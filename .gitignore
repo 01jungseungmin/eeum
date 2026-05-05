@@ -1,0 +1,62 @@
+# ========================
+# 환경변수 (절대 올리면 안 됨)
+# ========================
+.env
+.env.local
+.env.*.local
+
+# ========================
+# 백엔드 (Spring Boot)
+# ========================
+backend/build/
+backend/.gradle/
+backend/out/
+backend/*.jar
+backend/*.war
+backend/logs/
+
+# ========================
+# 프론트 웹 (React)
+# ========================
+frontend-web/node_modules/
+frontend-web/dist/
+frontend-web/.vite/
+
+# ========================
+# 프론트 앱 (React Native)
+# ========================
+frontend-app/node_modules/
+frontend-app/.expo/
+frontend-app/android/build/
+frontend-app/android/.gradle/
+frontend-app/ios/Pods/
+frontend-app/ios/build/
+
+# ========================
+# IDE 설정
+# ========================
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ========================
+# OS 파일
+# ========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ========================
+# 로그
+# ========================
+*.log
+logs/
+
+# ========================
+# Docker
+# ========================
+docker/data/
