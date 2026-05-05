@@ -1,5 +1,5 @@
 -- =============================================
--- 이음(Eeum) 프로젝트 초기 DB 스키마
+-- 이음(Eeum) 프로젝트 초기 DB 스키마 v2
 -- =============================================
 
 SET FOREIGN_KEY_CHECKS = 0;
@@ -9,12 +9,12 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS region (
-    region_id    BIGINT          NOT NULL AUTO_INCREMENT,
-    region_code  VARCHAR(20)     NOT NULL UNIQUE,
-    si_do        VARCHAR(50)     NOT NULL,
-    gun_gu       VARCHAR(50)     NOT NULL,
-    dong         VARCHAR(50)     NOT NULL,
-    radius       INT             NOT NULL,
+    region_id    BIGINT       NOT NULL AUTO_INCREMENT,
+    region_code  VARCHAR(20)  NOT NULL UNIQUE,
+    si_do        VARCHAR(50)  NOT NULL,
+    gun_gu       VARCHAR(50)  NOT NULL,
+    dong         VARCHAR(50)  NOT NULL,
+    radius       INT          NOT NULL,
     PRIMARY KEY (region_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -27,39 +27,44 @@ CREATE TABLE IF NOT EXISTS location (
     FOREIGN KEY (region_id) REFERENCES region(region_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- primary_region_id: FK 없이 서비스 레이어에서 관리 (순환참조 방지)
 CREATE TABLE IF NOT EXISTS account (
-    account_id          BIGINT          NOT NULL AUTO_INCREMENT,
+    account_id          BIGINT        NOT NULL AUTO_INCREMENT,
     primary_region_id   BIGINT,
-    email               VARCHAR(255)    UNIQUE,
+    email               VARCHAR(255)  UNIQUE,
     password            VARCHAR(255),
-    name                VARCHAR(100)    NOT NULL,
-    provider            VARCHAR(20)     NOT NULL,
+    name                VARCHAR(100)  NOT NULL,
+    provider            VARCHAR(20)   NOT NULL,
     provider_id         VARCHAR(255),
     profile_image_url   VARCHAR(500),
-    nickname            VARCHAR(50)     UNIQUE,
-    role                VARCHAR(20)     NOT NULL,
-    status              VARCHAR(20)     NOT NULL,
-    email_verified      BOOLEAN         NOT NULL DEFAULT FALSE,
+    nickname            VARCHAR(50)   UNIQUE,
+    role                VARCHAR(20)   NOT NULL,
+    status              VARCHAR(20)   NOT NULL,
+    email_verified      BOOLEAN       NOT NULL DEFAULT FALSE,
     fcm_token           VARCHAR(255),
-    created_at          DATETIME        NOT NULL,
-    modified_at         DATETIME        NOT NULL,
+    created_at          DATETIME      NOT NULL,
+    modified_at         DATETIME      NOT NULL,
     deleted_at          DATETIME,
-    PRIMARY KEY (account_id)
+    PRIMARY KEY (account_id),
+    INDEX idx_account_primary_region (primary_region_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- SDD 명세 기준: owner_info_id AUTO_INCREMENT PK 유지
 CREATE TABLE IF NOT EXISTS owner_info (
-    owner_info_id     BIGINT          NOT NULL AUTO_INCREMENT,
-    account_id        BIGINT          NOT NULL UNIQUE,
-    phone             VARCHAR(20)     NOT NULL,
-    business_number   VARCHAR(50)     NOT NULL UNIQUE,
-    approval_status   VARCHAR(20)     NOT NULL,
+    owner_info_id     BIGINT        NOT NULL AUTO_INCREMENT,
+    account_id        BIGINT        NOT NULL UNIQUE,
+    phone             VARCHAR(20)   NOT NULL,
+    business_number   VARCHAR(50)   NOT NULL UNIQUE,
+    approval_status   VARCHAR(20)   NOT NULL,
     rejection_reason  VARCHAR(255),
-    created_at        DATETIME        NOT NULL,
-    modified_at       DATETIME        NOT NULL,
+    created_at        DATETIME      NOT NULL,
+    modified_at       DATETIME      NOT NULL,
     PRIMARY KEY (owner_info_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- is_primary: Account.primaryRegionId로 관리 → 컬럼 없음 (SDD 설계)
+-- [수정] 중복 등록 방지 UNIQUE 추가
 CREATE TABLE IF NOT EXISTS account_region (
     account_region_id  BIGINT    NOT NULL AUTO_INCREMENT,
     account_id         BIGINT    NOT NULL,
@@ -69,46 +74,50 @@ CREATE TABLE IF NOT EXISTS account_region (
     created_at         DATETIME  NOT NULL,
     modified_at        DATETIME  NOT NULL,
     PRIMARY KEY (account_region_id),
+    UNIQUE KEY uk_account_region (account_id, region_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id),
     FOREIGN KEY (region_id) REFERENCES region(region_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_audit_log (
-    audit_log_id    BIGINT          NOT NULL AUTO_INCREMENT,
-    account_id      BIGINT          NOT NULL,
-    action_type     VARCHAR(50)     NOT NULL,
-    target_type     VARCHAR(50)     NOT NULL,
+    audit_log_id    BIGINT         NOT NULL AUTO_INCREMENT,
+    account_id      BIGINT         NOT NULL,
+    action_type     VARCHAR(50)    NOT NULL,
+    target_type     VARCHAR(50)    NOT NULL,
     target_id       BIGINT,
     parameters      TEXT,
-    result          VARCHAR(20)     NOT NULL,
+    result          VARCHAR(20)    NOT NULL,
     failure_reason  VARCHAR(1000),
-    created_at      DATETIME        NOT NULL,
-    modified_at     DATETIME        NOT NULL,
+    created_at      DATETIME       NOT NULL,
+    modified_at     DATETIME       NOT NULL,
     PRIMARY KEY (audit_log_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- Category (공통)
+-- Category (공통) - Soft Delete (isActive)
 -- =============================================
 
+-- [수정] parent_id NULL 포함 중복 방지 → generated column 사용
 CREATE TABLE IF NOT EXISTS category (
-    category_id    BIGINT        NOT NULL AUTO_INCREMENT,
-    type           VARCHAR(20)   NOT NULL,
-    parent_id      BIGINT,
-    name           VARCHAR(50)   NOT NULL,
-    display_order  INT           NOT NULL DEFAULT 0,
-    depth          INT           NOT NULL DEFAULT 1,
-    is_active      BOOLEAN       NOT NULL DEFAULT TRUE,
-    created_at     DATETIME      NOT NULL,
-    modified_at    DATETIME      NOT NULL,
-    deleted_at     DATETIME,
+    category_id  BIGINT       NOT NULL AUTO_INCREMENT,
+    type         VARCHAR(20)  NOT NULL,
+    parent_id    BIGINT,
+    parent_key   BIGINT GENERATED ALWAYS AS (IFNULL(parent_id, 0)) STORED,
+    name         VARCHAR(50)  NOT NULL,
+    display_order INT         NOT NULL DEFAULT 0,
+    depth        INT          NOT NULL DEFAULT 1,
+    is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at   DATETIME     NOT NULL,
+    modified_at  DATETIME     NOT NULL,
+    deleted_at   DATETIME,
     PRIMARY KEY (category_id),
+    UNIQUE KEY uk_category_type_parent_name (type, parent_key, name),
     FOREIGN KEY (parent_id) REFERENCES category(category_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- Store 도메인
+-- Store 도메인 - Hard Delete (SDD 6.6.2)
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS store (
@@ -137,13 +146,13 @@ CREATE TABLE IF NOT EXISTS store (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS store_notice (
-    notice_id    BIGINT        NOT NULL AUTO_INCREMENT,
-    store_id     BIGINT        NOT NULL,
-    notice_type  VARCHAR(20)   NOT NULL,
-    content      TEXT          NOT NULL,
-    is_active    BOOLEAN       NOT NULL DEFAULT TRUE,
-    created_at   DATETIME      NOT NULL,
-    modified_at  DATETIME      NOT NULL,
+    notice_id    BIGINT       NOT NULL AUTO_INCREMENT,
+    store_id     BIGINT       NOT NULL,
+    notice_type  VARCHAR(20)  NOT NULL,
+    content      TEXT         NOT NULL,
+    is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at   DATETIME     NOT NULL,
+    modified_at  DATETIME     NOT NULL,
     PRIMARY KEY (notice_id),
     FOREIGN KEY (store_id) REFERENCES store(store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -160,31 +169,32 @@ CREATE TABLE IF NOT EXISTS store_image (
     FOREIGN KEY (store_id) REFERENCES store(store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ProductCategory: Soft Delete (isActive) + 조건부 Hard Delete
 CREATE TABLE IF NOT EXISTS product_category (
-    product_category_id  BIGINT        NOT NULL AUTO_INCREMENT,
-    store_id             BIGINT        NOT NULL,
-    name                 VARCHAR(50)   NOT NULL,
-    display_order        INT           NOT NULL DEFAULT 0,
-    is_active            BOOLEAN       NOT NULL DEFAULT TRUE,
-    created_at           DATETIME      NOT NULL,
-    modified_at          DATETIME      NOT NULL,
+    product_category_id  BIGINT       NOT NULL AUTO_INCREMENT,
+    store_id             BIGINT       NOT NULL,
+    name                 VARCHAR(50)  NOT NULL,
+    display_order        INT          NOT NULL DEFAULT 0,
+    is_active            BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at           DATETIME     NOT NULL,
+    modified_at          DATETIME     NOT NULL,
     PRIMARY KEY (product_category_id),
     FOREIGN KEY (store_id) REFERENCES store(store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS product (
-    product_id           BIGINT           NOT NULL AUTO_INCREMENT,
-    store_id             BIGINT           NOT NULL,
-    product_category_id  BIGINT           NOT NULL,
-    name                 VARCHAR(100)     NOT NULL,
-    description          TEXT             NOT NULL,
-    price                DECIMAL(10,2)    NOT NULL,
+    product_id           BIGINT          NOT NULL AUTO_INCREMENT,
+    store_id             BIGINT          NOT NULL,
+    product_category_id  BIGINT          NOT NULL,
+    name                 VARCHAR(100)    NOT NULL,
+    description          TEXT            NOT NULL,
+    price                DECIMAL(10,2)   NOT NULL,
     stock                INT,
-    view_count           INT              NOT NULL DEFAULT 0,
-    status               VARCHAR(20)      NOT NULL DEFAULT 'ACTIVE',
-    version              BIGINT           NOT NULL DEFAULT 0,
-    created_at           DATETIME         NOT NULL,
-    modified_at          DATETIME         NOT NULL,
+    view_count           INT             NOT NULL DEFAULT 0,
+    status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
+    version              BIGINT          NOT NULL DEFAULT 0,
+    created_at           DATETIME        NOT NULL,
+    modified_at          DATETIME        NOT NULL,
     PRIMARY KEY (product_id),
     FOREIGN KEY (store_id) REFERENCES store(store_id),
     FOREIGN KEY (product_category_id) REFERENCES product_category(product_category_id)
@@ -203,118 +213,130 @@ CREATE TABLE IF NOT EXISTS product_image (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS product_option (
-    product_option_id  BIGINT        NOT NULL AUTO_INCREMENT,
-    product_id         BIGINT        NOT NULL,
-    group_name         VARCHAR(50)   NOT NULL,
-    selection_type     VARCHAR(20)   NOT NULL DEFAULT 'SINGLE',
-    is_required        BOOLEAN       NOT NULL DEFAULT FALSE,
-    display_order      INT           NOT NULL DEFAULT 0,
-    created_at         DATETIME      NOT NULL,
-    modified_at        DATETIME      NOT NULL,
+    product_option_id  BIGINT       NOT NULL AUTO_INCREMENT,
+    product_id         BIGINT       NOT NULL,
+    group_name         VARCHAR(50)  NOT NULL,
+    selection_type     VARCHAR(20)  NOT NULL DEFAULT 'SINGLE',
+    is_required        BOOLEAN      NOT NULL DEFAULT FALSE,
+    display_order      INT          NOT NULL DEFAULT 0,
+    created_at         DATETIME     NOT NULL,
+    modified_at        DATETIME     NOT NULL,
     PRIMARY KEY (product_option_id),
     FOREIGN KEY (product_id) REFERENCES product(product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS product_option_item (
-    product_option_item_id  BIGINT           NOT NULL AUTO_INCREMENT,
-    product_option_id       BIGINT           NOT NULL,
-    item_name               VARCHAR(50)      NOT NULL,
-    additional_price        DECIMAL(10,2)    NOT NULL DEFAULT 0,
-    is_default              BOOLEAN          NOT NULL DEFAULT FALSE,
-    display_order           INT              NOT NULL DEFAULT 0,
-    is_available            BOOLEAN          NOT NULL DEFAULT TRUE,
-    created_at              DATETIME         NOT NULL,
-    modified_at             DATETIME         NOT NULL,
+    product_option_item_id  BIGINT          NOT NULL AUTO_INCREMENT,
+    product_option_id       BIGINT          NOT NULL,
+    item_name               VARCHAR(50)     NOT NULL,
+    additional_price        DECIMAL(10,2)   NOT NULL DEFAULT 0,
+    is_default              BOOLEAN         NOT NULL DEFAULT FALSE,
+    display_order           INT             NOT NULL DEFAULT 0,
+    is_available            BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at              DATETIME        NOT NULL,
+    modified_at             DATETIME        NOT NULL,
     PRIMARY KEY (product_option_item_id),
     FOREIGN KEY (product_option_id) REFERENCES product_option(product_option_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- [수정] active_product_id GENERATED COLUMN + UNIQUE 추가 (SDD 명세 반영)
 CREATE TABLE IF NOT EXISTS event_product (
-    event_product_id  BIGINT        NOT NULL AUTO_INCREMENT,
-    product_id        BIGINT        NOT NULL,
-    discount_rate     INT           NOT NULL,
-    stock             INT,
-    start_date        DATETIME      NOT NULL,
-    end_date          DATETIME      NOT NULL,
-    status            VARCHAR(20)   NOT NULL,
-    version           BIGINT        NOT NULL DEFAULT 0,
-    created_at        DATETIME      NOT NULL,
-    modified_at       DATETIME      NOT NULL,
+    event_product_id   BIGINT       NOT NULL AUTO_INCREMENT,
+    product_id         BIGINT       NOT NULL,
+    active_product_id  BIGINT GENERATED ALWAYS AS (
+        CASE WHEN status = 'ACTIVE' THEN product_id ELSE NULL END
+    ) STORED,
+    discount_rate      INT          NOT NULL,
+    stock              INT,
+    start_date         DATETIME     NOT NULL,
+    end_date           DATETIME     NOT NULL,
+    status             VARCHAR(20)  NOT NULL,
+    version            BIGINT       NOT NULL DEFAULT 0,
+    created_at         DATETIME     NOT NULL,
+    modified_at        DATETIME     NOT NULL,
     PRIMARY KEY (event_product_id),
+    UNIQUE KEY uk_event_product_active (active_product_id),
     FOREIGN KEY (product_id) REFERENCES product(product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- Order 도메인
+-- Order 도메인 - Hard Delete (SDD 6.6.2)
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS orders (
-    order_id       BIGINT           NOT NULL AUTO_INCREMENT,
-    account_id     BIGINT           NOT NULL,
-    store_id       BIGINT           NOT NULL,
-    total_price    DECIMAL(10,2)    NOT NULL,
-    order_number   VARCHAR(50)      NOT NULL UNIQUE,
-    version        BIGINT           NOT NULL DEFAULT 0,
-    status         VARCHAR(20)      NOT NULL,
+    order_id       BIGINT          NOT NULL AUTO_INCREMENT,
+    account_id     BIGINT          NOT NULL,
+    store_id       BIGINT          NOT NULL,
+    total_price    DECIMAL(10,2)   NOT NULL,
+    order_number   VARCHAR(50)     NOT NULL UNIQUE,
+    version        BIGINT          NOT NULL DEFAULT 0,
+    status         VARCHAR(20)     NOT NULL,
     paid_at        DATETIME,
     cancelled_at   DATETIME,
     cancel_reason  VARCHAR(500),
-    created_at     DATETIME         NOT NULL,
-    modified_at    DATETIME         NOT NULL,
+    created_at     DATETIME        NOT NULL,
+    modified_at    DATETIME        NOT NULL,
     PRIMARY KEY (order_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id),
     FOREIGN KEY (store_id) REFERENCES store(store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- [수정] selected_options NULL 허용 (옵션 없는 상품도 주문 가능)
+-- [수정] product_id / event_product_id 둘 중 하나만 허용 CHECK 추가
 CREATE TABLE IF NOT EXISTS order_item (
-    order_item_id     BIGINT           NOT NULL AUTO_INCREMENT,
-    order_id          BIGINT           NOT NULL,
+    order_item_id     BIGINT          NOT NULL AUTO_INCREMENT,
+    order_id          BIGINT          NOT NULL,
     product_id        BIGINT,
     event_product_id  BIGINT,
-    product_name      VARCHAR(100)     NOT NULL,
-    selected_options  TEXT             NOT NULL,
-    quantity          INT              NOT NULL,
-    price             DECIMAL(10,2)    NOT NULL,
+    product_name      VARCHAR(100)    NOT NULL,
+    selected_options  TEXT,
+    quantity          INT             NOT NULL,
+    price             DECIMAL(10,2)   NOT NULL,
     PRIMARY KEY (order_item_id),
+    CHECK (
+        (product_id IS NOT NULL AND event_product_id IS NULL)
+        OR
+        (product_id IS NULL AND event_product_id IS NOT NULL)
+    ),
     FOREIGN KEY (order_id) REFERENCES orders(order_id),
     FOREIGN KEY (product_id) REFERENCES product(product_id),
     FOREIGN KEY (event_product_id) REFERENCES event_product(event_product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS payment (
-    payment_id           BIGINT           NOT NULL AUTO_INCREMENT,
-    order_id             BIGINT           NOT NULL UNIQUE,
-    account_id           BIGINT           NOT NULL,
-    portone_payment_id   VARCHAR(100)     NOT NULL UNIQUE,
-    idempotency_key      VARCHAR(100)     NOT NULL UNIQUE,
-    amount               DECIMAL(10,2)    NOT NULL,
-    status               VARCHAR(20)      NOT NULL,
+    payment_id           BIGINT          NOT NULL AUTO_INCREMENT,
+    order_id             BIGINT          NOT NULL UNIQUE,
+    account_id           BIGINT          NOT NULL,
+    portone_payment_id   VARCHAR(100)    NOT NULL UNIQUE,
+    idempotency_key      VARCHAR(100)    NOT NULL UNIQUE,
+    amount               DECIMAL(10,2)   NOT NULL,
+    status               VARCHAR(20)     NOT NULL,
     pg_provider          VARCHAR(50),
-    payment_method       VARCHAR(20)      NOT NULL,
+    payment_method       VARCHAR(20)     NOT NULL,
     paid_at              DATETIME,
     cancelled_at         DATETIME,
     fail_reason          VARCHAR(500),
-    created_at           DATETIME         NOT NULL,
-    modified_at          DATETIME         NOT NULL,
+    created_at           DATETIME        NOT NULL,
+    modified_at          DATETIME        NOT NULL,
     PRIMARY KEY (payment_id),
     FOREIGN KEY (order_id) REFERENCES orders(order_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS reservation (
-    reservation_id    BIGINT           NOT NULL AUTO_INCREMENT,
-    account_id        BIGINT           NOT NULL,
-    store_id          BIGINT           NOT NULL,
+    reservation_id    BIGINT          NOT NULL AUTO_INCREMENT,
+    account_id        BIGINT          NOT NULL,
+    store_id          BIGINT          NOT NULL,
     product_id        BIGINT,
     order_id          BIGINT,
-    reserved_at       DATETIME         NOT NULL,
-    status            VARCHAR(20)      NOT NULL,
-    reservation_type  VARCHAR(20)      NOT NULL,
+    reserved_at       DATETIME        NOT NULL,
+    status            VARCHAR(20)     NOT NULL,
+    reservation_type  VARCHAR(20)     NOT NULL,
     total_price       DECIMAL(10,2),
     capacity          INT,
-    version           BIGINT           NOT NULL DEFAULT 0,
-    created_at        DATETIME         NOT NULL,
-    modified_at       DATETIME         NOT NULL,
+    version           BIGINT          NOT NULL DEFAULT 0,
+    created_at        DATETIME        NOT NULL,
+    modified_at       DATETIME        NOT NULL,
     PRIMARY KEY (reservation_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id),
     FOREIGN KEY (store_id) REFERENCES store(store_id),
@@ -323,34 +345,49 @@ CREATE TABLE IF NOT EXISTS reservation (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS cart (
-    cart_id     BIGINT    NOT NULL AUTO_INCREMENT,
-    account_id  BIGINT    NOT NULL UNIQUE,
-    store_id    BIGINT    NOT NULL,
-    created_at  DATETIME  NOT NULL,
-    modified_at DATETIME  NOT NULL,
+    cart_id      BIGINT    NOT NULL AUTO_INCREMENT,
+    account_id   BIGINT    NOT NULL UNIQUE,
+    store_id     BIGINT    NOT NULL,
+    created_at   DATETIME  NOT NULL,
+    modified_at  DATETIME  NOT NULL,
     PRIMARY KEY (cart_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id),
     FOREIGN KEY (store_id) REFERENCES store(store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- [수정] product_id / event_product_id NULL 포함 UNIQUE → generated column 사용
+-- [수정] product_id / event_product_id 둘 중 하나만 허용 CHECK 추가
 CREATE TABLE IF NOT EXISTS cart_item (
-    cart_item_id            BIGINT           NOT NULL AUTO_INCREMENT,
-    cart_id                 BIGINT           NOT NULL,
-    product_id              BIGINT,
-    event_product_id        BIGINT,
+    cart_item_id             BIGINT          NOT NULL AUTO_INCREMENT,
+    cart_id                  BIGINT          NOT NULL,
+    product_id               BIGINT,
+    event_product_id         BIGINT,
+    product_key              BIGINT GENERATED ALWAYS AS (IFNULL(product_id, -1)) STORED,
+    event_product_key        BIGINT GENERATED ALWAYS AS (IFNULL(event_product_id, -1)) STORED,
     selected_option_item_ids TEXT,
-    options_total_price     DECIMAL(10,2)    NOT NULL DEFAULT 0,
-    selected_options_hash   VARCHAR(64)      NOT NULL,
-    quantity                INT              NOT NULL,
-    price                   DECIMAL(10,2)    NOT NULL,
+    options_total_price      DECIMAL(10,2)   NOT NULL DEFAULT 0,
+    selected_options_hash    VARCHAR(64)     NOT NULL,
+    quantity                 INT             NOT NULL,
+    price                    DECIMAL(10,2)   NOT NULL,
     PRIMARY KEY (cart_item_id),
+    UNIQUE KEY uk_cart_item_product_option (
+        cart_id,
+        product_key,
+        event_product_key,
+        selected_options_hash
+    ),
+    CHECK (
+        (product_id IS NOT NULL AND event_product_id IS NULL)
+        OR
+        (product_id IS NULL AND event_product_id IS NOT NULL)
+    ),
     FOREIGN KEY (cart_id) REFERENCES cart(cart_id),
     FOREIGN KEY (product_id) REFERENCES product(product_id),
     FOREIGN KEY (event_product_id) REFERENCES event_product(event_product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- Store Review 도메인
+-- Store Review 도메인 - Hard Delete (SDD 6.6.2)
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS store_review (
@@ -393,26 +430,26 @@ CREATE TABLE IF NOT EXISTS store_review_reply (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- UsedProduct 도메인
+-- UsedProduct 도메인 - Hard Delete (SDD 6.6.2)
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS used_product (
-    used_product_id     BIGINT           NOT NULL AUTO_INCREMENT,
-    account_id          BIGINT           NOT NULL,
+    used_product_id     BIGINT          NOT NULL AUTO_INCREMENT,
+    account_id          BIGINT          NOT NULL,
     buyer_id            BIGINT,
-    region_id           BIGINT           NOT NULL,
-    category_id         BIGINT           NOT NULL,
-    title               VARCHAR(100)     NOT NULL,
-    description         TEXT             NOT NULL,
-    price               DECIMAL(10,2)    NOT NULL,
+    region_id           BIGINT          NOT NULL,
+    category_id         BIGINT          NOT NULL,
+    title               VARCHAR(100)    NOT NULL,
+    description         TEXT            NOT NULL,
+    price               DECIMAL(10,2)   NOT NULL,
     trade_location      VARCHAR(255),
-    view_count          INT              NOT NULL DEFAULT 0,
-    status              VARCHAR(20)      NOT NULL,
-    favorite_count      INT              NOT NULL DEFAULT 0,
-    is_buyer_confirmed  BOOLEAN          NOT NULL DEFAULT FALSE,
-    version             BIGINT           NOT NULL DEFAULT 0,
-    created_at          DATETIME         NOT NULL,
-    modified_at         DATETIME         NOT NULL,
+    view_count          INT             NOT NULL DEFAULT 0,
+    status              VARCHAR(20)     NOT NULL,
+    favorite_count      INT             NOT NULL DEFAULT 0,
+    is_buyer_confirmed  BOOLEAN         NOT NULL DEFAULT FALSE,
+    version             BIGINT          NOT NULL DEFAULT 0,
+    created_at          DATETIME        NOT NULL,
+    modified_at         DATETIME        NOT NULL,
     PRIMARY KEY (used_product_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id),
     FOREIGN KEY (buyer_id) REFERENCES account(account_id),
@@ -446,7 +483,7 @@ CREATE TABLE IF NOT EXISTS used_product_review (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- Community 도메인
+-- Community 도메인 - Hard Delete (SDD 6.6.2)
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS community_post (
@@ -479,6 +516,7 @@ CREATE TABLE IF NOT EXISTS community_image (
     FOREIGN KEY (community_post_id) REFERENCES community_post(community_post_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- CommunityComment: Soft Delete (isDeleted) - SDD 6.6.2
 CREATE TABLE IF NOT EXISTS community_comment (
     community_comment_id  BIGINT    NOT NULL AUTO_INCREMENT,
     community_post_id     BIGINT    NOT NULL,
@@ -533,6 +571,7 @@ CREATE TABLE IF NOT EXISTS chat_room (
     FOREIGN KEY (created_by) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- [수정] 같은 채팅방 중복 참여 방지 UNIQUE 추가
 CREATE TABLE IF NOT EXISTS chat_participant (
     chat_participant_id  BIGINT        NOT NULL AUTO_INCREMENT,
     chat_room_id         BIGINT        NOT NULL,
@@ -544,10 +583,12 @@ CREATE TABLE IF NOT EXISTS chat_participant (
     created_at           DATETIME      NOT NULL,
     modified_at          DATETIME      NOT NULL,
     PRIMARY KEY (chat_participant_id),
+    UNIQUE KEY uk_chat_participant (chat_room_id, account_id),
     FOREIGN KEY (chat_room_id) REFERENCES chat_room(chat_room_id),
     FOREIGN KEY (account_id) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ChatMessage: Soft Delete (isDeleted) - SDD 6.6.2
 CREATE TABLE IF NOT EXISTS chat_message (
     chat_message_id  BIGINT        NOT NULL AUTO_INCREMENT,
     chat_room_id     BIGINT        NOT NULL,
@@ -566,7 +607,7 @@ CREATE TABLE IF NOT EXISTS chat_message (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- Common 도메인
+-- Common 도메인 - Hard Delete (SDD 6.6.2)
 -- =============================================
 
 CREATE TABLE IF NOT EXISTS favorite (
