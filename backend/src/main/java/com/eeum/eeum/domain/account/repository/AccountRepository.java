@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.account.repository;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,9 +27,11 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     );
 
     // 탈퇴 후 30일 경과 계정 조회 (스케줄러용)
-    @Query("SELECT a FROM Account a WHERE a.status = 'WITHDRAWN' AND a.deletedAt <= :threshold")
-    List<Account> findWithdrawnAccountsBefore(@Param("threshold") LocalDateTime threshold);
-
+    @Query("SELECT a FROM Account a WHERE a.status = :status AND a.deletedAt <= :threshold")
+    List<Account> findWithdrawnAccountsBefore(
+            @Param("status") AccountStatus status,
+            @Param("threshold") LocalDateTime threshold
+    );
     // 관리자 회원 목록 조회 (동적 필터링은 QueryDSL로 구현 예정)
     Page<Account> findAll(Pageable pageable);
 }

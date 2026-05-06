@@ -124,6 +124,32 @@ public class Account extends BaseEntity {
         return account;
     }
 
+    public static Account createOwner(
+            String email,
+            String encodedPassword,
+            String name,
+            String nickname,
+            String phone
+    ) {
+        Account account = new Account();
+        account.email = email;
+        account.password = encodedPassword;
+        account.name = name;
+        account.nickname = nickname;
+        account.phone = phone;
+        account.provider = OAuthProvider.LOCAL;
+        account.providerId = null;
+        account.profileImageUrl = DEFAULT_PROFILE_IMAGE_URL;
+
+        // 사장 회원가입 직후에는 일반 회원 권한으로 시작
+        // 사업자 정보 승인 후 approveOwner()를 통해 ROLE_OWNER로 변경
+        account.role = AccountRole.ROLE_USER;
+
+        account.status = AccountStatus.ACTIVE;
+        account.emailVerified = true;
+        return account;
+    }
+
     public void approveOwner() {
         this.role = AccountRole.ROLE_OWNER;
     }
