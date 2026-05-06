@@ -1,5 +1,7 @@
 package com.eeum.eeum.security.jwt;
 
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;
@@ -28,6 +30,9 @@ public class JwtProvider {
     private static final String TOKEN_TYPE_PASSWORD_RESET = "PASSWORD_RESET";
 
     private final SecretKey secretKey; //JWT 서명에 사용할 비밀키(사용자가 내용을 조작하지 못하게하는 서명(signature))
+
+    private static final String BEARER_PREFIX = "Bearer ";
+
 
     //각 토큰의 만료시간(application.yml에 작성)
 
@@ -170,6 +175,20 @@ public class JwtProvider {
                 .build() //파서 완성
                 .parseSignedClaims(token) //서명된 JWT를 파싱(이때 문제가 있으면 예외가 발생)
                 .getPayload(); //토큰의 payload, 즉 claims를 꺼냄
+    }
+
+    public String resolveAccessToken(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith(BEARER_PREFIX)) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+        }
+
+        String token = authorizationHeader.substring(BEARER_PREFIX.length());
+
+        if (!isValid(token) || !isAccessToken(token)) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+        }
+
+        return token;
     }
 
 }
