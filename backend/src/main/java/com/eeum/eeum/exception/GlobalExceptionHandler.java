@@ -17,7 +17,7 @@ public class GlobalExceptionHandler {
     // ===================== 비즈니스 예외 =====================
 
     @ExceptionHandler(BusinessException.class) //Spring은 예외 발생 시 가장 구체적인 타입부터 찾고 없으면 부모 타입으로 올라감
-    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
+    public ResponseEntity<ApiResponse<?>> handleBusinessException(BusinessException e) {
         log.warn("[BusinessException] code={}, message={}", e.getErrorCode().getCode(), e.getMessage());
 
         return ResponseEntity
@@ -28,7 +28,7 @@ public class GlobalExceptionHandler {
     // ===================== 입력값 검증 예외 =====================
 
     @ExceptionHandler(MethodArgumentNotValidException.class) //MethodArgumentNotValidException이 발생 시 실행되는 메서드
-    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
+    public ResponseEntity<ApiResponse<?>> handleValidationException(MethodArgumentNotValidException e) {
         String errorMessage = e.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
@@ -43,7 +43,7 @@ public class GlobalExceptionHandler {
     // ===================== 서버 오류 =====================
 
     @ExceptionHandler(Exception.class) //위에서 따로 처리하지 않은 모든 Exception 발생 시 실행되는 메서드
-    public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
+    public ResponseEntity<ApiResponse<?>> handleException(Exception e) {
         log.error("[InternalServerError] message={}", e.getMessage(), e);
 
         return ResponseEntity
