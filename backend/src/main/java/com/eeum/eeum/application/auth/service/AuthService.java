@@ -212,8 +212,11 @@ public class AuthService {
     // ===================== 로그아웃 =====================
 
     @Transactional
-    public void logout(ReissueRequestDto request, String accessToken) {
-        // 1. Refresh Token 검증 후 accountId 추출
+    public void logout(ReissueRequestDto request, String authorizationHeader) {
+        // 1. Authorization Header에서 Access Token 추출 및 검증
+        String accessToken = jwtProvider.resolveAccessToken(authorizationHeader);
+
+        // 2. Refresh Token 검증 후 accountId 추출
         Long refreshAccountId = tokenService.validateRefreshToken(request.getRefreshToken());
 
         // 2. Access Token 자체 검증
@@ -221,20 +224,15 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
 
-        // 3. Access Token 타입 검증
-        if (!jwtProvider.isAccessToken(accessToken)) {
-            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
-        }
-
-        // 4. Access Token의 accountId 추출
+        // 3. Access Token의 accountId 추출
         Long accessAccountId = jwtProvider.getAccountId(accessToken);
 
-        // 5. Access Token과 Refresh Token의 사용자 일치 확인
+        // 4. Access Token과 Refresh Token의 사용자 일치 확인
         if (!refreshAccountId.equals(accessAccountId)) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
 
-        // 6. Access Token 블랙리스트 등록 + Refresh Token 삭제
+        // 5. Access Token 블랙리스트 등록 + Refresh Token 삭제
         tokenService.logout(refreshAccountId, accessToken);
 
         log.info("로그아웃 완료: accountId={}", refreshAccountId);
