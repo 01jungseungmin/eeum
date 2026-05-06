@@ -2,6 +2,7 @@ import styled from 'styled-components';
 import kakaoIcon from '../assets/kakao_icon.png';
 import naverIcon from '../assets/naver_icon.png';
 import InputForm from '../components/InputForm';
+import { useNavigate } from 'react-router-dom';
 
 const PageWrapper = styled.div`
   max-width: 400px;
@@ -99,6 +100,7 @@ const SocialCircle = styled.div`
 `;
 
 function LoginPage() {
+  const navigate = useNavigate();
   return (
     <PageWrapper>
       <Title>EEUM</Title>
@@ -115,11 +117,19 @@ function LoginPage() {
         <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <input type="checkbox" /> 자동 로그인
         </label>
-        <span>비밀번호 찾기</span>
+        <span
+          onClick={() => navigate('/find-password')}
+          style={{ cursor: 'pointer' }}
+        >
+          비밀번호 찾기
+        </span>
       </OptionsRow>
 
       <LoginButton>로그인</LoginButton>
-      <div style={{ fontSize: '13px', color: '#666', cursor: 'pointer' }}>
+      <div
+        onClick={() => navigate('/sign-up')}
+        style={{ fontSize: '13px', color: '#666', cursor: 'pointer' }}
+      >
         회원가입
       </div>
       <Divider>간편 로그인</Divider>
