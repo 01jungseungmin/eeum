@@ -10,24 +10,57 @@ const Label = styled.label`
   font-size: 14px;
   font-weight: bold;
   margin-bottom: 8px;
+  text-align: left;
+`;
+
+const InputWrapper = styled.div`
+  display: flex;
+  gap: 10px; /* 인풋과 버튼 사이 간격 */
 `;
 
 const StyledInput = styled.input`
-  width: 100%;
+  flex: 1; /* 남은 공간 꽉 채우기 */
   padding: 12px;
-  border: 1px solid #ddd; /* 더 연한 회색 */
+  border: 1px solid #ddd;
   border-radius: 4px;
-  box-sizing: border-box; /* 패딩이 너비에 포함되게 */
+  font-size: 14px;
   &::placeholder {
     color: #ccc;
   }
 `;
 
-function InputForm({ title, type = 'text', placeholder }) {
+const ActionButton = styled.button`
+  padding: 0 15px;
+  background-color: #00a651;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap; /* 글자 줄바꿈 방지 */
+  &:hover {
+    background-color: #008441;
+  }
+`;
+
+function InputForm({
+  title,
+  type = 'text',
+  placeholder,
+  buttonText,
+  onButtonClick,
+}) {
   return (
     <Container>
       <Label>{title}</Label>
-      <StyledInput type={type} placeholder={placeholder} />
+      <InputWrapper>
+        <StyledInput type={type} placeholder={placeholder} />
+        {buttonText && (
+          <ActionButton type="button" onClick={onButtonClick}>
+            {buttonText}
+          </ActionButton>
+        )}
+      </InputWrapper>
     </Container>
   );
 }
