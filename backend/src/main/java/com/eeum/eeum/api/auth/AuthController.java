@@ -50,10 +50,6 @@ public class AuthController {
     }
 
     @Operation(summary = "사장 회원가입", description = "이메일 인증 및 사업자번호 검증 후 사장 회원으로 가입 신청합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "201",
-            description = "사장 회원가입 신청 성공"
-    )
     @PostMapping("/signup/owner")
     public ResponseEntity<ApiResponse<Void>> ownerSignup(
             @Valid @RequestBody OwnerSignupRequestDto request

@@ -43,7 +43,13 @@ public class EmailService {
 
         String subject = "[이음] 이메일 인증 코드";
         String content = buildCodeEmailContent(code);
-        sendHtmlEmail(email, subject, content);
+
+        try{
+            sendHtmlEmail(email, subject, content);
+        }catch (BusinessException e){
+            redisUtil.delete(EMAIL_CODE_PREFIX + email);
+        }
+
 
         log.info("이메일 인증 코드 발송 완료: {}", email);
     }

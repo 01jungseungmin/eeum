@@ -56,7 +56,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     REGION_NOT_VERIFIED("REGION_004", "GPS 인증이 완료되지 않은 지역입니다", HttpStatus.FORBIDDEN),
     REGION_GPS_MISMATCH("REGION_005", "현재 위치가 등록된 지역과 일치하지 않습니다", HttpStatus.BAD_REQUEST),
     REGION_ACCESS_REQUIRED("REGION_006", "활동 지역 인증이 필요합니다", HttpStatus.FORBIDDEN),
-
+    REGION_LOCATION_NOT_FOUND("REGION_007","지역 위치 정보를 찾아올 수 없습니다.",HttpStatus.NOT_FOUND),
     // ===================== 상점 (STORE) =====================
     STORE_NOT_FOUND("STORE_001", "존재하지 않는 상점입니다", HttpStatus.NOT_FOUND),
     STORE_ALREADY_EXISTS("STORE_002", "이미 상점이 등록되어 있습니다", HttpStatus.CONFLICT),
