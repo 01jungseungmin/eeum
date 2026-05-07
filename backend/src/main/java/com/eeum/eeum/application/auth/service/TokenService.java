@@ -106,7 +106,7 @@ public class TokenService {
      * 비밀번호 변경, 회원 탈퇴 등 민감 작업에서 사용한다.
      */
     //ReAuth Token을 검증하고, 성공하면 accountId를 반환
-    public void validateAndConsumeReAuthToken(Long currentAccountId, String reAuthToken) {
+    public void validateReAuthToken(Long currentAccountId, String reAuthToken) {
         if (!jwtProvider.isValid(reAuthToken)) { //토큰 자체가 유효한지 검사
             throw new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN); //유효하지 않으면 재인증 토큰 오류
         }
@@ -128,8 +128,11 @@ public class TokenService {
             throw new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN); //Redis 저장값과 요청 토큰이 다르면 예외
         }
 
-        //Redis에서 재인증 토큰 삭제 (1회성 사용 처리)
-        redisUtil.delete(reAuthTokenKey(currentAccountId));
+    }
+
+    //Redis에서 재인증 토큰 삭제
+    public void consumeReAuthToken(Long accountId) {
+        redisUtil.delete(reAuthTokenKey(accountId));
     }
 
     // ===================== Password Reset Token =====================

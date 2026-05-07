@@ -219,11 +219,6 @@ public class AuthService {
         // 2. Refresh Token 검증 후 accountId 추출
         Long refreshAccountId = tokenService.validateRefreshToken(request.getRefreshToken());
 
-        // 2. Access Token 자체 검증
-        if (!jwtProvider.isValid(accessToken)) {
-            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
-        }
-
         // 3. Access Token의 accountId 추출
         Long accessAccountId = jwtProvider.getAccountId(accessToken);
 
