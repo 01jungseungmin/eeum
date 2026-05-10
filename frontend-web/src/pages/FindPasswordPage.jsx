@@ -57,6 +57,22 @@ function FindPassword() {
     }
   };
 
+  const handleCodeVerification = async (e) => {
+    e.preventDefault();
+
+    try {
+      const response = await axios.post(
+        'http://localhost:8080/auth/email/verify-code',
+        { email: email, code: code },
+      );
+      console.log('Code verified successfully:', response.data);
+      alert('인증코드가 확인되었습니다. 새로운 비밀번호를 입력해주세요.');
+    } catch (error) {
+      console.error('Error occurred while verifying code:', error);
+      alert('인증코드 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
+    }
+  };
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
 
@@ -100,6 +116,8 @@ function FindPassword() {
         placeholder="인증코드를 입력해주세요"
         value={code}
         onChange={(e) => setCode(e.target.value)}
+        buttonText="인증코드 확인"
+        onButtonClick={handleCodeVerification}
       />
       <InputForm
         title="새로운 비밀번호"
