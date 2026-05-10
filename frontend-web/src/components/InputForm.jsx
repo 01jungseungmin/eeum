@@ -15,11 +15,11 @@ const Label = styled.label`
 
 const InputWrapper = styled.div`
   display: flex;
-  gap: 10px; /* 인풋과 버튼 사이 간격 */
+  gap: 10px;
 `;
 
 const StyledInput = styled.input`
-  flex: 1; /* 남은 공간 꽉 채우기 */
+  flex: 1;
   padding: 12px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -37,7 +37,7 @@ const ActionButton = styled.button`
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
-  white-space: nowrap; /* 글자 줄바꿈 방지 */
+  white-space: nowrap;
   &:hover {
     background-color: #008441;
   }
@@ -47,6 +47,8 @@ function InputForm({
   title,
   type = 'text',
   placeholder,
+  value,
+  onChange,
   buttonText,
   onButtonClick,
 }) {
@@ -54,7 +56,12 @@ function InputForm({
     <Container>
       <Label>{title}</Label>
       <InputWrapper>
-        <StyledInput type={type} placeholder={placeholder} />
+        <StyledInput
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+        />
         {buttonText && (
           <ActionButton type="button" onClick={onButtonClick}>
             {buttonText}

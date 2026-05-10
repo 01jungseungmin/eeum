@@ -3,6 +3,8 @@ import kakaoIcon from '../assets/kakao_icon.png';
 import naverIcon from '../assets/naver_icon.png';
 import InputForm from '../components/InputForm';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import axios from 'axios';
 
 const PageWrapper = styled.div`
   max-width: 400px;
@@ -57,7 +59,6 @@ const Divider = styled.div`
   color: #888;
   font-size: 12px;
 
-  /* 왼쪽 선 */
   &::before {
     content: '';
     flex: 1;
@@ -66,7 +67,6 @@ const Divider = styled.div`
     margin-right: 10px;
   }
 
-  /* 오른쪽 선 */
   &::after {
     content: '';
     flex: 1;
@@ -101,15 +101,52 @@ const SocialCircle = styled.div`
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
+    try {
+      const response = await axios.post('http://localhost:8080/auth/login', {
+        email: email,
+        password: password,
+      });
+
+      const { success, data, message } = response.data;
+
+      if (success) {
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('role', data.role);
+
+        alert(message);
+
+        // navigate('/home');
+      } else {
+        alert(response.data.error.message || '로그인에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('로그인 에러:', error);
+      alert('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
+    }
+  };
+
   return (
     <PageWrapper>
       <Title>EEUM</Title>
       <SubTitle>로그인</SubTitle>
 
-      <InputForm title="이메일" placeholder="이메일을 입력해주세요" />
+      <InputForm
+        title="이메일"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="이메일을 입력해주세요"
+      />
       <InputForm
         title="비밀번호"
         type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
         placeholder="비밀번호를 입력해주세요"
       />
 
@@ -125,7 +162,7 @@ function LoginPage() {
         </span>
       </OptionsRow>
 
-      <LoginButton>로그인</LoginButton>
+      <LoginButton onClick={handleLogin}>로그인</LoginButton>
       <div
         onClick={() => navigate('/sign-up')}
         style={{ fontSize: '13px', color: '#666', cursor: 'pointer' }}
