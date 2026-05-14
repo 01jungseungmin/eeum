@@ -79,7 +79,6 @@ public class ApiResponse<T> { //응답 데이터 타입을 상황에 따라 변�
     public static <T> ApiResponse<T> fail(String code, String message) { //ErrorCode enum이 없을 때 문자열 코드와 메시지로 실패 응답을 만드는 메서드
         return ApiResponse.<T>builder()
                 .success(false)
-                .message("요청 처리에 실패했습니다")
                 .error(ErrorDetail.of(code, message))
                 .timestamp(LocalDateTime.now())
                 .traceId(UUID.randomUUID().toString())

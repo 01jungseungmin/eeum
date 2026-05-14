@@ -46,9 +46,12 @@ public class SecurityConfig {
             "/auth/signup/owner",
             "/auth/login",
             "/auth/login/oauth",
+            "/auth/signup/oauth",
             "/auth/token/reissue",
             "/auth/password/reset-request",
-            "/auth/password/reset"
+            "/auth/password/verify",
+            "/auth/password/reset",
+            "/auth/business/verify"
     };
 
     private static final String[] SWAGGER_PATHS = {
@@ -124,6 +127,7 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
                 "http://localhost:8081",
+                "http://localhost:5173",
                 "https://eeum.com",
                 "https://www.eeum.com"
         ));
