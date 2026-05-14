@@ -1,9 +1,11 @@
 package com.eeum.eeum.api.auth;
 
 import com.eeum.eeum.application.auth.dto.request.*;
+import com.eeum.eeum.application.auth.dto.response.OAuthLoginResponseDto;
 import com.eeum.eeum.application.auth.dto.response.ReAuthResponseDto;
 import com.eeum.eeum.application.auth.dto.response.TokenResponseDto;
 import com.eeum.eeum.application.auth.service.AuthService;
+import com.eeum.eeum.application.auth.service.BusinessVerificationService;
 import com.eeum.eeum.common.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final BusinessVerificationService businessVerificationService;
 
     @Operation(summary = "이메일 인증 코드 발송", description = "회원가입 전 이메일 인증 코드를 발송합니다.")
     @PostMapping("/email/send-verification")
@@ -58,6 +61,19 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success());
     }
 
+    @Operation(
+            summary = "사업자등록정보 진위확인",
+            description = "사장 회원가입 전 사업자등록번호, 대표자명, 개업일자를 검증합니다."
+    )
+    @PostMapping("/business/verify")
+    public ResponseEntity<ApiResponse<Boolean>> verifyBusiness(
+            @Valid @RequestBody BusinessVerifyRequestDto request
+    ) {
+        boolean verified = businessVerificationService.verifyBusiness(request);
+
+        return ResponseEntity.ok(ApiResponse.success(verified));
+    }
+
     @Operation(summary = "로컬 로그인", description = "이메일/비밀번호로 로그인합니다.")
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<TokenResponseDto>> login(
@@ -69,18 +85,20 @@ public class AuthController {
 
     @Operation(summary = "OAuth 로그인", description = "카카오/네이버 인가 코드로 소셜 로그인합니다.")
     @PostMapping("/login/oauth")
-    public ResponseEntity<ApiResponse<TokenResponseDto>> oauthLogin(
+    public ResponseEntity<ApiResponse<OAuthLoginResponseDto>> oauthLogin(
             @Valid @RequestBody OAuthLoginRequestDto request
     ) {
-        // TODO: TokenResponseDto token = authService.oauthLogin(request);
-        TokenResponseDto token = TokenResponseDto.builder()
-                .accessToken("access-token-placeholder")
-                .refreshToken("refresh-token-placeholder")
-                .accessTokenExpiresIn(1800L)
-                .refreshTokenExpiresIn(1209600L)
-                .role("ROLE_USER")
-                .build();
+        OAuthLoginResponseDto token = authService.oauthLogin(request);
 
+        return ResponseEntity.ok(ApiResponse.success(token));
+    }
+
+    @Operation(summary = "OAuth 회원가입 추가 정보 입력 완료", description = "OAuth 신규 회원이 이름, 전화번호, 닉네임을 입력하여 회원가입을 완료합니다.")
+    @PostMapping("/signup/oauth")
+    public ResponseEntity<ApiResponse<TokenResponseDto>> oauthComplete(
+            @Valid @RequestBody OAuthCompleteRequestDto request
+    ){
+        TokenResponseDto token = authService.oauthComplete(request);
         return ResponseEntity.ok(ApiResponse.success(token));
     }
 
@@ -110,6 +128,15 @@ public class AuthController {
     ) {
         authService.sendPasswordResetEmail(request);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증 코드 확인", description = "발송된 인증 코드를 검증하고 비밀번호 재설정용 이메일 인증 토큰을 반환합니다.")
+    @PostMapping("/password/verify")
+    public ResponseEntity<ApiResponse<String>> resetPassword(
+            @Valid @RequestBody EmailVerifyRequestDto request
+    ) {
+        String token = authService.verifyresetPasswordEmailCode(request);
+        return ResponseEntity.ok(ApiResponse.success(token));
     }
 
     @Operation(summary = "비밀번호 재설정", description = "재설정 토큰으로 새 비밀번호를 설정합니다.")

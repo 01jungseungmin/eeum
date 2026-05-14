@@ -10,11 +10,11 @@ import lombok.Getter;
 @Schema(description = "OAuth 로그인 요청")
 public class OAuthLoginRequestDto {
 
-    @Schema(description = "OAuth 제공자", example = "KAKAO", allowableValues = {"KAKAO", "NAVER"})
     @NotNull(message = "OAuth 제공자는 필수입니다")
+    @Schema(description = "OAuth 제공자", example = "KAKAO", allowableValues = {"KAKAO", "NAVER"})
     private OAuthProvider provider;
 
-    @Schema(description = "OAuth 인가 코드", example = "abc123def456")
-    @NotBlank(message = "인가 코드는 필수입니다")
-    private String code;
+    @NotBlank(message = "Access Token은 필수입니다")
+    @Schema(description = "카카오/네이버 SDK에서 발급받은 Access Token")
+    private String accessToken;
 }

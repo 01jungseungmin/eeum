@@ -187,7 +187,7 @@ public class AccountService {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
         }
 
-        ownerInfo.updateInfo(request.getPhone(), request.getBusinessNumber());
+        ownerInfo.updateInfo(request.getBusinessNumber());
 
         log.info("사장 정보 수정 완료: accountId={}", accountId);
     }
@@ -418,7 +418,6 @@ public class AccountService {
         return OwnerResponseDto.builder()
                 .ownerInfoId(ownerInfo.getOwnerInfoId())
                 .accountId(ownerInfo.getAccount().getAccountId())
-                .phone(MaskingUtil.maskPhone(ownerInfo.getPhone()))
                 .businessNumber(MaskingUtil.maskBusinessNumber(ownerInfo.getBusinessNumber()))
                 .approvalStatus(ownerInfo.getApprovalStatus().name())
                 .rejectionReason(ownerInfo.getRejectionReason())
@@ -430,7 +429,6 @@ public class AccountService {
         return OwnerResponseDto.builder()
                 .ownerInfoId(ownerInfo.getOwnerInfoId())
                 .accountId(ownerInfo.getAccount().getAccountId())
-                .phone(ownerInfo.getPhone())
                 .businessNumber(ownerInfo.getBusinessNumber())
                 .approvalStatus(ownerInfo.getApprovalStatus().name())
                 .rejectionReason(ownerInfo.getRejectionReason())

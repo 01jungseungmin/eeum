@@ -1,29 +1,35 @@
 package com.eeum.eeum.application.auth.service;
 
-import com.eeum.eeum.application.auth.dto.request.EmailSendRequestDto;
-import com.eeum.eeum.application.auth.dto.request.EmailVerifyRequestDto;
-import com.eeum.eeum.application.auth.dto.request.LoginRequestDto;
-import com.eeum.eeum.application.auth.dto.request.OAuthLoginRequestDto;
-import com.eeum.eeum.application.auth.dto.request.OwnerSignupRequestDto;
-import com.eeum.eeum.application.auth.dto.request.PasswordNewRequestDto;
-import com.eeum.eeum.application.auth.dto.request.PasswordResetRequestDto;
-import com.eeum.eeum.application.auth.dto.request.ReAuthRequestDto;
-import com.eeum.eeum.application.auth.dto.request.ReissueRequestDto;
-import com.eeum.eeum.application.auth.dto.request.SignupRequestDto;
+import com.eeum.eeum.application.auth.dto.request.*;
+import com.eeum.eeum.application.auth.dto.response.OAuthLoginResponseDto;
+import com.eeum.eeum.application.auth.dto.response.OAuthUserInfo;
 import com.eeum.eeum.application.auth.dto.response.ReAuthResponseDto;
 import com.eeum.eeum.application.auth.dto.response.TokenResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.security.jwt.JwtProvider;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -32,13 +38,15 @@ public class AuthService {
 
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
+    private final StoreRepository storeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final TokenService tokenService;
     private final EmailService emailService;
-
-    // TODO: private final BusinessNumberClient businessNumberClient;(국세청 사업자번호 검증 API를 연동할 때 사용할 예정)
-    // TODO: private final OAuthClient oAuthClient;(카카오/네이버 OAuth 로그인 검증을 담당할 클라이언트를 추가할 예정)
+    private final OAuthService oAuthService;
+    private final RedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    private final BusinessVerificationService businessVerificationService;
 
     // ===================== 이메일 인증 =====================
 
@@ -62,8 +70,8 @@ public class AuthService {
 
     @Transactional
     public void signup(SignupRequestDto request) {
-        // 1. 이메일 인증 토큰 검증 → 이메일 추출 (1회성 소비)
-        String verifiedEmail = emailService.validateAndConsumeVerificationToken(
+        // 1. 이메일 인증 토큰 검증 → 이메일 추출
+        String verifiedEmail = emailService.validateVerificationToken(
                 request.getEmailVerificationToken()
         );
 
@@ -93,13 +101,15 @@ public class AuthService {
 
         accountRepository.save(account);
 
+        emailService.consumeVerificationToken(request.getEmailVerificationToken());
+
         log.info("일반 회원가입 완료: accountId={}", account.getAccountId());
     }
 
     @Transactional
     public void ownerSignup(OwnerSignupRequestDto request) {
-        // 1. 이메일 인증 토큰 검증 → 이메일 추출 (1회성 소비)
-        String verifiedEmail = emailService.validateAndConsumeVerificationToken(
+        // 1. 이메일 인증 토큰 검증 → 이메일 추출
+        String verifiedEmail = emailService.validateVerificationToken(
                 request.getEmailVerificationToken()
         );
 
@@ -108,43 +118,64 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED);
         }
 
-        // 3. 중복 확인
+        // 3. 사업자번호 정규화
+        String businessNumber = request.getBusinessNumber().replace("-", "");
+
+        // 4. 중복 확인
         if (accountRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_EMAIL);
         }
 
-        if (accountRepository.existsByNickname(request.getNickname())) {
-            throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_NICKNAME);
-        }
-
-        if (ownerInfoRepository.existsByBusinessNumber(request.getBusinessNumber())) {
+        if (ownerInfoRepository.existsByBusinessNumber(businessNumber)) {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
         }
 
-        // 4. 국세청 사업자번호 API 검증
-        // TODO: businessNumberClient.validate(request.getBusinessNumber());
+        // 5. 개업일자 변환
+        LocalDate openingDate = parseOpeningDate(request.getOpeningDate());
 
-        // 5. 계정 생성
+        // 6. 국세청 사업자등록정보 진위확인
+/*        boolean verified = businessVerificationService.verifyBusiness(
+                businessNumber,
+                request.getName(),          // 대표자명
+                request.getOpeningDate()    // yyyyMMdd 또는 yyyy-MM-dd
+        );
+
+        if (!verified) {
+            throw new BusinessException(ErrorCode.BUSINESS_VERIFY_FAILED);
+        } */
+
+        // 7. 계정 생성
         // 사장 회원가입 신청 시점에는 ROLE_USER로 생성하고, 관리자 승인 후 ROLE_OWNER로 변경
         Account account = Account.createOwner(
                 request.getEmail(),
                 passwordEncoder.encode(request.getPassword()),
                 request.getName(),
-                request.getNickname(),
                 request.getPhone()
         );
 
         accountRepository.save(account);
 
-        // 6. 사장 정보 등록
-        // OwnerInfo의 approvalStatus는 create 내부에서 PENDING으로 설정하는 구조를 가정
+        // 8. 사장 정보 등록
         OwnerInfo ownerInfo = OwnerInfo.create(
                 account,
-                request.getPhone(),
-                request.getBusinessNumber()
+                businessNumber,
+                openingDate
         );
 
         ownerInfoRepository.save(ownerInfo);
+
+        // 9. 상점 기본 정보 등록
+        Store store = Store.createForOwnerSignup(
+                account,
+                request.getStoreName(),
+                request.getStoreAddress(),
+                request.getStorePhone()
+        );
+
+        storeRepository.save(store);
+
+        emailService.consumeVerificationToken(request.getEmailVerificationToken());
+
 
         log.info("사장 회원가입 신청 완료: accountId={}", account.getAccountId());
     }
@@ -171,20 +202,103 @@ public class AuthService {
         return issueTokens(account);
     }
 
-    @Transactional
-    public TokenResponseDto oauthLogin(OAuthLoginRequestDto request) {
-        // TODO: OAuthClient로 카카오/네이버 사용자 정보 조회 후 아래 흐름으로 대체
-        // OAuthUserInfo userInfo = oAuthClient.getUserInfo(request.getProvider(), request.getCode());
-        //
-        // Account account = accountRepository
-        //         .findByProviderAndProviderId(request.getProvider(), userInfo.getId())
-        //         .orElseGet(() -> accountRepository.save(Account.createOAuthUser(...)));
-        //
-        // validateAccountStatus(account);
-        //
-        // return issueTokens(account);
+    // ===================== OAuth로그인 =====================
 
-        throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+    @Transactional
+    public OAuthLoginResponseDto oauthLogin(OAuthLoginRequestDto request) {
+        OAuthUserInfo userInfo = oAuthService.getUserInfo(request.getProvider(), request.getAccessToken());
+
+        Optional<Account> existing = accountRepository
+                .findByProviderAndProviderId(request.getProvider(), userInfo.getProviderId());
+
+        if (existing.isPresent()) {
+            Account account = existing.get();
+            validateAccountStatus(account);
+            TokenResponseDto tokens = issueTokens(account);
+            return OAuthLoginResponseDto.existingUser(tokens);
+        }
+
+        String tempToken = UUID.randomUUID().toString();
+
+        String userInfoJson;
+        try {
+            userInfoJson = objectMapper.writeValueAsString(userInfo);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+
+        redisTemplate.opsForValue().set(
+                "oauth:temp:" + tempToken,
+                userInfoJson,
+                10, TimeUnit.MINUTES
+        );
+
+        return OAuthLoginResponseDto.newUser(tempToken);
+    }
+
+    // ===================== Oauth 신규회원 추가 정보 입력 가입 완료 =====================
+    @Transactional
+    public TokenResponseDto oauthComplete(OAuthCompleteRequestDto request) {
+        String userInfoJson = (String) redisTemplate.opsForValue()
+                .get("oauth:temp:" + request.getTempToken());
+
+        if (userInfoJson == null) {
+            throw new BusinessException(ErrorCode.AUTH_EXPIRED_TOKEN);
+        }
+
+        OAuthUserInfo userInfo;
+        try {
+            userInfo = objectMapper.readValue(userInfoJson, OAuthUserInfo.class);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+
+        OAuthProvider provider = userInfo.getProvider();
+
+        // 같은 OAuth 계정으로 이미 가입된 계정이 있는지 재확인
+        // tempToken을 여러 번 쓰거나, 중복 요청이 들어오는 상황 방지
+        accountRepository.findByProviderAndProviderId(
+                provider,
+                userInfo.getProviderId()
+        ).ifPresent(account -> {
+            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
+        });
+
+        String name = request.getName();
+        String phone = request.getPhone();
+
+        String nickname = resolveNickname(
+                request.getNickname() != null
+                        ? request.getNickname()
+                        : userInfo.getNickname()
+        );
+
+        Account account = Account.createOAuthPendingUser(
+                userInfo.getEmail(),
+                nickname,
+                userInfo.getProfileImage(),
+                provider,
+                userInfo.getProviderId()
+        );
+
+        account.completeOAuthProfile(
+                name,
+                phone,
+                nickname
+        );
+
+        accountRepository.save(account);
+
+        redisTemplate.delete("oauth:temp:" + request.getTempToken());
+
+        return issueTokens(account);
+    }
+
+    private String resolveNickname(String requested) {
+        if (requested == null || accountRepository.existsByNickname(requested)) {
+            return "이음_" + UUID.randomUUID().toString().substring(0, 8);
+        }
+        return requested;
     }
 
     // ===================== 토큰 재발급 =====================
@@ -245,39 +359,62 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
 
-        // Password Reset Token 생성 + Redis 저장
-        String resetToken = tokenService.generateAndSavePasswordResetToken(account.getAccountId());
-
         // 비밀번호 재설정 이메일 발송
-        emailService.sendPasswordResetEmail(account.getEmail(), resetToken);
+        emailService.sendPasswordResetEmail(account.getEmail());
     }
 
     @Transactional
     public void resetPassword(PasswordNewRequestDto request) {
-        // 1. Password Reset Token 검증
+
+        // 1. 비밀번호가 다른지 검증
+        if (!request.getNewPassword().equals(request.getNewPasswordConfirm())) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
+        }
+
+        // 2. Password Reset Token 검증
         // - JWT 유효성
         // - type == PASSWORD_RESET
         // - Redis 저장값과 일치 여부 확인
         // - 검증 성공 시 Redis에서 삭제
-        Long accountId = tokenService.validateAndConsumePasswordResetToken(request.getToken());
+        Long accountId = tokenService.validateAndConsumePasswordResetToken(request.getPasswordResetToken());
 
-        // 2. 회원 조회
+        // 3. 회원 조회
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        // 3. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
+        // 4. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
         if (account.isOAuthAccount()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
 
-        // 4. 비밀번호 변경
+        // 5. 비밀번호 변경
         account.changePassword(passwordEncoder.encode(request.getNewPassword()));
 
-        // 5. 기존 Refresh Token 삭제
+        // 6. 기존 Refresh Token 삭제
         // 비밀번호 변경 후 기존 로그인 유지 차단
         tokenService.deleteRefreshToken(accountId);
 
+        // 7. Password Reset Token 삭제
+        tokenService.deletePasswordResetToken(accountId);
+
         log.info("비밀번호 재설정 완료: accountId={}", accountId);
+    }
+
+    @Transactional
+    //사용자가 입력한 이메일 인증 코드를 검증 메서드
+    public String verifyresetPasswordEmailCode(EmailVerifyRequestDto request) {
+        Account account = accountRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (account.isOAuthAccount()) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
+        }
+
+        // 1. 인증코드 검증
+        emailService.verifyPasswordResetCode(request.getEmail(), request.getCode());
+
+        // 2. 검증 성공 후 JWT password reset token 발급
+        return tokenService.generateAndSavePasswordResetToken(account.getAccountId());
     }
 
     // ===================== 재인증 =====================
@@ -321,6 +458,17 @@ public class AuthService {
         }
 
         // TODO: oAuthClient.validateToken(account.getProvider(), request.getOauthToken());
+    }
+
+    private LocalDate parseOpeningDate(String openingDate) {
+        try {
+            return LocalDate.parse(
+                    openingDate,
+                    DateTimeFormatter.ofPattern("yyyyMMdd")
+            );
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.COMMUNITY_COMMENT_ACCESS_DENIED);
+        }
     }
 
     private void validateAccountStatus(Account account) {

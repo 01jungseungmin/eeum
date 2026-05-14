@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.auth.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
@@ -9,10 +10,6 @@ import lombok.Getter;
 @Schema(description = "비밀번호 재설정 요청")
 public class PasswordNewRequestDto {
 
-    @Schema(description = "재설정 토큰", example = "7f8e9d2a-1234-5678-abcd-ef0123456789")
-    @NotBlank(message = "재설정 토큰은 필수입니다")
-    private String token;
-
     @Schema(description = "새 비밀번호 (영문+숫자+특수문자 8자 이상)", example = "NewPassword1!")
     @NotBlank(message = "새 비밀번호는 필수입니다")
     @Pattern(
@@ -20,4 +17,12 @@ public class PasswordNewRequestDto {
             message = "비밀번호는 영문, 숫자, 특수문자를 포함하여 8자 이상이어야 합니다"
     )
     private String newPassword;
+
+    @Schema(description = "새 비밀번호 확인", example = "NewPassword1!")
+    @NotBlank(message = "새 비밀번호 확인은 필수입니다")
+    private String newPasswordConfirm;
+
+    @Schema(description = "비밀번호 재설정 토큰 (비밀번호 재설정 이메일 인증 완료 후 발급된 토큰)", example = "abc123")
+    @NotBlank(message = "비밀번호 재설정 토큰은 필수입니다")
+    private String passwordResetToken;
 }
