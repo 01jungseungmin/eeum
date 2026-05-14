@@ -7,6 +7,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
+
 @Entity
 @Table(
         name = "owner_info",
@@ -28,11 +30,11 @@ public class OwnerInfo extends BaseEntity {
     @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
 
-    @Column(name = "phone", nullable = false, length = 20)
-    private String phone;
-
     @Column(name = "business_number", nullable = false, length = 50, unique = true)
     private String businessNumber;
+
+    @Column(name = "opening_date", nullable = false)
+    private LocalDate openingDate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "approval_status", nullable = false, length = 20)
@@ -41,15 +43,20 @@ public class OwnerInfo extends BaseEntity {
     @Column(name = "rejection_reason", length = 255)
     private String rejectionReason;
 
-    public static OwnerInfo create(Account account, String phone, String businessNumber) {
+    public static OwnerInfo create(
+            Account account,
+            String businessNumber,
+            LocalDate openingDate
+    ) {
         OwnerInfo ownerInfo = new OwnerInfo();
         ownerInfo.account = account;
-        ownerInfo.phone = phone;
         ownerInfo.businessNumber = businessNumber;
+        ownerInfo.openingDate = openingDate;
         ownerInfo.approvalStatus = ApprovalStatus.PENDING;
         ownerInfo.rejectionReason = null;
         return ownerInfo;
     }
+
 
     public void approve() {
         this.approvalStatus = ApprovalStatus.APPROVED;
@@ -62,8 +69,7 @@ public class OwnerInfo extends BaseEntity {
         this.rejectionReason = reason;
     }
 
-    public void updateInfo(String phone, String businessNumber) {
-        this.phone = phone;
+    public void updateInfo(String businessNumber) {
         if (businessNumber != null && !businessNumber.equals(this.businessNumber)) {
             this.businessNumber = businessNumber;
             this.approvalStatus = ApprovalStatus.PENDING;
