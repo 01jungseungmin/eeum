@@ -121,7 +121,7 @@ function LoginPage() {
 
         alert(message);
 
-        navigate('/dashboard');
+        navigate('/approval-status');
       } else {
         alert(response.data.error.message || '로그인에 실패했습니다.');
       }
