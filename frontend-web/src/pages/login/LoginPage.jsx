@@ -1,7 +1,7 @@
 import styled from 'styled-components';
-import kakaoIcon from '../assets/kakao_icon.png';
-import naverIcon from '../assets/naver_icon.png';
-import InputForm from '../components/InputForm';
+import kakaoIcon from '../../assets/kakao_icon.png';
+import naverIcon from '../../assets/naver_icon.png';
+import InputForm from '../../components/InputForm';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import axios from 'axios';
@@ -121,7 +121,7 @@ function LoginPage() {
 
         alert(message);
 
-        // navigate('/home');
+        navigate('/approval-status');
       } else {
         alert(response.data.error.message || '로그인에 실패했습니다.');
       }
