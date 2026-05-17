@@ -4,6 +4,7 @@ import SignUpPage from './pages/login/SignUpPage';
 import FindPasswordPage from './pages/login/FindPasswordPage';
 import MainLayout from './layouts/MainLayout';
 import ApprovalStatus from './pages/main/ApprovalStatusPage';
+import DashboardPage from './pages/main/DashBoardPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/approval-status" element={<ApprovalStatus />} />
 
         {/* 나중에 추가될 다른 메뉴들 */}
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/store" element={<div>상점 관리 페이지 (준비중)</div>} />
         <Route
           path="/products"
