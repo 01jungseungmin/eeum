@@ -58,7 +58,7 @@ function SignUp() {
   const [openingDate, setOpeningDate] = useState('');
   const [storeName, setStoreName] = useState('');
   const [location, setLocation] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phone, setPhone] = useState('');
   const [storePhone, setStorePhone] = useState('');
   const [token, setToken] = useState('');
 
@@ -68,7 +68,7 @@ function SignUp() {
   const confirmPasswordRef = useRef(null);
   const businessNumberRef = useRef(null);
   const businessNameRef = useRef(null);
-  const phoneNumberRef = useRef(null);
+  const phoneRef = useRef(null);
   const openingDateRef = useRef(null);
   const storeNameRef = useRef(null);
   const locationRef = useRef(null);
@@ -134,7 +134,7 @@ function SignUp() {
       { value: confirmPassword, msg: '비밀번호 확인', ref: confirmPasswordRef },
       { value: businessNumber, msg: '사업자번호', ref: businessNumberRef },
       { value: businessName, msg: '사업자명', ref: businessNameRef },
-      { value: phoneNumber, msg: '전화번호', ref: phoneNumberRef },
+      { value: phone, msg: '전화번호', ref: phoneRef },
       { value: openingDate, msg: '개업일자', ref: openingDateRef },
       { value: storeName, msg: '상호명', ref: storeNameRef },
       { value: location, msg: '사업장 소재지', ref: locationRef },
@@ -168,7 +168,7 @@ function SignUp() {
           email: email,
           password: password,
           name: businessName,
-          phone: phoneNumber,
+          phone: phone,
           businessNumber: businessNumber,
           storeName: storeName,
           openingDate: openingDate,
@@ -241,11 +241,11 @@ function SignUp() {
         onChange={(e) => setBusinessName(e.target.value)}
       />
       <InputForm
-        ref={phoneNumberRef}
+        ref={phoneRef}
         title="전화번호"
         placeholder="전화번호를 입력해주세요"
-        value={phoneNumber}
-        onChange={(e) => setPhoneNumber(e.target.value)}
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
       />
       <InputForm
         ref={storeNameRef}
