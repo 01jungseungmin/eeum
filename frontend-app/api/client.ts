@@ -9,7 +9,7 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from '../uti
 // const BASE_URL = 'http://192.168.50.37:8080';
 const BASE_URL = 'http://192.168.0.17:8080';
 
-//Axios 기본 설정에 우리가 만든 '_retry' 속성을 추가해 줍니다.
+//Axios 기본 설정에 '_retry' 속성을 추가.
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }

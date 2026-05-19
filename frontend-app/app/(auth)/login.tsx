@@ -82,16 +82,14 @@ export default function LoginScreen() {
   // 카카오 로그인 핸들러
   const handleKakaoLogin = async () => {
     try {
-      // 1. 카카오톡 앱을 열어서 로그인을 시도하고, 카카오 토큰을 받아옵니다.
+      // 1. 카카오톡 앱을 열어서 로그인을 시도하고, 카카오 토큰을 받아온다.
       const result = await KakaoLogin.login();
       console.log('카카오 인증 성공! 토큰:', result.accessToken);
 
-    const token = await KakaoLogin.login();
-
-      // 2. 스웨거(Swagger) 명세에 맞춘 백엔드 API 호출
+      // 2. 백엔드 API 호출
     const response = await client.post('/auth/login/oauth', {
       provider: 'KAKAO',
-      code: token.accessToken // 발급받은 카카오 토큰을 'code' 필드에 담습니다.
+      code: result.accessToken
     });
 
     // 3. 백엔드 응답 처리
@@ -116,7 +114,6 @@ export default function LoginScreen() {
   // 네이버 로그인 핸들러
   const handleNaverLogin = async () => {
     try {
-      // 네이버는 초기화가 필요합니다 (발급받은 ID, Secret, URL Scheme 넣기)
       NaverLogin.initialize({
         appName: 'EEUM',
         consumerKey: 'Ryfw4Zb5hvMUsAxF7N83',
@@ -131,11 +128,11 @@ export default function LoginScreen() {
 
       // 2. 백엔드 API 호출
       const response = await client.post('/auth/login/oauth', {
-        provider: 'NAVER', // 카카오일 경우 'KAKAO'
-        code: successResponse.accessToken // 발급받은 토큰을 'code' 필드에 담아 보냅니다.
+        provider: 'NAVER',
+        code: successResponse.accessToken
       });
 
-      // 3. 백엔드 응답 처리 (스웨거의 response 형태에 맞춤)
+      // 3. 백엔드 응답 처리
       if (response.data.success) {
         const { accessToken, refreshToken } = response.data.data;
         
