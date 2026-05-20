@@ -23,8 +23,6 @@ public class EmailService {
     private static final String EMAIL_CODE_PREFIX  = "email:code:";
     private static final String EMAIL_TOKEN_PREFIX = "email:token:";
     private static final String PASSWORD_RESET_CODE_PREFIX = "email:password-reset:code:";
-    private static final String PASSWORD_RESET_TOKEN_PREFIX = "email:password-reset-token:";
-
 
     private final JavaMailSender mailSender;
     private final RedisUtil redisUtil;
@@ -51,6 +49,7 @@ public class EmailService {
             sendHtmlEmail(email, subject, content);
         }catch (BusinessException e){
             redisUtil.delete(EMAIL_CODE_PREFIX + email);
+            throw e;
         }
 
 
@@ -110,6 +109,7 @@ public class EmailService {
             sendHtmlEmail(email, subject, content);
         }catch (BusinessException e){
             redisUtil.delete(PASSWORD_RESET_CODE_PREFIX + email);
+            throw e;
         }
 
 
@@ -129,17 +129,6 @@ public class EmailService {
 
         // 코드 사용 후 삭제
         redisUtil.delete(PASSWORD_RESET_CODE_PREFIX + email);
-    }
-
-    /**
-     * 비밀번호 재설정 시 인증 토큰 검증 → 이메일 반환 후 삭제 (1회성)
-     */
-    public String validateAndConsumeVerificationPasswordResetToken(String token) {
-        String email = redisUtil.get(PASSWORD_RESET_TOKEN_PREFIX + token)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED));
-
-        redisUtil.delete(PASSWORD_RESET_TOKEN_PREFIX + token);
-        return email;
     }
 
     // ===================== 내부 유틸 =====================

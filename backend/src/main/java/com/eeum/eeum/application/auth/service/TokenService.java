@@ -155,7 +155,7 @@ public class TokenService {
      * 검증 성공 시 토큰의 accountId를 반환한다.
      */
     //비밀번호 재설정 토큰을 검증하는 메서드
-    public Long validateAndConsumePasswordResetToken(String resetToken) {
+    public Long validatePasswordResetToken(String resetToken) {
         if (!jwtProvider.isValid(resetToken)) { //resetToken 자체가 유효한 JWT인지 검사
             throw new BusinessException(ErrorCode.AUTH_INVALID_RESET_TOKEN); //토큰 자체가 유효하지 않으면 비밀번호 재설정 토큰 오류
         }

@@ -70,25 +70,9 @@ public class AuthService {
 
     @Transactional
     public void signup(SignupRequestDto request) {
-        // 1. 이메일 인증 토큰 검증 → 이메일 추출
-        String verifiedEmail = emailService.validateVerificationToken(
-                request.getEmailVerificationToken()
-        );
+        validateSignupEmail(request.getEmail(), request.getEmailVerificationToken());
+        validateNicknameNotDuplicated(request.getNickname());
 
-        // 2. 요청 이메일과 인증된 이메일 일치 확인
-        if (!verifiedEmail.equals(request.getEmail())) {
-            throw new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED);
-        }
-
-        // 3. 이메일 중복 확인
-        if (accountRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_EMAIL);
-        }
-
-        // 4. 닉네임 중복 확인
-        if (accountRepository.existsByNickname(request.getNickname())) {
-            throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_NICKNAME);
-        }
 
         // 4. 계정 생성
         Account account = Account.createUser(
@@ -108,23 +92,12 @@ public class AuthService {
 
     @Transactional
     public void ownerSignup(OwnerSignupRequestDto request) {
-        // 1. 이메일 인증 토큰 검증 → 이메일 추출
-        String verifiedEmail = emailService.validateVerificationToken(
-                request.getEmailVerificationToken()
-        );
-
-        // 2. 요청 이메일과 인증된 이메일 일치 확인
-        if (!verifiedEmail.equals(request.getEmail())) {
-            throw new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED);
-        }
+        validateSignupEmail(request.getEmail(), request.getEmailVerificationToken());
 
         // 3. 사업자번호 정규화
         String businessNumber = request.getBusinessNumber().replace("-", "");
 
         // 4. 중복 확인
-        if (accountRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_EMAIL);
-        }
 
         if (ownerInfoRepository.existsByBusinessNumber(businessNumber)) {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
@@ -376,7 +349,7 @@ public class AuthService {
         // - type == PASSWORD_RESET
         // - Redis 저장값과 일치 여부 확인
         // - 검증 성공 시 Redis에서 삭제
-        Long accountId = tokenService.validateAndConsumePasswordResetToken(request.getPasswordResetToken());
+        Long accountId = tokenService.validatePasswordResetToken(request.getPasswordResetToken());
 
         // 3. 회원 조회
         Account account = accountRepository.findById(accountId)
@@ -402,7 +375,7 @@ public class AuthService {
 
     @Transactional
     //사용자가 입력한 이메일 인증 코드를 검증 메서드
-    public String verifyresetPasswordEmailCode(EmailVerifyRequestDto request) {
+    public String verifyResetPasswordEmailCode(EmailVerifyRequestDto request) {
         Account account = accountRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
@@ -442,6 +415,24 @@ public class AuthService {
 
     // ===================== 내부 유틸 =====================
 
+    private void validateSignupEmail(String requestEmail, String verificationToken) {
+        String verifiedEmail = emailService.validateVerificationToken(verificationToken);
+
+        if (!verifiedEmail.equals(requestEmail)) {
+            throw new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED);
+        }
+
+        if (accountRepository.existsByEmail(requestEmail)) {
+            throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_EMAIL);
+        }
+    }
+
+    private void validateNicknameNotDuplicated(String nickname) {
+        if (accountRepository.existsByNickname(nickname)) {
+            throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_NICKNAME);
+        }
+    }
+
     private void validateLocalReAuth(Account account, ReAuthRequestDto request) {
         if (request.getPassword() == null || request.getPassword().isBlank()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
@@ -467,7 +458,7 @@ public class AuthService {
                     DateTimeFormatter.ofPattern("yyyyMMdd")
             );
         } catch (DateTimeParseException e) {
-            throw new BusinessException(ErrorCode.COMMUNITY_COMMENT_ACCESS_DENIED);
+            throw new BusinessException(ErrorCode.BUSINESS_INVALID_OPENING_DATE);
         }
     }
 

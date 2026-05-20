@@ -4,11 +4,11 @@ import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.service.AdminAccountService;
 import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
-import com.eeum.eeum.application.account.service.AccountService;
 import com.eeum.eeum.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.*;
 @Validated
 public class AdminAccountController {
 
-    private final AccountService accountService;
+    private final AdminAccountService adminAccountService;
 
     @Operation(summary = "[관리자] 회원 목록 조회", description = "전체 회원 목록을 페이징으로 조회합니다.")
     @GetMapping
@@ -47,7 +47,7 @@ public class AdminAccountController {
             @Parameter(description = "닉네임 또는 이메일 검색 키워드")
             @RequestParam(required = false) String keyword
     ) {
-        Page<AccountResponseDto> response = accountService.getAccounts(pageable, status, role, keyword);
+        Page<AccountResponseDto> response = adminAccountService.getAccounts(pageable, status, role, keyword);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -56,7 +56,7 @@ public class AdminAccountController {
     public ResponseEntity<ApiResponse<Page<AccountResponseDto>>> getWithdrawnAccounts(
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        Page<AccountResponseDto> response = accountService.getWithdrawnAccounts(pageable);
+        Page<AccountResponseDto> response = adminAccountService.getWithdrawnAccounts(pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -66,7 +66,7 @@ public class AdminAccountController {
             @Parameter(description = "조회할 회원 ID", required = true, example = "1")
             @PathVariable @Positive Long accountId
     ) {
-        AccountDetailResponseDto response = accountService.getAccountDetail(accountId);
+        AccountDetailResponseDto response = adminAccountService.getAccountDetail(accountId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -77,7 +77,7 @@ public class AdminAccountController {
             @PathVariable @Positive Long accountId
     ) {
         Long adminId = SecurityUtil.getCurrentAccountId();
-        accountService.suspendAccount(adminId, accountId);
+        adminAccountService.suspendAccount(adminId, accountId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
@@ -88,7 +88,7 @@ public class AdminAccountController {
             @PathVariable @Positive Long accountId
     ) {
         Long adminId = SecurityUtil.getCurrentAccountId();
-        accountService.activateAccount(adminId, accountId);
+        adminAccountService.activateAccount(adminId, accountId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
@@ -99,7 +99,7 @@ public class AdminAccountController {
             @PathVariable @Positive Long accountId
     ) {
         Long adminId = SecurityUtil.getCurrentAccountId();
-        accountService.cancelWithdrawal(adminId, accountId);
+        adminAccountService.cancelWithdrawal(adminId, accountId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
@@ -110,7 +110,7 @@ public class AdminAccountController {
             @PathVariable @Positive Long accountId
     ) {
         Long adminId = SecurityUtil.getCurrentAccountId();
-        accountService.forceDeleteAccount(adminId, accountId);
+        adminAccountService.forceDeleteAccount(adminId, accountId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
@@ -121,7 +121,7 @@ public class AdminAccountController {
             @Parameter(description = "승인 상태 필터 (PENDING / APPROVED / REJECTED)")
             @RequestParam(required = false) ApprovalStatus approvalStatus
     ) {
-        Page<AccountDetailResponseDto> response = accountService.getOwnerRequests(pageable, approvalStatus);
+        Page<AccountDetailResponseDto> response = adminAccountService.getOwnerRequests(pageable, approvalStatus);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -131,7 +131,7 @@ public class AdminAccountController {
             @Parameter(description = "조회할 사장 신청 ID", required = true, example = "1")
             @PathVariable @Positive Long ownerInfoId
     ) {
-        OwnerResponseDto response = accountService.getOwnerApplicationDetail(ownerInfoId);
+        OwnerResponseDto response = adminAccountService.getOwnerApplicationDetail(ownerInfoId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -142,7 +142,7 @@ public class AdminAccountController {
             @PathVariable @Positive Long ownerInfoId
     ) {
         Long adminId = SecurityUtil.getCurrentAccountId();
-        accountService.approveOwner(adminId, ownerInfoId);
+        adminAccountService.approveOwner(adminId, ownerInfoId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
@@ -154,7 +154,7 @@ public class AdminAccountController {
             @Valid @RequestBody RejectRequestDto request
     ) {
         Long adminId = SecurityUtil.getCurrentAccountId();
-        accountService.rejectOwner(adminId, ownerInfoId, request);
+        adminAccountService.rejectOwner(adminId, ownerInfoId, request);
         return ResponseEntity.ok(ApiResponse.success());
     }
 }
