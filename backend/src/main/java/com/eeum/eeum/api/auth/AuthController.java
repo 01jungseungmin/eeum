@@ -132,10 +132,10 @@ public class AuthController {
 
     @Operation(summary = "비밀번호 재설정 인증 코드 확인", description = "발송된 인증 코드를 검증하고 비밀번호 재설정용 이메일 인증 토큰을 반환합니다.")
     @PostMapping("/password/verify")
-    public ResponseEntity<ApiResponse<String>> resetPassword(
+    public ResponseEntity<ApiResponse<String>> verifyPasswordResetCode(
             @Valid @RequestBody EmailVerifyRequestDto request
     ) {
-        String token = authService.verifyresetPasswordEmailCode(request);
+        String token = authService.verifyResetPasswordEmailCode(request);
         return ResponseEntity.ok(ApiResponse.success(token));
     }
 

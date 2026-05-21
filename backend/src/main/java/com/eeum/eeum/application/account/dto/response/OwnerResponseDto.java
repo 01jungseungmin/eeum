@@ -17,9 +17,6 @@ public class OwnerResponseDto {
     @Schema(description = "회원 ID", example = "1")
     private Long accountId;
 
-    @Schema(description = "전화번호 (마스킹)", example = "010-****-5678")
-    private String phone;
-
     @Schema(description = "사업자번호 (마스킹)", example = "123-**-*****")
     private String businessNumber;
 

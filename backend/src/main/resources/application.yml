@@ -48,3 +48,6 @@ auth:
 business:
   nts:
     service-key: ${NTS_BUSINESS_SERVICE_KEY}
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY}

@@ -51,7 +51,9 @@ public class SecurityConfig {
             "/auth/password/reset-request",
             "/auth/password/verify",
             "/auth/password/reset",
-            "/auth/business/verify"
+            "/auth/business/verify",
+            "/admin/locations/sync",
+            "/admin/locations/sync"
     };
 
     private static final String[] SWAGGER_PATHS = {

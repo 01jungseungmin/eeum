@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { forwardRef } from 'react';
 
 const Container = styled.div`
   width: 100%;
@@ -43,33 +44,39 @@ const ActionButton = styled.button`
   }
 `;
 
-function InputForm({
-  title,
-  type = 'text',
-  placeholder,
-  value,
-  onChange,
-  buttonText,
-  onButtonClick,
-}) {
-  return (
-    <Container>
-      <Label>{title}</Label>
-      <InputWrapper>
-        <StyledInput
-          type={type}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-        />
-        {buttonText && (
-          <ActionButton type="button" onClick={onButtonClick}>
-            {buttonText}
-          </ActionButton>
-        )}
-      </InputWrapper>
-    </Container>
-  );
-}
+const InputForm = forwardRef(
+  (
+    {
+      title,
+      type = 'text',
+      placeholder,
+      value,
+      onChange,
+      buttonText,
+      onButtonClick,
+    },
+    ref,
+  ) => {
+    return (
+      <Container>
+        <Label>{title}</Label>
+        <InputWrapper>
+          <StyledInput
+            ref={ref}
+            type={type}
+            placeholder={placeholder}
+            value={value}
+            onChange={onChange}
+          />
+          {buttonText && (
+            <ActionButton type="button" onClick={onButtonClick}>
+              {buttonText}
+            </ActionButton>
+          )}
+        </InputWrapper>
+      </Container>
+    );
+  },
+);
 
 export default InputForm;

@@ -76,28 +76,28 @@ const Divider = styled.div`
   }
 `;
 
-const SocialLogin = styled.div`
-  margin-top: 30px;
-  display: flex;
-  gap: 20px;
-`;
+// const SocialLogin = styled.div`
+//   margin-top: 30px;
+//   display: flex;
+//   gap: 20px;
+// `;
 
-const SocialCircle = styled.div`
-  width: 45px;
-  height: 45px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  overflow: hidden;
+// const SocialCircle = styled.div`
+//   width: 45px;
+//   height: 45px;
+//   border-radius: 50%;
+//   display: flex;
+//   align-items: center;
+//   justify-content: center;
+//   cursor: pointer;
+//   overflow: hidden;
 
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-`;
+//   img {
+//     width: 100%;
+//     height: 100%;
+//     object-fit: contain;
+//   }
+// `;
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -171,14 +171,14 @@ function LoginPage() {
       </div>
       <Divider>간편 로그인</Divider>
 
-      <SocialLogin>
+      {/* <SocialLogin>
         <SocialCircle>
           <img src={kakaoIcon} alt="카카오 로그인" />
         </SocialCircle>
         <SocialCircle>
           <img src={naverIcon} alt="네이버 로그인" />
         </SocialCircle>
-      </SocialLogin>
+      </SocialLogin> */}
     </PageWrapper>
   );
 }
