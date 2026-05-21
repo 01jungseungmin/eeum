@@ -52,7 +52,7 @@ public class OwnerInfo extends BaseEntity {
         ownerInfo.account = account;
         ownerInfo.businessNumber = businessNumber;
         ownerInfo.openingDate = openingDate;
-        ownerInfo.approvalStatus = ApprovalStatus.DRAFT;
+        ownerInfo.approvalStatus = ApprovalStatus.PENDING;
         ownerInfo.rejectionReason = null;
         return ownerInfo;
     }
