@@ -155,7 +155,7 @@ public class TokenService {
      * 검증 성공 시 토큰의 accountId를 반환한다.
      */
     //비밀번호 재설정 토큰을 검증하는 메서드
-    public Long validateAndConsumePasswordResetToken(String resetToken) {
+    public Long validatePasswordResetToken(String resetToken) {
         if (!jwtProvider.isValid(resetToken)) { //resetToken 자체가 유효한 JWT인지 검사
             throw new BusinessException(ErrorCode.AUTH_INVALID_RESET_TOKEN); //토큰 자체가 유효하지 않으면 비밀번호 재설정 토큰 오류
         }
@@ -172,11 +172,11 @@ public class TokenService {
         if (!storedToken.equals(resetToken)) { //Redis에 저장된 토큰과 사용자가 보낸 resetToken이 같은지 비교
             throw new BusinessException(ErrorCode.AUTH_INVALID_RESET_TOKEN); //Redis 저장값과 요청 토큰이 다르면 예외
         }
-
-        //Redis에서 비밀번호 재설정 토큰 삭제 (1회성 사용 처리)
-        redisUtil.delete(passwordResetTokenKey(accountId));
-
         return accountId;
+    }
+
+    public void deletePasswordResetToken(Long accountId) { //저장된 Refresh Token을 Redis에서 삭제
+        redisUtil.delete(passwordResetTokenKey(accountId)); //예를 들어 accountId = 1 delete passwordreset:1
     }
 
     // ===================== 로그아웃 =====================

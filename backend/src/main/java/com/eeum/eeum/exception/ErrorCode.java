@@ -1,9 +1,11 @@
 package com.eeum.eeum.exception;
 
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 
 @Getter
+@RequiredArgsConstructor
 public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
 
     /*
@@ -35,7 +37,6 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     AUTH_INVALID_RESET_TOKEN("AUTH_009", "유효하지 않은 비밀번호 재설정 토큰입니다", HttpStatus.BAD_REQUEST),
     AUTH_RATE_LIMITED("AUTH_010", "요청 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요", HttpStatus.TOO_MANY_REQUESTS),
     AUTH_OAUTH_FAILED("AUTH_011", "소셜 로그인 처리 중 오류가 발생했습니다", HttpStatus.BAD_REQUEST),
-
     // ===================== 회원 (ACCOUNT) =====================
     ACCOUNT_NOT_FOUND("ACCOUNT_001", "존재하지 않는 회원입니다", HttpStatus.NOT_FOUND),
     ACCOUNT_DUPLICATE_EMAIL("ACCOUNT_002", "이미 사용 중인 이메일입니다", HttpStatus.CONFLICT),
@@ -48,7 +49,11 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_OWNER_NOT_APPROVED("ACCOUNT_009", "사장 회원 승인이 완료되지 않았습니다", HttpStatus.FORBIDDEN),
     ACCOUNT_DUPLICATE_BUSINESS_NUMBER("ACCOUNT_010", "이미 등록된 사업자번호입니다", HttpStatus.CONFLICT),
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
-
+    ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
+    // ===================== 사업자 인증 (BUSINESST) =====================
+    BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
+    BUSINESS_API_FAILED("BUSINESS_002", "사업자등록정보 API 호출에 실패했습니다.", HttpStatus.BAD_GATEWAY),
+    BUSINESS_INVALID_OPENING_DATE("BUSINESS_003", "개업일자 형식이 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
     // ===================== 활동 지역 (REGION) =====================
     REGION_NOT_FOUND("REGION_001", "존재하지 않는 지역입니다", HttpStatus.NOT_FOUND),
     REGION_ALREADY_REGISTERED("REGION_002", "이미 등록된 활동 지역입니다", HttpStatus.CONFLICT),
@@ -167,10 +172,4 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     private final String code;
     private final String message;
     private final HttpStatus httpStatus;
-
-    ErrorCode(String code, String message, HttpStatus httpStatus) {
-        this.code = code;
-        this.message = message;
-        this.httpStatus = httpStatus;
-    }
 }

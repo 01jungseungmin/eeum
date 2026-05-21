@@ -24,17 +24,12 @@ public class OwnerSignupRequestDto {
     )
     private String password;
 
-    @Schema(description = "닉네임", example = "동네사장")
-    @NotBlank(message = "닉네임은 필수입니다")
-    @Size(min = 2, max = 20, message = "닉네임은 2~20자 이내여야 합니다")
-    private String nickname;
-
     @Schema(description = "이름", example = "홍길동")
     @NotBlank(message = "이름은 필수입니다")
     private String name;
 
-    @Schema(description = "전화번호", example = "010-1234-5678")
-    @NotBlank(message = "전화번호는 필수입니다")
+    @Schema(description = "사장님 전화번호", example = "010-1234-5678")
+    @NotBlank(message = "사장님 전화번호는 필수입니다")
     @Pattern(regexp = "^01[0-9]-\\d{3,4}-\\d{4}$", message = "전화번호 형식이 올바르지 않습니다")
     private String phone;
 
@@ -42,6 +37,26 @@ public class OwnerSignupRequestDto {
     @NotBlank(message = "사업자번호는 필수입니다")
     @Pattern(regexp = "^\\d{10}$", message = "사업자번호는 숫자 10자리여야 합니다")
     private String businessNumber;
+
+    @Schema(description = "상호명", example = "맛있는 반찬가게")
+    @NotBlank(message = "상호명은 필수입니다")
+    private String storeName;
+
+    @NotBlank(message = "개업일자는 필수입니다")
+    @Schema(description = "개업일자", example = "20240101")
+    private String openingDate;
+
+    @Schema(description = "사업장 소재지", example = "서울 마포구 서교동 123-4")
+    @NotBlank(message = "사업장 소재지는 필수입니다")
+    private String storeAddress;
+
+    @Schema(description = "사업장 전화번호", example = "02-1234-5678")
+    @NotBlank(message = "사업장 전화번호는 필수입니다")
+    @Pattern(
+            regexp = "^(0\\d{1,2}-\\d{3,4}-\\d{4}|01[0-9]-\\d{3,4}-\\d{4})$",
+            message = "사업장 전화번호 형식이 올바르지 않습니다"
+    )
+    private String storePhone;
 
     @Schema(description = "이메일 인증 토큰", example = "abc123")
     @NotBlank(message = "이메일 인증 토큰은 필수입니다")

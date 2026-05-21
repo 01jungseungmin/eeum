@@ -44,3 +44,10 @@ jwt:
 auth:
   email-verification-code-expiration: ${EMAIL_VERIFICATION_CODE_EXPIRATION:300}
   email-verification-token-expiration: ${EMAIL_VERIFICATION_TOKEN_EXPIRATION:1800}
+
+business:
+  nts:
+    service-key: ${NTS_BUSINESS_SERVICE_KEY}
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY}

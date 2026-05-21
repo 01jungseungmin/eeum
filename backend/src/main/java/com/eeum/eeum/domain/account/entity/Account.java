@@ -101,41 +101,46 @@ public class Account extends BaseEntity {
         return account;
     }
 
-    public static Account createOAuthUser(
+    public static Account createOAuthPendingUser(
             String email,
-            String name,
             String nickname,
-            String phone,
+            String profileImageUrl,
             OAuthProvider provider,
             String providerId
     ) {
         Account account = new Account();
         account.email = email;
         account.password = null;
-        account.name = name;
+        account.name = "";
         account.nickname = nickname;
-        account.phone = phone;
+        account.phone = "";
         account.provider = provider;
         account.providerId = providerId;
-        account.profileImageUrl = DEFAULT_PROFILE_IMAGE_URL;
+        account.profileImageUrl = profileImageUrl != null ? profileImageUrl : DEFAULT_PROFILE_IMAGE_URL;
         account.role = AccountRole.ROLE_USER;
-        account.status = AccountStatus.ACTIVE;
+        account.status = AccountStatus.PENDING;
         account.emailVerified = true;
         return account;
+    }
+
+    // 추가 정보 입력 완료 후 업데이트
+    public void completeOAuthProfile(String name, String phone, String nickname) {
+        this.name = name;
+        this.phone = phone;
+        if (nickname != null) this.nickname = nickname;
+        this.status = AccountStatus.ACTIVE;
     }
 
     public static Account createOwner(
             String email,
             String encodedPassword,
             String name,
-            String nickname,
             String phone
     ) {
         Account account = new Account();
         account.email = email;
         account.password = encodedPassword;
         account.name = name;
-        account.nickname = nickname;
         account.phone = phone;
         account.provider = OAuthProvider.LOCAL;
         account.providerId = null;

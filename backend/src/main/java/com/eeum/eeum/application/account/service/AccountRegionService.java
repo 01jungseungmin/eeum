@@ -3,6 +3,7 @@ package com.eeum.eeum.application.account.service;
 import com.eeum.eeum.application.account.dto.request.LocationDto;
 import com.eeum.eeum.application.account.dto.request.RegionRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountRegionResponseDto;
+import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Location;
@@ -32,6 +33,7 @@ public class AccountRegionService {
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final LocationRepository locationRepository;
+    private final AccountMapper accountMapper;
 
     // ===================== 활동 지역 목록 조회 =====================
 
@@ -40,7 +42,7 @@ public class AccountRegionService {
         Account account = getAccount(accountId);
         return accountRegionRepository.findByAccount_AccountId(accountId)
                 .stream()
-                .map(ar -> toDto(account,ar))
+                .map(ar -> accountMapper.toRegionDto(ar,account))
                 .toList();
     }
 
@@ -69,7 +71,7 @@ public class AccountRegionService {
         accountRegionRepository.save(accountRegion);
 
         log.info("활동 지역 등록: accountId={}, regionId={}", accountId, region.getRegionId());
-        return toDto(account,accountRegion);
+        return accountMapper.toRegionDto(accountRegion,account);
     }
 
     // ===================== GPS 인증 =====================
@@ -103,7 +105,7 @@ public class AccountRegionService {
         }
 
         log.info("활동 지역 GPS 인증 완료: accountId={}, accountRegionId={}", accountId, accountRegionId);
-        return toDto(account,accountRegion);
+        return accountMapper.toRegionDto(accountRegion,account);
     }
 
     // ===================== 특정 지역 조회 =====================
@@ -112,7 +114,7 @@ public class AccountRegionService {
         Account account = getAccount(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
 
-        return toDto(account,accountRegion);
+        return accountMapper.toRegionDto(accountRegion,account);
     }
 
     // ===================== 대표 지역 설정 =====================
@@ -183,20 +185,6 @@ public class AccountRegionService {
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
-    private AccountRegionResponseDto toDto(Account account,AccountRegion accountRegion) {
-        return AccountRegionResponseDto.builder()
-                .accountRegionId(accountRegion.getAccountRegionId())
-                .regionId(accountRegion.getRegionId())
-                .siDo(accountRegion.getRegion().getSiDo())
-                .gunGu(accountRegion.getRegion().getGunGu())
-                .dong(accountRegion.getRegion().getDong())
-                .isPrimary(accountRegion.getAccountRegionId().equals(account.getPrimaryRegionId()))
-                .verified(accountRegion.isVerified())
-                .verifiedAt(accountRegion.getVerifiedAt())
-                .createdAt(accountRegion.getCreatedAt())
-                .build();
     }
 
 }
