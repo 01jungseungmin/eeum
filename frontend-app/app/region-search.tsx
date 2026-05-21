@@ -4,6 +4,7 @@ import { Text } from '../components/CustomText'; // 경로에 맞게 수정해�
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 
 import { regionApi } from '../api/region'; 
 
@@ -56,6 +57,43 @@ export default function RegionSearchScreen() {
     ]);
   };
 
+  // GPS로 현재 위치 찾음
+  const handleCurrentLocation = async () => {
+    try {
+      setIsLoading(true);
+
+      // 1) 스마트폰 위치 권한 묻기 (시안 3번째 사진에 있던 그 팝업입니다!)
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('권한 필요', '현재 위치로 동네를 찾으려면 위치 권한이 필요해요.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 2) 권한을 허락했다면, 현재 GPS 좌표(위도, 경도) 가져오기
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced, // 배터리를 너무 먹지 않도록 적절한 정확도 설정
+      });
+
+      const { latitude, longitude } = location.coords;
+      console.log('📍 내 위치 좌표:', latitude, longitude);
+
+      // 3) 백엔드 파트너에게 "이 좌표 근처 동네 찾아줘!" 하고 API 요청
+      // 💡 (주의) 이 API는 백엔드 파트너가 만들어주면 주석을 풀고 연결할 겁니다!
+      // const data = await regionApi.searchByGps(latitude, longitude);
+      // setResults(data.data);
+      
+      Alert.alert('GPS 성공!', `위도: ${latitude}\n경도: ${longitude}\n(이제 이 좌표로 서버에 동네를 물어보면 됩니다!)`);
+
+    } catch (error) {
+      console.error(error);
+      Alert.alert('오류', '위치 정보를 가져오는 데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* 상단 검색바 */}
@@ -77,6 +115,12 @@ export default function RegionSearchScreen() {
           />
         </View>
       </View>
+
+      {/* 3. 현재 위치로 찾기 버튼 추가 (디자인 시안처럼 검색바 바로 아래에 배치) */}
+      <TouchableOpacity style={styles.currentLocationBtn} onPress={handleCurrentLocation}>
+        <Ionicons name="locate" size={18} color="#00A859" />
+        <Text style={styles.currentLocationText}>현재 위치로 찾기</Text>
+      </TouchableOpacity>
 
       {/* 로딩 중일 때 표시 */}
       {isLoading ? (
@@ -153,5 +197,21 @@ const styles = StyleSheet.create({
   emptyText: { 
     color: '#999', 
     fontSize: 15 
-  }
+  },
+  currentLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 20,
+    marginTop: 10,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+  },
+  currentLocationText: {
+    marginLeft: 6,
+    color: '#00A859',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
 });
