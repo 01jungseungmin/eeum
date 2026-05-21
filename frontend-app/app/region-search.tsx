@@ -1,22 +1,39 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
-import { Text } from '../components/CustomText';
+import { View, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
+import { Text } from '../components/CustomText'; // 경로에 맞게 수정해주세요
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-// import { regionService } from '../services/regionService'; // 나중에 백엔드 연결 시 주석 해제
 
-const DUMMY_REGIONS = [
-  { id: 1, name: "서울특별시 송파구 잠실본동" },
-  { id: 2, name: "서울특별시 송파구 잠실2동" },
-  { id: 3, name: "서울특별시 강남구 역삼동" },
-];
+import { regionApi } from '../api/region'; 
 
 export default function RegionSearchScreen() {
   const router = useRouter();
   const [searchText, setSearchText] = useState('');
-  const [results, setResults] = useState(DUMMY_REGIONS);
+  const [results, setResults] = useState<any[]>([]); // 검색 결과 상태
+  const [isLoading, setIsLoading] = useState(false); // 로딩 상태
 
+  // 1. 검색 실행 함수 (엔터 눌렀을 때 작동)
+  const handleSearch = async () => {
+    if (!searchText.trim()) {
+      Alert.alert('알림', '검색어를 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // API 통신 서버에서 지역 목록을 받아옵니다.
+      const data = await regionApi.searchRegion(searchText);
+      // 서버에서 주는 응답 형태에 맞게 세팅 (예: data.data 또는 data가 바로 배열일 수 있음)
+      setResults(data.data || data); 
+    } catch (error) {
+      Alert.alert('검색 실패', '지역을 검색하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 2. 지역 등록 함수
   const handleAddRegion = async (regionId: number, name: string) => {
     Alert.alert("동네 등록", `'${name}'을(를) 활동 지역으로 등록할까요?`, [
       { text: "취소", style: "cancel" },
@@ -24,11 +41,11 @@ export default function RegionSearchScreen() {
         text: "등록", 
         onPress: async () => {
           try {
-            // const res = await regionService.addRegion(regionId);
-            // if (res.success) { ... }
+            // ✨ API로 regionId를 서버에 던져줍니다.
+            await regionApi.addRegion(regionId);
             
-            // 임시 성공 처리
             Alert.alert("성공", "지역이 성공적으로 등록되었습니다.", [
+              // 성공하면 이전 화면(내 지역 목록)으로 돌아갑니다.
               { text: "확인", onPress: () => router.back() }
             ]);
           } catch (e: any) {
@@ -53,34 +70,40 @@ export default function RegionSearchScreen() {
             placeholder="동네 이름을 검색하세요 (예: 잠실동)" 
             value={searchText}
             autoFocus={true}
-            onChangeText={(t) => {
-              setSearchText(t);
-              // 입력한 글자가 포함된 동네만 필터링
-              setResults(DUMMY_REGIONS.filter(r => r.name.includes(t)));
-            }}
+            onChangeText={setSearchText}
+            // 키보드에서 '완료/검색'을 눌렀을 때 API를 호출합니다.
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
           />
         </View>
       </View>
 
-      {/* 동네 검색 결과 리스트 */}
-      <FlatList 
-        data={results}
-        keyExtractor={(item) => item.id.toString()}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={styles.item} // ✨ 문제가 되었던 스타일입니다. 하단에 추가 완료!
-            onPress={() => handleAddRegion(item.id, item.name)}
-          >
-            <Text style={styles.itemText}>{item.name}</Text>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
-          </View>
-        )}
-      />
+      {/* 로딩 중일 때 표시 */}
+      {isLoading ? (
+        <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList 
+          data={results}
+          // 서버에서 오는 regionId를 키값으로 사용합니다.
+          keyExtractor={(item) => item.regionId.toString()}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={styles.item}
+              onPress={() => handleAddRegion(item.regionId, item.name)}
+            >
+              <Text style={styles.itemText}>{item.name}</Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                {searchText ? "검색 결과가 없습니다." : "동네 이름을 검색해 보세요."}
+              </Text>
+            </View>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }

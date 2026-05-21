@@ -116,8 +116,8 @@ export default function LoginScreen() {
     try {
       NaverLogin.initialize({
         appName: 'EEUM',
-        consumerKey: 'Ryfw4Zb5hvMUsAxF7N83',
-        consumerSecret: 'amg0HY9SQn',
+        consumerKey: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID as string,
+        consumerSecret: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET as string,
         serviceUrlSchemeIOS: 'eeum',
       });
 

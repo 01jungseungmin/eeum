@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { regionService } from '../../services/regionService';
 import { Text } from '../../components/CustomText';
+import { regionApi } from '../../api/region';
 
 const { width } = Dimensions.get('window');
 
@@ -105,23 +106,32 @@ const UsedTradeView = ({ router, selectedCategory, setSelectedCategory }: any) =
   </View>
 );
 
-// 2-4. 동네 설정 모달 컴포넌트
-const RegionModal = ({ visible, onClose, regions, onSetPrimary, onAddRegion }: any) => (
+// 2-4. 동네 설정 모달 컴포넌트 (✨ 삭제 기능 연결, 데이터 속성 이름 변경)
+const RegionModal = ({ visible, onClose, regions, onSetPrimary, onAddRegion, onDeleteRegion }: any) => (
   <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
     <Pressable style={styles.modalOverlay} onPress={onClose}>
       <Pressable style={styles.modalContent}>
         <Text style={styles.modalTitle}>내 동네 설정</Text>
         <Text style={styles.modalSubTitle}>최대 2개의 동네를 선택할 수 있어요</Text>
+        
         {regions.map((item: any) => (
           <TouchableOpacity key={item.accountRegionId} style={styles.regionItem} onPress={() => onSetPrimary(item.accountRegionId)}>
             <View style={styles.regionLeft}>
               <View style={[styles.radio, item.isPrimary && styles.radioActive]} />
-              <Text style={item.isPrimary ? styles.regionNameActive : styles.regionName}>{item.dong}</Text>
+              {/* 💡 백엔드 데이터 형식에 맞춰 item.dong -> item.region.name 으로 변경했습니다 */}
+              <Text style={item.isPrimary ? styles.regionNameActive : styles.regionName}>
+                {item.region.name}
+              </Text>
               {item.verified && <Ionicons name="checkmark-circle" size={14} color="#00A859" style={{marginLeft: 5}} />}
             </View>
-            <TouchableOpacity><Ionicons name="close" size={20} color="#999" /></TouchableOpacity>
+            
+            {/* ✨ X 버튼을 눌렀을 때 삭제 함수(onDeleteRegion)가 실행되도록 연결! */}
+            <TouchableOpacity onPress={() => onDeleteRegion(item.accountRegionId)}>
+              <Ionicons name="close" size={20} color="#999" />
+            </TouchableOpacity>
           </TouchableOpacity>
         ))}
+
         <TouchableOpacity style={styles.addButton} onPress={onAddRegion}>
           <Ionicons name="add" size={20} color="#fff" />
           <Text style={styles.addButtonText}>동네 추가</Text>
@@ -138,42 +148,61 @@ const RegionModal = ({ visible, onClose, regions, onSetPrimary, onAddRegion }: a
 export default function HomeScreen() {
   const router = useRouter();
   
-  // UI 상태 관리
   const [activeTab, setActiveTab] = useState<'shop' | 'used'>('shop');
   const [selectedCategory, setSelectedCategory] = useState('전체');
   const [modalVisible, setModalVisible] = useState(false);
   
-  // 비즈니스(데이터) 상태 관리
   const [regions, setRegions] = useState<any[]>([]);
   const [primaryRegionName, setPrimaryRegionName] = useState('동네 로딩중...');
 
-  // [시간 의존도 처리] 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
     loadRegions();
   }, []);
 
+  // ✨ 1. 지역 목록 불러오기 (regionApi 사용)
   const loadRegions = async () => {
     try {
-      const res = await regionService.getRegions();
-      if (res.success) {
-        setRegions(res.data);
-        const primary = res.data.find((r: any) => r.isPrimary);
-        setPrimaryRegionName(primary ? `${primary.gunGu} ${primary.dong}` : '동네 설정 필요');
-      }
+      const res = await regionApi.getMyRegions();
+      // 서버 응답 구조(res.data)에 맞춰 수정
+      const data = res.data || res; 
+      setRegions(data);
+      
+      const primary = data.find((r: any) => r.isPrimary);
+      // 💡 백엔드 데이터에 맞게 primary.region.name 으로 수정
+      setPrimaryRegionName(primary ? primary.region.name : '동네 설정 필요');
     } catch (e) {
       console.log("지역 목록 로딩 실패:", e);
       setPrimaryRegionName('동네 설정 필요');
     }
   };
 
+  // ✨ 2. 대표 지역 설정하기
   const handleSetPrimary = async (id: number) => {
     try {
-      await regionService.setPrimaryRegion(id);
-      loadRegions(); // 상태 갱신
-      setModalVisible(false);
+      await regionApi.setPrimaryRegion(id);
+      loadRegions(); // 설정 후 목록을 다시 불러와서 초록색 체크를 업데이트합니다.
     } catch (e) {
       Alert.alert("오류", "대표 지역 설정에 실패했습니다.");
     }
+  };
+
+  // ✨ 3. 지역 삭제하기 (새로 추가됨!)
+  const handleDeleteRegion = (id: number) => {
+    Alert.alert("삭제", "이 동네를 삭제하시겠습니까?", [
+      { text: "취소", style: "cancel" },
+      {
+        text: "삭제",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await regionApi.deleteRegion(id);
+            loadRegions(); // 삭제 후 목록 새로고침
+          } catch (e) {
+            Alert.alert("오류", "삭제에 실패했습니다.");
+          }
+        }
+      }
+    ]);
   };
 
   const handleAddRegion = () => {
@@ -191,7 +220,6 @@ export default function HomeScreen() {
         onSearch={() => router.push({ pathname: '/search' })}
       />
       
-      {/* 탭 상태에 따라 독립적인 하위 컴포넌트 렌더링 */}
       {activeTab === 'shop' 
         ? <ShopView router={router} /> 
         : <UsedTradeView router={router} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
@@ -203,6 +231,7 @@ export default function HomeScreen() {
         regions={regions}
         onSetPrimary={handleSetPrimary}
         onAddRegion={handleAddRegion}
+        onDeleteRegion={handleDeleteRegion} // ✨ 모달에 삭제 함수 전달!
       />
     </SafeAreaView>
   );

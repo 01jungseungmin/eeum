@@ -6,8 +6,7 @@ import axios, {
 } from 'axios';
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from '../utils/secureStore';
 
-// const BASE_URL = 'http://192.168.50.37:8080';
-const BASE_URL = 'http://192.168.0.17:8080';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
 //Axios 기본 설정에 '_retry' 속성을 추가.
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
