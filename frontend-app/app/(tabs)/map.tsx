@@ -1,23 +1,54 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, DimensionValue } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/CustomText';
+// 💡 웹뷰 import 추가!
+import { WebView } from 'react-native-webview';
 
 const categories = ['전체', '카페', '식당', '베이커리', '편의점'];
 
 export default function MapScreen() {
   const [activeCategory, setActiveCategory] = useState('전체');
+  
+  // 💡 환경 변수에서 JavaScript 키 가져오기
+  const KAKAO_JS_KEY = process.env.EXPO_PUBLIC_KAKAO_JS_KEY;
 
-  // 마커를 그리는 공통 컴포넌트
-const MapMarker = ({ name, top, left }: { name: string, top: DimensionValue, left: DimensionValue }) => (
-  <View style={[styles.markerWrapper, { top, left }]}>
-    <Ionicons name="location-sharp" size={40} color="#00A859" style={{ marginBottom: -10 }} />
-    <View style={styles.markerLabel}>
-      <Text style={styles.markerText}>{name}</Text>
-    </View>
-  </View>
-);
+  // 💡 웹뷰 안에 들어갈 HTML & 카카오맵 JS 코드
+  // 아까 찾으신 '군자동' 좌표를 초기 중심값으로 설정해 두었습니다!
+  const mapHtml = `
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}"></script>
+      <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
+        #map { width: 100%; height: 100%; }
+      </style>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        // 1. 지도 생성
+        var mapContainer = document.getElementById('map');
+        var mapOption = { 
+            center: new kakao.maps.LatLng(37.548, 127.073), // 군자동 좌표
+            level: 3 // 확대 레벨
+        };
+        var map = new kakao.maps.Map(mapContainer, mapOption);
+
+        // 2. 중앙에 마커 하나 찍어보기 (테스트용)
+        var markerPosition  = new kakao.maps.LatLng(37.548, 127.073); 
+        var marker = new kakao.maps.Marker({
+            position: markerPosition
+        });
+        marker.setMap(map);
+      </script>
+    </body>
+    </html>
+  `;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -47,22 +78,16 @@ const MapMarker = ({ name, top, left }: { name: string, top: DimensionValue, lef
         </ScrollView>
       </View>
 
-      {/* 지도 영역 (카카오맵 API 들어갈 자리) */}
+      {/* ✨ 지도 영역 (WebView로 교체) */}
       <View style={styles.mapArea}>
-        {/* 가짜 마커들 (임의의 위치) */}
-        <MapMarker name="골드락 카페" top="30%" left="40%" />
-        <MapMarker name="한식당 맛집" top="45%" left="65%" />
-        <MapMarker name="베이커리 빵집" top="55%" left="20%" />
-        <MapMarker name="동네 약국" top="65%" left="35%" />
+        <WebView
+          originWhitelist={['*']}
+          source={{ html: mapHtml, baseUrl: 'http://localhost:8081' }}
+          style={{ flex: 1 }}
+          javaScriptEnabled={true}
+        />
 
-        {/* 현재 위치 마커 (중앙) */}
-        <View style={[styles.markerWrapper, { top: '45%', left: '40%' }]}>
-          <Ionicons name="location" size={50} color="#888" style={{ marginBottom: -15 }} />
-          <Text style={styles.centerText}>지도 영역</Text>
-          <Text style={styles.centerSubText}>(4개 상점)</Text>
-        </View>
-
-        {/* 내 위치로 이동 버튼 */}
+        {/* 내 위치로 이동 버튼 (지도 위에 둥둥 떠있게) */}
         <TouchableOpacity style={styles.myLocationBtn}>
           <Text style={styles.myLocationText}>내 위치로 이동</Text>
         </TouchableOpacity>
@@ -85,13 +110,8 @@ const styles = StyleSheet.create({
 
   mapArea: { flex: 1, backgroundColor: '#F8F9FA', position: 'relative' },
   
-  markerWrapper: { position: 'absolute', alignItems: 'center' },
-  markerLabel: { backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, elevation: 3 },
-  markerText: { fontSize: 12, fontWeight: '600', color: '#333' },
+  // 가짜 마커 스타일은 지웠습니다!
   
-  centerText: { fontSize: 14, color: '#888', fontWeight: 'bold', marginTop: 5 },
-  centerSubText: { fontSize: 12, color: '#AAA' },
-
   myLocationBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', backgroundColor: '#fff', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 5 },
   myLocationText: { fontSize: 14, fontWeight: 'bold', color: '#333' }
 });
