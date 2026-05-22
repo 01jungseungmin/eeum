@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import axios from 'axios';
 
 import { regionApi } from '../api/region'; 
 
@@ -57,38 +58,68 @@ export default function RegionSearchScreen() {
     ]);
   };
 
-  // GPS로 현재 위치 찾음
+  // GPS로 현재 위치 찾기 (카카오 로컬 API + .env 적용)
   const handleCurrentLocation = async () => {
     try {
       setIsLoading(true);
 
-      // 1) 스마트폰 위치 권한 묻기 (시안 3번째 사진에 있던 그 팝업입니다!)
+      // 1. 위치 권한 묻기
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
         Alert.alert('권한 필요', '현재 위치로 동네를 찾으려면 위치 권한이 필요해요.');
-        setIsLoading(false);
         return;
       }
 
-      // 2) 권한을 허락했다면, 현재 GPS 좌표(위도, 경도) 가져오기
+      // 2. 현재 GPS 위도, 경도 가져오기
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced, // 배터리를 너무 먹지 않도록 적절한 정확도 설정
+        accuracy: Location.Accuracy.Balanced, 
       });
 
       const { latitude, longitude } = location.coords;
       console.log('📍 내 위치 좌표:', latitude, longitude);
 
-      // 3) 백엔드 파트너에게 "이 좌표 근처 동네 찾아줘!" 하고 API 요청
-      // 💡 (주의) 이 API는 백엔드 파트너가 만들어주면 주석을 풀고 연결할 겁니다!
-      // const data = await regionApi.searchByGps(latitude, longitude);
-      // setResults(data.data);
-      
-      Alert.alert('GPS 성공!', `위도: ${latitude}\n경도: ${longitude}\n(이제 이 좌표로 서버에 동네를 물어보면 됩니다!)`);
+      // ✨ 3. 환경 변수(.env)에서 카카오 REST API 키 불러오기
+      // (주의: .env 파일에 EXPO_PUBLIC_KAKAO_REST_API_KEY 로 저장되어 있어야 합니다!)
+      const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+
+      if (!KAKAO_REST_API_KEY) {
+         console.error('🚨 환경 변수 에러: 카카오 API 키를 찾을 수 없습니다.');
+         Alert.alert('오류', '앱 설정 문제로 위치를 찾을 수 없습니다.');
+         return;
+      }
+
+      // 🚀 4. 카카오 로컬 API 호출 (좌표 -> 주소 변환)
+      const response = await axios.get(
+        `https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${longitude}&y=${latitude}`,
+        {
+          headers: {
+            Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`, 
+          },
+        }
+      );
+
+      // 🎯 5. 응답 데이터에서 '동' 이름(행정동) 뽑아내기
+      const documents = response.data.documents;
+      const regionName = documents.find((doc: any) => doc.region_type === 'H')?.region_3depth_name;
+
+      if (regionName) {
+        console.log('📍 카카오가 찾아준 동네 이름:', regionName);
+        
+        // 검색창 텍스트를 내 동네로 업데이트
+        setSearchText(regionName);
+        
+        // 🔗 6. 이음 서버의 동네 검색 API 호출 (동네 목록 띄우기)
+        const data = await regionApi.searchRegion(regionName);
+        setResults(data.data || data);
+
+      } else {
+        Alert.alert('알림', '현재 위치의 정확한 동네 이름을 찾을 수 없습니다.');
+      }
 
     } catch (error) {
-      console.error(error);
-      Alert.alert('오류', '위치 정보를 가져오는 데 실패했습니다.');
+      console.error('카카오 주소 변환 에러:', error);
+      Alert.alert('오류', '위치 정보를 처리하는 데 실패했습니다.');
     } finally {
       setIsLoading(false);
     }

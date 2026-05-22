@@ -13,6 +13,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import axios from 'axios';
 import { client } from '../../api/client'; 
 import { Text } from '../../components/CustomText';
 import { saveTokens } from '../../utils/secureStore';
@@ -89,25 +90,42 @@ export default function LoginScreen() {
       // 2. 백엔드 API 호출
     const response = await client.post('/auth/login/oauth', {
       provider: 'KAKAO',
-      code: result.accessToken
+      accessToken: result.accessToken
     });
 
     // 3. 백엔드 응답 처리
     if (response.data.success) { 
-      const { accessToken, refreshToken } = response.data.data;
+      const { signupRequired, tempToken, accessToken, refreshToken } = response.data.data;
       
-      console.log('이음 서버 토큰 발급 성공!', accessToken);
-      
-      // 토큰 저장 로직
-      await saveTokens(accessToken, refreshToken); 
-      
-      // 홈 화면으로 이동
-      router.replace('/(tabs)');
+      if (signupRequired) {
+        // 🚦 신규 유저: 회원가입 화면으로 보내기!
+        console.log('신규 유저입니다. 회원가입 화면으로 이동합니다. 임시 토큰:', tempToken);
+        
+        // 다음 화면(회원가입)에서 쓸 수 있도록 임시 토큰을 저장하거나 넘겨줍니다.
+        // (정원님의 회원가입 라우터 경로에 맞게 '/signup' 등을 수정해 주세요)
+        router.push({
+          pathname: '/signup', // 👈 실제 회원가입 화면 경로로 바꿔주세요!
+          params: { tempToken: tempToken }
+        });
+
+      } else {
+        // 🟢 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기!
+        console.log('기존 유저 로그인 성공! 진짜 토큰:', accessToken);
+        
+        await saveTokens(accessToken, refreshToken);
+        router.replace('/(tabs)');
+      }
     }
 
     } catch (error) {
-      console.error('카카오 로그인 에러:', error);
-      Alert.alert('로그인 실패', '카카오 로그인 중 오류가 발생했습니다.');
+      // 1. "타입스크립트야, 이거 Axios 통신 에러 맞지?" 하고 물어봅니다.
+      if (axios.isAxiosError(error)) {
+        // 2. 맞다면, 이제 안심하고 .response를 꺼내서 백엔드의 속마음을 까봅니다!
+        console.log('🚨 백엔드 카카오 거절 사유:', JSON.stringify(error.response?.data, null, 2));
+      } else {
+        // 3. 통신 에러가 아닌 다른 에러(단순 코드 버그 등)일 경우
+        console.error('기타 카카오 로그인 에러:', error);
+      }
     }
   };
 
@@ -129,22 +147,41 @@ export default function LoginScreen() {
       // 2. 백엔드 API 호출
       const response = await client.post('/auth/login/oauth', {
         provider: 'NAVER',
-        code: successResponse.accessToken
+        accessToken: successResponse.accessToken
       });
 
       // 3. 백엔드 응답 처리
       if (response.data.success) {
-        const { accessToken, refreshToken } = response.data.data;
+        // 🚨 카카오 때처럼 응답 데이터를 싹 다 꺼냅니다.
+        const { signupRequired, tempToken, accessToken, refreshToken } = response.data.data;
         
-        console.log('우리 서버 토큰 발급 성공!', accessToken);
-        // 토큰 저장
-        await saveTokens(accessToken, refreshToken); 
-        
-        router.replace('/(tabs)');
+        if (signupRequired) {
+          // 🚦 신규 유저: 회원가입 화면으로 보내기!
+          console.log('네이버 신규 유저입니다. 회원가입으로 이동. 임시 토큰:', tempToken);
+          
+          router.push({
+            pathname: '/signup', // 👈 정원님의 회원가입 화면 경로 (예: '/(auth)/signup')
+            params: { tempToken: tempToken }
+          });
+          
+        } else {
+          // 🟢 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기!
+          console.log('우리 서버 토큰 발급 성공!', accessToken);
+          
+          await saveTokens(accessToken, refreshToken); 
+          router.replace('/(tabs)');
+        }
       }
     }
     } catch (error) {
-      console.error('네이버 로그인 에러:', error);
+      // 1. "타입스크립트야, 이거 Axios 통신 에러 맞지?" 하고 물어봅니다.
+      if (axios.isAxiosError(error)) {
+        // 2. 맞다면, 이제 안심하고 .response를 꺼내서 백엔드의 속마음을 까봅니다!
+        console.log('🚨 백엔드 네이버 거절 사유:', JSON.stringify(error.response?.data, null, 2));
+      } else {
+        // 3. 통신 에러가 아닌 다른 에러(단순 코드 버그 등)일 경우
+        console.error('기타 네이버 로그인 에러:', error);
+      }
     }
   };
 
