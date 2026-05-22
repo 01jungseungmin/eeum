@@ -10,12 +10,12 @@ import {
   PlusCircle,
   Users,
 } from 'lucide-react';
-import DashboardCard from '../../components/dashboard/DashBoardCard';
-import SalesChart from '../../components/dashboard/SalesChart';
-import CategoryChart from '../../components/dashboard/CategoryChart';
-import TopProducts from '../../components/dashboard/TopProducts';
-import RecentOrders from '../../components/dashboard/recentOrders';
-import RecentReviews from '../../components/dashboard/RecentReviews';
+import DashboardCard from '../../../components/dashboard/DashBoardCard';
+import SalesChart from '../../../components/dashboard/SalesChart';
+import CategoryChart from '../../../components/dashboard/CategoryChart';
+import TopProducts from '../../../components/dashboard/TopProducts';
+import RecentOrders from '../../../components/dashboard/recentOrders';
+import RecentReviews from '../../../components/dashboard/RecentReviews';
 
 const DashboardWrapper = styled.div`
   padding: 30px;
