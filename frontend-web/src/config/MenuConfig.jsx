@@ -16,13 +16,17 @@ import {
   TrendingUp,
   Bell,
   ShieldCheck,
-  Settings,
-  LogOut,
+  FileText, // 🌟 관리자용 추가
+  FolderTree, // 🌟 관리자용 추가
+  UserCheck, // 🌟 관리자용 추가
 } from 'lucide-react';
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
 
-export const MENU_CONFIG = [
+// ==========================================
+// 🏪 1. 사장님 전용 메뉴 (기존 메뉴 이름 변경)
+// ==========================================
+export const OWNER_MENU_CONFIG = [
   {
     group: '메뉴',
     items: [
@@ -176,9 +180,79 @@ export const MENU_CONFIG = [
   },
 ];
 
-// Helper: 경로로 데이터 하나만 찾아주는 함수
-export const findMenuByPath = (path) => {
-  for (const group of MENU_CONFIG) {
+// ==========================================
+// 🛡️ 2. 관리자 전용 메뉴 (첫 번째 이미지 기준)
+// ==========================================
+export const ADMIN_MENU_CONFIG = [
+  {
+    group: '', // 관리자는 첫 그룹에 라벨이 없으므로 빈 문자열 처리
+    items: [
+      {
+        id: 'admin-dashboard',
+        name: '대시보드',
+        path: '/admin/dashboard',
+        icon: <LayoutGrid {...iconProps} />,
+        subtitle: '이웃 플랫폼의 전체 운영 현황을 확인합니다.',
+      },
+      {
+        id: 'admin-members',
+        name: '회원 관리',
+        path: '/admin/members',
+        icon: <Users {...iconProps} />,
+        subtitle: '전체 가입 회원 및 블랙리스트를 관리합니다.',
+      },
+      {
+        id: 'admin-approval',
+        name: '사장 승인',
+        path: '/approval-status', // 🌟 로그인 후 이동할 승인 현황 페이지
+        icon: <UserCheck {...iconProps} />,
+        subtitle: '입점 신청한 사장님의 서류를 심사합니다.',
+        countKey: 'adminApproval', // 알림 숫자 '12' 연동용
+      },
+      {
+        id: 'admin-posts',
+        name: '게시글',
+        path: '/admin/posts',
+        icon: <FileText {...iconProps} />,
+        subtitle: '커뮤니티 및 중고거래 게시글을 모니터링합니다.',
+      },
+      {
+        id: 'admin-reports',
+        name: '신고',
+        path: '/admin/reports',
+        icon: <Flag {...iconProps} />,
+        subtitle: '접수된 유저 및 게시글 신고를 처리합니다.',
+        countKey: 'adminReports', // 알림 숫자 '5' 연동용
+      },
+      {
+        id: 'admin-qna',
+        name: '문의',
+        path: '/admin/qna',
+        icon: <MessageCircle {...iconProps} />,
+        subtitle: '고객 센터로 접수된 1:1 문의에 답변합니다.',
+      },
+      {
+        id: 'admin-categories',
+        name: '카테고리',
+        path: '/admin/categories',
+        icon: <FolderTree {...iconProps} />,
+        subtitle: '서비스 전체 카테고리를 설정하고 관리합니다.',
+      },
+      {
+        id: 'admin-logs',
+        name: '관리자 로그',
+        path: '/admin/logs',
+        icon: <ClipboardList {...iconProps} />,
+        subtitle: '관리자 계정들의 활동 행동 로그를 조회합니다.',
+      },
+    ],
+  },
+];
+
+export const findMenuByPath = (path, role) => {
+  const targetConfig =
+    role === 'ROLE_USER' ? OWNER_MENU_CONFIG : ADMIN_MENU_CONFIG;
+  for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;
   }

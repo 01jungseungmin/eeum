@@ -1,9 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from './pages/login/LoginPage';
-import SignUpPage from './pages/login/SignUpPage';
-import FindPasswordPage from './pages/login/FindPasswordPage';
+import LoginPage from './pages/owner/login/LoginPage';
+import SignUpPage from './pages/owner/login/SignUpPage';
+import FindPasswordPage from './pages/owner/login/FindPasswordPage';
 import MainLayout from './layouts/MainLayout';
-import ApprovalStatus from './pages/main/ApprovalStatusPage';
+import ApprovalStatus from './pages/owner/main/ApprovalStatusPage';
+import OwnerDashboardPage from './pages/owner/main/DashBoardPage';
+import AdminLoginPage from './pages/admin/login/AdminLoginPage';
+import AdminDashboardPage from './pages/admin/main/DashBoardPage';
 
 function App() {
   return (
@@ -11,13 +14,17 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/sign-up" element={<SignUpPage />} />
       <Route path="/find-password" element={<FindPasswordPage />} />
+      <Route path="/admin/login" element={<AdminLoginPage />} />
 
       <Route element={<MainLayout />}>
         {/* 로그인 시 처음에 갈 곳 */}
         <Route path="/" element={<Navigate to="/approval-status" replace />} />
+
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/approval-status" element={<ApprovalStatus />} />
 
         {/* 나중에 추가될 다른 메뉴들 */}
+        <Route path="/dashboard" element={<OwnerDashboardPage />} />
         <Route path="/store" element={<div>상점 관리 페이지 (준비중)</div>} />
         <Route
           path="/products"
