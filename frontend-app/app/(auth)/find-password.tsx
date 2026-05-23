@@ -93,7 +93,6 @@ export default function FindPasswordScreen() {
     if (isResetting) return;
     setIsResetting(true);
     try {
-      // 백엔드 스펙에 따라 emailVerificationToken이 필요할 수 있으므로 함께 보냅니다.
       const response = await client.post('/auth/password/reset', {
         email,
         newPassword,

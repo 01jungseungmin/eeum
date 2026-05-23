@@ -1,4 +1,3 @@
-// 💡 axios 라이브러리를 직접 부르지 않고, 우리가 설정해둔 client만 불러옵니다.
 import { client } from './client';
 
 export const regionApi = {
@@ -35,14 +34,15 @@ export const regionApi = {
     return response.data;
   },
 
-  // ✨ 6. 지역 검색 (추가된 부분)
+  // 6. 지역 검색
   searchRegion: async (keyword: string) => {
     try {
+      // 추후 api 설정 추가 필요
       const response = await client.get(`/regions?search=${keyword}`);
       return response.data;
     } catch (error) {
       console.error('지역 검색 에러:', error);
-      throw error; // 💡 프론트엔드 화면(컴포넌트)에서 에러 팝업을 띄울 수 있도록 에러를 던져줍니다.
+      throw error;
     }
   }
 };

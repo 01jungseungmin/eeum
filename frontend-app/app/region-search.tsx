@@ -43,7 +43,7 @@ export default function RegionSearchScreen() {
         text: "등록", 
         onPress: async () => {
           try {
-            // ✨ API로 regionId를 서버에 던져줍니다.
+            // API로 regionId를 서버에 던져줍니다.
             await regionApi.addRegion(regionId);
             
             Alert.alert("성공", "지역이 성공적으로 등록되었습니다.", [
@@ -77,10 +77,9 @@ export default function RegionSearchScreen() {
       });
 
       const { latitude, longitude } = location.coords;
-      console.log('📍 내 위치 좌표:', latitude, longitude);
+      console.log('내 위치 좌표:', latitude, longitude);
 
-      // ✨ 3. 환경 변수(.env)에서 카카오 REST API 키 불러오기
-      // (주의: .env 파일에 EXPO_PUBLIC_KAKAO_REST_API_KEY 로 저장되어 있어야 합니다!)
+      // 3. 환경 변수(.env)에서 카카오 REST API 키 불러오기
       const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 
       if (!KAKAO_REST_API_KEY) {
@@ -89,7 +88,7 @@ export default function RegionSearchScreen() {
          return;
       }
 
-      // 🚀 4. 카카오 로컬 API 호출 (좌표 -> 주소 변환)
+      // 4. 카카오 로컬 API 호출 (좌표 -> 주소 변환)
       const response = await axios.get(
         `https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${longitude}&y=${latitude}`,
         {
@@ -99,7 +98,7 @@ export default function RegionSearchScreen() {
         }
       );
 
-      // 🎯 5. 응답 데이터에서 '동' 이름(행정동) 뽑아내기
+      // 5. 응답 데이터에서 '동' 이름(행정동) 뽑아내기
       const documents = response.data.documents;
       const regionName = documents.find((doc: any) => doc.region_type === 'H')?.region_3depth_name;
 
@@ -109,7 +108,7 @@ export default function RegionSearchScreen() {
         // 검색창 텍스트를 내 동네로 업데이트
         setSearchText(regionName);
         
-        // 🔗 6. 이음 서버의 동네 검색 API 호출 (동네 목록 띄우기)
+        // 6. 이음 서버의 동네 검색 API 호출 (동네 목록 띄우기)
         const data = await regionApi.searchRegion(regionName);
         setResults(data.data || data);
 

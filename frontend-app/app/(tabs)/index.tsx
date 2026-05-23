@@ -13,7 +13,7 @@ import { regionApi } from '../../api/region';
 const { width } = Dimensions.get('window');
 
 // ==========================================
-// 📦 1. 데이터 영역 (나중에는 서버 통신이나 constants 폴더로 분리)
+// 1. 데이터 영역 (나중에는 서버 통신이나 constants 폴더로 분리)
 // ==========================================
 const SHOP_LIST = [{ id: 's1', name: '라떼가 맛있는 집', category: '카페', img: 'https://via.placeholder.com/150/333333/FFFFFF?text=Cafe' }, /*...생략된 더미 데이터들...*/];
 const EVENT_PRODUCTS = [{ id: 'e1', name: '무항생제 계란 30구', price: 6500, img: 'https://via.placeholder.com/150/EEEEEE/888888?text=Egg' }];
@@ -21,7 +21,7 @@ const USED_CATEGORIES = ['전체', '농산물', '의류', '잡화', '가전'];
 const USED_PRODUCTS = [{ id: 'u1', title: '잔치국수 냄비', location: '송파동', price: 5000, likes: 12, chats: 2, img: 'https://via.placeholder.com/150/E8F5E9/00A859?text=Pot' }];
 
 // ==========================================
-// 🧩 2. 하위 컴포넌트 영역 (나중에는 components 폴더로 독립시킬 파일들)
+// 2. 하위 컴포넌트 영역 (나중에는 components 폴더로 독립시킬 파일들)
 // ==========================================
 
 // 2-1. 헤더 컴포넌트
@@ -106,7 +106,7 @@ const UsedTradeView = ({ router, selectedCategory, setSelectedCategory }: any) =
   </View>
 );
 
-// 2-4. 동네 설정 모달 컴포넌트 (✨ 삭제 기능 연결, 데이터 속성 이름 변경)
+// 2-4. 동네 설정 모달 컴포넌트 (삭제 기능 연결, 데이터 속성 이름 변경)
 const RegionModal = ({ visible, onClose, regions, onSetPrimary, onAddRegion, onDeleteRegion }: any) => (
   <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
     <Pressable style={styles.modalOverlay} onPress={onClose}>
@@ -118,7 +118,6 @@ const RegionModal = ({ visible, onClose, regions, onSetPrimary, onAddRegion, onD
           <TouchableOpacity key={item.accountRegionId} style={styles.regionItem} onPress={() => onSetPrimary(item.accountRegionId)}>
             <View style={styles.regionLeft}>
               <View style={[styles.radio, item.isPrimary && styles.radioActive]} />
-              {/* 💡 백엔드 데이터 형식에 맞춰 item.dong -> item.region.name 으로 변경했습니다 */}
               <Text style={item.isPrimary ? styles.regionNameActive : styles.regionName}>
                 {item.region.name}
               </Text>
@@ -159,7 +158,7 @@ export default function HomeScreen() {
     loadRegions();
   }, []);
 
-  // ✨ 1. 지역 목록 불러오기 (regionApi 사용)
+  // 1. 지역 목록 불러오기
   const loadRegions = async () => {
     try {
       const res = await regionApi.getMyRegions();
@@ -168,7 +167,6 @@ export default function HomeScreen() {
       setRegions(data);
       
       const primary = data.find((r: any) => r.isPrimary);
-      // 💡 백엔드 데이터에 맞게 primary.region.name 으로 수정
       setPrimaryRegionName(primary ? primary.region.name : '동네 설정 필요');
     } catch (e) {
       console.log("지역 목록 로딩 실패:", e);
@@ -176,7 +174,7 @@ export default function HomeScreen() {
     }
   };
 
-  // ✨ 2. 대표 지역 설정하기
+  // 2. 대표 지역 설정하기
   const handleSetPrimary = async (id: number) => {
     try {
       await regionApi.setPrimaryRegion(id);
@@ -186,7 +184,7 @@ export default function HomeScreen() {
     }
   };
 
-  // ✨ 3. 지역 삭제하기 (새로 추가됨!)
+  // 3. 지역 삭제하기
   const handleDeleteRegion = (id: number) => {
     Alert.alert("삭제", "이 동네를 삭제하시겠습니까?", [
       { text: "취소", style: "cancel" },
@@ -231,14 +229,14 @@ export default function HomeScreen() {
         regions={regions}
         onSetPrimary={handleSetPrimary}
         onAddRegion={handleAddRegion}
-        onDeleteRegion={handleDeleteRegion} // ✨ 모달에 삭제 함수 전달!
+        onDeleteRegion={handleDeleteRegion} 
       />
     </SafeAreaView>
   );
 }
 
 // ==========================================
-// 🎨 4. 스타일 영역 (길어서 접어두고 관리하세요)
+// 4. 스타일 영역 (길어서 접어두고 관리하세요)
 // ==========================================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },

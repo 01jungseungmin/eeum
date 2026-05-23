@@ -118,38 +118,35 @@ export default function SignupScreen() {
     setIsSigningUp(true);
 
       try {
-        // 🚦 [소셜 회원가입] 흐름: 임시 토큰(tempToken)이 존재할 때
+        // [소셜 회원가입] 임시 토큰(tempToken)이 존재할 때
         if (tempToken) {
-          // 스웨거 요구사항에 맞춘 데이터 패키징
           const oauthSignupData = { 
             tempToken, 
             name, 
-            // 스웨거 예시(01012345678)에 맞춰 하이픈(-)을 제거하고 전송
+            //하이픈(-)을 제거하고 전송
             phone: phone.replace(/-/g, ''), 
             nickname 
           };
           
-          // 스웨거 명세서에 적힌 정확한 API 주소 호출
           const response = await client.post('/auth/signup/oauth', oauthSignupData);
           
           if (response.data?.success || response.status === 200) {
-            // 스웨거 응답(Response)에 정의된 진짜 토큰들을 꺼내서 금고에 저장
+            // 응답(Response)에 정의된 진짜 토큰들을 꺼내서 금고에 저장
             const { accessToken, refreshToken } = response.data.data;
             await saveTokens(accessToken, refreshToken); 
             
             Alert.alert('환영합니다!', '이음 회원이 되신 것을 환영합니다.', [
-              { text: '확인', onPress: () => router.replace('/(tabs)') } // 바로 메인 홈 화면으로 이동!
+              { text: '확인', onPress: () => router.replace('/(tabs)') } // 바로 메인 홈 화면으로 이동
             ]);
           }
           //일반 회원가입
         } else {
-            // 스웨거 요구사항에 맞춘 데이터 패키징
+            // 요구사항에 맞춘 데이터 패키징
             const signupData = { 
               email, 
               password, 
               nickname, 
               name, 
-              // 스웨거 예시(010-1234-5678)에 맞춰 하이픈 유지
               phone, 
               emailVerificationToken
             };
@@ -171,9 +168,6 @@ export default function SignupScreen() {
       }
     };
 
-  // 7. 버튼 활성화 조건 (로딩 중일 때도 비활성화)
-  // 7. 버튼 활성화 조건 (소셜 vs 일반 완벽 분리)
-  // 공통 필수 조건: 이름, 닉네임, 전화번호(12~13자리), 약관동의, 로딩중아님
   const isCommonValid = 
     name.length > 0 && 
     nickname.length > 0 && 
@@ -181,10 +175,10 @@ export default function SignupScreen() {
     termsAgreed && 
     !isSigningUp;
 
-  // tempToken 유무에 따라 활성화 조건을 다르게 적용합니다!
+  // tempToken 유무에 따라 활성화 조건을 다르게 적용합니다
   const isFormValid = tempToken
-    ? isCommonValid // 🟢 [소셜 가입] 공통 조건만 만족하면 통과!
-    : isCommonValid && // 🔵 [일반 가입] 공통 조건 + 이메일/비밀번호 조건까지 만족해야 통과!
+    ? isCommonValid // [소셜 가입] 공통 조건만 만족하면 통과
+    : isCommonValid && // [일반 가입] 공통 조건 + 이메일/비밀번호 조건까지 만족해야 통과
       isEmailVerified && 
       password.length >= 8 && 
       password === passwordConfirm &&
@@ -211,7 +205,7 @@ export default function SignupScreen() {
             showsVerticalScrollIndicator={false} 
             contentContainerStyle={styles.scrollContent}
           >
-            {/* 🚨 [일반 가입 전용 영역] tempToken이 없을 때만 보입니다! */}
+            {/* [일반 가입 전용 영역] tempToken이 없을 때만 보입니다*/}
             {!tempToken && (
               <>
                 {/* 이메일 입력 섹션 */}
@@ -306,10 +300,10 @@ export default function SignupScreen() {
                 </View>
               </>
             )}
-            {/* 🚨 일반 가입 전용 영역 끝! */}
+            {/* 일반 가입 전용 영역 끝! */}
 
 
-            {/* 🟢 [공통 영역] 소셜/일반 모두에게 항상 보입니다! */}
+            {/* [공통 영역] 소셜/일반 모두에게 항상 보입니다 */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>이름</Text>
               <TextInput style={styles.input} placeholder="실명을 입력해주세요" value={name} onChangeText={setName} />
