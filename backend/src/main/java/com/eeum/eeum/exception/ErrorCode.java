@@ -47,6 +47,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_OWNER_ALREADY_EXISTS("ACCOUNT_007", "이미 사업자 정보가 등록되어 있습니다", HttpStatus.CONFLICT),
     ACCOUNT_OWNER_NOT_FOUND("ACCOUNT_008", "사업자 정보를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     ACCOUNT_OWNER_NOT_APPROVED("ACCOUNT_009", "사장 회원 승인이 완료되지 않았습니다", HttpStatus.FORBIDDEN),
+
     ACCOUNT_DUPLICATE_BUSINESS_NUMBER("ACCOUNT_010", "이미 등록된 사업자번호입니다", HttpStatus.CONFLICT),
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
@@ -62,12 +63,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     REGION_GPS_MISMATCH("REGION_005", "현재 위치가 등록된 지역과 일치하지 않습니다", HttpStatus.BAD_REQUEST),
     REGION_ACCESS_REQUIRED("REGION_006", "활동 지역 인증이 필요합니다", HttpStatus.FORBIDDEN),
     REGION_LOCATION_NOT_FOUND("REGION_007","지역 위치 정보를 찾아올 수 없습니다.",HttpStatus.NOT_FOUND),
+
     // ===================== 상점 (STORE) =====================
     STORE_NOT_FOUND("STORE_001", "존재하지 않는 상점입니다", HttpStatus.NOT_FOUND),
     STORE_ALREADY_EXISTS("STORE_002", "이미 상점이 등록되어 있습니다", HttpStatus.CONFLICT),
     STORE_ACCESS_DENIED("STORE_003", "상점 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     STORE_SUSPENDED("STORE_004", "정지된 상점입니다", HttpStatus.FORBIDDEN),
     STORE_CLOSED("STORE_005", "영업 중인 상점이 아닙니다", HttpStatus.BAD_REQUEST),
+    STORE_CATEGORY_REQUIRED( "STORE_006", "상점 업종을 선택해야 합니다.",HttpStatus.BAD_REQUEST),
+    STORE_NOTICE_NOT_FOUND("STORE_007", "공지를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+
 
     // ===================== 상품 (PRODUCT) =====================
     PRODUCT_NOT_FOUND("PRODUCT_001", "존재하지 않는 상품입니다", HttpStatus.NOT_FOUND),
@@ -82,6 +87,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     EVENT_NOT_ACTIVE("EVENT_002", "진행 중인 이벤트가 아닙니다", HttpStatus.BAD_REQUEST),
     EVENT_OUT_OF_STOCK("EVENT_003", "이벤트 재고가 부족합니다", HttpStatus.BAD_REQUEST),
     EVENT_ALREADY_ACTIVE("EVENT_004", "이미 활성화된 이벤트가 존재합니다", HttpStatus.CONFLICT),
+    EVENT_PRODUCT_INVALID_PERIOD( "EVENT_005", "이벤트 시작 시간은 종료 시간보다 빨라야 합니다.",HttpStatus.BAD_REQUEST),
+    EVENT_PRODUCT_INVALID_PRICE( "EVENT_006", "이벤트 가격은 원래 가격보다 낮아야 합니다.",HttpStatus.BAD_REQUEST),
+
 
     // ===================== 장바구니 (CART) =====================
     CART_DIFFERENT_STORE("CART_001", "동일한 상점의 상품만 담을 수 있습니다", HttpStatus.BAD_REQUEST),
@@ -168,7 +176,6 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
 
     // ===================== 입력값 검증 (VALIDATION) =====================
     VALIDATION_INVALID_INPUT("VALIDATION_001", "입력값이 올바르지 않습니다", HttpStatus.BAD_REQUEST);
-
     private final String code;
     private final String message;
     private final HttpStatus httpStatus;

@@ -3,6 +3,7 @@ package com.eeum.eeum.domain.store.entity;
 import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -20,97 +21,52 @@ public class Store extends BaseEntity {
     @Column(name = "store_id")
     private Long storeId;
 
-    /**
-     * 사장 계정
-     * 사장 1명당 상점 1개 구조
-     */
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
 
-    /**
-     * 상점 지역
-     * 회원가입 시점에는 아직 선택하지 않을 수 있으므로 nullable 허용
-     */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name="category_id",nullable = true)
+    private Category category;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "region_id")
     private Region region;
 
-    /**
-     * 위도
-     * 주소 입력 후 지도 API로 변환하기 전까지 null 가능
-     */
     @Column(name = "latitude")
     private Double latitude;
 
-    /**
-     * 경도
-     * 주소 입력 후 지도 API로 변환하기 전까지 null 가능
-     */
     @Column(name = "longitude")
     private Double longitude;
 
-    /**
-     * 상호명
-     */
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    /**
-     * 사업장 소재지
-     */
     @Column(name = "address", nullable = false, length = 255)
     private String address;
 
-    /**
-     * 사업장 전화번호
-     */
     @Column(name = "phone", nullable = false, length = 20)
     private String phone;
 
-    /**
-     * 상점 소개
-     */
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    /**
-     * 영업 시간
-     */
     @Column(name = "business_hours", length = 255)
     private String businessHours;
 
-    /**
-     * 평균 평점
-     */
     @Column(name = "rating", nullable = false)
     private Double rating;
 
-    /**
-     * 관심 수
-     */
     @Column(name = "favorite_count", nullable = false)
     private Integer favoriteCount;
 
-    /**
-     * 리뷰 수
-     */
     @Column(name = "review_count", nullable = false)
     private Integer reviewCount;
 
-    /**
-     * 상점 운영 상태
-     *
-     * 승인 상태는 OwnerInfo.approvalStatus에서 관리하고,
-     * Store.status는 승인 이후 상점 운영 상태를 관리한다.
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private StoreStatus status;
 
-    /**
-     * 낙관적 락 버전
-     */
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -119,7 +75,7 @@ public class Store extends BaseEntity {
      * 사장 회원가입 시 상점 기본 생성
      *
      * 이때 사업자 승인은 아직 완료되지 않았으므로
-     * store.status는 INACTIVE 상태로 생성한다.
+     * store.status는 TEMP_CLOSED 상태로 생성한다.
      */
     public static Store createForOwnerSignup(
             Account account,
@@ -195,5 +151,9 @@ public class Store extends BaseEntity {
         this.region = region;
         this.latitude = latitude;
         this.longitude = longitude;
+    }
+
+    public void updateCategory(Category category) {
+        this.category = category;
     }
 }

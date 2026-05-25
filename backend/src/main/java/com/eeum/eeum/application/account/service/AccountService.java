@@ -205,4 +205,5 @@ public class AccountService {
         return request.getNickname() == null
                 && request.getProfileImageUrl() == null;
     }
+
 }
