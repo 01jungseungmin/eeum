@@ -1,11 +1,11 @@
 import styled from 'styled-components';
 import TopNavbar from '../../../layouts/TopNavbar';
 import { useState } from 'react';
-import AuthStatusBanner from '../../../components/approval/AuthStatusBanner';
-import BusinessInfoBox from '../../../components/approval/BusinessInfoBox';
-import RejectReasonBox from '../../../components/approval/RejectReasonBox';
-import InspectionChecklist from '../../../components/approval/InspectionChecklist';
-import InspectionTimeline from '../../../components/approval/Inspectiontimeline';
+import AuthStatusBanner from '../../../components/owner/approval/AuthStatusBanner';
+import BusinessInfoBox from '../../../components/owner/approval/BusinessInfoBox';
+import RejectReasonBox from '../../../components/owner/approval/RejectReasonBox';
+import InspectionChecklist from '../../../components/owner/approval/InspectionChecklist';
+import InspectionTimeline from '../../../components/owner/approval/Inspectiontimeline';
 
 const Container = styled.div`
   margin: 0 auto;

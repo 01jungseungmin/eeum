@@ -4,7 +4,6 @@ import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 
 const SideContainer = styled.div`
   width: 260px;
-  /* 🌟 이미지 분석 결과: 관리자는 더 선명하고 쨍한 초록(#005936), 사장님은 톤다운된 딥그린(#1a392a) */
   background-color: ${(props) => (props.$isAdmin ? '#005936' : '#1a392a')};
   color: white;
   display: flex;
@@ -24,7 +23,6 @@ const LogoSection = styled.div`
     font-weight: 800;
   }
   p {
-    /* 🌟 관리자 서브텍스트는 연한 회색빛 민트, 사장님은 연초록 */
     color: ${(props) => (props.$isAdmin ? '#a3ccbe' : '#81c784')};
     font-size: 12px;
     margin: 5px 0 0;
@@ -63,7 +61,6 @@ const MenuItem = styled.div`
   position: relative;
   transition: all 0.2s ease;
 
-  /* 🌟 활성화 시 배경색 다르게 처리 (관리자 활성화: #0f4229 / 사장님 활성화: #2d5a43) */
   background-color: ${(props) =>
     props.$active ? (props.$isAdmin ? '#0f4229' : '#2d5a43') : 'transparent'};
   color: ${(props) => (props.$active ? '#fff' : '#adb5bd')};
@@ -85,8 +82,7 @@ const IconWrapper = styled.span`
 
 const Badge = styled.span`
   background-color: ${(props) => (props.$isAdmin ? '#f1b913' : '#ff4d4f')};
-  color: ${(props) =>
-    props.$isAdmin ? '#000' : '#fff'}; /* 관리자 배지는 글씨가 어두운 색 */
+  color: ${(props) => (props.$isAdmin ? '#000' : '#fff')};
   font-size: 11px;
   font-weight: bold;
   padding: 2px 8px;
@@ -110,7 +106,7 @@ function Sidebar() {
 
   // 로컬스토리지에 있는 role에 따라 관리자용 메뉴, 사장님용 메뉴를 구분해서 보여줌
   const role = localStorage.getItem('role');
-  const isAdmin = role === 'ROLE_USER';
+  const isAdmin = role === 'ROLE_ADMIN';
 
   const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 

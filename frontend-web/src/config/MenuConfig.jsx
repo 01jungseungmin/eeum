@@ -16,16 +16,14 @@ import {
   TrendingUp,
   Bell,
   ShieldCheck,
-  FileText, // 🌟 관리자용 추가
-  FolderTree, // 🌟 관리자용 추가
-  UserCheck, // 🌟 관리자용 추가
+  FileText,
+  FolderTree,
+  UserCheck,
 } from 'lucide-react';
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
 
-// ==========================================
-// 🏪 1. 사장님 전용 메뉴 (기존 메뉴 이름 변경)
-// ==========================================
+// 사장님 전용 메뉴
 export const OWNER_MENU_CONFIG = [
   {
     group: '메뉴',
@@ -180,12 +178,10 @@ export const OWNER_MENU_CONFIG = [
   },
 ];
 
-// ==========================================
-// 🛡️ 2. 관리자 전용 메뉴 (첫 번째 이미지 기준)
-// ==========================================
+// 관리자 전용 메뉴
 export const ADMIN_MENU_CONFIG = [
   {
-    group: '', // 관리자는 첫 그룹에 라벨이 없으므로 빈 문자열 처리
+    group: '',
     items: [
       {
         id: 'admin-dashboard',
@@ -204,10 +200,10 @@ export const ADMIN_MENU_CONFIG = [
       {
         id: 'admin-approval',
         name: '사장 승인',
-        path: '/approval-status', // 🌟 로그인 후 이동할 승인 현황 페이지
+        path: '/admin/approval',
         icon: <UserCheck {...iconProps} />,
         subtitle: '입점 신청한 사장님의 서류를 심사합니다.',
-        countKey: 'adminApproval', // 알림 숫자 '12' 연동용
+        countKey: 'adminApproval',
       },
       {
         id: 'admin-posts',

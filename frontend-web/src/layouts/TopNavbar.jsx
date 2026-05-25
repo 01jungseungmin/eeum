@@ -1,6 +1,6 @@
+import React, { useMemo } from 'react';
 import styled from 'styled-components';
 import { useLocation } from 'react-router-dom';
-import { useMemo } from 'react';
 import { Search, Bell, ChevronDown } from 'lucide-react';
 import { findMenuByPath } from '../config/MenuConfig';
 
@@ -19,7 +19,7 @@ const TitleSection = styled.div`
     margin: 0;
     font-size: 20px;
     font-weight: bold;
-    color: #1a392a; // 사이드바와 톤을 맞춘 짙은 색
+    color: #1a392a;
   }
   p {
     margin: 4px 0 0;
@@ -33,7 +33,6 @@ const RightSection = styled.div`
   align-items: center;
   gap: 20px;
 `;
-
 const SearchBar = styled.div`
   position: relative;
   display: flex;
@@ -42,7 +41,6 @@ const SearchBar = styled.div`
   border-radius: 20px;
   padding: 8px 15px;
   width: 280px;
-
   input {
     border: none;
     background: transparent;
@@ -52,7 +50,6 @@ const SearchBar = styled.div`
     width: 100%;
   }
 `;
-
 const IconBadge = styled.div`
   position: relative;
   cursor: pointer;
@@ -68,7 +65,6 @@ const IconBadge = styled.div`
     border: 2px solid white;
   }
 `;
-
 const ProfileBox = styled.div`
   display: flex;
   align-items: center;
@@ -77,7 +73,6 @@ const ProfileBox = styled.div`
   border: 1px solid #eee;
   border-radius: 30px;
   cursor: pointer;
-
   .avatar {
     width: 32px;
     height: 32px;
@@ -105,7 +100,6 @@ const ProfileBox = styled.div`
 function TopNavbar() {
   const { pathname } = useLocation();
 
-  // URL 경로에 맞는 메뉴 데이터 찾기
   const currentMenu = useMemo(() => findMenuByPath(pathname), [pathname]);
 
   const today = new Intl.DateTimeFormat('ko-KR', {
@@ -115,14 +109,15 @@ function TopNavbar() {
     weekday: 'long',
   }).format(new Date());
 
-  if (!currentMenu) return null; // 혹은 기본 네비바 리턴
+  const menuName = currentMenu?.name || '상세 정보';
+  const menuSubtitle = currentMenu?.subtitle || '상세 내역을 확인합니다.';
 
   return (
     <NavContainer>
       <TitleSection>
-        <h2>{currentMenu.name}</h2>
+        <h2>{menuName}</h2>
         <p>
-          {today} · {currentMenu.subtitle}
+          {today} · {menuSubtitle}
         </p>
       </TitleSection>
 
