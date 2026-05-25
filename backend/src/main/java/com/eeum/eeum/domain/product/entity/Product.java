@@ -79,6 +79,14 @@ public class Product extends BaseEntity {
         this.productType = productType;
     }
 
+    public void inactive() {
+        this.status = ProductStatus.INACTIVE;
+    }
+
+    public void updateStock(Integer stock) {
+        this.stock = stock;
+    }
+
     public void soldOut() { this.status = ProductStatus.SOLD_OUT; }
     public void activate() { this.status = ProductStatus.ACTIVE; }
     public void deactivate() { this.status = ProductStatus.INACTIVE; }

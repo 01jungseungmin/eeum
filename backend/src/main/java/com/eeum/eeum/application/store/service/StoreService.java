@@ -87,7 +87,12 @@ public class StoreService {
     public StoreNoticeResponseDto createNotice(Long accountId, StoreNoticeRequestDto request) {
         Store store = getStore(accountId);
         StoreNotice notice = StoreNotice.create(
-                store, request.getTitle(), request.getContent(), request.isPinned());
+                store,
+                request.getTitle(),
+                request.getContent(),
+                request.getNoticeType(),
+                request.isPinned()
+        );
         storeNoticeRepository.save(notice);
         log.info("공지 등록: storeId={}", store.getStoreId());
         return toNoticeDto(notice);
@@ -97,7 +102,12 @@ public class StoreService {
     public StoreNoticeResponseDto updateNotice(Long accountId, Long noticeId,
             StoreNoticeRequestDto request) {
         StoreNotice notice = getNoticeWithOwnerCheck(accountId, noticeId);
-        notice.update(request.getTitle(), request.getContent(), request.isPinned());
+        notice.update(
+                request.getTitle(),
+                request.getContent(),
+                request.getNoticeType(),
+                request.isPinned()
+        );
         return toNoticeDto(notice);
     }
 

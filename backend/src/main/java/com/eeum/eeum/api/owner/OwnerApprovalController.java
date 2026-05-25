@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.owner;
 
 import com.eeum.eeum.application.account.service.OwnerApprovalService;
+import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreBasicInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
@@ -55,6 +56,19 @@ public class OwnerApprovalController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 ownerApprovalService.saveSettlementAccount(accountId, request)));
+    }
+
+    @Operation(
+            summary = "대표 메뉴 등록/수정",
+            description = "사장 입점 심사를 위해 대표 메뉴를 등록하거나 수정합니다. 기존 대표 메뉴가 없으면 새로 생성하고, 이미 있으면 해당 대표 메뉴 정보를 수정합니다."
+    )
+    @PutMapping("/representative-menu")
+    public ResponseEntity<ApiResponse<Void>> saveRepresentativeMenu(
+            @Valid @RequestBody RepresentativeMenuCreateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        ownerApprovalService.saveRepresentativeMenu(accountId, request);
+        return ResponseEntity.ok(ApiResponse.success());
     }
 
     @Operation(summary = "입점 심사 요청",
