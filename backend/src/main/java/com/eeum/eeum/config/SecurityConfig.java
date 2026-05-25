@@ -52,7 +52,6 @@ public class SecurityConfig {
             "/auth/password/verify",
             "/auth/password/reset",
             "/auth/business/verify",
-            "/admin/locations/sync",
             "/admin/locations/sync"
     };
 
@@ -100,6 +99,15 @@ public class SecurityConfig {
 
                         // PortOne Webhook은 JWT 인증 대신 서명 검증으로 처리
                         .requestMatchers(HttpMethod.POST, "/payments/webhook").permitAll()
+
+                        // 사장 승인 전 추가 입력/심사 요청 API
+                        .requestMatchers(
+                                "/owner/stores/me/checklist",
+                                "/owner/stores/me/business-info",
+                                "/owner/stores/me/settlement-account",
+                                "/owner/stores/me/apply",
+                                "/owner/products"
+                        ).hasAnyRole("USER", "OWNER")
 
                         // 관리자 전용
                         .requestMatchers("/admin/**").hasRole("ADMIN")
