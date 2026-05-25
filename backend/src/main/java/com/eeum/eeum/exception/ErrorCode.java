@@ -87,6 +87,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     EVENT_NOT_ACTIVE("EVENT_002", "진행 중인 이벤트가 아닙니다", HttpStatus.BAD_REQUEST),
     EVENT_OUT_OF_STOCK("EVENT_003", "이벤트 재고가 부족합니다", HttpStatus.BAD_REQUEST),
     EVENT_ALREADY_ACTIVE("EVENT_004", "이미 활성화된 이벤트가 존재합니다", HttpStatus.CONFLICT),
+    EVENT_PRODUCT_INVALID_PERIOD( "EVENT_005", "이벤트 시작 시간은 종료 시간보다 빨라야 합니다.",HttpStatus.BAD_REQUEST),
+    EVENT_PRODUCT_INVALID_PRICE( "EVENT_006", "이벤트 가격은 원래 가격보다 낮아야 합니다.",HttpStatus.BAD_REQUEST),
+
 
     // ===================== 장바구니 (CART) =====================
     CART_DIFFERENT_STORE("CART_001", "동일한 상점의 상품만 담을 수 있습니다", HttpStatus.BAD_REQUEST),
