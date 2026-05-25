@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
+import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreBasicInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
@@ -8,6 +10,7 @@ import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.SettlementAccount;
@@ -21,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
 
 @Slf4j
 @Service
@@ -149,6 +154,43 @@ public class OwnerApprovalService {
         ownerInfo.requestReview();
 
         log.info("입점 심사 요청 완료: accountId={}", accountId);
+    }
+
+    // ===================== 대표 메뉴 설정 =====================
+
+    @Transactional
+    public void saveRepresentativeMenu(Long accountId, RepresentativeMenuCreateRequestDto request) {
+        Store store = storeRepository.findByAccount_AccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+
+        Product product = productRepository
+                .findFirstByStore_StoreIdAndProductTypeOrderByCreatedAtAsc(
+                        store.getStoreId(),
+                        ProductType.MENU
+                )
+                .orElse(null);
+
+        if (product == null) {
+            Product newProduct = Product.create(
+                    store,
+                    request.getName(),
+                    request.getDescription(),
+                    BigDecimal.valueOf(request.getBasePrice()),
+                    null,
+                    ProductType.MENU
+            );
+
+            productRepository.save(newProduct);
+            return;
+        }
+
+        product.update(
+                request.getName(),
+                request.getDescription(),
+                BigDecimal.valueOf(request.getBasePrice()),
+                null,
+                ProductType.MENU
+        );
     }
 
     // ===================== 내부 유틸 =====================

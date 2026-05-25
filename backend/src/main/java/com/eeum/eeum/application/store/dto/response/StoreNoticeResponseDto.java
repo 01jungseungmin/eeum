@@ -28,4 +28,7 @@ public class StoreNoticeResponseDto {
 
     @Schema(description = "수정일시", example = "2026-05-25T13:00:00")
     private LocalDateTime modifiedAt;
+
+    @Schema(description = "공지 유형", example = "NORMAL")
+    private String noticeType;
 }
