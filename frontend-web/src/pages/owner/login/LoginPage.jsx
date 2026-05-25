@@ -1,7 +1,5 @@
 import styled from 'styled-components';
-import kakaoIcon from '../../assets/kakao_icon.png';
-import naverIcon from '../../assets/naver_icon.png';
-import InputForm from '../../components/InputForm';
+import InputForm from '../../../components/InputForm';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import axios from 'axios';

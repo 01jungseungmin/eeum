@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import InputForm from '../../components/InputForm';
+import InputForm from '../../../components/InputForm';
 import { useState, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';

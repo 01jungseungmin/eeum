@@ -1,16 +1,18 @@
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MENU_CONFIG } from '../config/MenuConfig';
+import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 
 const SideContainer = styled.div`
   width: 260px;
-  background-color: #1a392a;
+  /* 🌟 이미지 분석 결과: 관리자는 더 선명하고 쨍한 초록(#005936), 사장님은 톤다운된 딥그린(#1a392a) */
+  background-color: ${(props) => (props.$isAdmin ? '#005936' : '#1a392a')};
   color: white;
   display: flex;
   flex-direction: column;
   height: 100vh;
   padding: 20px 0;
   font-family: 'Pretendard', sans-serif;
+  transition: background-color 0.2s ease;
 `;
 
 const LogoSection = styled.div`
@@ -22,7 +24,8 @@ const LogoSection = styled.div`
     font-weight: 800;
   }
   p {
-    color: #81c784;
+    /* 🌟 관리자 서브텍스트는 연한 회색빛 민트, 사장님은 연초록 */
+    color: ${(props) => (props.$isAdmin ? '#a3ccbe' : '#81c784')};
     font-size: 12px;
     margin: 5px 0 0;
   }
@@ -33,12 +36,11 @@ const MenuSection = styled.div`
   overflow-y: auto;
   padding: 0 15px;
 
-  /* 스크롤바 디자인 (필요시) */
   &::-webkit-scrollbar {
     width: 4px;
   }
   &::-webkit-scrollbar-thumb {
-    background: #2d5a43;
+    background: ${(props) => (props.$isAdmin ? '#004027' : '#2d5a43')};
     border-radius: 10px;
   }
 `;
@@ -61,13 +63,14 @@ const MenuItem = styled.div`
   position: relative;
   transition: all 0.2s ease;
 
-  /* 이미지처럼 선택된 메뉴 하이라이트 */
+  /* 🌟 활성화 시 배경색 다르게 처리 (관리자 활성화: #0f4229 / 사장님 활성화: #2d5a43) */
   background-color: ${(props) =>
-    props.$active ? (props.$special ? '#4caf50' : '#2d5a43') : 'transparent'};
+    props.$active ? (props.$isAdmin ? '#0f4229' : '#2d5a43') : 'transparent'};
   color: ${(props) => (props.$active ? '#fff' : '#adb5bd')};
 
   &:hover {
-    background-color: ${(props) => (props.$active ? '' : '#264d39')};
+    background-color: ${(props) =>
+      props.$active ? '' : props.$isAdmin ? '#0a3621' : '#264d39'};
     color: #fff;
   }
 `;
@@ -77,16 +80,18 @@ const IconWrapper = styled.span`
   display: flex;
   align-items: center;
   font-size: 18px;
+  opacity: ${(props) => (props.$active ? '1' : '0.7')};
 `;
 
 const Badge = styled.span`
-  background-color: #ff4d4f;
-  color: white;
+  background-color: ${(props) => (props.$isAdmin ? '#f1b913' : '#ff4d4f')};
+  color: ${(props) =>
+    props.$isAdmin ? '#000' : '#fff'}; /* 관리자 배지는 글씨가 어두운 색 */
   font-size: 11px;
   font-weight: bold;
   padding: 2px 8px;
   border-radius: 10px;
-  margin-left: auto; // 오른쪽 끝으로 밀기
+  margin-left: auto;
 `;
 
 const StatusBadge = styled.span`
@@ -103,33 +108,52 @@ function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const counts = { orders: 3, reviews: 2, chat: 5, qna: 3, alerts: 8 };
+  // 로컬스토리지에 있는 role에 따라 관리자용 메뉴, 사장님용 메뉴를 구분해서 보여줌
+  const role = localStorage.getItem('role');
+  const isAdmin = role === 'ROLE_USER';
+
+  const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
+
+  const counts = {
+    orders: 3,
+    reviews: 2,
+    chat: 5,
+    qna: 3,
+    alerts: 8,
+    adminApproval: 12,
+    adminReports: 5,
+  };
 
   return (
-    <SideContainer>
-      <LogoSection>
-        <h2>이음</h2>
-        <p>사장님 전용 관리 센터</p>
+    <SideContainer $isAdmin={isAdmin}>
+      <LogoSection $isAdmin={isAdmin}>
+        <h2>{isAdmin ? '이웃' : '이음'}</h2>
+        <p>{isAdmin ? 'Admin Dashboard' : '사장님 전용 관리 센터'}</p>
       </LogoSection>
-      <MenuSection>
-        {MENU_CONFIG.map((group) => (
-          <div key={group.group}>
-            <MenuGroupLabel>{group.group}</MenuGroupLabel>
-            {group.items.map((item) => (
-              <MenuItem
-                key={item.id}
-                onClick={() => navigate(item.path)}
-                $active={location.pathname === item.path}
-                $special={item.isSpecial}
-              >
-                <IconWrapper>{item.icon}</IconWrapper>
-                {item.name}
-                {item.countKey && counts[item.countKey] > 0 && (
-                  <Badge>{counts[item.countKey]}</Badge>
-                )}
-                {item.status && <StatusBadge>{item.status}</StatusBadge>}
-              </MenuItem>
-            ))}
+
+      <MenuSection $isAdmin={isAdmin}>
+        {menuConfig.map((group, index) => (
+          <div key={group.group || index}>
+            {group.group && <MenuGroupLabel>{group.group}</MenuGroupLabel>}
+
+            {group.items.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <MenuItem
+                  key={item.id}
+                  onClick={() => navigate(item.path)}
+                  $active={isActive}
+                  $isAdmin={isAdmin}
+                >
+                  <IconWrapper $active={isActive}>{item.icon}</IconWrapper>
+                  {item.name}
+                  {item.countKey && counts[item.countKey] > 0 && (
+                    <Badge $isAdmin={isAdmin}>{counts[item.countKey]}</Badge>
+                  )}
+                  {item.status && <StatusBadge>{item.status}</StatusBadge>}
+                </MenuItem>
+              );
+            })}
           </div>
         ))}
       </MenuSection>
