@@ -6,7 +6,7 @@ import com.eeum.eeum.application.auth.dto.response.ReAuthResponseDto;
 import com.eeum.eeum.application.auth.dto.response.TokenResponseDto;
 import com.eeum.eeum.application.auth.service.AuthService;
 import com.eeum.eeum.application.auth.service.BusinessVerificationService;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

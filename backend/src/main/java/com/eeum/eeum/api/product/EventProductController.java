@@ -3,7 +3,7 @@ package com.eeum.eeum.api.product;
 import com.eeum.eeum.application.product.dto.request.EventProductRequestDto;
 import com.eeum.eeum.application.product.dto.response.EventProductResponseDto;
 import com.eeum.eeum.application.product.service.EventProductService;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;

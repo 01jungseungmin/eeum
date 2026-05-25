@@ -1,6 +1,6 @@
 package com.eeum.eeum.exception;
 
-import com.eeum.eeum.common.response.ApiResponse; //공통 응답 객체
+import com.eeum.eeum.common.dto.response.ApiResponse; //공통 응답 객체
 import lombok.extern.slf4j.Slf4j; //로그
 import org.springframework.http.HttpStatus; //HTTP 상태 코드
 import org.springframework.http.ResponseEntity; //응답 객체 생성

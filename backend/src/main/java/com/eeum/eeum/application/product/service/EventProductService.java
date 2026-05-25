@@ -138,7 +138,7 @@ public class EventProductService {
 
     private void validateProductOwner(Product product, Store store) {
         if (!product.getStore().getStoreId().equals(store.getStoreId())) {
-            throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
+            throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
         }
     }
 
