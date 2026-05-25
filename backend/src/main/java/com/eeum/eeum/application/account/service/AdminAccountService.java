@@ -15,6 +15,8 @@ import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,7 @@ public class AdminAccountService {
     private final AccountRegionRepository accountRegionRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final TokenService tokenService;
+    private final StoreRepository storeRepository;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -146,8 +149,18 @@ public class AdminAccountService {
                 ? approvalStatus
                 : ApprovalStatus.PENDING;
 
-        return ownerInfoRepository.findByApprovalStatus(status, pageable)
-                .map(ownerInfo -> getAccountDetail(ownerInfo.getAccount().getAccountId()));
+        Page<OwnerInfo> ownerInfos;
+
+        if (status == ApprovalStatus.PENDING) {
+            ownerInfos = ownerInfoRepository
+                    .findByApprovalStatusAndReviewRequestedAtIsNotNull(status, pageable);
+        } else {
+            ownerInfos = ownerInfoRepository.findByApprovalStatus(status, pageable);
+        }
+
+        return ownerInfos.map(ownerInfo ->
+                getAccountDetail(ownerInfo.getAccount().getAccountId())
+        );
     }
 
     @Transactional(readOnly = true)
@@ -155,7 +168,12 @@ public class AdminAccountService {
         OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        return accountMapper.toOwnerAdminResponseDto(ownerInfo);
+        Account account = ownerInfo.getAccount();
+
+        Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+
+        return accountMapper.toOwnerAdminStoreResponseDto(ownerInfo, store);
     }
 
     @Transactional
@@ -166,12 +184,12 @@ public class AdminAccountService {
         Account account = ownerInfo.getAccount();
 
         ownerInfo.approve();
-        account.approveOwner();
+        // 내부에서 approvalStatus = APPROVED, account.approveOwner() 처리
+
+        storeRepository.findByAccount_AccountId(account.getAccountId())
+                .ifPresent(Store::open);
 
         tokenService.deleteRefreshToken(account.getAccountId());
-
-        log.info("사장 승인: adminId={}, ownerInfoId={}, accountId={}",
-                adminId, ownerInfoId, account.getAccountId());
     }
 
     @Transactional

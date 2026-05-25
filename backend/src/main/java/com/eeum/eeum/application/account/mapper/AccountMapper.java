@@ -7,6 +7,7 @@ import com.eeum.eeum.common.util.MaskingUtil;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.store.entity.Store;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -58,6 +59,33 @@ public class AccountMapper {
                 .approvalStatus(ownerInfo.getApprovalStatus().name())
                 .rejectionReason(ownerInfo.getRejectionReason())
                 .createdAt(ownerInfo.getCreatedAt())
+                .build();
+    }
+    public OwnerResponseDto toOwnerAdminStoreResponseDto(OwnerInfo ownerInfo, Store store) {
+        Account account = ownerInfo.getAccount();
+
+        return OwnerResponseDto.builder()
+                .ownerInfoId(ownerInfo.getOwnerInfoId())
+                .accountId(account.getAccountId())
+                .ownerName(account.getName())
+                .email(account.getEmail())
+                .phone(account.getPhone())
+                .businessNumber(ownerInfo.getBusinessNumber())
+                .openingDate(ownerInfo.getOpeningDate())
+                .approvalStatus(ownerInfo.getApprovalStatus().name())
+                .rejectionReason(ownerInfo.getRejectionReason())
+                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
+                .createdAt(ownerInfo.getCreatedAt())
+
+                .storeId(store.getStoreId())
+                .storeName(store.getName())
+                .storeAddress(store.getAddress())
+                .storePhone(store.getPhone())
+                .storeCategoryId(store.getCategory() != null ? store.getCategory().getCategoryId() : null)
+                .storeCategoryName(store.getCategory() != null ? store.getCategory().getName() : null)
+                .storeDescription(store.getDescription())
+                .businessHours(store.getBusinessHours())
+                .storeStatus(store.getStatus().name())
                 .build();
     }
 }

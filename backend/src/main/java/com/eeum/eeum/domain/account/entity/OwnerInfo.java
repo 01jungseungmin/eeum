@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -43,6 +44,9 @@ public class OwnerInfo extends BaseEntity {
     @Column(name = "rejection_reason", length = 255)
     private String rejectionReason;
 
+    @Column(name = "review_requested_at")
+    private LocalDateTime reviewRequestedAt;
+
     public static OwnerInfo create(
             Account account,
             String businessNumber,
@@ -54,9 +58,15 @@ public class OwnerInfo extends BaseEntity {
         ownerInfo.openingDate = openingDate;
         ownerInfo.approvalStatus = ApprovalStatus.PENDING;
         ownerInfo.rejectionReason = null;
+        ownerInfo.reviewRequestedAt = null;
         return ownerInfo;
     }
 
+    public void requestReview() {
+        this.approvalStatus = ApprovalStatus.PENDING;
+        this.rejectionReason = null;
+        this.reviewRequestedAt = LocalDateTime.now();
+    }
 
     public void approve() {
         this.approvalStatus = ApprovalStatus.APPROVED;
@@ -74,6 +84,12 @@ public class OwnerInfo extends BaseEntity {
             this.businessNumber = businessNumber;
             this.approvalStatus = ApprovalStatus.PENDING;
             this.rejectionReason = null;
+            this.reviewRequestedAt = null;
         }
+    }
+
+    public boolean isBusinessVerified() {
+        return this.businessNumber != null && !this.businessNumber.isBlank()
+                && this.openingDate != null;
     }
 }

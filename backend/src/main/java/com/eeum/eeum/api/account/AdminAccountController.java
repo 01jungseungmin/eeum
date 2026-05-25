@@ -19,6 +19,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,7 +40,7 @@ public class AdminAccountController {
     @Operation(summary = "[관리자] 회원 목록 조회", description = "전체 회원 목록을 페이징으로 조회합니다.")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AccountResponseDto>>> getAccounts(
-            @PageableDefault(size = 20) Pageable pageable,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @Parameter(description = "회원 상태 필터 (ACTIVE / SUSPENDED / WITHDRAWN)")
             @RequestParam(required = false) AccountStatus status,
             @Parameter(description = "권한 필터 (ROLE_USER / ROLE_OWNER / ROLE_ADMIN)")
@@ -54,7 +55,7 @@ public class AdminAccountController {
     @Operation(summary = "[관리자] 탈퇴 예정 회원 목록 조회", description = "탈퇴 처리된 회원 목록을 페이징으로 조회합니다.")
     @GetMapping("/withdrawn")
     public ResponseEntity<ApiResponse<Page<AccountResponseDto>>> getWithdrawnAccounts(
-            @PageableDefault(size = 20) Pageable pageable
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         Page<AccountResponseDto> response = adminAccountService.getWithdrawnAccounts(pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -117,7 +118,7 @@ public class AdminAccountController {
     @Operation(summary = "[관리자] 사장 신청 목록 조회", description = "사장 회원 승인 대기 목록을 조회합니다.")
     @GetMapping("/owners/applications")
     public ResponseEntity<ApiResponse<Page<AccountDetailResponseDto>>> getOwnerRequests(
-            @PageableDefault(size = 20) Pageable pageable,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @Parameter(description = "승인 상태 필터 (PENDING / APPROVED / REJECTED)")
             @RequestParam(required = false) ApprovalStatus approvalStatus
     ) {
