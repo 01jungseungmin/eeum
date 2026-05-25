@@ -7,11 +7,11 @@ import {
   AlertTriangle,
   Download,
 } from 'lucide-react';
-import DashboardCard from '../../../components/dashboard/DashboardCard';
-import AdminPendingActions from '../../../components/dashboard/admin/AdminPendingActions';
-import AdminLiveActivities from '../../../components/dashboard/admin/AdminLiveActivities';
-import AdminUserChart from '../../../components/dashboard/admin/AdminUserChart';
-import AdminRegionChart from '../../../components/dashboard/admin/AdminRegionChart';
+import DashboardCard from '../../../components/owner/dashboard/DashBoardCard';
+import AdminPendingActions from '../../../components/admin/dashboard/AdminPendingActions';
+import AdminLiveActivities from '../../../components/admin/dashboard/AdminLiveActivities';
+import AdminUserChart from '../../../components/admin/dashboard/AdminUserChart';
+import AdminRegionChart from '../../../components/admin/dashboard/AdminRegionChart';
 
 const DashboardWrapper = styled.div`
   padding: 30px;
