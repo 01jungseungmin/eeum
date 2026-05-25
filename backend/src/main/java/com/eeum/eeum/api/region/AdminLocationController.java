@@ -2,7 +2,7 @@ package com.eeum.eeum.api.region;
 
 import com.eeum.eeum.application.region.service.LocationSyncService;
 import com.eeum.eeum.application.region.service.RegionService;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;

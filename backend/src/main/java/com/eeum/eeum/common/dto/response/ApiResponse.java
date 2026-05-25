@@ -1,4 +1,4 @@
-package com.eeum.eeum.common.response;
+package com.eeum.eeum.common.dto.response;
 
 import com.eeum.eeum.exception.ErrorCode;
 import com.fasterxml.jackson.annotation.JsonInclude; //JSON으로 변환할 때 null인 필드를 제외

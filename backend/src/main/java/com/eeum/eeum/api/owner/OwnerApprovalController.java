@@ -6,7 +6,7 @@ import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreBasicInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;

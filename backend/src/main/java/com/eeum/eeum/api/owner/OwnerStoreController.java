@@ -2,8 +2,11 @@ package com.eeum.eeum.api.owner;
 
 import com.eeum.eeum.application.store.dto.request.*;
 import com.eeum.eeum.application.store.dto.response.*;
+import com.eeum.eeum.application.store.service.StoreImageService;
 import com.eeum.eeum.application.store.service.StoreService;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -25,6 +28,7 @@ import java.util.List;
 public class OwnerStoreController {
 
     private final StoreService storeService;
+    private final StoreImageService storeImageService;
 
     @Operation(
             summary = "내 상점 조회",
@@ -58,6 +62,45 @@ public class OwnerStoreController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         storeService.updateStoreStatus(accountId, request);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // OwnerStoreController에 추가
+    @Operation(summary = "상점 이미지 목록 조회")
+    @GetMapping("/images")
+    public ResponseEntity<ApiResponse<List<ImageResponseDto>>> getStoreImages() {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                storeImageService.getImages(accountId)));
+    }
+
+    @Operation(summary = "상점 이미지 등록 (최대 20장)")
+    @PostMapping("/images")
+    public ResponseEntity<ApiResponse<ImageResponseDto>> addStoreImage(
+            @Valid @RequestBody ImageUploadRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                storeImageService.addImage(accountId, request)));
+    }
+
+    @Operation(summary = "상점 이미지 삭제")
+    @DeleteMapping("/images/{imageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteStoreImage(
+            @PathVariable Long imageId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        storeImageService.deleteImage(accountId, imageId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "상점 대표 이미지 설정")
+    @PatchMapping("/images/{imageId}/thumbnail")
+    public ResponseEntity<ApiResponse<Void>> setStoreThumbnail(
+            @PathVariable Long imageId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        storeImageService.setThumbnail(accountId, imageId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 

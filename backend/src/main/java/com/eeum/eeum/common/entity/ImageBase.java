@@ -43,4 +43,12 @@ public abstract class ImageBase extends BaseEntity {
     public void unmarkAsThumbnail() {
         this.isThumbnail = false;
     }
+
+    public boolean isThumbnail() {
+        return isThumbnail;
+    }
+
+    public void changeDisplayOrder(int displayOrder) {
+        this.displayOrder = displayOrder;
+    }
 }

@@ -4,7 +4,7 @@ import com.eeum.eeum.application.account.dto.request.LocationDto;
 import com.eeum.eeum.application.account.dto.request.RegionRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountRegionResponseDto;
 import com.eeum.eeum.application.account.service.AccountRegionService;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

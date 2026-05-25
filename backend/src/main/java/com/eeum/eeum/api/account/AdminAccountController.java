@@ -9,7 +9,7 @@ import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
