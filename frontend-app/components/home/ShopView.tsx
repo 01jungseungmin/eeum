@@ -17,10 +17,13 @@ export default function ShopView({ router }: { router: any }) {
         <Text style={{ color: '#fff' }}>이벤트 배너 영역</Text>
       </View>
       <View style={styles.sectionContainer}>
-        <View style={styles.sectionHeader}>
+        <TouchableOpacity 
+          style={styles.sectionHeader} 
+          onPress={() => router.push('/shop/list')}
+        >
           <Text style={styles.sectionTitle}>우리 동네 상점</Text>
           <Ionicons name="chevron-forward" size={20} color="#333" />
-        </View>
+        </TouchableOpacity>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {SHOP_LIST.map((shop) => (
             <TouchableOpacity 
