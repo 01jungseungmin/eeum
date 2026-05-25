@@ -70,6 +70,16 @@ export default function HomeScreen() {
   };
 
   const handleAddRegion = () => {
+    // 방어 로직: 현재 등록된 동네(regions)가 2개 이상이면 못 넘어감
+    if (regions.length >= 2) {
+      Alert.alert(
+        "동네 추가 불가", 
+        "동네는 최대 2개까지만 등록할 수 있어요.\n새로운 동네를 추가하려면 기존 동네를 삭제해 주세요."
+      );
+      return;
+    }
+
+    // 2개 미만일 때만 모달을 닫고 검색 화면으로 보냅니다.
     setModalVisible(false);
     router.push('/region-search');
   };
