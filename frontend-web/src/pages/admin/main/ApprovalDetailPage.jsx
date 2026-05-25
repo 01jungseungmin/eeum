@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styled from 'styled-components';
 import { ArrowLeft, FileText, Image as ImageIcon, Check } from 'lucide-react';
-import ApprovalProfileCard from '../../../components/admin/ApprovalProfileCard';
-import ApprovalDetailPanel from '../../../components/admin/ApprovalDetailPanel';
+import ApprovalProfileCard from '../../../components/admin/approval/ApprovalProfileCard';
+import ApprovalDetailPanel from '../../../components/admin/approval/ApprovalDetailPanel';
 
 const DetailContainer = styled.div`
   padding: 30px; /* AdminApprovalPage와 동일한 패딩값 매칭 */
