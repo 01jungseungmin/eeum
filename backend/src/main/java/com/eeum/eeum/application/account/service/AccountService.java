@@ -6,7 +6,7 @@ import com.eeum.eeum.application.account.dto.request.UpdateInfoRequestDto;
 import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.MyPageResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.common.util.MaskingUtil;
@@ -138,7 +138,7 @@ public class AccountService {
     // ===================== 사장 정보 조회 =====================
 
     @Transactional(readOnly = true)
-    public OwnerResponseDto getMyOwnerInfo(Long accountId) {
+    public OwnerApplicationDetailResponseDto getMyOwnerInfo(Long accountId) {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 

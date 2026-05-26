@@ -1,14 +1,16 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.account.dto.request.OwnerInfoSearchDto;
 import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
-import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.entity.AccountRegion;
-import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.application.region.service.RegionService;
+import com.eeum.eeum.application.store.service.StoreLocationResolver;
+import com.eeum.eeum.domain.account.entity.*;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
@@ -26,7 +28,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+
+import static org.springframework.util.StringUtils.hasText;
 
 @Slf4j
 @Service
@@ -39,6 +44,7 @@ public class AdminAccountService {
     private final OwnerInfoRepository ownerInfoRepository;
     private final TokenService tokenService;
     private final StoreRepository storeRepository;
+    private final StoreLocationResolver storeLocationResolver;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -141,30 +147,19 @@ public class AdminAccountService {
     // ===================== 관리자 - 사장 승인/거절 =====================
 
     @Transactional(readOnly = true)
-    public Page<AccountDetailResponseDto> getOwnerRequests(
-            Pageable pageable,
-            ApprovalStatus approvalStatus
+    public Page<OwnerApplicationListResponseDto> getOwnerRequests(
+            OwnerInfoSearchDto condition,
+            Pageable pageable
     ) {
-        ApprovalStatus status = approvalStatus != null
-                ? approvalStatus
-                : ApprovalStatus.PENDING;
-
-        Page<OwnerInfo> ownerInfos;
-
-        if (status == ApprovalStatus.PENDING) {
-            ownerInfos = ownerInfoRepository
-                    .findByApprovalStatusAndReviewRequestedAtIsNotNull(status, pageable);
-        } else {
-            ownerInfos = ownerInfoRepository.findByApprovalStatus(status, pageable);
+        if (condition.getApprovalStatus() == null) {
+            condition.setApprovalStatus(ApprovalStatus.PENDING);
         }
 
-        return ownerInfos.map(ownerInfo ->
-                getAccountDetail(ownerInfo.getAccount().getAccountId())
-        );
+        return ownerInfoRepository.searchOwnerApplications(condition, pageable);
     }
 
     @Transactional(readOnly = true)
-    public OwnerResponseDto getOwnerApplicationDetail(Long ownerInfoId) {
+    public OwnerApplicationDetailResponseDto getOwnerApplicationDetail(Long ownerInfoId) {
         OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
@@ -173,7 +168,7 @@ public class AdminAccountService {
         Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
-        return accountMapper.toOwnerAdminStoreResponseDto(ownerInfo, store);
+        return toOwnerApplicationDetailDto(ownerInfo, store);
     }
 
     @Transactional
@@ -183,13 +178,42 @@ public class AdminAccountService {
 
         Account account = ownerInfo.getAccount();
 
-        ownerInfo.approve();
-        // 내부에서 approvalStatus = APPROVED, account.approveOwner() 처리
+        Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
-        storeRepository.findByAccount_AccountId(account.getAccountId())
-                .ifPresent(Store::open);
+        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
+        if (store.getRegion() == null || store.getLatitude() == null || store.getLongitude() == null) {
+            storeLocationResolver.resolveAndApplyLocation(store);
+        }
+
+        account.updatePrimaryRegion(store.getRegion().getRegionId());
+
+        boolean exists = accountRegionRepository
+                .existsByAccount_AccountIdAndRegion_RegionId(
+                        account.getAccountId(),
+                        store.getRegion().getRegionId()
+                );
+
+        if (!exists) {
+            AccountRegion accountRegion = AccountRegion.builder()
+                    .account(account)
+                    .region(store.getRegion())
+                    .verified(true)
+                    .verifiedAt(LocalDateTime.now())
+                    .build();
+
+            accountRegionRepository.save(accountRegion);
+        }
+
+        ownerInfo.approve();
 
         tokenService.deleteRefreshToken(account.getAccountId());
+
+        log.info("사장 승인: adminId={}, ownerInfoId={}, accountId={}, storeId={}",
+                adminId, ownerInfoId, account.getAccountId(), store.getStoreId());
     }
 
     @Transactional
@@ -228,6 +252,68 @@ public class AdminAccountService {
                 .ownerInfo(ownerInfo != null ? accountMapper.toOwnerAdminResponseDto(ownerInfo) : null)
                 .createdAt(account.getCreatedAt())
                 .deletedAt(account.getDeletedAt())
+                .build();
+    }
+
+    public OwnerApplicationListResponseDto toOwnerApplicationListDto(
+            OwnerInfo ownerInfo,
+            Store store
+    ) {
+        Account account = ownerInfo.getAccount();
+
+        return OwnerApplicationListResponseDto.builder()
+                .ownerInfoId(ownerInfo.getOwnerInfoId())
+                .accountId(account.getAccountId())
+                .email(account.getEmail())
+                .ownerName(account.getName())
+                .phone(account.getPhone())
+                .businessNumber(ownerInfo.getBusinessNumber())
+                .openingDate(ownerInfo.getOpeningDate())
+                .approvalStatus(ownerInfo.getApprovalStatus().name())
+                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
+                .storeId(store != null ? store.getStoreId() : null)
+                .storeName(store != null ? store.getName() : null)
+                .storeAddress(store != null ? store.getAddress() : null)
+                .storeStatus(store != null ? store.getStatus().name() : null)
+                .createdAt(ownerInfo.getCreatedAt())
+                .build();
+    }
+
+    private OwnerApplicationDetailResponseDto toOwnerApplicationDetailDto(
+            OwnerInfo ownerInfo,
+            Store store
+    ) {
+        Account account = ownerInfo.getAccount();
+
+        return OwnerApplicationDetailResponseDto.builder()
+                .ownerInfoId(ownerInfo.getOwnerInfoId())
+                .accountId(account.getAccountId())
+                .ownerName(account.getName())
+                .email(account.getEmail())
+                .phone(account.getPhone())
+                .businessNumber(ownerInfo.getBusinessNumber())
+                .openingDate(ownerInfo.getOpeningDate())
+                .approvalStatus(ownerInfo.getApprovalStatus().name())
+                .rejectionReason(ownerInfo.getRejectionReason())
+                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
+                .createdAt(ownerInfo.getCreatedAt())
+                .storeId(store.getStoreId())
+                .storeName(store.getName())
+                .storeAddress(store.getAddress())
+                .storePhone(store.getPhone())
+                .storeCategoryId(
+                        store.getCategory() != null
+                                ? store.getCategory().getCategoryId()
+                                : null
+                )
+                .storeCategoryName(
+                        store.getCategory() != null
+                                ? store.getCategory().getName()
+                                : null
+                )
+                .storeDescription(store.getDescription())
+                .businessHours(store.getBusinessHours())
+                .storeStatus(store.getStatus().name())
                 .build();
     }
 }

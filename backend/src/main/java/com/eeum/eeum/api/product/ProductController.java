@@ -2,8 +2,11 @@ package com.eeum.eeum.api.product;
 
 import com.eeum.eeum.application.product.dto.request.*;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
+import com.eeum.eeum.application.product.service.ProductImageService;
 import com.eeum.eeum.application.product.service.ProductService;
-import com.eeum.eeum.common.response.ApiResponse;
+import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -25,6 +28,7 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductImageService productImageService;
 
     @Operation(
             summary = "내 상점 상품 목록 조회",
@@ -113,6 +117,50 @@ public class ProductController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         productService.updateStock(accountId, productId, request);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // ProductController에 추가
+    @Operation(summary = "상품 이미지 목록 조회")
+    @GetMapping("/{productId}/images")
+    public ResponseEntity<ApiResponse<List<ImageResponseDto>>> getProductImages(
+            @PathVariable Long productId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                productImageService.getImages(accountId, productId)));
+    }
+
+    @Operation(summary = "상품 이미지 등록 (최대 20장)")
+    @PostMapping("/{productId}/images")
+    public ResponseEntity<ApiResponse<ImageResponseDto>> addProductImage(
+            @PathVariable Long productId,
+            @Valid @RequestBody ImageUploadRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                productImageService.addImage(accountId, productId, request)));
+    }
+
+    @Operation(summary = "상품 이미지 삭제")
+    @DeleteMapping("/{productId}/images/{imageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteProductImage(
+            @PathVariable Long productId,
+            @PathVariable Long imageId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        productImageService.deleteImage(accountId, productId, imageId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "상품 대표 이미지 설정")
+    @PatchMapping("/{productId}/images/{imageId}/thumbnail")
+    public ResponseEntity<ApiResponse<Void>> setProductThumbnail(
+            @PathVariable Long productId,
+            @PathVariable Long imageId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        productImageService.setThumbnail(accountId, productId, imageId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 }

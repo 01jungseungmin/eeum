@@ -1,4 +1,4 @@
-package com.eeum.eeum.common.response;
+package com.eeum.eeum.common.dto.response;
 
 import com.eeum.eeum.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.media.Schema;
