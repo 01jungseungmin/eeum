@@ -41,3 +41,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Sensitive files (환경변수 보안 파일 격리)
+.env
+.env-cmdrc
+.env.*
+!.env.example

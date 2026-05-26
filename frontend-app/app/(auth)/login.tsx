@@ -13,6 +13,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import axios from 'axios';
 import { client } from '../../api/client'; 
 import { Text } from '../../components/CustomText';
 import { saveTokens } from '../../utils/secureStore';
@@ -82,45 +83,55 @@ export default function LoginScreen() {
   // 카카오 로그인 핸들러
   const handleKakaoLogin = async () => {
     try {
-      // 1. 카카오톡 앱을 열어서 로그인을 시도하고, 카카오 토큰을 받아옵니다.
+      // 1. 카카오톡 앱을 열어서 로그인을 시도하고, 카카오 토큰을 받아온다.
       const result = await KakaoLogin.login();
       console.log('카카오 인증 성공! 토큰:', result.accessToken);
 
-    const token = await KakaoLogin.login();
-
-      // 2. 스웨거(Swagger) 명세에 맞춘 백엔드 API 호출
+      // 2. 백엔드 API 호출
     const response = await client.post('/auth/login/oauth', {
       provider: 'KAKAO',
-      code: token.accessToken // 발급받은 카카오 토큰을 'code' 필드에 담습니다.
+      accessToken: result.accessToken
     });
 
     // 3. 백엔드 응답 처리
     if (response.data.success) { 
-      const { accessToken, refreshToken } = response.data.data;
+      const { signupRequired, tempToken, accessToken, refreshToken } = response.data.data;
       
-      console.log('이음 서버 토큰 발급 성공!', accessToken);
-      
-      // 토큰 저장 로직
-      await saveTokens(accessToken, refreshToken); 
-      
-      // 홈 화면으로 이동
-      router.replace('/(tabs)');
+      if (signupRequired) {
+        // 신규 유저: 회원가입 화면으로 보내기
+        console.log('신규 유저입니다. 회원가입 화면으로 이동합니다. 임시 토큰:', tempToken);
+        
+        router.push({
+          pathname: '/signup',
+          params: { tempToken: tempToken }
+        });
+
+      } else {
+        // 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기
+        console.log('기존 유저 로그인 성공! 진짜 토큰:', accessToken);
+        
+        await saveTokens(accessToken, refreshToken);
+        router.replace('/(tabs)');
+      }
     }
 
     } catch (error) {
-      console.error('카카오 로그인 에러:', error);
-      Alert.alert('로그인 실패', '카카오 로그인 중 오류가 발생했습니다.');
+      if (axios.isAxiosError(error)) {
+        console.log('백엔드 카카오 거절 사유:', JSON.stringify(error.response?.data, null, 2));
+      } else {
+        // 3. 통신 에러가 아닌 다른 에러(단순 코드 버그 등)일 경우
+        console.error('기타 카카오 로그인 에러:', error);
+      }
     }
   };
 
   // 네이버 로그인 핸들러
   const handleNaverLogin = async () => {
     try {
-      // 네이버는 초기화가 필요합니다 (발급받은 ID, Secret, URL Scheme 넣기)
       NaverLogin.initialize({
         appName: 'EEUM',
-        consumerKey: 'Ryfw4Zb5hvMUsAxF7N83',
-        consumerSecret: 'amg0HY9SQn',
+        consumerKey: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID as string,
+        consumerSecret: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET as string,
         serviceUrlSchemeIOS: 'eeum',
       });
 
@@ -131,23 +142,39 @@ export default function LoginScreen() {
 
       // 2. 백엔드 API 호출
       const response = await client.post('/auth/login/oauth', {
-        provider: 'NAVER', // 카카오일 경우 'KAKAO'
-        code: successResponse.accessToken // 발급받은 토큰을 'code' 필드에 담아 보냅니다.
+        provider: 'NAVER',
+        accessToken: successResponse.accessToken
       });
 
-      // 3. 백엔드 응답 처리 (스웨거의 response 형태에 맞춤)
+      // 3. 백엔드 응답 처리
       if (response.data.success) {
-        const { accessToken, refreshToken } = response.data.data;
+        const { signupRequired, tempToken, accessToken, refreshToken } = response.data.data;
         
-        console.log('우리 서버 토큰 발급 성공!', accessToken);
-        // 토큰 저장
-        await saveTokens(accessToken, refreshToken); 
-        
-        router.replace('/(tabs)');
+        if (signupRequired) {
+          // 신규 유저: 회원가입 화면으로 보내기!
+          console.log('네이버 신규 유저입니다. 회원가입으로 이동. 임시 토큰:', tempToken);
+          
+          router.push({
+            pathname: '/signup',
+            params: { tempToken: tempToken }
+          });
+          
+        } else {
+          // 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기
+          console.log('우리 서버 토큰 발급 성공!', accessToken);
+          
+          await saveTokens(accessToken, refreshToken); 
+          router.replace('/(tabs)');
+        }
       }
     }
     } catch (error) {
-      console.error('네이버 로그인 에러:', error);
+      if (axios.isAxiosError(error)) {
+        console.log('🚨 백엔드 네이버 거절 사유:', JSON.stringify(error.response?.data, null, 2));
+      } else {
+        // 3. 통신 에러가 아닌 다른 에러(단순 코드 버그 등)일 경우
+        console.error('기타 네이버 로그인 에러:', error);
+      }
     }
   };
 

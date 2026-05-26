@@ -6,10 +6,9 @@ import axios, {
 } from 'axios';
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from '../utils/secureStore';
 
-// const BASE_URL = 'http://192.168.50.37:8080';
-const BASE_URL = 'http://192.168.0.17:8080';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
-//Axios 기본 설정에 우리가 만든 '_retry' 속성을 추가해 줍니다.
+//Axios 기본 설정에 '_retry' 속성을 추가.
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
@@ -41,7 +40,6 @@ client.interceptors.response.use(
     return response; 
   },
   async (error: AxiosError) => {
-    // 에러 설정 객체를 우리가 만든 Custom 타입으로 덮어씌워서 _retry 에러를 없앱니다.
     const originalRequest = error.config as CustomAxiosRequestConfig;
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
@@ -69,7 +67,6 @@ client.interceptors.response.use(
               originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
             }
             
-            // 3. 멈췄던 요청 다시 출발!
             return client(originalRequest);
           }
         }

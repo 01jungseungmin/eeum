@@ -1,0 +1,10 @@
+package com.eeum.eeum.domain.store.repository;
+
+import com.eeum.eeum.domain.store.entity.StoreImage;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface StoreImageRepository extends JpaRepository<StoreImage, Long> {
+    List<StoreImage> findByStore_StoreIdOrderByDisplayOrderAsc(Long storeId);
+    int countByStore_StoreId(Long storeId);
+}

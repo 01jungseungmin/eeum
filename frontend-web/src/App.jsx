@@ -7,6 +7,8 @@ import ApprovalStatus from './pages/owner/main/ApprovalStatusPage';
 import OwnerDashboardPage from './pages/owner/main/DashBoardPage';
 import AdminLoginPage from './pages/admin/login/AdminLoginPage';
 import AdminDashboardPage from './pages/admin/main/DashBoardPage';
+import ApprovalPage from './pages/admin/main/ApprovalPage';
+import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
 
 function App() {
   return (
@@ -21,6 +23,9 @@ function App() {
         <Route path="/" element={<Navigate to="/approval-status" replace />} />
 
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/approval" element={<ApprovalPage />} />
+        <Route path="/admin/approval/:id" element={<ApprovalDetailPage />} />
+
         <Route path="/approval-status" element={<ApprovalStatus />} />
 
         {/* 나중에 추가될 다른 메뉴들 */}
