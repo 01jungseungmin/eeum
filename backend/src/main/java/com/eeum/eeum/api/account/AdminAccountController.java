@@ -2,8 +2,9 @@ package com.eeum.eeum.api.account;
 
 import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.application.account.service.AdminAccountService;
 import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.account.enums.AccountRole;
@@ -117,22 +118,24 @@ public class AdminAccountController {
 
     @Operation(summary = "[관리자] 사장 신청 목록 조회", description = "사장 회원 승인 대기 목록을 조회합니다.")
     @GetMapping("/owners/applications")
-    public ResponseEntity<ApiResponse<Page<AccountDetailResponseDto>>> getOwnerRequests(
+    public ResponseEntity<ApiResponse<Page<OwnerApplicationListResponseDto>>> getOwnerRequests(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @Parameter(description = "승인 상태 필터 (PENDING / APPROVED / REJECTED)")
             @RequestParam(required = false) ApprovalStatus approvalStatus
     ) {
-        Page<AccountDetailResponseDto> response = adminAccountService.getOwnerRequests(pageable, approvalStatus);
+        Page<OwnerApplicationListResponseDto> response = adminAccountService.getOwnerRequests(pageable, approvalStatus);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @Operation(summary = "[관리자] 사장 신청 상세 조회", description = "사장 회원 신청 상세 정보를 조회합니다.")
     @GetMapping("/owners/{ownerInfoId}")
-    public ResponseEntity<ApiResponse<OwnerResponseDto>> getOwnerApplicationDetail(
+    public ResponseEntity<ApiResponse<OwnerApplicationDetailResponseDto>> getOwnerApplicationDetail(
             @Parameter(description = "조회할 사장 신청 ID", required = true, example = "1")
             @PathVariable @Positive Long ownerInfoId
     ) {
-        OwnerResponseDto response = adminAccountService.getOwnerApplicationDetail(ownerInfoId);
+        OwnerApplicationDetailResponseDto response =
+                adminAccountService.getOwnerApplicationDetail(ownerInfoId);
+
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

@@ -2,7 +2,7 @@ package com.eeum.eeum.application.account.mapper;
 
 import com.eeum.eeum.application.account.dto.response.AccountRegionResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.common.util.MaskingUtil;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
@@ -41,8 +41,8 @@ public class AccountMapper {
                 .build();
     }
 
-    public OwnerResponseDto toOwnerResponseDto(OwnerInfo ownerInfo) {
-        return OwnerResponseDto.builder()
+    public OwnerApplicationDetailResponseDto toOwnerResponseDto(OwnerInfo ownerInfo) {
+        return OwnerApplicationDetailResponseDto.builder()
                 .ownerInfoId(ownerInfo.getOwnerInfoId())
                 .accountId(ownerInfo.getAccount().getAccountId())
                 .businessNumber(MaskingUtil.maskBusinessNumber(ownerInfo.getBusinessNumber()))
@@ -51,8 +51,8 @@ public class AccountMapper {
                 .createdAt(ownerInfo.getCreatedAt())
                 .build();
     }
-    public OwnerResponseDto toOwnerAdminResponseDto(OwnerInfo ownerInfo) {
-        return OwnerResponseDto.builder()
+    public OwnerApplicationDetailResponseDto toOwnerAdminResponseDto(OwnerInfo ownerInfo) {
+        return OwnerApplicationDetailResponseDto.builder()
                 .ownerInfoId(ownerInfo.getOwnerInfoId())
                 .accountId(ownerInfo.getAccount().getAccountId())
                 .businessNumber(ownerInfo.getBusinessNumber())
@@ -61,10 +61,10 @@ public class AccountMapper {
                 .createdAt(ownerInfo.getCreatedAt())
                 .build();
     }
-    public OwnerResponseDto toOwnerAdminStoreResponseDto(OwnerInfo ownerInfo, Store store) {
+    public OwnerApplicationDetailResponseDto toOwnerAdminStoreResponseDto(OwnerInfo ownerInfo, Store store) {
         Account account = ownerInfo.getAccount();
 
-        return OwnerResponseDto.builder()
+        return OwnerApplicationDetailResponseDto.builder()
                 .ownerInfoId(ownerInfo.getOwnerInfoId())
                 .accountId(account.getAccountId())
                 .ownerName(account.getName())

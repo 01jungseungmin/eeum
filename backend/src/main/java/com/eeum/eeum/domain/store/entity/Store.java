@@ -95,6 +95,28 @@ public class Store extends BaseEntity {
         return store;
     }
 
+    public void updateBasicInfo(
+            String name,
+            String address,
+            String phone,
+            Category category,
+            Region region,
+            Double latitude,
+            Double longitude,
+            String description,
+            String businessHours
+    ) {
+        this.name = name;
+        this.address = address;
+        this.phone = phone;
+        this.category = category;
+        this.region = region;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.description = description;
+        this.businessHours = businessHours;
+    }
+
     /**
      * 관리자 승인 시 상점 영업 가능 상태로 변경
      */

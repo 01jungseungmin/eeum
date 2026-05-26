@@ -51,6 +51,11 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_DUPLICATE_BUSINESS_NUMBER("ACCOUNT_010", "이미 등록된 사업자번호입니다", HttpStatus.CONFLICT),
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
+    // ===================== 사장 추가정보 기입 =====================
+    OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),
+    OWNER_REVIEW_ALREADY_REQUESTED("OWNER_002","이미 입점 심사 요청이 접수되었습니다.",HttpStatus.CONFLICT),
+    OWNER_CHECKLIST_NOT_COMPLETED( "OWNER_003","입점 심사 필수 항목을 모두 완료해야 합니다.",HttpStatus.BAD_REQUEST),
+    OWNER_INFO_NOT_FOUND( "OWNER_004","사장 신청 정보를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
     // ===================== 사업자 인증 (BUSINESST) =====================
     BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
     BUSINESS_API_FAILED("BUSINESS_002", "사업자등록정보 API 호출에 실패했습니다.", HttpStatus.BAD_GATEWAY),

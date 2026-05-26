@@ -12,6 +12,8 @@ public interface RegionRepository extends JpaRepository<Region, Long> {
 
     Optional<Region> findByRegionCode(String regionCode);
 
+    Optional<Region> findByGunGuAndDong(String gunGu, String dong);
+
     @Query("""
         select r
         from Region r
