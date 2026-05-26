@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
-public interface OwnerInfoRepository extends JpaRepository<OwnerInfo, Long> {
+public interface OwnerInfoRepository extends JpaRepository<OwnerInfo, Long>,OwnerInfoRepositoryCustom {
 
     Optional<OwnerInfo> findByAccount_AccountId(Long accountId);
 

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -10,6 +11,7 @@ import java.time.LocalDateTime;
 @Getter
 @Builder
 @Schema(description = "관리자 사장 신청 목록 응답")
+@AllArgsConstructor
 public class OwnerApplicationListResponseDto {
 
     @Schema(description = "사업자 정보 ID", example = "1")

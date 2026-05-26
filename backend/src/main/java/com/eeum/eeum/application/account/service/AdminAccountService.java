@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.account.dto.request.OwnerInfoSearchDto;
 import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
@@ -147,30 +148,14 @@ public class AdminAccountService {
 
     @Transactional(readOnly = true)
     public Page<OwnerApplicationListResponseDto> getOwnerRequests(
-            Pageable pageable,
-            ApprovalStatus approvalStatus
+            OwnerInfoSearchDto condition,
+            Pageable pageable
     ) {
-        ApprovalStatus status = approvalStatus != null
-                ? approvalStatus
-                : ApprovalStatus.PENDING;
-
-        Page<OwnerInfo> ownerInfos;
-
-        if (status == ApprovalStatus.PENDING) {
-            ownerInfos = ownerInfoRepository
-                    .findByApprovalStatusAndReviewRequestedAtIsNotNull(status, pageable);
-        } else {
-            ownerInfos = ownerInfoRepository.findByApprovalStatus(status, pageable);
+        if (condition.getApprovalStatus() == null) {
+            condition.setApprovalStatus(ApprovalStatus.PENDING);
         }
 
-        return ownerInfos.map(ownerInfo -> {
-            Account account = ownerInfo.getAccount();
-
-            Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
-                    .orElse(null);
-
-            return toOwnerApplicationListDto(ownerInfo, store);
-        });
+        return ownerInfoRepository.searchOwnerApplications(condition, pageable);
     }
 
     @Transactional(readOnly = true)
