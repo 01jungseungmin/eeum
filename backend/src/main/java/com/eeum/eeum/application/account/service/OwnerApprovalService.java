@@ -7,6 +7,9 @@ import com.eeum.eeum.application.store.dto.request.StoreBasicInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
+import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -37,6 +40,7 @@ public class OwnerApprovalService {
     private final SettlementAccountRepository settlementAccountRepository;
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final RegionRepository regionRepository;
 
     // ===================== 체크리스트 조회 =====================
 
@@ -86,26 +90,31 @@ public class OwnerApprovalService {
 
     @Transactional
     public void updateStoreBasicInfo(Long accountId, StoreBasicInfoRequestDto request) {
-        Store store = getStore(accountId);
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        Category category = categoryRepository
-                .findByCategoryIdAndTypeAndIsActiveTrue(
-                        request.getCategoryId(),
-                        CategoryType.STORE
-                )
+        validateReviewEditable(ownerInfo);
+
+        Store store = storeRepository.findByAccount_AccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+
+        Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
 
-        store.updateCategory(category);
+        Region region = regionRepository.findById(request.getRegionId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.REGION_NOT_FOUND));
 
         store.updateBasicInfo(
-                store.getName(),
-                store.getAddress(),
-                store.getPhone(),
+                request.getName(),
+                request.getAddress(),
+                request.getPhone(),
+                category,
+                region,
+                request.getLatitude(),
+                request.getLongitude(),
                 request.getDescription(),
                 request.getBusinessHours()
         );
-
-        log.info("상점 기본 정보 수정 완료: accountId={}", accountId);
     }
 
     // ===================== 정산 계좌 등록/수정 =====================
@@ -115,6 +124,10 @@ public class OwnerApprovalService {
             Long accountId,
             SettlementAccountRequestDto request
     ) {
+        OwnerInfo ownerInfo = getOwnerInfo(accountId);
+
+        validateReviewEditable(ownerInfo);
+
         Store store = getStore(accountId);
 
         SettlementAccount settlementAccount =
@@ -147,6 +160,11 @@ public class OwnerApprovalService {
     @Transactional
     public void requestReview(Long accountId) {
         OwnerInfo ownerInfo = getOwnerInfo(accountId);
+
+        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
         Store store = getStore(accountId);
 
         validateChecklistCompleted(ownerInfo, store);
@@ -160,6 +178,10 @@ public class OwnerApprovalService {
 
     @Transactional
     public void saveRepresentativeMenu(Long accountId, RepresentativeMenuCreateRequestDto request) {
+        OwnerInfo ownerInfo = getOwnerInfo(accountId);
+
+        validateReviewEditable(ownerInfo);
+
         Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
@@ -258,5 +280,11 @@ public class OwnerApprovalService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private void validateReviewEditable(OwnerInfo ownerInfo) {
+        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
     }
 }
