@@ -1,23 +1,21 @@
 package com.eeum.eeum.application.account.service;
 
-import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
 import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
-import com.eeum.eeum.application.store.dto.request.StoreBasicInfoRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreBusinessInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
-import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
-import com.eeum.eeum.domain.account.repository.RegionRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.category.entity.Category;
-import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductCategory;
 import com.eeum.eeum.domain.product.enums.ProductType;
+import com.eeum.eeum.domain.product.repository.ProductCategoryRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.SettlementAccount;
-import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.SettlementAccountRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -40,7 +38,7 @@ public class OwnerApprovalService {
     private final SettlementAccountRepository settlementAccountRepository;
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
-    private final RegionRepository regionRepository;
+    private final ProductCategoryRepository productCategoryRepository;
 
     // ===================== 체크리스트 조회 =====================
 
@@ -89,7 +87,7 @@ public class OwnerApprovalService {
     // ===================== 영업시간 설정 =====================
 
     @Transactional
-    public void updateStoreBasicInfo(Long accountId, StoreBasicInfoRequestDto request) {
+    public void updateStoreBusinessInfo(Long accountId, StoreBusinessInfoRequestDto request) {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
@@ -101,17 +99,8 @@ public class OwnerApprovalService {
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
 
-        Region region = regionRepository.findById(request.getRegionId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.REGION_NOT_FOUND));
-
-        store.updateBasicInfo(
-                request.getName(),
-                request.getAddress(),
-                request.getPhone(),
+        store.updateBusinessInfo(
                 category,
-                region,
-                request.getLatitude(),
-                request.getLongitude(),
                 request.getDescription(),
                 request.getBusinessHours()
         );
@@ -185,6 +174,8 @@ public class OwnerApprovalService {
         Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
+        ProductCategory representativeCategory = getOrCreateRepresentativeCategory(store);
+
         Product product = productRepository
                 .findFirstByStore_StoreIdAndProductTypeOrderByCreatedAtAsc(
                         store.getStoreId(),
@@ -195,6 +186,7 @@ public class OwnerApprovalService {
         if (product == null) {
             Product newProduct = Product.create(
                     store,
+                    representativeCategory,
                     request.getName(),
                     request.getDescription(),
                     BigDecimal.valueOf(request.getBasePrice()),
@@ -207,6 +199,7 @@ public class OwnerApprovalService {
         }
 
         product.update(
+                representativeCategory,
                 request.getName(),
                 request.getDescription(),
                 BigDecimal.valueOf(request.getBasePrice()),
@@ -214,7 +207,6 @@ public class OwnerApprovalService {
                 ProductType.MENU
         );
     }
-
     // ===================== 내부 유틸 =====================
 
     private OwnerInfo getOwnerInfo(Long accountId) {
@@ -286,5 +278,13 @@ public class OwnerApprovalService {
         if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
             throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
         }
+    }
+
+    private ProductCategory getOrCreateRepresentativeCategory(Store store) {
+        return productCategoryRepository
+                .findByStore_StoreIdAndName(store.getStoreId(), "대표 메뉴")
+                .orElseGet(() -> productCategoryRepository.save(
+                        ProductCategory.create(store, "대표 메뉴", 0)
+                ));
     }
 }
