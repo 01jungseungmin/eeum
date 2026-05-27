@@ -6,51 +6,43 @@ import {
   Image, 
   TouchableOpacity, 
   ScrollView,
-  ActivityIndicator // ✨ 실제 로딩 서버 스피너 표시용
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
-// 🚧 [백엔드 연동] 백엔드가 API를 완성하면 아래 주석을 해제합니다.
+// 💡 작성하신 더미 데이터 불러오기
+import { SHOP_CATEGORIES, DUMMY_SHOPS } from '../../constants/shopDummyData';
 // import { shopApi } from '../../api/shop'; 
-
-const CATEGORIES = ['전체', '식당', '카페', '베이커리', '마트'];
-
-const MOCK_SHOP_LIST = [
-  { id: '1', name: '곱도리 식당', rating: 4.9, reviewCount: 342, category: '식당', likeCount: 45, viewCount: 89, isLiked: false, thumbnailUrl: 'https://via.placeholder.com/300/E8F5E9/00A859?text=Gobdori' },
-  { id: '2', name: '베이커리 밀크빵', rating: 4.8, reviewCount: 156, category: '베이커리', likeCount: 56, viewCount: 123, isLiked: true, thumbnailUrl: 'https://via.placeholder.com/300/FFF3E0/FF9800?text=Bakery' },
-  { id: '3', name: '카페 라떼하우스', rating: 4.7, reviewCount: 92, category: '카페', likeCount: 38, viewCount: 74, isLiked: false, thumbnailUrl: 'https://via.placeholder.com/300/EFEBE9/795548?text=Cafe' },
-  { id: '4', name: '우리동네 싱싱마트', rating: 4.9, reviewCount: 512, category: '마트', likeCount: 120, viewCount: 340, isLiked: false, thumbnailUrl: 'https://via.placeholder.com/300/E3F2FD/2196F3?text=Mart' },
-  { id: '5', name: '돈까스 마스터', rating: 4.6, reviewCount: 210, category: '식당', likeCount: 64, viewCount: 115, isLiked: true, thumbnailUrl: 'https://via.placeholder.com/300/FFEBEE/F44336?text=Cutlet' }
-];
 
 export default function ShopListScreen() {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState('전체');
-  const [shopList, setShopList] = useState<any[]>(MOCK_SHOP_LIST);
-  const [isLoading, setIsLoading] = useState(false); // ✨ 로딩 상태 관리
+  // 상태를 카테고리 '이름'이 아니라 'id(숫자)'로 관리합니다. (0은 전체)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
+  const [shopList, setShopList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false); 
 
-  // 💡 [더미 데이터용 필터 로직] - 실제 API 연결 시 이 useEffect는 주석 처리하거나 지웁니다.
+  // [더미 데이터용 필터 로직] 
   useEffect(() => {
-    if (selectedCategory === '전체') {
-      setShopList(MOCK_SHOP_LIST);
+    if (selectedCategoryId === 0) {
+      setShopList(DUMMY_SHOPS);
     } else {
-      const filtered = MOCK_SHOP_LIST.filter(shop => shop.category === selectedCategory);
+      const filtered = DUMMY_SHOPS.filter(shop => shop.categoryId === selectedCategoryId);
       setShopList(filtered);
     }
-  }, [selectedCategory]);
+  }, [selectedCategoryId]);
 
-  /* 🚧 [백엔드 연동 켜기] 실제 백엔드 연동 시 위의 useEffect를 지우고 아래 주석을 푸세요!
+  /* 🚧 [백엔드 API 연동 시 주석 해제]
   useEffect(() => {
     const fetchShopList = async () => {
       setIsLoading(true);
       try {
-        // 카테고리가 '전체'일 때는 null을 보내고, 아닐 때는 선택된 카테고리명을 파라미터로 전송
-        const categoryParam = selectedCategory === '전체' ? null : selectedCategory;
+        // 카테고리가 전체(0)일 때는 null 전송, 아닐 때는 id 전송
+        const categoryParam = selectedCategoryId === 0 ? null : selectedCategoryId;
         const res = await shopApi.getShops(categoryParam);
-        setShopList(res.data); // 백엔드 데이터로 교체
+        setShopList(res.data);
       } catch (e) {
         console.error('상점 목록 API 로딩 실패:', e);
       } finally {
@@ -58,30 +50,37 @@ export default function ShopListScreen() {
       }
     };
     fetchShopList();
-  }, [selectedCategory]);
+  }, [selectedCategoryId]);
   */
 
-  const renderShopCard = ({ item }: any) => (
-    <TouchableOpacity style={styles.cardContainer} onPress={() => router.push(`/shop/${item.id}`)}>
-      <Image source={{ uri: item.thumbnailUrl }} style={styles.cardImage} />
-      <View style={styles.cardTitleRow}>
-        <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.name}</Text>
-        <Ionicons name={item.isLiked ? "heart" : "heart-outline"} size={20} color={item.isLiked ? "#FF5252" : "#999"} />
-      </View>
-      <View style={styles.ratingRow}>
-        <Ionicons name="star" size={14} color="#FFD700" />
-        <Text fontWeight="bold" style={styles.ratingText}>{item.rating}</Text>
-        <Text style={styles.reviewText}>({item.reviewCount})</Text>
-      </View>
-      <Text style={styles.locationText}>{item.category}</Text>
-      <View style={styles.footerRow}>
-        <View style={styles.footerItem}><Ionicons name="heart" size={12} color="#999" /><Text style={styles.footerText}>{item.likeCount}</Text></View>
-        <View style={styles.footerItem}><Ionicons name="eye" size={14} color="#999" /><Text style={styles.footerText}>{item.viewCount}</Text></View>
-      </View>
-    </TouchableOpacity>
-  );
+  const getCategoryName = (id: number) => {
+    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
+  };
 
-  // 로딩 중일 때 돌릴 스피너 화면
+  const renderShopCard = ({ item }: any) => {
+    // 썸네일은 첫 번째 상품의 이미지를 가져오거나, 없으면 플레이스홀더 사용
+    const thumbnailUrl = item.products?.[0]?.imageUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
+
+    return (
+      <TouchableOpacity style={styles.cardContainer} onPress={() => router.push(`/shop/${item.id}`)}>
+        <Image source={{ uri: thumbnailUrl }} style={styles.cardImage} />
+        <View style={styles.cardTitleRow}>
+          <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.name}</Text>
+          <Ionicons name="heart-outline" size={20} color="#999" />
+        </View>
+        <View style={styles.ratingRow}>
+          <Ionicons name="star" size={14} color="#FFD700" />
+          <Text fontWeight="bold" style={styles.ratingText}>{item.rating}</Text>
+          <Text style={styles.reviewText}>({item.reviewCount})</Text>
+        </View>
+        <Text style={styles.locationText}>{getCategoryName(item.categoryId)}</Text>
+        <View style={styles.footerRow}>
+          <View style={styles.footerItem}><Ionicons name="heart" size={12} color="#999" /><Text style={styles.footerText}>{item.favoriteCount}</Text></View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -101,20 +100,20 @@ export default function ShopListScreen() {
 
       <View style={styles.categoryWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {CATEGORIES.map((cat) => (
+          {(SHOP_CATEGORIES || []).map((cat) => (
             <TouchableOpacity 
-              key={cat} 
-              style={[styles.categoryPill, selectedCategory === cat && styles.categoryPillActive]}
-              onPress={() => setSelectedCategory(cat)} 
+              key={cat.id} 
+              style={[styles.categoryPill, selectedCategoryId === cat.id && styles.categoryPillActive]}
+              onPress={() => setSelectedCategoryId(cat.id)} 
             >
-              <Text style={[styles.categoryText, selectedCategory === cat && styles.categoryTextActive]}>{cat}</Text>
+              <Text style={[styles.categoryText, selectedCategoryId === cat.id && styles.categoryTextActive]}>{cat.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
       <View style={styles.listHeader}>
-        <Text style={styles.totalText}>총 {shopList.length}개</Text>
+        <Text style={styles.totalText}>총 {(shopList || []).length}개</Text>
         <TouchableOpacity style={styles.sortButton}>
           <Text style={styles.sortText}>최신순</Text>
           <Ionicons name="chevron-down" size={14} color="#666" />
@@ -123,7 +122,7 @@ export default function ShopListScreen() {
 
       <FlatList
         data={shopList}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={renderShopCard}
         numColumns={2}
         columnWrapperStyle={styles.rowWrapper}

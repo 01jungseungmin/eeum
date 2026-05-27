@@ -5,28 +5,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DUMMY_SHOPS } from '../../constants/shopDummyData';
 // 🚧 [백엔드 연동]
 // import { productApi } from '../../api/product';
 
 const { width } = Dimensions.get('window');
 
-const MOCK_PRODUCT = {
-  id: '1',
-  title: '[콜리브리] 유기농 엑스트라버진 올리브 오일',
-  category: '식품 · 2시간 전',
-  price: 13000,
-  originalPrice: 18000,
-  tags: ['#프리미엄', '#이탈리아산', '#건강식품'],
-  description: '이탈리아 토스카나 지역에서 생산된 프리미엄 엑스트라버진 올리브유입니다. 신선한 풍미가 일품이며 샐러드나 파스타에 곁들이기 좋습니다.',
-  rating: 4.8,
-  reviewCount: 89,
-  seller: { name: '현대식품관', location: '송파동', rating: 4.9 },
-  img: 'https://via.placeholder.com/500/E8F5E9/00A859?text=Olive+Oil'
-};
-
+// 더미 리뷰
 const MOCK_REVIEWS = [
-  { id: 'r1', user: '김*', rating: 5, date: '2026.04.15', content: '맛이 정말 진하고 좋아요! 샐러드 드레싱으로 최고입니다.' },
-  { id: 'r2', user: '이**', rating: 4, date: '2026.04.12', content: '배송도 빠르고 포장도 꼼꼼해서 만족합니다.' }
+  { id: 'r1', user: '김*', rating: 5, date: '2026.04.15', content: '정말 만족스럽습니다! 강력 추천해요.' },
+  { id: 'r2', user: '이**', rating: 4, date: '2026.04.12', content: '포장도 깔끔하고 배송도 빨랐어요.' }
 ];
 
 export default function ProductDetailScreen() {
@@ -34,16 +22,38 @@ export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams(); 
   const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [product, setProduct] = useState<any>(MOCK_PRODUCT);
+  
+  // 더미 데이터에서 상품 추출
+  const [product, setProduct] = useState<any>(null);
+  const [seller, setSeller] = useState<any>(null);
 
-  /* 🚧 [백엔드 연동 켜기] 실제 백엔드 연동 시 아래 주석을 해제하세요!
+  useEffect(() => {
+    if (!id) return;
+    const productIdNum = Number(id);
+    let foundProduct = null;
+    let foundSeller = null;
+
+    for (const shop of DUMMY_SHOPS) {
+      const prod = shop.products?.find(p => p.id === productIdNum);
+      if (prod) {
+        foundProduct = prod;
+        foundSeller = shop;
+        break;
+      }
+    }
+    setProduct(foundProduct);
+    setSeller(foundSeller);
+  }, [id]);
+
+  /* 🚧 [백엔드 연동 켜기] 실제 백엔드 연동 시 아래 주석 해제!
   useEffect(() => {
     if (id) {
       const fetchProductDetail = async () => {
         setIsLoading(true);
         try {
           const res = await productApi.getProductDetail(id as string);
-          setProduct(res.data); // 서버 데이터로 연동 완료
+          setProduct(res.data.product); 
+          setSeller(res.data.seller);
         } catch (e) {
           console.error('상품 상세 API 로딩 실패:', e);
         } finally {
@@ -71,41 +81,46 @@ export default function ProductDetailScreen() {
     Alert.alert("구매하기", "주문/결제 페이지로 이동합니다 (준비 중)");
   };
 
-  if (isLoading) {
+  if (isLoading || !product) {
     return <View style={{flex:1, justifyContent:'center', alignItems:'center'}}><ActivityIndicator size="large" color="#00A859" /></View>;
   }
+
+  // 할인 여부 계산
+  const hasEvent = !!product.eventPrice;
+  const currentPrice = hasEvent ? product.eventPrice : product.price;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: product.img }} style={styles.productImage} />
+          <Image source={{ uri: product.imageUrl }} style={styles.productImage} />
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color="#333" /></TouchableOpacity>
         </View>
 
         <View style={styles.infoSection}>
           <View style={styles.titleRow}>
-            <Text style={styles.categoryText}>{product.category}</Text>
+            <Text style={styles.categoryText}>{seller?.name} · {product.type === 'RESERVATION' ? '예약' : '일반'}</Text>
             <TouchableOpacity onPress={() => setIsLiked(!isLiked)}><Ionicons name={isLiked ? "heart" : "heart-outline"} size={24} color={isLiked ? "#FF5252" : "#999"} /></TouchableOpacity>
           </View>
-          <Text fontWeight="bold" style={styles.productTitle}>{product.title}</Text>
+          <Text fontWeight="bold" style={styles.productTitle}>{product.name}</Text>
           <View style={styles.priceRow}>
-            <Text style={styles.originalPrice}>{product.originalPrice.toLocaleString()}원</Text>
-            <Text fontWeight="bold" style={styles.currentPrice}>{product.price.toLocaleString()}원</Text>
+            {hasEvent && <Text style={styles.originalPrice}>{product.price.toLocaleString()}원</Text>}
+            <Text fontWeight="bold" style={styles.currentPrice}>{currentPrice.toLocaleString()}원</Text>
           </View>
           <View style={styles.tagRow}>
-            {product.tags.map((tag: string) => (<View key={tag} style={styles.tagPill}><Text style={styles.tagText}>{tag}</Text></View>))}
+             <View style={styles.tagPill}><Text style={styles.tagText}>{product.status === 'ACTIVE' ? '판매중' : '품절'}</Text></View>
+             {product.stock && <View style={styles.tagPill}><Text style={styles.tagText}>남은수량: {product.stock}개</Text></View>}
           </View>
         </View>
 
         <View style={styles.divider} />
 
-        <TouchableOpacity style={styles.sellerSection}>
+        <TouchableOpacity style={styles.sellerSection} onPress={() => router.push(`/shop/${seller?.id}`)}>
           <View style={styles.sellerInfo}>
-            <View style={styles.avatarPlaceholder}><Text style={{color:'#fff'}}>M</Text></View>
+            <View style={styles.avatarPlaceholder}><Text style={{color:'#fff'}}>{seller?.name?.[0] || 'S'}</Text></View>
             <View>
-              <Text fontWeight="bold">{product.seller.name}</Text>
-              <Text style={styles.sellerLocation}>{product.seller.location}</Text>
+              <Text fontWeight="bold">{seller?.name}</Text>
+              <Text style={styles.sellerLocation}>{seller?.address}</Text>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#999" />
@@ -122,8 +137,8 @@ export default function ProductDetailScreen() {
 
         <View style={styles.reviewSection}>
           <View style={styles.sectionHeader}>
-            <Text fontWeight="bold" style={styles.sectionTitle}>상품 리뷰 {product.reviewCount}</Text>
-            <View style={styles.ratingRow}><Ionicons name="star" size={16} color="#FFD700" /><Text fontWeight="bold">{product.rating}</Text></View>
+            <Text fontWeight="bold" style={styles.sectionTitle}>상품 리뷰 {seller?.reviewCount}</Text>
+            <View style={styles.ratingRow}><Ionicons name="star" size={16} color="#FFD700" /><Text fontWeight="bold">{seller?.rating.toFixed(1)}</Text></View>
           </View>
           {MOCK_REVIEWS.map(review => (
             <View key={review.id} style={styles.reviewCard}>
@@ -139,8 +154,25 @@ export default function ProductDetailScreen() {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.cartBtn} onPress={handleAddToCart}><Text fontWeight="bold" style={styles.cartBtnText}>장바구니</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.buyBtn} onPress={handleBuyNow}><Text fontWeight="bold" style={styles.buyBtnText}>구매하기</Text></TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.cartBtn, product.status === 'SOLD_OUT' && { backgroundColor: '#F5F5F5' }]} 
+          onPress={handleAddToCart}
+          disabled={product.status === 'SOLD_OUT'}
+        >
+          <Text fontWeight="bold" style={[styles.cartBtnText, product.status === 'SOLD_OUT' && { color: '#999' }]}>
+            {product.status === 'SOLD_OUT' ? '품절' : '장바구니'}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.buyBtn, product.status === 'SOLD_OUT' && { backgroundColor: '#999' }]} 
+          onPress={handleBuyNow}
+          disabled={product.status === 'SOLD_OUT'}
+        >
+          <Text fontWeight="bold" style={styles.buyBtnText}>
+             {product.type === 'RESERVATION' ? '예약하기' : '구매하기'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -165,7 +197,7 @@ const styles = StyleSheet.create({
   sellerSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   sellerInfo: { flexDirection: 'row', alignItems: 'center' },
   avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#00A859', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  sellerLocation: { fontSize: 12, color: '#888' },
+  sellerLocation: { fontSize: 12, color: '#888', marginTop: 4 },
   descSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 15 },
   descriptionText: { fontSize: 15, color: '#444', lineHeight: 22 },

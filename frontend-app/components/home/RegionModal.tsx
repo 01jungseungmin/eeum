@@ -27,12 +27,13 @@ export default function RegionModal({
           <Text style={styles.modalTitle}>내 동네 설정</Text>
           <Text style={styles.modalSubTitle}>최대 2개의 동네를 선택할 수 있어요</Text>
           
-          {regions.map((item: any) => (
+          {(regions || []).map((item: any) => (
             <TouchableOpacity key={item.accountRegionId} style={styles.regionItem} onPress={() => onSetPrimary(item.accountRegionId)}>
               <View style={styles.regionLeft}>
                 <View style={[styles.radio, item.isPrimary && styles.radioActive]} />
                 <Text style={item.isPrimary ? styles.regionNameActive : styles.regionName}>
-                  {item.region.name}
+                  {/* 2. 방어막: item 안에 region 데이터가 없을 때를 대비해 ?(옵셔널 체이닝) 추가 */}
+                  {item.region?.name || '동네 로딩 중...'}
                 </Text>
                 {item.verified && <Ionicons name="checkmark-circle" size={14} color="#00A859" style={{marginLeft: 5}} />}
               </View>
