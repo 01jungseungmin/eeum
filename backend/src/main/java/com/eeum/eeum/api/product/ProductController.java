@@ -1,10 +1,13 @@
 package com.eeum.eeum.api.product;
 
-import com.eeum.eeum.application.product.dto.request.*;
+import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
 import com.eeum.eeum.application.product.service.ProductImageService;
 import com.eeum.eeum.application.product.service.ProductService;
-import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -133,13 +136,14 @@ public class ProductController {
 
     @Operation(summary = "상품 이미지 등록 (최대 20장)")
     @PostMapping("/{productId}/images")
-    public ResponseEntity<ApiResponse<ImageResponseDto>> addProductImage(
+    public ResponseEntity<ApiResponse<List<ImageResponseDto>>> addProductImages(
             @PathVariable Long productId,
-            @Valid @RequestBody ImageUploadRequestDto request
+            @Valid @RequestBody ImageUploadListRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                productImageService.addImage(accountId, productId, request)));
+                productImageService.addImages(accountId, productId, request)
+        ));
     }
 
     @Operation(summary = "상품 이미지 삭제")

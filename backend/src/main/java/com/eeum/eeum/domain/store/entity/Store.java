@@ -95,28 +95,6 @@ public class Store extends BaseEntity {
         return store;
     }
 
-    public void updateBasicInfo(
-            String name,
-            String address,
-            String phone,
-            Category category,
-            Region region,
-            Double latitude,
-            Double longitude,
-            String description,
-            String businessHours
-    ) {
-        this.name = name;
-        this.address = address;
-        this.phone = phone;
-        this.category = category;
-        this.region = region;
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.description = description;
-        this.businessHours = businessHours;
-    }
-
     /**
      * 관리자 승인 시 상점 영업 가능 상태로 변경
      */
@@ -139,11 +117,26 @@ public class Store extends BaseEntity {
     }
 
     /**
-     * 영업 종료 / 폐업 처리
+     * 영업 종료
      */
     public void close() {
         this.status = StoreStatus.CLOSED;
     }
+
+    /**
+     * 상점 영업시간 설정
+     */
+
+    public void updateBusinessInfo(
+            Category category,
+            String description,
+            String businessHours
+    ) {
+        this.category = category;
+        this.description = description;
+        this.businessHours = businessHours;
+    }
+
 
     /**
      * 상점 기본 정보 수정
@@ -177,5 +170,12 @@ public class Store extends BaseEntity {
 
     public void updateCategory(Category category) {
         this.category = category;
+    }
+    public void suspend() {
+        this.status = StoreStatus.SUSPENDED;
+    }
+
+    public void activate() {
+        this.status = StoreStatus.TEMP_CLOSED;
     }
 }

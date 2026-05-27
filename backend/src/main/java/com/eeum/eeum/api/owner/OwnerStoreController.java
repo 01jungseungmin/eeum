@@ -1,10 +1,13 @@
 package com.eeum.eeum.api.owner;
 
-import com.eeum.eeum.application.store.dto.request.*;
-import com.eeum.eeum.application.store.dto.response.*;
+import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreUpdateRequestDto;
+import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreResponseDto;
 import com.eeum.eeum.application.store.service.StoreImageService;
 import com.eeum.eeum.application.store.service.StoreService;
-import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -54,7 +57,7 @@ public class OwnerStoreController {
 
     @Operation(
             summary = "상점 상태 변경",
-            description = "현재 로그인한 사장의 상점 영업 상태를 변경합니다. 사장 화면에서는 OPEN(영업중), TEMP_CLOSED(휴식중) 상태 변경만 허용합니다. CLOSED(영업 종료)는 일반 상태 변경 API에서 허용하지 않습니다."
+            description = "현재 로그인한 사장의 상점 영업 상태를 변경합니다. OPEN(영업중), TEMP_CLOSED(임시 휴업/쉬는 시간), CLOSED(영업 종료) 상태로 변경할 수 있습니다."
     )
     @PatchMapping("/status")
     public ResponseEntity<ApiResponse<Void>> updateStoreStatus(
@@ -76,12 +79,13 @@ public class OwnerStoreController {
 
     @Operation(summary = "상점 이미지 등록 (최대 20장)")
     @PostMapping("/images")
-    public ResponseEntity<ApiResponse<ImageResponseDto>> addStoreImage(
-            @Valid @RequestBody ImageUploadRequestDto request
+    public ResponseEntity<ApiResponse<List<ImageResponseDto>>> addStoreImages(
+            @Valid @RequestBody ImageUploadListRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                storeImageService.addImage(accountId, request)));
+                storeImageService.addImages(accountId, request)
+        ));
     }
 
     @Operation(summary = "상점 이미지 삭제")

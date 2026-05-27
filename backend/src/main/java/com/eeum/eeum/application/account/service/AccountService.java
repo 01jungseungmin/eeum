@@ -13,6 +13,7 @@ import com.eeum.eeum.common.util.MaskingUtil;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
@@ -37,6 +38,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final AccountMapper accountMapper;
+    private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
 
     // ===================== 내 정보 조회 =====================
 
@@ -114,13 +116,18 @@ public class AccountService {
         // 2. 활성 회원 조회
         Account account = getActiveAccount(accountId);
 
-        // 3. 탈퇴 처리
+        // 3. 사장 계정이면 상점/상품/이벤트 상품 비활성화
+        if (account.getRole() == AccountRole.ROLE_OWNER) {
+            ownerStoreWithdrawalService.deactivateForWithdrawal(accountId);
+        }
+
+        // 4. 탈퇴 처리
         account.withdraw();
 
-        // 4. ReAuthToken 삭제
+        // 5. ReAuthToken 삭제
         tokenService.consumeReAuthToken(accountId);
 
-        // 5. Refresh Token 삭제
+        // 6. Refresh Token 삭제
         tokenService.deleteRefreshToken(accountId);
 
 

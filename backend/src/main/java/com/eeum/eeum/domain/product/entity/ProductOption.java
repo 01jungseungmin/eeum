@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.product.entity;
 
 import com.eeum.eeum.common.entity.BaseEntity;
+import com.eeum.eeum.domain.product.enums.OptionSelectionType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -24,8 +25,9 @@ public class ProductOption extends BaseEntity {
     @Column(name = "group_name", nullable = false, length = 50)
     private String groupName;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "selection_type", nullable = false, length = 20)
-    private String selectionType; // SINGLE, MULTIPLE
+    private OptionSelectionType selectionType;
 
     @Column(name = "is_required", nullable = false)
     private boolean isRequired;
@@ -33,8 +35,13 @@ public class ProductOption extends BaseEntity {
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder;
 
-    public static ProductOption create(Product product, String groupName,
-            String selectionType, boolean isRequired, int displayOrder) {
+    public static ProductOption create(
+            Product product,
+            String groupName,
+            OptionSelectionType selectionType,
+            boolean isRequired,
+            int displayOrder
+    ) {
         ProductOption option = new ProductOption();
         option.product = product;
         option.groupName = groupName;
@@ -42,5 +49,17 @@ public class ProductOption extends BaseEntity {
         option.isRequired = isRequired;
         option.displayOrder = displayOrder;
         return option;
+    }
+
+    public void update(
+            String groupName,
+            OptionSelectionType selectionType,
+            boolean isRequired,
+            int displayOrder
+    ) {
+        this.groupName = groupName;
+        this.selectionType = selectionType;
+        this.isRequired = isRequired;
+        this.displayOrder = displayOrder;
     }
 }

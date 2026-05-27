@@ -1,10 +1,14 @@
 package com.eeum.eeum.application.product.service;
 
-import com.eeum.eeum.application.product.dto.request.*;
+import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductCategory;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
-import com.eeum.eeum.domain.product.enums.ProductType;
+import com.eeum.eeum.domain.product.repository.ProductCategoryRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -14,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -24,6 +29,7 @@ public class ProductService {
 
     private final StoreRepository storeRepository;
     private final ProductRepository productRepository;
+    private final ProductCategoryRepository productCategoryRepository;
 
     @Transactional(readOnly = true)
     public List<ProductResponseDto> getMyProducts(Long accountId) {
@@ -43,6 +49,13 @@ public class ProductService {
     public void createProduct(Long accountId, ProductCreateRequestDto request) {
         Store store = getStore(accountId);
 
+        ProductCategory productCategory = productCategoryRepository
+                .findByProductCategoryIdAndStore_StoreId(
+                        request.getCategoryId(),
+                        store.getStoreId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
+
         BigDecimal price = request.getBasePrice() == null
                 ? BigDecimal.ZERO
                 : BigDecimal.valueOf(request.getBasePrice());
@@ -51,7 +64,7 @@ public class ProductService {
                 ? "" : request.getDescription();
 
         Product product = Product.create(
-                store, request.getName(), description,
+                store, productCategory, request.getName(), description,
                 price, request.getStockQuantity(), request.getProductType()
         );
 
@@ -64,7 +77,15 @@ public class ProductService {
                                             ProductUpdateRequestDto request) {
         Product product = getProductWithOwnerCheck(accountId, productId);
 
+        ProductCategory productCategory = productCategoryRepository
+                .findByProductCategoryIdAndStore_StoreId(
+                        request.getCategoryId(),
+                        product.getStore().getStoreId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
+
         product.update(
+                productCategory,
                 request.getName(),
                 request.getDescription() == null ? "" : request.getDescription(),
                 BigDecimal.valueOf(request.getBasePrice()),
@@ -124,8 +145,13 @@ public class ProductService {
     }
 
     private ProductResponseDto toDto(Product product) {
+        ProductCategory category = product.getProductCategory();
+
         return ProductResponseDto.builder()
                 .productId(product.getProductId())
+                .storeId(product.getStore().getStoreId())
+                .categoryId(category.getProductCategoryId())
+                .categoryName(category.getName())
                 .name(product.getName())
                 .description(product.getDescription())
                 .price(product.getPrice())
@@ -134,6 +160,7 @@ public class ProductService {
                 .status(product.getStatus().name())
                 .viewCount(product.getViewCount())
                 .createdAt(product.getCreatedAt())
+                .modifiedAt(product.getModifiedAt())
                 .build();
     }
 }

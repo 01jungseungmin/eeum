@@ -1,13 +1,15 @@
 package com.eeum.eeum.application.store.service;
 
-import com.eeum.eeum.application.store.dto.request.*;
-import com.eeum.eeum.application.store.dto.response.*;
+import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreUpdateRequestDto;
+import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreResponseDto;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreNotice;
-import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 @Slf4j
@@ -60,12 +63,11 @@ public class StoreService {
     public void updateStoreStatus(Long accountId, StoreStatusUpdateRequestDto request) {
         Store store = getStore(accountId);
 
-        if (request.getStatus() == StoreStatus.OPEN) {
-            store.reopen();
-        } else if (request.getStatus() == StoreStatus.TEMP_CLOSED) {
-            store.tempClose();
-        } else {
-            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        switch (request.getStatus()) {
+            case OPEN -> store.reopen();
+            case TEMP_CLOSED -> store.tempClose();
+            case CLOSED -> store.close();
+            default -> throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
 
         log.info("상점 상태 변경: accountId={}, status={}", accountId, request.getStatus());

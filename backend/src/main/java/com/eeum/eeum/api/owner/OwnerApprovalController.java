@@ -3,7 +3,7 @@ package com.eeum.eeum.api.owner;
 import com.eeum.eeum.application.account.service.OwnerApprovalService;
 import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
-import com.eeum.eeum.application.store.dto.request.StoreBasicInfoRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreBusinessInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -36,14 +36,16 @@ public class OwnerApprovalController {
                 ownerApprovalService.getChecklist(accountId)));
     }
 
-    @Operation(summary = "영업시간 및 상점 설명 수정",
-            description = "영업시간과 상점 설명을 입력합니다.")
+    @Operation(
+            summary = "입점 심사용 상점 영업 정보 입력/수정",
+            description = "입점 심사를 위해 업종, 상점 설명, 영업시간을 입력하거나 수정합니다. 상점명, 주소, 전화번호는 사장 회원가입 시 입력된 값을 사용합니다."
+    )
     @PatchMapping("/business-info")
-    public ResponseEntity<ApiResponse<Void>> updateStoreBasicInfo(
-            @Valid @RequestBody StoreBasicInfoRequestDto request
+    public ResponseEntity<ApiResponse<Void>> updateStoreBusinessInfo(
+            @Valid @RequestBody StoreBusinessInfoRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
-        ownerApprovalService.updateStoreBasicInfo(accountId, request);
+        ownerApprovalService.updateStoreBusinessInfo(accountId, request);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
