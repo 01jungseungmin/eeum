@@ -38,7 +38,8 @@ public class SecurityConfig {
             "/used-products/**",
             "/products/**",
             "/regions/search",
-            "/regions/nearby"
+            "/regions/nearby",
+            "/event-products/**"
     };
 
     // ===================== 인증 없이 허용할 POST 경로 =====================
