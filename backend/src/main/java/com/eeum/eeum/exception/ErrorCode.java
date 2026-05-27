@@ -24,7 +24,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMON_FORBIDDEN("COMMON_005", "접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     COMMON_DUPLICATE_REQUEST("COMMON_006", "중복된 요청입니다", HttpStatus.CONFLICT),
     COMMON_CONCURRENT_ACCESS("COMMON_007", "동시 접근 오류입니다. 잠시 후 다시 시도해 주세요", HttpStatus.CONFLICT),
-
+    COMMON_DUPLICATE_RESOURCE("COMMON_008","이미 존재하는 리소스입니다.",HttpStatus.CONFLICT ),
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
     AUTH_EXPIRED_TOKEN("AUTH_002", "만료된 토큰입니다", HttpStatus.UNAUTHORIZED),
@@ -84,8 +84,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PRODUCT_OUT_OF_STOCK("PRODUCT_002", "재고가 부족합니다", HttpStatus.BAD_REQUEST),
     PRODUCT_INACTIVE("PRODUCT_003", "판매 중인 상품이 아닙니다", HttpStatus.BAD_REQUEST),
     PRODUCT_CATEGORY_NOT_FOUND("PRODUCT_004", "상품 카테고리를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
-    PRODUCT_OPTION_NOT_FOUND("PRODUCT_005", "상품 옵션을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
-    PRODUCT_REQUIRED_OPTION_MISSING("PRODUCT_006", "필수 옵션을 선택해 주세요", HttpStatus.BAD_REQUEST),
+    PRODUCT_CATEGORY_HAS_PRODUCTS("CATEGORY_005", "소속 상품이 있어 삭제할 수 없습니다", HttpStatus.BAD_REQUEST),
+    PRODUCT_OPTION_NOT_FOUND("PRODUCT_006", "상품 옵션을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+    PRODUCT_OPTION_ITEM_NOT_FOUND("OPTION_007", "옵션 항목을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+    PRODUCT_REQUIRED_OPTION_MISSING("PRODUCT_008", "필수 옵션을 선택해 주세요", HttpStatus.BAD_REQUEST),
 
     // ===================== 이벤트 상품 (EVENT) =====================
     EVENT_NOT_FOUND("EVENT_001", "존재하지 않는 이벤트 상품입니다", HttpStatus.NOT_FOUND),
