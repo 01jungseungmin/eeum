@@ -4,10 +4,13 @@ import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 
 @Entity
@@ -25,14 +28,14 @@ public class Product extends BaseEntity {
     @JoinColumn(name = "store_id", nullable = false)
     private Store store;
 
-    // @ManyToOne(fetch = FetchType.LAZY)
-    // @JoinColumn(name = "product_category_id")
-    // private ProductCategory productCategory;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_category_id", nullable = false)
+    private ProductCategory productCategory;
 
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
     @Column(name = "price", nullable = false, precision = 10, scale = 2)
@@ -56,22 +59,37 @@ public class Product extends BaseEntity {
     @Column(name = "version", nullable = false)
     private Long version;
 
-    public static Product create(Store store, String name, String description,
-                                 BigDecimal price, Integer stock, ProductType productType) {
+    public static Product create(
+            Store store,
+            ProductCategory productCategory,
+            String name,
+            String description,
+            BigDecimal price,
+            Integer stock,
+            ProductType productType
+    ) {
         Product product = new Product();
         product.store = store;
+        product.productCategory = productCategory;
         product.name = name;
         product.description = description;
         product.price = price;
         product.stock = stock;
         product.productType = productType;
-        product.viewCount = 0;
         product.status = ProductStatus.ACTIVE;
+        product.viewCount = 0;
         return product;
     }
 
-    public void update(String name, String description,
-                       BigDecimal price, Integer stock, ProductType productType) {
+    public void update(
+            ProductCategory productCategory,
+            String name,
+            String description,
+            BigDecimal price,
+            Integer stock,
+            ProductType productType
+    ) {
+        this.productCategory = productCategory;
         this.name = name;
         this.description = description;
         this.price = price;
@@ -90,4 +108,38 @@ public class Product extends BaseEntity {
     public void soldOut() { this.status = ProductStatus.SOLD_OUT; }
     public void activate() { this.status = ProductStatus.ACTIVE; }
     public void deactivate() { this.status = ProductStatus.INACTIVE; }
+
+    public void increaseViewCount() {
+        if (this.viewCount == null) {
+            this.viewCount = 0;
+        }
+        this.viewCount++;
+    }
+
+    public boolean hasUnlimitedStock() {
+        return this.stock == null;
+    }
+
+    public void decreaseStock(int quantity) {
+        if (this.stock == null) {
+            return;
+        }
+        if (this.stock < quantity) {
+            throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
+        }
+        this.stock -= quantity;
+        if (this.stock == 0) {
+            this.status = ProductStatus.SOLD_OUT;
+        }
+    }
+
+    public void increaseStock(int quantity) {
+        if (this.stock == null) {
+            return;
+        }
+        this.stock += quantity;
+        if (this.stock > 0 && this.status == ProductStatus.SOLD_OUT) {
+            this.status = ProductStatus.ACTIVE;
+        }
+    }
 }

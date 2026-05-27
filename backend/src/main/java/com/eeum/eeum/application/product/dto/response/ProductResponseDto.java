@@ -30,10 +30,7 @@ public class ProductResponseDto {
     @Schema(description = "재고 수량", example = "15")
     private Integer stock;
 
-    @Schema(description = "예약 가능 인원", example = "4")
-    private Integer reservationCapacity;
-
-    @Schema(description = "상품 유형", example = "SALE", allowableValues = {"SALE", "RESERVATION", "MENU"})
+    @Schema(description = "상품 유형", example = "SALE", allowableValues = {"MENU", "SALE", "PREORDER"})
     private String productType;
 
     @Schema(description = "상품 상태", example = "ACTIVE", allowableValues = {"ACTIVE", "SOLD_OUT", "INACTIVE"})
