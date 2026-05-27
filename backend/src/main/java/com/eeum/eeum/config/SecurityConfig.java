@@ -35,7 +35,10 @@ public class SecurityConfig {
     // ===================== 인증 없이 허용할 GET 경로 =====================
     private static final String[] PUBLIC_GET = {
             "/stores/**",
-            "/used-products/**"
+            "/used-products/**",
+            "/products/**",
+            "/regions/search",
+            "/regions/nearby"
     };
 
     // ===================== 인증 없이 허용할 POST 경로 =====================
@@ -96,6 +99,7 @@ public class SecurityConfig {
                         .requestMatchers(ACTUATOR_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
+
 
                         // PortOne Webhook은 JWT 인증 대신 서명 검증으로 처리
                         .requestMatchers(HttpMethod.POST, "/payments/webhook").permitAll()
