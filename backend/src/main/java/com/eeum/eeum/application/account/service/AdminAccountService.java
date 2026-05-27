@@ -3,14 +3,15 @@ package com.eeum.eeum.application.account.service;
 import com.eeum.eeum.application.account.dto.request.OwnerInfoSearchDto;
 import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
-import com.eeum.eeum.application.region.service.RegionService;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
-import com.eeum.eeum.domain.account.entity.*;
+import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
@@ -30,8 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-
-import static org.springframework.util.StringUtils.hasText;
 
 @Slf4j
 @Service
@@ -63,13 +62,6 @@ public class AdminAccountService {
             AccountRole role,
             String keyword
     ) {
-        // TODO:
-        // 현재는 필터 파라미터만 받을 수 있게 시그니처를 맞춘 상태.
-        // 실제 status / role / keyword 검색은 QueryDSL 또는 Repository 커스텀 쿼리로 구현 필요.
-        //
-        // 예:
-        // return accountQueryRepository.searchAccounts(pageable, status, role, keyword)
-        //         .map(accountMapper::toAccountResponseDto);
 
         return accountRepository.findAll(pageable)
                 .map(accountMapper::toAccountResponseDto);
