@@ -168,8 +168,9 @@ public class EventProductService {
         }
     }
 
+
     private void validateEventPeriod(LocalDateTime startAt, LocalDateTime endAt) {
-        if (startAt == null || endAt == null || !startAt.isBefore(endAt)) {
+        if (startAt == null || endAt == null || !startAt.isBefore(endAt) || startAt.isBefore(LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
     }

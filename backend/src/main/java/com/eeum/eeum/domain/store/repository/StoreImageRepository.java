@@ -7,4 +7,6 @@ import java.util.List;
 public interface StoreImageRepository extends JpaRepository<StoreImage, Long> {
     List<StoreImage> findByStore_StoreIdOrderByDisplayOrderAsc(Long storeId);
     int countByStore_StoreId(Long storeId);
+    void deleteByStore_StoreId(Long storeId);
+    boolean existsByStore_StoreIdAndIsThumbnailTrue(Long storeId);
 }

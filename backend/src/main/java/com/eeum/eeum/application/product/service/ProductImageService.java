@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.product.service;
 
+import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.domain.product.entity.Product;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 @Slf4j
@@ -38,24 +40,64 @@ public class ProductImageService {
     }
 
     @Transactional
-    public ImageResponseDto addImage(Long accountId, Long productId,
-            ImageUploadRequestDto request) {
+    public List<ImageResponseDto> addImages(
+            Long accountId,
+            Long productId,
+            ImageUploadListRequestDto request
+    ) {
         Product product = getProductWithOwnerCheck(accountId, productId);
 
         int currentCount = productImageRepository.countByProduct_ProductId(productId);
-        if (currentCount >= MAX_IMAGE_COUNT) {
+        int requestCount = request.getImages().size();
+
+        if (currentCount + requestCount > MAX_IMAGE_COUNT) {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        boolean isThumbnail = currentCount == 0;
-        int displayOrder = currentCount + 1;
+        validateThumbnailCount(request);
 
-        ProductImage image = ProductImage.create(product, request.getImageUrl(),
-                displayOrder, isThumbnail);
-        productImageRepository.save(image);
+        boolean hasExistingThumbnail = productImageRepository
+                .existsByProduct_ProductIdAndIsThumbnailTrue(productId);
 
-        log.info("상품 이미지 등록: productId={}", productId);
-        return toDto(image);
+        boolean hasNewThumbnail = request.getImages().stream()
+                .anyMatch(ImageUploadRequestDto::isThumbnail);
+
+        if (hasNewThumbnail) {
+            productImageRepository.findByProduct_ProductIdOrderByDisplayOrderAsc(productId)
+                    .forEach(ProductImage::unmarkAsThumbnail);
+        }
+
+        List<ProductImage> images = new java.util.ArrayList<>();
+
+        for (int i = 0; i < request.getImages().size(); i++) {
+            ImageUploadRequestDto imageRequest = request.getImages().get(i);
+
+            boolean isThumbnail = imageRequest.isThumbnail();
+
+            if (!hasExistingThumbnail && !hasNewThumbnail && currentCount == 0 && i == 0) {
+                isThumbnail = true;
+            }
+
+            int displayOrder = currentCount + i + 1;
+
+            ProductImage image = ProductImage.create(
+                    product,
+                    imageRequest.getImageUrl(),
+                    displayOrder,
+                    isThumbnail
+            );
+
+            images.add(image);
+        }
+
+        List<ProductImage> savedImages = productImageRepository.saveAll(images);
+
+        log.info("상품 이미지 다중 등록: productId={}, count={}",
+                productId, savedImages.size());
+
+        return savedImages.stream()
+                .map(this::toDto)
+                .toList();
     }
 
     @Transactional
@@ -125,12 +167,13 @@ public class ProductImageService {
                 .build();
     }
 
-    private void reorderProductImages(Long productId) {
-        List<ProductImage> images = productImageRepository
-                .findByProduct_ProductIdOrderByDisplayOrderAsc(productId);
+    private void validateThumbnailCount(ImageUploadListRequestDto request) {
+        long thumbnailCount = request.getImages().stream()
+                .filter(ImageUploadRequestDto::isThumbnail)
+                .count();
 
-        for (int i = 0; i < images.size(); i++) {
-            images.get(i).changeDisplayOrder(i + 1);
+        if (thumbnailCount > 1) {
+            throw new BusinessException(ErrorCode.COMMON_INTERNAL_ERROR);
         }
     }
 }
