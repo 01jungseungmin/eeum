@@ -17,7 +17,7 @@ export const SHOP_CATEGORIES = [
 export const DUMMY_SHOPS = [
   {
     id: 1,
-    categoryId: 1,
+    categoryId: 3,
     name: '맛있는 반찬가게',
     status: 'OPEN',
     address: '서울특별시 종로구 청운동 123-4',
