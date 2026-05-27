@@ -10,4 +10,5 @@ public interface SettlementAccountRepository extends JpaRepository<SettlementAcc
     Optional<SettlementAccount> findByStore_StoreId(Long storeId);
 
     boolean existsByStore_StoreId(Long storeId);
+    void deleteByStore_StoreId(Long storeId);
 }

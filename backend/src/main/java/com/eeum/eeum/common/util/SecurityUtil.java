@@ -49,11 +49,19 @@ public final class SecurityUtil {
      * 비로그인 상태면 null을 반환한다.
      */
     public static Long getCurrentAccountIdOrNull() {
-        if (!isAuthenticated()) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
             return null;
         }
 
-        return getCurrentAccountId();
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof CustomUserDetails userDetails) {
+            return userDetails.getAccountId();
+        }
+
+        return null;
     }
 
     private static Authentication getAuthentication() {
