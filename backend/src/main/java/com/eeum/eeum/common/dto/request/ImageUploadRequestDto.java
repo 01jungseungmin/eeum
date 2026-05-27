@@ -16,4 +16,7 @@ public class ImageUploadRequestDto {
     @NotBlank(message = "이미지 URL은 필수입니다.")
     @Size(max = 1000, message = "이미지 URL은 1000자 이하로 입력해야 합니다.")
     private String imageUrl;
+
+    @Schema(description = "대표 이미지 여부. true는 요청당 1개만 허용됩니다.", example = "true")
+    private boolean isThumbnail = false;
 }
