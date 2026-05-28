@@ -10,7 +10,7 @@ interface RegionModalProps {
   onSetPrimary: (id: number) => void;
   onAddRegion: () => void;
   onDeleteRegion: (id: number) => void;
-  onVerifyRegion: (id: number) => void; // 🔥 1. 인터페이스에 추가
+  onVerifyRegion: (id: number) => void;
 }
 
 export default function RegionModal({
@@ -20,7 +20,7 @@ export default function RegionModal({
   onSetPrimary,
   onAddRegion,
   onDeleteRegion,
-  onVerifyRegion // 🔥 2. Props 받아오기
+  onVerifyRegion
 }: RegionModalProps) {
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
@@ -103,7 +103,6 @@ const styles = StyleSheet.create({
   regionNameActive: { fontSize: 15, color: '#333', fontWeight: 'bold' },
   addButton: { backgroundColor: '#00A859', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15, borderRadius: 8, marginTop: 20 },
   addButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 5 },
-  // ✨ 인증 버튼 스타일 추가
   verifyBtn: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
   verifyBtnText: { color: '#00A859', fontSize: 12, fontWeight: 'bold' }
 });
