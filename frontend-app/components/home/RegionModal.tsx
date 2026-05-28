@@ -27,21 +27,32 @@ export default function RegionModal({
           <Text style={styles.modalTitle}>내 동네 설정</Text>
           <Text style={styles.modalSubTitle}>최대 2개의 동네를 선택할 수 있어요</Text>
           
-          {regions.map((item: any) => (
-            <TouchableOpacity key={item.accountRegionId} style={styles.regionItem} onPress={() => onSetPrimary(item.accountRegionId)}>
-              <View style={styles.regionLeft}>
-                <View style={[styles.radio, item.isPrimary && styles.radioActive]} />
-                <Text style={item.isPrimary ? styles.regionNameActive : styles.regionName}>
-                  {item.region.name}
-                </Text>
-                {item.verified && <Ionicons name="checkmark-circle" size={14} color="#00A859" style={{marginLeft: 5}} />}
-              </View>
-              
-              <TouchableOpacity onPress={() => onDeleteRegion(item.accountRegionId)}>
-                <Ionicons name="close" size={20} color="#999" />
+          {/* 💡 방어막 1: regions 배열이 없으면 빈 배열로 치환 */}
+          {(regions || []).map((item: any) => {
+            // 💡 방어막 2: item 자체가 아예 없으면 렌더링 건너뛰기
+            if (!item) return null; 
+            
+            return (
+              <TouchableOpacity 
+                key={item?.accountRegionId || Math.random().toString()} 
+                style={styles.regionItem} 
+                onPress={() => item?.accountRegionId && onSetPrimary(item.accountRegionId)}
+              >
+                <View style={styles.regionLeft}>
+                  <View style={[styles.radio, item?.isPrimary && styles.radioActive]} />
+                  <Text style={item?.isPrimary ? styles.regionNameActive : styles.regionName}>
+                    {/* 💡 방어막 3: ? 기호를 총동원해서 에러 원천 차단 */}
+                    {item?.dong || item?.fullName || item?.region?.dong || item?.region?.name || '동네 정보 없음'}
+                  </Text>
+                  {item?.verified && <Ionicons name="checkmark-circle" size={14} color="#00A859" style={{marginLeft: 5}} />}
+                </View>
+                
+                <TouchableOpacity onPress={() => item?.accountRegionId && onDeleteRegion(item.accountRegionId)}>
+                  <Ionicons name="close" size={20} color="#999" />
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
 
           <TouchableOpacity style={styles.addButton} onPress={onAddRegion}>
             <Ionicons name="add" size={20} color="#fff" />
