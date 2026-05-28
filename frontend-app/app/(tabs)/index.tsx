@@ -93,7 +93,7 @@ export default function HomeScreen() {
   };
 
   // =====================================================================
-  // 4. GPS 동네 인증하기 (새로 추가!)
+  // 4. GPS 동네 인증하기
   // =====================================================================
   const handleVerifyRegion = async (id: number) => {
     try {
@@ -109,7 +109,6 @@ export default function HomeScreen() {
       });
       const { latitude, longitude } = location.coords;
 
-      // ✨ 정원님의 기존 API 규격에 맞춰서 괄호 없이 콤마(,)로 전달!
       await regionApi.verifyRegion(id, latitude, longitude);
       
       Alert.alert("인증 성공", "현재 위치 인증이 완료되었습니다! 이제 대표 지역으로 설정할 수 있습니다.");
