@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
 import { Text } from '../components/CustomText'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,37 +15,55 @@ export default function RegionSearchScreen() {
   const [results, setResults] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(false); 
 
-  // 1. 검색 실행 함수
-  const handleSearch = async () => {
+  // 1. 실시간 자동 검색 (디바운싱)
+  useEffect(() => {
+    // 검색어가 다 지워지면 밑에 뜬 결과도 비운다.
     if (!searchText.trim()) {
-      Alert.alert('알림', '검색어를 입력해주세요.');
+      setResults([]);
       return;
     }
 
+    // 유저가 타이핑을 멈추고 0.3초(300ms)가 지나면 백엔드에 검색을 요청합니다.
+    const delayDebounceFn = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const res = await regionApi.searchRegion(searchText);
+        const data = res.data || res; 
+        
+        if (Array.isArray(data)) {
+          setResults(data); 
+        } else {
+          setResults([]);
+        }
+      } catch (error) {
+        console.error("검색 API 에러:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300); 
+
+    // 유저가 0.3초 안에 또 타자를 치면, 기존에 기다리던 타이머를 취소하고 다시 기다린다.
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchText]); // searchText가 바뀔 때마다 이 useEffect가 실행된다
+
+  // 2. 돋보기 버튼이나 엔터를 쳤을 때 즉시 검색
+  const handleManualSearch = async () => {
+    if (!searchText.trim()) return;
+    
     setIsLoading(true);
     try {
       const res = await regionApi.searchRegion(searchText);
-      
-      // 🔥 [디버깅] 서버가 도대체 뭐라고 답변했는지 터미널에 찍어봅니다!
-      console.log("🚀 검색 API 응답 결과:", res); 
-
-      // 💡 [방어막] 데이터가 { data: [...] } 로 오든, [...] 배열로 바로 오든 모두 커버!
       const data = res.data || res; 
-
-      if (Array.isArray(data)) {
-        setResults(data); 
-      } else {
-        setResults([]);
-      }
+      if (Array.isArray(data)) setResults(data);
+      else setResults([]);
     } catch (error) {
-      console.error("검색 API 에러:", error);
-      Alert.alert('검색 실패', '지역을 검색하는 중 오류가 발생했습니다.');
+      console.error("수동 검색 에러:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. 지역 등록 함수
+  // 3. 지역 등록 함수
   const handleAddRegion = async (regionId: number, name: string) => {
     Alert.alert("동네 등록", `'${name}'을(를) 활동 지역으로 등록할까요?`, [
       { text: "취소", style: "cancel" },
@@ -54,7 +72,6 @@ export default function RegionSearchScreen() {
         onPress: async () => {
           try {
             await regionApi.addRegion(regionId);
-            
             Alert.alert("성공", "지역이 성공적으로 등록되었습니다.", [
               { text: "확인", onPress: () => router.back() }
             ]);
@@ -66,11 +83,10 @@ export default function RegionSearchScreen() {
     ]);
   };
 
-  // 3. GPS로 현재 위치 찾기 기능
+  // 4. GPS로 현재 위치 찾기 기능
   const handleCurrentLocation = async () => {
     try {
       setIsLoading(true);
-
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('권한 필요', '현재 위치로 동네를 찾으려면 위치 권한이 필요해요.');
@@ -82,25 +98,21 @@ export default function RegionSearchScreen() {
       });
       const { latitude, longitude } = location.coords;
 
-      /* 🚧 [백엔드 전용 근처 지역 조회 연동 시 활성화 구간]
-      // 파트너분이 만들어주신 /regions/nearby API를 사용해 자체 서버 데이터로 바로 매핑하고 싶다면 아래 주석을 켜세요!
+      // [백엔드 전용 근처 지역 조회 연동 시 활성화 구간]
       try {
          const res = await regionApi.getNearbyRegions(latitude, longitude);
          if (res.success && res.data && res.data.length > 0) {
-            // 가장 가까운 동네 이름을 첫 번째 기준으로 검색창에 채우고 결과를 리스트에 뿌립니다.
             setSearchText(res.data[0].dong);
             setResults(res.data);
             return;
          }
       } catch (err) {
-         console.log("백엔드 기반 근처 조회 미가동 또는 에러로 기존 카카오 로컬 레이어로 대체 진행합니다.");
+         console.log("근처 조회 에러, 카카오로 대체");
       }
-      */
+      
 
-      // 4. 카카오 로컬 API 호출 (기존 카카오 레이어 백업 활성화)
       const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
       if (!KAKAO_REST_API_KEY) {
-         console.error('🚨 환경 변수 에러: 카카오 API 키를 찾을 수 없습니다.');
          Alert.alert('오류', '앱 설정 문제로 위치를 찾을 수 없습니다.');
          return;
       }
@@ -114,19 +126,11 @@ export default function RegionSearchScreen() {
       const regionName = documents.find((doc: any) => doc.region_type === 'H')?.region_3depth_name;
 
       if (regionName) {
-        setSearchText(regionName);
-        
-        // 💡 우리 이음 서버 주소 규격에 맞게 키워드로 재검색하여 결과 갱신
-        const res = await regionApi.searchRegion(regionName);
-        if (res.success && res.data) {
-          setResults(res.data);
-        }
+        setSearchText(regionName); // 여기서 텍스트를 바꾸면 useEffect가 자동으로 감지해서 검색해 줍니다!
       } else {
         Alert.alert('알림', '현재 위치의 정확한 동네 이름을 찾을 수 없습니다.');
       }
-
     } catch (error) {
-      console.error('위치 처리 에러:', error);
       Alert.alert('오류', '위치 정보를 처리하는 데 실패했습니다.');
     } finally {
       setIsLoading(false);
@@ -141,16 +145,16 @@ export default function RegionSearchScreen() {
           <Ionicons name="chevron-back" size={24} color="#333" />
         </TouchableOpacity>
         <View style={styles.searchBox}>
-          <TouchableOpacity onPress={handleSearch} style={{ padding: 4, paddingLeft: 0 }}>
+          <TouchableOpacity onPress={handleManualSearch} style={{ padding: 4, paddingLeft: 0 }}>
             <Ionicons name="search" size={22} color="#999" />
           </TouchableOpacity>
           <TextInput 
             style={styles.searchInput} 
-            placeholder="동네 이름을 검색하세요 (예: 원종1동)" 
+            placeholder="동네 이름을 검색하세요 (예: 북촌동)" 
             value={searchText}
             autoFocus={true}
             onChangeText={setSearchText}
-            onSubmitEditing={handleSearch}
+            onSubmitEditing={handleManualSearch}
             returnKeyType="search"
           />
         </View>
@@ -173,10 +177,8 @@ export default function RegionSearchScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity 
               style={styles.item}
-              // 💡 백엔드 응답 속성인 'dong' 혹은 전체 주소인 'fullName' 전달 가능
               onPress={() => handleAddRegion(item.regionId, item.dong)}
             >
-              {/* 💡 피그마 시안에 맞추어 시/도 군/구가 한눈에 보이는 fullName을 표출합니다 */}
               <Text style={styles.itemText}>{item.fullName}</Text>
             </TouchableOpacity>
           )}
