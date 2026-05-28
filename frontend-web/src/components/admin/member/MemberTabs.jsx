@@ -22,25 +22,28 @@ const TabItem = styled.div`
   transition: all 0.2s;
 
   span {
-    font-size: 12px;
-    margin-left: 4px;
-    opacity: 0.8;
-    color: ${(props) => (props.$active ? '#2d5a43' : '#999')};
-    font-weight: 500;
+    font-size: 14px;
+    margin-left: 6px;
+    color: ${(props) => (props.$active ? '#2d5a43' : '#8c8c8c')};
+    font-weight: ${(props) => (props.$active ? '700' : '500')};
   }
 `;
 
-function MemberTabs({ activeTab, setActiveTab, rawData }) {
-  const totalCount = rawData.length;
-  const generalCount = rawData.filter((m) => m.role === 'ROLE_USER').length;
-  const ownerCount = rawData.filter((m) => m.role === 'ROLE_OWNER').length;
-  const suspendedCount = rawData.filter((m) => m.status === 'SUSPENDED').length;
+function MemberTabs({
+  activeTab,
+  setActiveTab,
+  tabCounts = { all: 0, general: 0, owner: 0, suspended: 0 },
+}) {
+  const formatNumber = (num) => {
+    if (num === undefined || num === null) return '0';
+    return num.toLocaleString();
+  };
 
   const tabs = [
-    { id: 'all', label: '전체', count: `${totalCount}명` },
-    { id: 'general', label: '일반 회원', count: generalCount },
-    { id: 'owner', label: '사장 회원', count: ownerCount },
-    { id: 'suspended', label: '정지 회원', count: suspendedCount },
+    { id: 'all', label: '전체', count: tabCounts?.all ?? 0 },
+    { id: 'general', label: '일반 회원', count: tabCounts?.general ?? 0 },
+    { id: 'owner', label: '사장 회원', count: tabCounts?.owner ?? 0 },
+    { id: 'suspended', label: '정지 회원', count: tabCounts?.suspended ?? 0 },
   ];
 
   return (
@@ -52,7 +55,7 @@ function MemberTabs({ activeTab, setActiveTab, rawData }) {
           onClick={() => setActiveTab(tab.id)}
         >
           {tab.label}
-          <span>{tab.count}</span>
+          <span>{formatNumber(tab.count)}</span>
         </TabItem>
       ))}
     </TabContainer>
