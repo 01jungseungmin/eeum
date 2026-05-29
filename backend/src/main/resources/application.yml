@@ -51,3 +51,7 @@ business:
 
 kakao:
   rest-api-key: ${KAKAO_REST_API_KEY}
+
+portone:
+  api-secret: ${PORTONE_API_SECRET}
+  base-url: ${PORTONE_BASE_URL:https://api.portone.io}

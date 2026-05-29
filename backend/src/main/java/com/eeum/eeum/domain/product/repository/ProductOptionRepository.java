@@ -16,4 +16,6 @@ public interface ProductOptionRepository extends JpaRepository<ProductOption, Lo
     );
 
     void deleteByProduct_ProductId(Long productId);
+
+    List<ProductOption> findByProduct_ProductId(Long productId);
 }
