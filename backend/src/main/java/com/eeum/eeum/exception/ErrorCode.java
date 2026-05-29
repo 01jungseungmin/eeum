@@ -88,6 +88,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PRODUCT_OPTION_NOT_FOUND("PRODUCT_006", "상품 옵션을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     PRODUCT_OPTION_ITEM_NOT_FOUND("OPTION_007", "옵션 항목을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     PRODUCT_REQUIRED_OPTION_MISSING("PRODUCT_008", "필수 옵션을 선택해 주세요", HttpStatus.BAD_REQUEST),
+    PRODUCT_NOT_PURCHASABLE("PRODUCT_009", "구매할 수 없는 상품입니다.", HttpStatus.BAD_REQUEST),
 
     // ===================== 이벤트 상품 (EVENT) =====================
     EVENT_NOT_FOUND("EVENT_001", "존재하지 않는 이벤트 상품입니다", HttpStatus.NOT_FOUND),
@@ -102,12 +103,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CART_DIFFERENT_STORE("CART_001", "동일한 상점의 상품만 담을 수 있습니다", HttpStatus.BAD_REQUEST),
     CART_ITEM_NOT_FOUND("CART_002", "장바구니 상품을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     CART_EMPTY("CART_003", "장바구니가 비어있습니다", HttpStatus.BAD_REQUEST),
+    CART_ACCESS_DENIED("CART_004","장바구니 접근 권한이 없습니다.",HttpStatus.FORBIDDEN),
+    CART_NOT_FOUND("CART_005","장바구니를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
 
     // ===================== 주문 (ORDER) =====================
     ORDER_NOT_FOUND("ORDER_001", "존재하지 않는 주문입니다", HttpStatus.NOT_FOUND),
     ORDER_CANCEL_NOT_ALLOWED("ORDER_002", "취소할 수 없는 주문 상태입니다", HttpStatus.BAD_REQUEST),
     ORDER_ACCESS_DENIED("ORDER_003", "주문 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     ORDER_ALREADY_PAID("ORDER_004", "이미 결제된 주문입니다", HttpStatus.CONFLICT),
+    ORDER_EXPIRED("ORDER_005", "만료된 주문입니다", HttpStatus.BAD_REQUEST),
+    ORDER_TYPE_MISMATCH("ORDER_006", "서로 다른 주문 유형의 상품은 함께 주문할 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
@@ -116,6 +121,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_DUPLICATE("PAYMENT_004", "이미 처리된 결제입니다", HttpStatus.CONFLICT),
     PAYMENT_WEBHOOK_INVALID("PAYMENT_005", "유효하지 않은 Webhook 요청입니다", HttpStatus.UNAUTHORIZED),
     PAYMENT_REFUND_FAILED("PAYMENT_006", "환불 처리에 실패했습니다", HttpStatus.INTERNAL_SERVER_ERROR),
+    PAYMENT_VERIFY_FAILED("PAYMENT_007", "결제 검증에 실패했습니다", HttpStatus.BAD_REQUEST),
+    PAYMENT_METHOD_NOT_SUPPORTED("PAYMENT_008", "지원하지 않는 결제 수단입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
