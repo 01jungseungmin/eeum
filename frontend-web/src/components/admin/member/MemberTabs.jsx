@@ -32,7 +32,7 @@ const TabItem = styled.div`
 function MemberTabs({
   activeTab,
   setActiveTab,
-  tabCounts = { all: 0, general: 0, owner: 0, suspended: 0 },
+  tabCounts = { all: 0, general: 0, owner: 0, suspended: 0, withdrawn: 0 },
 }) {
   const formatNumber = (num) => {
     if (num === undefined || num === null) return '0';
@@ -44,6 +44,7 @@ function MemberTabs({
     { id: 'general', label: '일반 회원', count: tabCounts?.general ?? 0 },
     { id: 'owner', label: '사장 회원', count: tabCounts?.owner ?? 0 },
     { id: 'suspended', label: '정지 회원', count: tabCounts?.suspended ?? 0 },
+    { id: 'withdrawn', label: '탈퇴 회원', count: tabCounts?.withdrawn ?? 0 },
   ];
 
   return (
