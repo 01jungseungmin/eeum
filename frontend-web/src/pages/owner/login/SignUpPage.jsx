@@ -124,6 +124,22 @@ function SignUp() {
     }
   };
 
+  // 전화번호 포맷팅
+  const formatPhoneNumber = (value) => {
+    const numbers = value.replace(/[^0-9]/g, '');
+
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 7) {
+      return numbers.replace(/(\d{3})(\d{1,4})/, '$1-$2');
+    }
+    return numbers.replace(/(\d{3})(\d{4})(\d{1,4})/, '$1-$2-$3');
+  };
+
+  const handlePhoneChange = (setter) => (e) => {
+    const formattedValue = formatPhoneNumber(e.target.value);
+    setter(formattedValue);
+  };
+
   const handleSignUp = async (e) => {
     e.preventDefault();
 
@@ -243,9 +259,11 @@ function SignUp() {
       <InputForm
         ref={phoneRef}
         title="전화번호"
-        placeholder="전화번호를 입력해주세요"
+        placeholder="010-1234-5678"
         value={phone}
-        onChange={(e) => setPhone(e.target.value)}
+        onChange={handlePhoneChange(setPhone)}
+        maxLength={13}
+        inputMode="numeric"
       />
       <InputForm
         ref={storeNameRef}
@@ -271,9 +289,11 @@ function SignUp() {
       <InputForm
         ref={storePhoneRef}
         title="사업장 전화번호"
-        placeholder="사업장 전화번호를 입력해주세요"
+        placeholder="010-1234-5678"
         value={storePhone}
-        onChange={(e) => setStorePhone(e.target.value)}
+        onChange={handlePhoneChange(setStorePhone)}
+        maxLength={13}
+        inputMode="numeric"
       />
 
       <CheckboxContainer>

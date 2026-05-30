@@ -2,6 +2,7 @@ import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { useAuth } from '../../../contexts/AuthContext';
 import axios from 'axios';
 
 const PageWrapper = styled.div`
@@ -74,31 +75,9 @@ const Divider = styled.div`
   }
 `;
 
-// const SocialLogin = styled.div`
-//   margin-top: 30px;
-//   display: flex;
-//   gap: 20px;
-// `;
-
-// const SocialCircle = styled.div`
-//   width: 45px;
-//   height: 45px;
-//   border-radius: 50%;
-//   display: flex;
-//   align-items: center;
-//   justify-content: center;
-//   cursor: pointer;
-//   overflow: hidden;
-
-//   img {
-//     width: 100%;
-//     height: 100%;
-//     object-fit: contain;
-//   }
-// `;
-
 function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -107,21 +86,23 @@ function LoginPage() {
 
     try {
       const response = await axios.post('http://localhost:8080/auth/login', {
-        email: email,
-        password: password,
+        email,
+        password,
       });
 
       const { success, data, message } = response.data;
 
       if (success) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('role', data.role);
+        login(data.accessToken, data.role, data.refreshToken);
 
         alert(message);
 
-        navigate('/approval-status');
+        const redirectPath =
+          data.role === 'ROLE_ADMIN' ? '/admin/dashboard' : '/approval-status';
+
+        navigate(redirectPath);
       } else {
-        alert(response.data.error.message || '로그인에 실패했습니다.');
+        alert(response.data.error?.message || '로그인에 실패했습니다.');
       }
     } catch (error) {
       console.error('로그인 에러:', error);
@@ -168,15 +149,6 @@ function LoginPage() {
         회원가입
       </div>
       <Divider>간편 로그인</Divider>
-
-      {/* <SocialLogin>
-        <SocialCircle>
-          <img src={kakaoIcon} alt="카카오 로그인" />
-        </SocialCircle>
-        <SocialCircle>
-          <img src={naverIcon} alt="네이버 로그인" />
-        </SocialCircle>
-      </SocialLogin> */}
     </PageWrapper>
   );
 }
