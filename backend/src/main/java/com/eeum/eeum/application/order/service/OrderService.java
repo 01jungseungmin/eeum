@@ -195,17 +195,21 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_CANCEL_NOT_ALLOWED);
         }
 
+        Payment payment = paymentRepository
+                .findByOrder_OrderId(orderId)
+                .orElse(null);
+
+        if (payment != null && payment.getStatus() == PaymentStatus.PAID) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCEL_NOT_ALLOWED);
+        }
+
         List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(orderId);
 
         restoreStock(orderItems);
 
         order.cancel("사용자 요청");
 
-        Payment payment = paymentRepository
-                .findByOrder_OrderId(orderId)
-                .orElse(null);
-
-        if (payment != null && payment.getStatus() != PaymentStatus.PAID) {
+        if (payment != null) {
             payment.cancel();
         }
 
@@ -331,7 +335,7 @@ public class OrderService {
                         .orElse(null);
 
                 if (eventProduct != null) {
-                    eventProduct.getProduct().restoreStock(item.getQuantity());
+                    eventProduct.restoreStock(item.getQuantity());
                 }
 
                 continue;

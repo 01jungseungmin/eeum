@@ -28,7 +28,7 @@ public class StoreDetailResponseDto {
     private String description;
 
     @Schema(description = "영업시간", example = "월~토 10:00~20:00")
-    private String businessHours;
+    private List<StoreBusinessHourResponseDto> businessHours;
 
     @Schema(description = "상점 상태", example = "OPEN", allowableValues = {"OPEN", "TEMP_CLOSED", "CLOSED"})
     private String status;

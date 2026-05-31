@@ -111,4 +111,12 @@ public class EventProduct extends BaseEntity {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
     }
+
+    public void restoreStock(int quantity) {
+        if (quantity <= 0) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        this.soldCount = Math.max(0, this.soldCount - quantity);
+    }
 }

@@ -84,7 +84,6 @@ public class AccountMapper {
                 .storeCategoryId(store.getCategory() != null ? store.getCategory().getCategoryId() : null)
                 .storeCategoryName(store.getCategory() != null ? store.getCategory().getName() : null)
                 .storeDescription(store.getDescription())
-                .businessHours(store.getBusinessHours())
                 .storeStatus(store.getStatus().name())
                 .build();
     }

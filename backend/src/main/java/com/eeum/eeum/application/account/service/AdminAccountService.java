@@ -8,6 +8,7 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResp
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
@@ -19,6 +20,8 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
+import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -30,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 @Slf4j
@@ -44,6 +48,7 @@ public class AdminAccountService {
     private final TokenService tokenService;
     private final StoreRepository storeRepository;
     private final StoreLocationResolver storeLocationResolver;
+    private final StoreBusinessHourRepository storeBusinessHourRepository;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -304,8 +309,25 @@ public class AdminAccountService {
                                 : null
                 )
                 .storeDescription(store.getDescription())
-                .businessHours(store.getBusinessHours())
+                .businessHours(getBusinessHours(store.getStoreId()))
                 .storeStatus(store.getStatus().name())
+                .build();
+    }
+    private List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
+        return storeBusinessHourRepository.findByStore_StoreId(storeId)
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(this::toBusinessHourDto)
+                .toList();
+    }
+
+    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
+        return StoreBusinessHourResponseDto.builder()
+                .dayOfWeek(businessHour.getDayOfWeek())
+                .dayLabel(businessHour.getDayOfWeek().getLabel())
+                .closed(businessHour.isClosed())
+                .openTime(businessHour.getOpenTime())
+                .closeTime(businessHour.getCloseTime())
                 .build();
     }
 }

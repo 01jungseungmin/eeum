@@ -12,5 +12,7 @@ public interface StoreRepositoryCustom {
 
     Page<Store> searchStores(StoreSearchDto condition, Pageable pageable);
 
+    Page<Store> searchAdminStores(String keyword, String status, Pageable pageable);
+
     List<Store> findNearbyStoresWithFilter(NearbyStoreSearchCondition condition);
 }

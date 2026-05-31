@@ -51,9 +51,6 @@ public class Store extends BaseEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "business_hours", length = 255)
-    private String businessHours;
-
     @Column(name = "rating", nullable = false)
     private Double rating;
 
@@ -124,17 +121,15 @@ public class Store extends BaseEntity {
     }
 
     /**
-     * 상점 영업시간 설정
+     * 상점 정보 설정
      */
 
     public void updateBusinessInfo(
             Category category,
-            String description,
-            String businessHours
+            String description
     ) {
         this.category = category;
         this.description = description;
-        this.businessHours = businessHours;
     }
 
 
@@ -145,14 +140,12 @@ public class Store extends BaseEntity {
             String name,
             String address,
             String phone,
-            String description,
-            String businessHours
+            String description
     ) {
         this.name = name;
         this.address = address;
         this.phone = phone;
         this.description = description;
-        this.businessHours = businessHours;
     }
 
     /**

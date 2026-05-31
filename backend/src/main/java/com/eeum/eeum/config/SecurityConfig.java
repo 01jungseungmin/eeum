@@ -112,7 +112,8 @@ public class SecurityConfig {
                                 "/owner/stores/me/business-info",
                                 "/owner/stores/me/settlement-account",
                                 "/owner/stores/me/apply",
-                                "/owner/stores/me/representative-menu"
+                                "/owner/stores/me/representative-menu",
+                                "/owner/stores/me/approval/business-hours"
                         ).hasAnyRole("USER", "OWNER")
 
                         // 관리자 전용
