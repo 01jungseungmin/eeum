@@ -2,9 +2,11 @@ package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreBusinessHourUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreBusinessInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
@@ -17,7 +19,10 @@ import com.eeum.eeum.domain.product.repository.ProductCategoryRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.SettlementAccount;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
+import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.repository.SettlementAccountRepository;
+import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -27,6 +32,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,6 +49,7 @@ public class OwnerApprovalService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductCategoryRepository productCategoryRepository;
+    private final StoreBusinessHourRepository storeBusinessHourRepository;
 
     // ===================== 체크리스트 조회 =====================
 
@@ -60,7 +71,8 @@ public class OwnerApprovalService {
                         ProductType.MENU
                 );
 
-        boolean businessHoursSet = hasText(store.getBusinessHours());
+        boolean businessHoursSet =
+                storeBusinessHourRepository.countByStore_StoreId(store.getStoreId()) == 7;
 
         boolean settlementAccountRegistered =
                 settlementAccountRepository.existsByStore_StoreId(store.getStoreId());
@@ -86,6 +98,62 @@ public class OwnerApprovalService {
 
     // ===================== 영업시간 설정 =====================
 
+    @Transactional(readOnly = true)
+    public List<StoreBusinessHourResponseDto> getBusinessHours(Long accountId) {
+        Store store = getStore(accountId);
+
+        return storeBusinessHourRepository.findByStore_StoreId(store.getStoreId())
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(this::toBusinessHourDto)
+                .toList();
+    }
+
+
+    @Transactional
+    public void updateBusinessHours(Long accountId,StoreBusinessHourUpdateRequestDto request) {
+        OwnerInfo ownerInfo = getOwnerInfo(accountId);
+
+        validateReviewEditable(ownerInfo);
+
+        Store store = getStore(accountId);
+
+        validateBusinessHoursRequest(request);
+
+        Map<StoreDayOfWeek, StoreBusinessHour> existingMap =
+                storeBusinessHourRepository.findByStore_StoreId(store.getStoreId())
+                        .stream()
+                        .collect(Collectors.toMap(
+                                StoreBusinessHour::getDayOfWeek,
+                                Function.identity()
+                        ));
+
+        for (StoreBusinessHourUpdateRequestDto.BusinessHourItem item : request.getBusinessHours()) {
+            StoreBusinessHour businessHour = existingMap.get(item.getDayOfWeek());
+
+            if (businessHour == null) {
+                StoreBusinessHour newBusinessHour = StoreBusinessHour.create(
+                        store,
+                        item.getDayOfWeek(),
+                        item.isClosed(),
+                        item.getOpenTime(),
+                        item.getCloseTime()
+                );
+
+                storeBusinessHourRepository.save(newBusinessHour);
+                continue;
+            }
+
+            businessHour.update(
+                    item.isClosed(),
+                    item.getOpenTime(),
+                    item.getCloseTime()
+            );
+        }
+
+        log.info("상점 영업시간 저장 완료: accountId={}, storeId={}", accountId, store.getStoreId());
+    }
+
     @Transactional
     public void updateStoreBusinessInfo(Long accountId, StoreBusinessInfoRequestDto request) {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
@@ -101,8 +169,7 @@ public class OwnerApprovalService {
 
         store.updateBusinessInfo(
                 category,
-                request.getDescription(),
-                request.getBusinessHours()
+                request.getDescription()
         );
     }
 
@@ -238,7 +305,7 @@ public class OwnerApprovalService {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
 
-        if (!hasText(store.getBusinessHours())) {
+        if (storeBusinessHourRepository.countByStore_StoreId(store.getStoreId()) != 7) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
 
@@ -286,5 +353,56 @@ public class OwnerApprovalService {
                 .orElseGet(() -> productCategoryRepository.save(
                         ProductCategory.create(store, "대표 메뉴", 0)
                 ));
+    }
+
+    private void validateBusinessHoursRequest(StoreBusinessHourUpdateRequestDto request) {
+        if (request.getBusinessHours() == null || request.getBusinessHours().isEmpty()) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        long distinctDayCount = request.getBusinessHours().stream()
+                .map(StoreBusinessHourUpdateRequestDto.BusinessHourItem::getDayOfWeek)
+                .distinct()
+                .count();
+
+        if (distinctDayCount != request.getBusinessHours().size()) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        if (request.getBusinessHours().size() != StoreDayOfWeek.values().length) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        for (StoreBusinessHourUpdateRequestDto.BusinessHourItem item : request.getBusinessHours()) {
+            validateBusinessHourItem(item);
+        }
+    }
+
+    private void validateBusinessHourItem(StoreBusinessHourUpdateRequestDto.BusinessHourItem item) {
+        if (item.getDayOfWeek() == null) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        if (item.isClosed()) {
+            return;
+        }
+
+        if (item.getOpenTime() == null || item.getCloseTime() == null) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        if (!item.getOpenTime().isBefore(item.getCloseTime())) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+    }
+
+    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
+        return StoreBusinessHourResponseDto.builder()
+                .dayOfWeek(businessHour.getDayOfWeek())
+                .dayLabel(businessHour.getDayOfWeek().getLabel())
+                .closed(businessHour.isClosed())
+                .openTime(businessHour.getOpenTime())
+                .closeTime(businessHour.getCloseTime())
+                .build();
     }
 }

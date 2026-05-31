@@ -1,23 +1,14 @@
 package com.eeum.eeum.application.store.service;
 
-import com.eeum.eeum.application.store.dto.response.AdminStoreDetailResponseDto;
-import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
-import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
-import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
+import com.eeum.eeum.application.store.dto.response.*;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.MaskingUtil;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
-import com.eeum.eeum.domain.store.entity.SettlementAccount;
-import com.eeum.eeum.domain.store.entity.Store;
-import com.eeum.eeum.domain.store.entity.StoreImage;
-import com.eeum.eeum.domain.store.entity.StoreNotice;
+import com.eeum.eeum.domain.store.entity.*;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
-import com.eeum.eeum.domain.store.repository.SettlementAccountRepository;
-import com.eeum.eeum.domain.store.repository.StoreImageRepository;
-import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
-import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.domain.store.repository.*;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +17,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Comparator;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -37,6 +31,7 @@ public class AdminStoreService {
     private final SettlementAccountRepository settlementAccountRepository;
     private final StoreImageRepository storeImageRepository;
     private final StoreNoticeRepository storeNoticeRepository;
+    private final StoreBusinessHourRepository storeBusinessHourRepository;
 
     @Transactional(readOnly = true)
     public Page<StoreListResponseDto> getStores(
@@ -58,7 +53,7 @@ public class AdminStoreService {
                 .address(store.getAddress())
                 .phone(store.getPhone())
                 .description(store.getDescription())
-                .businessHours(store.getBusinessHours())
+                .businessHours(getBusinessHours(storeId))
                 .status(store.getStatus().name())
                 .rating(store.getRating())
                 .favoriteCount(store.getFavoriteCount())
@@ -129,7 +124,6 @@ public class AdminStoreService {
                 .address(store.getAddress())
                 .phone(store.getPhone())
                 .description(store.getDescription())
-                .businessHours(store.getBusinessHours())
                 .status(store.getStatus().name())
                 .rating(store.getRating())
                 .favoriteCount(store.getFavoriteCount())
@@ -182,5 +176,22 @@ public class AdminStoreService {
                 store.getRegion().getGunGu(),
                 store.getRegion().getDong()
         );
+    }
+    private List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
+        return storeBusinessHourRepository.findByStore_StoreId(storeId)
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(this::toBusinessHourDto)
+                .toList();
+    }
+
+    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
+        return StoreBusinessHourResponseDto.builder()
+                .dayOfWeek(businessHour.getDayOfWeek())
+                .dayLabel(businessHour.getDayOfWeek().getLabel())
+                .closed(businessHour.isClosed())
+                .openTime(businessHour.getOpenTime())
+                .closeTime(businessHour.getCloseTime())
+                .build();
     }
 }

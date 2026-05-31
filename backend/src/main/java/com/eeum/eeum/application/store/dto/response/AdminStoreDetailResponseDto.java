@@ -19,7 +19,7 @@ public class AdminStoreDetailResponseDto {
     private String address;
     private String phone;
     private String description;
-    private String businessHours;
+    private List<StoreBusinessHourResponseDto> businessHours;
     private String status;
     private Double rating;
     private Integer favoriteCount;
