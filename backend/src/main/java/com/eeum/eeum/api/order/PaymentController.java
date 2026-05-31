@@ -31,9 +31,12 @@ public class PaymentController {
     )
     @PostMapping("/webhook")
     public ResponseEntity<Void> handleWebhook(
-            @RequestBody PaymentWebhookRequestDto request
+            @RequestBody String rawBody,
+            @RequestHeader(value = "X-PortOne-Webhook-Signature", required = false) String portoneSignature,
+            @RequestHeader(value = "Portone-Webhook-Signature", required = false) String legacySignature
     ) {
- //       paymentService.handleWebhook(request);
+        String signature = portoneSignature != null ? portoneSignature : legacySignature;
+        paymentService.handleWebhook(rawBody, signature);
         return ResponseEntity.ok().build();
     }
 

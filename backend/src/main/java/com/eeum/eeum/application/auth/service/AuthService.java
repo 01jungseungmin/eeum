@@ -452,7 +452,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
 
-        // TODO: oAuthClient.validateToken(account.getProvider(), request.getOauthToken());
+        oAuthService.validateToken(account.getProvider(), request.getOauthToken(), account.getProviderId());
     }
 
     private LocalDate parseOpeningDate(String openingDate) {

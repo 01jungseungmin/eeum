@@ -1,5 +1,6 @@
 package com.eeum.eeum.api.store;
 
+import com.eeum.eeum.application.store.dto.response.AdminStoreDetailResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
 import com.eeum.eeum.application.store.service.AdminStoreService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -36,6 +37,14 @@ public class AdminStoreController {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 adminStoreService.getStores(keyword, status, pageable)));
+    }
+
+    @Operation(summary = "[관리자] 상점 상세 조회")
+    @GetMapping("/{storeId}")
+    public ResponseEntity<ApiResponse<AdminStoreDetailResponseDto>> getStoreDetail(
+            @PathVariable Long storeId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(adminStoreService.getStoreDetail(storeId)));
     }
 
     @Operation(summary = "[관리자] 상점 정지")

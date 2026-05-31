@@ -64,6 +64,35 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
     }
 
     @Override
+    public Page<Store> searchAdminStores(String keyword, String status, Pageable pageable) {
+        StoreStatus parsedStatus = parseStoreStatus(status);
+
+        List<Store> content = queryFactory
+                .selectFrom(store)
+                .leftJoin(store.account, account).fetchJoin()
+                .where(
+                        adminKeywordContains(keyword),
+                        statusEq(parsedStatus)
+                )
+                .orderBy(store.createdAt.desc())
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .fetch();
+
+        Long total = queryFactory
+                .select(store.count())
+                .from(store)
+                .leftJoin(store.account, account)
+                .where(
+                        adminKeywordContains(keyword),
+                        statusEq(parsedStatus)
+                )
+                .fetchOne();
+
+        return new PageImpl<>(content, pageable, total == null ? 0 : total);
+    }
+
+    @Override
     public List<Store> findNearbyStoresWithFilter(NearbyStoreSearchCondition condition) {
         NumberTemplate<Double> distance = Expressions.numberTemplate(
                 Double.class,
@@ -122,6 +151,34 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 .or(store.address.containsIgnoreCase(keyword));
     }
 
+    private BooleanExpression adminKeywordContains(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+
+        return store.name.containsIgnoreCase(keyword)
+                .or(store.address.containsIgnoreCase(keyword))
+                .or(store.phone.containsIgnoreCase(keyword))
+                .or(account.email.containsIgnoreCase(keyword))
+                .or(account.name.containsIgnoreCase(keyword));
+    }
+
+    private BooleanExpression statusEq(StoreStatus status) {
+        return status == null ? null : store.status.eq(status);
+    }
+
+    private StoreStatus parseStoreStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+
+        try {
+            return StoreStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     private OrderSpecifier<Integer> storeStatusPriority() {
         return Expressions.numberTemplate(
                 Integer.class,
@@ -136,4 +193,5 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 store.status.stringValue()
         ).asc();
     }
+
 }

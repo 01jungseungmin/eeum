@@ -83,4 +83,22 @@ public class MaskingUtil {
                 + "-**-"
                 + digitsOnly.substring(5);
     }
+
+    public static String maskAccountNumber(String accountNumber) {
+        if (accountNumber == null || accountNumber.isBlank()) {
+            return accountNumber;
+        }
+
+        String digitsOnly = accountNumber.replaceAll("[^0-9]", "");
+
+        if (digitsOnly.length() <= 4) {
+            return "*".repeat(digitsOnly.length());
+        }
+
+        int visiblePrefixLength = Math.min(3, digitsOnly.length() - 4);
+        String prefix = digitsOnly.substring(0, visiblePrefixLength);
+        String suffix = digitsOnly.substring(digitsOnly.length() - 4);
+
+        return prefix + "-" + "*".repeat(Math.max(4, digitsOnly.length() - visiblePrefixLength - 4)) + "-" + suffix;
+    }
 }
