@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.dto.response;
 
+import com.eeum.eeum.domain.store.enums.StoreNoticeType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -30,5 +31,5 @@ public class StoreNoticeResponseDto {
     private LocalDateTime modifiedAt;
 
     @Schema(description = "공지 유형", example = "NORMAL")
-    private String noticeType;
+    private StoreNoticeType noticeType;
 }

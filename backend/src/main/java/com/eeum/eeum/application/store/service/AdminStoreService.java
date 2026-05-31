@@ -169,7 +169,7 @@ public class AdminStoreService {
                 .noticeId(notice.getNoticeId())
                 .title(notice.getTitle())
                 .content(notice.getContent())
-                .noticeType(notice.getNoticeType().name())
+                .noticeType(notice.getNoticeType())
                 .pinned(notice.isPinned())
                 .createdAt(notice.getCreatedAt())
                 .modifiedAt(notice.getModifiedAt())

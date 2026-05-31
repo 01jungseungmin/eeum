@@ -162,6 +162,7 @@ public class StoreService {
                 .title(n.getTitle())
                 .content(n.getContent())
                 .pinned(n.isPinned())
+                .noticeType(n.getNoticeType())
                 .createdAt(n.getCreatedAt())
                 .modifiedAt(n.getModifiedAt())
                 .build();
