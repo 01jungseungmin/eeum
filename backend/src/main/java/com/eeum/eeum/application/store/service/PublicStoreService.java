@@ -3,6 +3,7 @@ package com.eeum.eeum.application.store.service;
 import com.eeum.eeum.application.product.dto.response.*;
 import com.eeum.eeum.application.store.dto.request.NearbyStoreSearchCondition;
 import com.eeum.eeum.application.store.dto.request.StoreSearchDto;
+import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreDetailResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
@@ -17,9 +18,11 @@ import com.eeum.eeum.domain.product.entity.ProductOption;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.repository.*;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
 import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.entity.StoreNotice;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
+import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -33,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,6 +57,7 @@ public class PublicStoreService {
     private final ProductOptionRepository productOptionRepository;
     private final ProductOptionItemRepository productOptionItemRepository;
     private final OwnerInfoRepository ownerInfoRepository;
+    private final StoreBusinessHourRepository storeBusinessHourRepository;
 
     // ===================== 상점 목록 조회 =====================
 
@@ -101,7 +106,7 @@ public class PublicStoreService {
                 .address(store.getAddress())
                 .phone(store.getPhone())
                 .description(store.getDescription())
-                .businessHours(store.getBusinessHours())
+                .businessHours(getBusinessHourDtos(store.getStoreId()))
                 .status(store.getStatus().name())
                 .rating(store.getRating())
                 .favoriteCount(store.getFavoriteCount())
@@ -304,7 +309,6 @@ public class PublicStoreService {
                 .address(store.getAddress())
                 .phone(store.getPhone())
                 .description(store.getDescription())
-                .businessHours(store.getBusinessHours())
                 .status(store.getStatus().name())
                 .rating(store.getRating())
                 .favoriteCount(store.getFavoriteCount())
@@ -458,5 +462,23 @@ public class PublicStoreService {
         if (!approved) {
             throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
         }
+    }
+
+    private List<StoreBusinessHourResponseDto> getBusinessHourDtos(Long storeId) {
+        return storeBusinessHourRepository.findByStore_StoreId(storeId)
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(this::toBusinessHourDto)
+                .toList();
+    }
+
+    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
+        return StoreBusinessHourResponseDto.builder()
+                .dayOfWeek(businessHour.getDayOfWeek())
+                .dayLabel(businessHour.getDayOfWeek().getLabel())
+                .closed(businessHour.isClosed())
+                .openTime(businessHour.getOpenTime())
+                .closeTime(businessHour.getCloseTime())
+                .build();
     }
 }

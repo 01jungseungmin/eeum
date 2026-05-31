@@ -142,4 +142,16 @@ public class Product extends BaseEntity {
             this.status = ProductStatus.ACTIVE;
         }
     }
+
+    public void restoreStock(int quantity) {
+        if (this.stock == null) {
+            return;
+        }
+
+        this.stock += quantity;
+
+        if (this.status == ProductStatus.SOLD_OUT && this.stock > 0) {
+            this.status = ProductStatus.ACTIVE;
+        }
+    }
 }

@@ -1,9 +1,14 @@
 package com.eeum.eeum.application.store.service;
 
-import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
-import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.application.store.dto.response.*;
+import com.eeum.eeum.common.dto.response.ImageResponseDto;
+import com.eeum.eeum.common.util.MaskingUtil;
+import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.store.entity.*;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
-import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.domain.store.repository.*;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -13,19 +18,72 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminStoreService {
 
     private final StoreRepository storeRepository;
+    private final OwnerInfoRepository ownerInfoRepository;
+    private final SettlementAccountRepository settlementAccountRepository;
+    private final StoreImageRepository storeImageRepository;
+    private final StoreNoticeRepository storeNoticeRepository;
+    private final StoreBusinessHourRepository storeBusinessHourRepository;
 
     @Transactional(readOnly = true)
     public Page<StoreListResponseDto> getStores(
             String keyword, String status, Pageable pageable) {
-        // TODO: QueryDSL로 keyword, status 필터 구현 필요
-        return storeRepository.findAll(pageable)
+        return storeRepository.searchAdminStores(keyword, status, pageable)
                 .map(this::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminStoreDetailResponseDto getStoreDetail(Long storeId) {
+        Store store = getStore(storeId);
+        Account owner = store.getAccount();
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(owner.getAccountId()).orElse(null);
+        SettlementAccount settlementAccount = settlementAccountRepository.findByStore_StoreId(storeId).orElse(null);
+
+        return AdminStoreDetailResponseDto.builder()
+                .storeId(store.getStoreId())
+                .name(store.getName())
+                .address(store.getAddress())
+                .phone(store.getPhone())
+                .description(store.getDescription())
+                .businessHours(getBusinessHours(storeId))
+                .status(store.getStatus().name())
+                .rating(store.getRating())
+                .favoriteCount(store.getFavoriteCount())
+                .reviewCount(store.getReviewCount())
+                .categoryId(store.getCategory() != null ? store.getCategory().getCategoryId() : null)
+                .categoryName(store.getCategory() != null ? store.getCategory().getName() : null)
+                .regionId(store.getRegion() != null ? store.getRegion().getRegionId() : null)
+                .regionName(store.getRegion() != null ? formatRegionName(store) : null)
+                .latitude(store.getLatitude())
+                .longitude(store.getLongitude())
+                .ownerAccountId(owner.getAccountId())
+                .ownerName(owner.getName())
+                .ownerEmail(owner.getEmail())
+                .ownerPhone(owner.getPhone())
+                .ownerRole(owner.getRole().name())
+                .ownerStatus(owner.getStatus().name())
+                .ownerInfoId(ownerInfo != null ? ownerInfo.getOwnerInfoId() : null)
+                .businessNumber(ownerInfo != null ? ownerInfo.getBusinessNumber() : null)
+                .openingDate(ownerInfo != null ? ownerInfo.getOpeningDate() : null)
+                .approvalStatus(ownerInfo != null ? ownerInfo.getApprovalStatus().name() : null)
+                .rejectionReason(ownerInfo != null ? ownerInfo.getRejectionReason() : null)
+                .reviewRequestedAt(ownerInfo != null ? ownerInfo.getReviewRequestedAt() : null)
+                .settlementAccount(toSettlementDto(settlementAccount))
+                .images(storeImageRepository.findByStore_StoreIdOrderByDisplayOrderAsc(storeId)
+                        .stream().map(this::toImageDto).toList())
+                .notices(storeNoticeRepository.findByStore_StoreIdAndIsActiveTrueOrderByIsPinnedDescCreatedAtDesc(storeId)
+                        .stream().map(this::toNoticeDto).toList())
+                .createdAt(store.getCreatedAt())
+                .modifiedAt(store.getModifiedAt())
+                .build();
     }
 
     @Transactional
@@ -66,7 +124,6 @@ public class AdminStoreService {
                 .address(store.getAddress())
                 .phone(store.getPhone())
                 .description(store.getDescription())
-                .businessHours(store.getBusinessHours())
                 .status(store.getStatus().name())
                 .rating(store.getRating())
                 .favoriteCount(store.getFavoriteCount())
@@ -77,6 +134,64 @@ public class AdminStoreService {
                         ? store.getCategory().getName() : null)
                 .latitude(store.getLatitude())
                 .longitude(store.getLongitude())
+                .build();
+    }
+    private SettlementAccountResponseDto toSettlementDto(SettlementAccount settlementAccount) {
+        if (settlementAccount == null) {
+            return null;
+        }
+
+        return SettlementAccountResponseDto.builder()
+                .settlementAccountId(settlementAccount.getSettlementAccountId())
+                .bankName(settlementAccount.getBankName())
+                .accountNumber(MaskingUtil.maskAccountNumber(settlementAccount.getAccountNumber()))
+                .accountHolder(settlementAccount.getAccountHolder())
+                .build();
+    }
+
+    private ImageResponseDto toImageDto(StoreImage image) {
+        return ImageResponseDto.builder()
+                .imageId(image.getStoreImageId())
+                .imageUrl(image.getImageUrl())
+                .displayOrder(image.getDisplayOrder())
+                .isThumbnail(image.isThumbnail())
+                .build();
+    }
+
+    private StoreNoticeResponseDto toNoticeDto(StoreNotice notice) {
+        return StoreNoticeResponseDto.builder()
+                .noticeId(notice.getNoticeId())
+                .title(notice.getTitle())
+                .content(notice.getContent())
+                .noticeType(notice.getNoticeType())
+                .pinned(notice.isPinned())
+                .createdAt(notice.getCreatedAt())
+                .modifiedAt(notice.getModifiedAt())
+                .build();
+    }
+
+    private String formatRegionName(Store store) {
+        return String.join(" ",
+                store.getRegion().getSiDo(),
+                store.getRegion().getGunGu(),
+                store.getRegion().getDong()
+        );
+    }
+    private List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
+        return storeBusinessHourRepository.findByStore_StoreId(storeId)
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(this::toBusinessHourDto)
+                .toList();
+    }
+
+    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
+        return StoreBusinessHourResponseDto.builder()
+                .dayOfWeek(businessHour.getDayOfWeek())
+                .dayLabel(businessHour.getDayOfWeek().getLabel())
+                .closed(businessHour.isClosed())
+                .openTime(businessHour.getOpenTime())
+                .closeTime(businessHour.getCloseTime())
                 .build();
     }
 }

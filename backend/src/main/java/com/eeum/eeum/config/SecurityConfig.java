@@ -56,7 +56,8 @@ public class SecurityConfig {
             "/auth/password/verify",
             "/auth/password/reset",
             "/auth/business/verify",
-            "/admin/locations/sync"
+            "/admin/locations/sync",
+            "/payments/webhook"
     };
 
     private static final String[] SWAGGER_PATHS = {
@@ -111,7 +112,8 @@ public class SecurityConfig {
                                 "/owner/stores/me/business-info",
                                 "/owner/stores/me/settlement-account",
                                 "/owner/stores/me/apply",
-                                "/owner/stores/me/representative-menu"
+                                "/owner/stores/me/representative-menu",
+                                "/owner/stores/me/approval/business-hours"
                         ).hasAnyRole("USER", "OWNER")
 
                         // 관리자 전용
