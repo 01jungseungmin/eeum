@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Cart", description = "장바구니 API")
+@Tag(name = "12. Cart", description = "장바구니 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/cart")
