@@ -1,18 +1,74 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import IMP from 'iamport-react-native'; 
+
+import { orderApi } from '../../api/order'; // 방금 만든 결제 API
 
 export default function CheckoutScreen() {
   const router = useRouter();
+  
+  // 💡 포트원 결제창을 띄울지 말지 결정하는 상태
+  const [isPaymentVisible, setIsPaymentVisible] = useState(false);
 
-  const handlePayment = () => {
-    Alert.alert("결제 완료", "주문이 성공적으로 접수되었습니다!", [
-      { text: "확인", onPress: () => router.push('/') } // 홈으로 이동
-    ]);
+  // [결제하기] 버튼을 눌렀을 때 실행되는 함수
+  const handlePayment = async () => {
+    // 1. 백엔드에 먼저 '주문서'를 생성해서 가짜 주문번호(merchant_uid)를 받아와야 합니다.
+    // (이 과정은 파트너님과 협의된 API 흐름에 따라 다를 수 있습니다.)
+    
+    // 2. 주문번호가 준비되면 포트원 결제창을 켭니다.
+    setIsPaymentVisible(true);
   };
+
+  // 💡 포트원 결제가 끝난 직후 포트원이 실행시켜 주는 콜백 함수입니다.
+  const paymentCallback = async (response: any) => {
+    // 결제창을 다시 끕니다.
+    setIsPaymentVisible(false);
+
+    // 포트원이 준 결과값 (영수증 번호 등)
+    const { success, imp_uid, merchant_uid, error_msg } = response;
+
+    if (success) {
+      try {
+        // ✨ [가장 중요!] 포트원이 준 영수증 번호를 우리 백엔드로 보내서 '진짜 결제 맞는지' 검증합니다.
+        await orderApi.verifyPayment(imp_uid, merchant_uid);
+        
+        Alert.alert("결제 성공", "주문이 완료되었습니다!", [
+          { text: "확인", onPress: () => router.push('/order/complete') }
+        ]);
+      } catch (e) {
+        Alert.alert("결제 검증 실패", "결제는 되었으나 서버 검증에 실패했습니다. 고객센터에 문의해주세요.");
+      }
+    } else {
+      Alert.alert("결제 실패", `결제에 실패했습니다.\n사유: ${error_msg}`);
+    }
+  };
+
+
+  if (isPaymentVisible) {
+    return (
+      <IMP.Payment
+        userCode={'imp00000000'} // 포트원(아임포트) 관리자 페이지에서 발급받은 프론트엔드용 식별코드
+        loading={<View><Text>결제창을 불러오는 중입니다...</Text></View>}
+        data={{
+          pg: 'kakaopay', // 결제 방식 (카카오페이, 토스 등)
+          pay_method: 'card',
+          name: '맛있는 반찬가게 - 깍두기 외 1건',
+          merchant_uid: `mid_${new Date().getTime()}`, // 고유 주문번호 (보통 백엔드가 생성해 줌)
+          amount: 22000,
+          buyer_name: '정원',
+          buyer_tel: '010-1234-5678',
+          buyer_email: 'test@eeum.com', 
+          escrow: false,
+          app_scheme: 'eeum',
+        }}
+        callback={paymentCallback} // 결제 완료 후 실행될 함수 연결
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -26,14 +82,12 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 주문 상품 요약 */}
         <View style={styles.section}>
           <Text fontWeight="bold" style={styles.sectionTitle}>주문 상품</Text>
           <Text style={styles.summaryText}>맛있는 반찬가게 - 깍두기 500g 외 1건</Text>
         </View>
         <View style={styles.divider} />
 
-        {/* 배송지 정보 (UI 껍데기) */}
         <View style={styles.section}>
           <Text fontWeight="bold" style={styles.sectionTitle}>배송지 정보</Text>
           <View style={styles.inputBox}>
@@ -44,14 +98,9 @@ export default function CheckoutScreen() {
             <Text style={styles.inputLabel}>연락처</Text>
             <Text style={styles.inputValue}>010-1234-5678</Text>
           </View>
-          <View style={styles.inputBox}>
-            <Text style={styles.inputLabel}>배송 주소</Text>
-            <Text style={styles.inputValue}>서울특별시 종로구 청운동 123-4 (이음아파트 101동)</Text>
-          </View>
         </View>
         <View style={styles.divider} />
 
-        {/* 결제 금액 */}
         <View style={styles.section}>
           <Text fontWeight="bold" style={styles.sectionTitle}>결제 상세</Text>
           <View style={styles.priceRow}>
@@ -69,7 +118,6 @@ export default function CheckoutScreen() {
         </View>
       </ScrollView>
 
-      {/* 최종 결제 버튼 */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.payBtn} onPress={handlePayment}>
           <Text fontWeight="bold" style={styles.payBtnText}>22,000원 결제하기</Text>
