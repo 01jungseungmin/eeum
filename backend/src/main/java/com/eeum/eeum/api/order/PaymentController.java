@@ -1,7 +1,6 @@
 package com.eeum.eeum.api.order;
 
 import com.eeum.eeum.application.order.dto.request.PaymentCompleteRequestDto;
-import com.eeum.eeum.application.order.dto.request.PaymentWebhookRequestDto;
 import com.eeum.eeum.application.order.service.PaymentService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -13,13 +12,30 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Payment", description = "결제 API")
+@Tag(name = "14. Payment", description = "결제 API")
 @RestController
 @RequestMapping("/payments")
 @RequiredArgsConstructor
 public class PaymentController {
 
     private final PaymentService paymentService;
+
+    @Operation(
+            summary = "결제 완료 검증",
+            description = """
+                    프론트에서 PortOne 결제 완료 후 호출합니다.
+                    paymentId와 orderNumber를 전달받아 서버에서 결제 정보를 검증하고 주문/결제 상태를 갱신합니다.
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/verify")
+    public ResponseEntity<ApiResponse<Void>> verifyPayment(
+            @Valid @RequestBody PaymentCompleteRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        paymentService.verifyPayment(accountId, request);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 
     @Operation(
             summary = "PortOne Webhook 처리",
@@ -38,22 +54,5 @@ public class PaymentController {
         String signature = portoneSignature != null ? portoneSignature : legacySignature;
         paymentService.handleWebhook(rawBody, signature);
         return ResponseEntity.ok().build();
-    }
-
-    @Operation(
-            summary = "결제 완료 검증",
-            description = """
-                    프론트에서 PortOne 결제 완료 후 호출합니다.
-                    paymentId와 orderNumber를 전달받아 서버에서 결제 정보를 검증하고 주문/결제 상태를 갱신합니다.
-                    """
-    )
-    @SecurityRequirement(name = "bearerAuth")
-    @PostMapping("/verify")
-    public ResponseEntity<ApiResponse<Void>> verifyPayment(
-            @Valid @RequestBody PaymentCompleteRequestDto request
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        paymentService.verifyPayment(accountId, request);
-        return ResponseEntity.ok(ApiResponse.success());
     }
 }

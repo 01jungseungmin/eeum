@@ -18,7 +18,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Order", description = "주문 API")
+@Tag(name = "13. Order", description = "주문 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/orders")

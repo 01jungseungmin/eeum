@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "AccountRegion", description = "활동 지역 API")
+@Tag(name = "03. AccountRegion", description = "활동 지역 API")
 @RestController
 @RequestMapping("/accounts/me/regions")
 @RequiredArgsConstructor
@@ -32,16 +32,6 @@ public class AccountRegionController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @Operation(summary = "활동 지역 등록", description = "활동 지역을 등록합니다. 최대 2개까지 등록 가능합니다.")
-    @PostMapping
-    public ResponseEntity<ApiResponse<AccountRegionResponseDto>> addRegion(
-            @Valid @RequestBody RegionRequestDto request
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        AccountRegionResponseDto response = accountRegionService.addRegion(accountId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
-    }
-
     @Operation(summary = "특정 활동 지역 조회", description = "등록된 특정 활동 지역을 조회합니다.")
     @GetMapping("/{accountRegionId}")
     public ResponseEntity<ApiResponse<AccountRegionResponseDto>> getRegion(
@@ -50,6 +40,16 @@ public class AccountRegionController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         AccountRegionResponseDto response = accountRegionService.getRegion(accountId, accountRegionId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @Operation(summary = "활동 지역 등록", description = "활동 지역을 등록합니다. 최대 2개까지 등록 가능합니다.")
+    @PostMapping
+    public ResponseEntity<ApiResponse<AccountRegionResponseDto>> addRegion(
+            @Valid @RequestBody RegionRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        AccountRegionResponseDto response = accountRegionService.addRegion(accountId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
     @Operation(summary = "활동 지역 GPS 인증", description = "현재 GPS 위치로 등록된 지역을 인증합니다.")
