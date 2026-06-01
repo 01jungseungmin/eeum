@@ -5,34 +5,64 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { SHOP_CATEGORIES, DUMMY_SHOPS } from '../../constants/shopDummyData';
+import { shopApi } from '../../api/shop';
 
 const { width } = Dimensions.get('window');
 
 export default function ShopDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams(); 
-  const [isLoading, setIsLoading] = useState(false);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [shopDetail, setShopDetail] = useState<any>(null);
+  const [shopProducts, setShopProducts] = useState<any[]>([]); // 💡 상품 리스트 상태 추가
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
-  const foundShop = DUMMY_SHOPS.find(s => s.id === shopIdNum) || DUMMY_SHOPS[0];
-  const [shopDetail, setShopDetail] = useState<any>(foundShop);
 
-  if (isLoading) return <View style={{flex:1, justifyContent:'center', alignItems:'center'}}><ActivityIndicator size="large" color="#00A859" /></View>;
+  useEffect(() => {
+    const fetchShopData = async () => {
+      try {
+        setIsLoading(true);
+        // 상점 상세 정보와 상품 목록을 동시에 가져온다.
+        const [detailData, productsData] = await Promise.all([
+          shopApi.getShopDetail(shopIdNum),
+          shopApi.getShopProducts(shopIdNum)
+        ]);
+        
+        setShopDetail(detailData);
+        setShopProducts(productsData || []);
+      } catch (e) {
+        Alert.alert("오류", "상점 정보를 불러오지 못했습니다.");
+        router.back();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (shopIdNum) fetchShopData();
+  }, [shopIdNum]);
 
-  const categoryName = SHOP_CATEGORIES.find(c => c.id === shopDetail.categoryId)?.name || '기타';
-  const coverImageUrl = shopDetail.products?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Cover';
+  if (isLoading || !shopDetail) {
+    return (
+      <View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor: '#fff'}}>
+        <ActivityIndicator size="large" color="#00A859" />
+      </View>
+    );
+  }
 
-  // 💡 [핵심] 카테고리 1(음식점), 2(카페)는 네이버 지도(식당) 스타일로!
+  const categoryName = shopDetail.categoryName || '기타';
+  const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Cover';
   const isRestaurant = shopDetail.categoryId === 1 || shopDetail.categoryId === 2;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* 상단 이미지 ~ 메인 정보 생략 없이 기존 코드 그대로 유지 */}
+        
         <View style={styles.coverContainer}>
           <Image source={{ uri: coverImageUrl }} style={styles.coverImg} />
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={28} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.mainInfo}>
@@ -41,7 +71,7 @@ export default function ShopDetailScreen() {
             <Text fontWeight="bold" style={styles.shopName}>{shopDetail.name}</Text>
             <View style={styles.ratingRow}>
               <Ionicons name="star" size={18} color="#FFD700" />
-              <Text fontWeight="bold" style={styles.ratingText}>{shopDetail.rating.toFixed(1)}</Text>
+              <Text fontWeight="bold" style={styles.ratingText}>{shopDetail.rating?.toFixed(1) || '0.0'}</Text>
             </View>
           </View>
           <View style={styles.contactRow}><Ionicons name="location-outline" size={16} color="#888" /><Text style={styles.contactText}>{shopDetail.address}</Text></View>
@@ -52,24 +82,37 @@ export default function ShopDetailScreen() {
 
         <View style={styles.menuSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>메뉴</Text>
-          {shopDetail.products?.map((menu: any) => (
+          {shopProducts.map((menu: any) => (
             <TouchableOpacity 
-              key={menu.id} 
+              key={menu.productId}
               style={styles.menuCard}
-              onPress={() => router.push(`/product/${menu.id}`)}
+              onPress={() => router.push(`/product/${menu.productId}`)}
             >
               <View style={styles.menuTextContainer}>
                 <Text fontWeight="bold" style={styles.menuName}>{menu.name}</Text>
                 <Text style={styles.menuDesc} numberOfLines={2}>{menu.description}</Text>
-                <Text fontWeight="bold" style={styles.menuPrice}>{menu.price.toLocaleString()}원</Text>
+                {menu.hasEvent ? (
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    <Text style={{textDecorationLine: 'line-through', color: '#bbb', marginRight: 6, fontSize: 13}}>
+                      {menu.price?.toLocaleString()}원
+                    </Text>
+                    <Text fontWeight="bold" style={[styles.menuPrice, {color: '#FF5252'}]}>
+                      {menu.eventPrice?.toLocaleString()}원
+                    </Text>
+                  </View>
+                ) : (
+                  <Text fontWeight="bold" style={styles.menuPrice}>{menu.price?.toLocaleString()}원</Text>
+                )}
               </View>
-              <Image source={{ uri: menu.imageUrl }} style={styles.menuImg} />
+              {menu.thumbnailUrl && <Image source={{ uri: menu.thumbnailUrl }} style={styles.menuImg} />}
             </TouchableOpacity>
           ))}
+          {shopProducts.length === 0 && (
+            <Text style={{ color: '#888', marginTop: 10 }}>등록된 메뉴가 없습니다.</Text>
+          )}
         </View>
       </ScrollView>
 
-      {/* 💡 [네이버 지도 vs 쿠팡] 가게 상세 하단 바 */}
       <View style={styles.bottomBar}>
         {isRestaurant ? (
           <>
@@ -92,7 +135,6 @@ export default function ShopDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 기존 스타일 유지...
   container: { flex: 1, backgroundColor: '#fff' },
   coverContainer: { width: '100%', height: 250, position: 'relative' },
   coverImg: { width: '100%', height: '100%' },
@@ -116,16 +158,15 @@ const styles = StyleSheet.create({
   menuPrice: { fontSize: 16, color: '#333' },
   menuImg: { width: 100, height: 100, borderRadius: 8 },
   
-  // 💡 하단 바 스타일 개선 (레이아웃 깨짐 방지)
   bottomBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   
-  // 식당(네이버 지도) 버튼
+  // 식당 버튼
   callBtn: { flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderWidth: 1, borderColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   callBtnText: { color: '#00A859', fontSize: 16 },
   reserveBtn: { flex: 2, backgroundColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   reserveBtnText: { color: '#fff', fontSize: 16 },
   
-  // 상점(쿠팡) 버튼
+  // 상점 버튼
   inquiryBtn: { flex: 1, backgroundColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   inquiryBtnText: { color: '#fff', fontSize: 16 }
 });

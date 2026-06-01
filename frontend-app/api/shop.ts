@@ -1,25 +1,58 @@
-import axios from 'axios';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 5000,
-});
+import { client } from './client';
 
 export const shopApi = {
-  // 1. 상점 목록 가져오기
-  getShops: async (category: string) => {
-    return await api.get(`/shops`, { params: { category } });
-  },
-  
-  // 2. 특정 상점 상세정보 가져오기
-  getShopDetail: async (shopId: string) => {
-    return await api.get(`/shops/${shopId}`);
+  // 상점 목록 조회
+  getShops: async (params?: { categoryId?: number; regionId?: number; keyword?: string; page?: number; size?: number }) => {
+    try {
+      const response = await client.get('/stores', { params });
+      return response.data; 
+    } catch (error) {
+      console.error('상점 목록 조회 에러:', error);
+      throw error;
+    }
   },
 
-  // 3. 특정 상품 상세정보 가져오기
-  getProductDetail: async (productId: string) => {
-    return await api.get(`/products/${productId}`);
+  // 상점 상세 조회 (GET /stores/{storeId})
+  getShopDetail: async (storeId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}`);
+      return response.data?.data || response.data; 
+    } catch (error) {
+      console.error('상점 상세 조회 에러:', error);
+      throw error;
+    }
+  },
+
+  // 상점 상품(메뉴) 목록 조회 (GET /stores/{storeId}/products)
+  getShopProducts: async (storeId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}/products`);
+      return response.data?.data || response.data; 
+    } catch (error) {
+      console.error('상점 상품 조회 에러:', error);
+      throw error;
+    }
+  },
+
+  // 상품 상세 조회 (GET /products/{productId})
+  getProductDetail: async (productId: number) => {
+    try {
+      const response = await client.get(`/products/${productId}`);
+      return response.data?.data || response.data; 
+    } catch (error) {
+      console.error('상품 상세 조회 에러:', error);
+      throw error;
+    }
+  },
+
+  // 상품 옵션 조회 (GET /products/{productId}/options)
+  getProductOptions: async (productId: number) => {
+    try {
+      const response = await client.get(`/products/${productId}/options`);
+      return response.data?.data || response.data; 
+    } catch (error) {
+      console.error('상품 옵션 조회 에러:', error);
+      throw error;
+    }
   }
 };

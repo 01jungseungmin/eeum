@@ -1,5 +1,3 @@
-// app/product/[id].tsx - 완전 수정 버전
-
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking } from 'react-native';
 import { Text } from '../../components/CustomText'; 
@@ -7,43 +5,37 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// 💡 더미 데이터 import
-import { DUMMY_SHOPS, SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { shopApi } from '../../api/shop';
 
 const { width } = Dimensions.get('window');
-
-// 리뷰 더미 데이터 (생략)
 
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams(); 
-  const [isLiked, setIsLiked] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   
-  // 데이터 상태
+  const [isLiked, setIsLiked] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [product, setProduct] = useState<any>(null);
-  const [seller, setSeller] = useState<any>(null);
 
-  // 1단계: ID로 더미 데이터에서 상품 및 상점 정보 찾기
+  const productIdNum = typeof id === 'string' ? Number(id) : 1;
+
   useEffect(() => {
-    if (!id) return;
-    const productIdNum = Number(id);
-    let foundProduct = null;
-    let foundSeller = null;
-
-    for (const shop of DUMMY_SHOPS) {
-      const prod = shop.products?.find(p => p.id === productIdNum);
-      if (prod) {
-        foundProduct = prod;
-        foundSeller = shop;
-        break;
+    const fetchProductDetail = async () => {
+      try {
+        setIsLoading(true);
+        const data = await shopApi.getProductDetail(productIdNum);
+        setProduct(data);
+      } catch (e) {
+        Alert.alert("오류", "상품 정보를 불러오지 못했습니다.");
+        router.back();
+      } finally {
+        setIsLoading(false);
       }
-    }
-    setProduct(foundProduct);
-    setSeller(foundSeller);
-  }, [id]);
+    };
 
-  // 장바구니 담기 (상점 전용)
+    if (productIdNum) fetchProductDetail();
+  }, [productIdNum]);
+
   const handleAddToCart = async () => {
     Alert.alert("장바구니", `[${product.name}] 상품을 담았습니다!`, [
       { text: "계속 쇼핑", style: "cancel" },
@@ -51,17 +43,7 @@ export default function ProductDetailScreen() {
     ]);
   };
 
-  // 바로 구매하기 (상점 전용)
   const handleBuyNow = () => {
-    /* 
-       🚧 나중에 실제 데이터를 넘길 때는 params를 사용합니다:
-       router.push({
-         pathname: '/order/checkout',
-         params: { productId: product.id, quantity: 1 }
-       });
-    */
-    
-    // 지금은 결제 페이지 화면으로 바로 이동!
     router.push('/order/checkout');
   };
 
@@ -69,40 +51,38 @@ export default function ProductDetailScreen() {
     return <View style={styles.center}><ActivityIndicator size="large" color="#00A859" /></View>;
   }
 
-  // 할인 여부 계산
-  const hasEvent = !!product.eventPrice;
+  // 데이터 매핑
+  const hasEvent = product.hasEvent;
   const currentPrice = hasEvent ? product.eventPrice : product.price;
+  const productImageUrl = product.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
 
-  // 💡 [핵심 비즈니스 로직] 카테고리가 1(음식점), 2(카페)는 '식당'으로 분류
-  // 그 외 3(반찬가게), 6(마트) 등은 '상점'으로 분류
-  const isRestaurant = seller?.categoryId === 1 || seller?.categoryId === 2;
+  // 상품 상세 데이터에는 상점 categoryId가 따로 없으므로 장바구니/구매하기 버튼(상점 스타일)으로 기본 통일
+  const isRestaurant = false; 
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 상단 이미지 영역 */}
         <View style={styles.imageContainer}>
-          <Image source={{ uri: product.imageUrl }} style={styles.productImage} />
+          <Image source={{ uri: productImageUrl }} style={styles.productImage} />
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={28} color="#fff" />
           </TouchableOpacity>
         </View>
 
-        {/* 상품 기본 정보 섹션 (피그마 반영) */}
         <View style={styles.infoSection}>
           <View style={styles.titleRow}>
-            <Text style={styles.categoryText}>{seller?.name}</Text>
+            <Text style={styles.categoryText}>{product.storeName}</Text> 
             <TouchableOpacity onPress={() => setIsLiked(!isLiked)}>
               <Ionicons name={isLiked ? "heart" : "heart-outline"} size={24} color={isLiked ? "#FF5252" : "#999"} />
             </TouchableOpacity>
           </View>
           <Text fontWeight="bold" style={styles.productTitle}>{product.name}</Text>
           <View style={styles.priceRow}>
-            {hasEvent && <Text style={styles.originalPrice}>{product.price.toLocaleString()}원</Text>}
-            <Text fontWeight="bold" style={styles.currentPrice}>{currentPrice.toLocaleString()}원</Text>
+            {hasEvent && <Text style={styles.originalPrice}>{product.price?.toLocaleString()}원</Text>}
+            <Text fontWeight="bold" style={styles.currentPrice}>{currentPrice?.toLocaleString()}원</Text>
           </View>
           <View style={styles.tagRow}>
-            {product.type === 'RESERVATION' ? (
+            {product.productType === 'RESERVATION' ? (
                 <View style={[styles.tagPill, {backgroundColor: '#E3F2FD'}]}>
                     <Text style={[styles.tagText, {color: '#2196F3'}]}>예약상품</Text>
                 </View>
@@ -117,15 +97,14 @@ export default function ProductDetailScreen() {
 
         <View style={styles.divider} />
 
-        {/* 판매자(상점) 정보 */}
-        <TouchableOpacity style={styles.sellerSection} onPress={() => router.push(`/shop/${seller?.id}`)}>
+        <TouchableOpacity style={styles.sellerSection} onPress={() => router.push(`/shop/${product.storeId}`)}>
           <View style={styles.sellerInfo}>
             <View style={styles.avatarPlaceholder}>
-                <Text style={{color:'#fff', fontWeight: 'bold'}}>{seller?.name?.[0] || 'S'}</Text>
+                <Text style={{color:'#fff', fontWeight: 'bold'}}>{product.storeName?.[0] || 'S'}</Text>
             </View>
             <View>
-              <Text fontWeight="bold" style={{fontSize: 16}}>{seller?.name}</Text>
-              <Text style={styles.sellerLocation}>{seller?.address}</Text>
+              <Text fontWeight="bold" style={{fontSize: 16}}>{product.storeName}</Text>
+              <Text style={styles.sellerLocation}>상점 방문하기</Text>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#999" />
@@ -133,35 +112,26 @@ export default function ProductDetailScreen() {
 
         <View style={styles.divider} />
 
-        {/* 상품 설명 섹션 */}
         <View style={styles.descSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>상품 설명</Text>
           <Text style={styles.descriptionText}>{product.description}</Text>
         </View>
 
-        {/* 리뷰 섹션 (생략) */}
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* 💡 [핵심 UI 분기 처리] 하단 버튼 바: 식당 vs 상점 */}
       <View style={styles.bottomBar}>
         {isRestaurant ? (
-          // 🍽️ 식당(음식점/카페)일 경우 (Figma 7 컨셉 반영)
           <>
-            <TouchableOpacity 
-              style={[styles.cartBtn, styles.callBtn]} 
-              onPress={() => Linking.openURL(`tel:${seller?.phone || '02-1234-5678'}`)}
-            >
+            <TouchableOpacity style={[styles.cartBtn, styles.callBtn]} onPress={() => Linking.openURL(`tel:02-0000-0000`)}>
               <Ionicons name="call" size={18} color="#00A859" style={{marginRight: 6}} />
               <Text fontWeight="bold" style={[styles.cartBtnText, { color: '#00A859' }]}>전화하기</Text>
             </TouchableOpacity>
-            
             <TouchableOpacity style={styles.buyBtn} onPress={() => Alert.alert('방문 예약', '방문 예약 페이지로 이동합니다.')}>
               <Text fontWeight="bold" style={styles.buyBtnText}>방문 예약하기</Text>
             </TouchableOpacity>
           </>
         ) : (
-          // 🛍️ 상점(마트/반찬 등)일 경우 (Figma 8 완벽 반영)
           <>
             <TouchableOpacity 
               style={[styles.cartBtn, styles.shopCartBtn]} 
@@ -170,7 +140,6 @@ export default function ProductDetailScreen() {
             >
               <Text fontWeight="bold" style={[styles.cartBtnText, styles.shopCartBtnText]}>장바구니</Text>
             </TouchableOpacity>
-            
             <TouchableOpacity 
               style={[styles.buyBtn, styles.shopBuyBtn]} 
               onPress={handleBuyNow}

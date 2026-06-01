@@ -3,28 +3,24 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicato
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 
-// 💡 작성하신 더미 데이터 불러오기
-import { DUMMY_SHOPS, SHOP_CATEGORIES } from '../../constants/shopDummyData';
-// 🚧 [백엔드 연동]
-// import { shopApi } from '../../api/shop';
+import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { shopApi } from '../../api/shop';
 
 export default function ShopView({ router }: { router: any }) {
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // [더미 데이터 로직] 홈 화면이므로 전체 상점 중 앞의 5개만 미리보기로 띄웁니다.
-  useEffect(() => {
-    setShopList((DUMMY_SHOPS || []).slice(0, 5));
-  }, []);
-
-  /* 🚧 [백엔드 API 연동 시 주석 해제]
+  // 백엔드 API 연동 완료
   useEffect(() => {
     const fetchHomeShops = async () => {
       setIsLoading(true);
       try {
-        // 홈 화면용 추천 상점 목록을 불러오는 API (예시)
-        const res = await shopApi.getShops(); 
-        setShopList(res.data.slice(0, 5)); 
+        // 홈 화면이므로 앞의 5개만 가져오도록 size 파라미터 전달
+        const res = await shopApi.getShops({ size: 5 }); 
+        
+        // 💡 [핵심] 백엔드가 페이징 객체로 주므로 data.content를 뽑아냅니다!
+        const shops = res.data?.content || [];
+        setShopList(shops); 
       } catch (e) {
         console.error('홈 화면 상점 로딩 실패:', e);
       } finally {
@@ -33,7 +29,6 @@ export default function ShopView({ router }: { router: any }) {
     };
     fetchHomeShops();
   }, []);
-  */
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
@@ -59,18 +54,18 @@ export default function ShopView({ router }: { router: any }) {
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {shopList.map((shop) => {
-              // 썸네일은 첫 번째 상품의 이미지를 가져오거나, 없으면 기본 이미지 사용
-              const thumbnailUrl = shop.products?.[0]?.imageUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store';
+              // 서버가 주는 thumbnailUrl 바로 사용
+              const thumbnailUrl = shop.thumbnailUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store';
               
               return (
                 <TouchableOpacity 
-                  key={shop.id} 
+                  key={shop.storeId}
                   style={styles.shopCard} 
-                  onPress={() => router.push(`/shop/${shop.id}`)}
+                  onPress={() => router.push(`/shop/${shop.storeId}`)} 
                 >
                   <Image source={{ uri: thumbnailUrl }} style={styles.shopImage} />
                   <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
-                  <Text style={styles.shopCategory}>{getCategoryName(shop.categoryId)}</Text>
+                  <Text style={styles.shopCategory}>{shop.categoryName || getCategoryName(shop.categoryId)}</Text>
                 </TouchableOpacity>
               );
             })}
