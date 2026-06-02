@@ -1,5 +1,7 @@
 package com.eeum.eeum.domain.store.enums;
 
+import java.time.DayOfWeek;
+
 public enum StoreDayOfWeek {
     MONDAY("월", 1),
     TUESDAY("화", 2),
@@ -23,5 +25,17 @@ public enum StoreDayOfWeek {
 
     public int getOrder() {
         return order;
+    }
+
+    public static StoreDayOfWeek from(DayOfWeek dayOfWeek) {
+        return switch (dayOfWeek) {
+            case MONDAY -> MONDAY;
+            case TUESDAY -> TUESDAY;
+            case WEDNESDAY -> WEDNESDAY;
+            case THURSDAY -> THURSDAY;
+            case FRIDAY -> FRIDAY;
+            case SATURDAY -> SATURDAY;
+            case SUNDAY -> SUNDAY;
+        };
     }
 }

@@ -4,22 +4,16 @@ import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
 import com.eeum.eeum.application.order.dto.response.OrderPaymentReadyResponseDto;
 import com.eeum.eeum.application.order.dto.response.OrderResponseDto;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
-import com.eeum.eeum.domain.order.entity.Cart;
-import com.eeum.eeum.domain.order.entity.CartItem;
-import com.eeum.eeum.domain.order.entity.Order;
-import com.eeum.eeum.domain.order.entity.OrderItem;
-import com.eeum.eeum.domain.order.entity.Payment;
+import com.eeum.eeum.domain.order.entity.*;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.OrderType;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
-import com.eeum.eeum.domain.order.repository.CartItemRepository;
-import com.eeum.eeum.domain.order.repository.CartRepository;
-import com.eeum.eeum.domain.order.repository.OrderItemRepository;
-import com.eeum.eeum.domain.order.repository.OrderRepository;
-import com.eeum.eeum.domain.order.repository.PaymentRepository;
+import com.eeum.eeum.domain.order.repository.*;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
@@ -37,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -56,6 +51,9 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final EventProductRepository eventProductRepository;
     private final ProductImageRepository productImageRepository;
+    private final RedisLockService redisLockService;
+
+    private static final Duration ORDER_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
     @Transactional
     public OrderPaymentReadyResponseDto createOrder(
@@ -78,9 +76,7 @@ public class OrderService {
 
         validatePickupPolicy(orderType, request.getPickupScheduledAt());
 
-        validateStock(cartItems);
-
-        decreaseStock(cartItems);
+        validateAndDecreaseStock(cartItems);
 
         BigDecimal totalPrice = cartItems.stream()
                 .map(CartItem::getTotalPrice)
@@ -183,61 +179,22 @@ public class OrderService {
 
     @Transactional
     public void cancelOrder(Long accountId, Long orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-        if (!order.getAccount().getAccountId().equals(accountId)) {
-            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING
-                && order.getStatus() != OrderStatus.PAID) {
-            throw new BusinessException(ErrorCode.ORDER_CANCEL_NOT_ALLOWED);
-        }
-
-        Payment payment = paymentRepository
-                .findByOrder_OrderId(orderId)
-                .orElse(null);
-
-        if (payment != null && payment.getStatus() == PaymentStatus.PAID) {
-            throw new BusinessException(ErrorCode.PAYMENT_CANCEL_NOT_ALLOWED);
-        }
-
-        List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(orderId);
-
-        restoreStock(orderItems);
-
-        order.cancel("사용자 요청");
-
-        if (payment != null) {
-            payment.cancel();
-        }
-
-        log.info("주문 취소: orderId={}", orderId);
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId),
+                ORDER_LOCK_LEASE_TIME,
+                ErrorCode.LOCK_ORDER_FAILED,
+                () -> cancelOrderWithLock(accountId, orderId)
+        );
     }
 
     @Transactional
-    public void expirePendingOrder(Order order) {
-        if (order.getStatus() != OrderStatus.PENDING) {
-            return;
-        }
-
-        List<OrderItem> orderItems = orderItemRepository
-                .findByOrder_OrderId(order.getOrderId());
-
-        restoreStock(orderItems);
-
-        order.expire();
-
-        Payment payment = paymentRepository
-                .findByOrder_OrderId(order.getOrderId())
-                .orElse(null);
-
-        if (payment != null && payment.getStatus() == PaymentStatus.PENDING) {
-            payment.cancel();
-        }
-
-        log.info("결제 대기 주문 만료 처리: orderId={}", order.getOrderId());
+    public void expirePendingOrder(Long orderId) {
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId),
+                ORDER_LOCK_LEASE_TIME,
+                ErrorCode.LOCK_ORDER_FAILED,
+                () -> expirePendingOrderWithLock(orderId)
+        );
     }
 
     // ===================== 내부 유틸 =====================
@@ -282,10 +239,12 @@ public class OrderService {
         }
     }
 
-    private void validateStock(List<CartItem> cartItems) {
+    private void validateAndDecreaseStock(List<CartItem> cartItems) {
         for (CartItem item : cartItems) {
             if (item.getProduct() != null) {
-                Product product = item.getProduct();
+                Product product = productRepository.findByIdWithPessimisticLock(
+                        item.getProduct().getProductId()
+                ).orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
                 if (product.getStatus() == ProductStatus.SOLD_OUT
                         || product.getStatus() == ProductStatus.INACTIVE) {
@@ -295,10 +254,16 @@ public class OrderService {
                 if (product.getStock() != null && product.getStock() < item.getQuantity()) {
                     throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                 }
+
+                if (product.getStock() != null) {
+                    product.decreaseStock(item.getQuantity());
+                }
             }
 
             if (item.getEventProduct() != null) {
-                EventProduct eventProduct = item.getEventProduct();
+                EventProduct eventProduct = eventProductRepository.findByIdWithPessimisticLock(
+                        item.getEventProduct().getEventProductId()
+                ).orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
                 if (!eventProduct.isOngoing()) {
                     throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
@@ -307,22 +272,8 @@ public class OrderService {
                 if (eventProduct.getRemainingStock() < item.getQuantity()) {
                     throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                 }
-            }
-        }
-    }
 
-    private void decreaseStock(List<CartItem> cartItems) {
-        for (CartItem item : cartItems) {
-            if (item.getProduct() != null) {
-                Product product = item.getProduct();
-
-                if (product.getStock() != null) {
-                    product.decreaseStock(item.getQuantity());
-                }
-            }
-
-            if (item.getEventProduct() != null) {
-                item.getEventProduct().decreaseStock(item.getQuantity());
+                eventProduct.decreaseStock(item.getQuantity());
             }
         }
     }
@@ -400,6 +351,75 @@ public class OrderService {
 
         return "ORD-" + datePart + "-" + randomPart;
     }
+
+    private void cancelOrderWithLock(Long accountId, Long orderId) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!order.getAccount().getAccountId().equals(accountId)) {
+            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+        }
+
+        Payment payment = paymentRepository
+                .findByOrderIdWithPessimisticLock(order.getOrderId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        /*
+         * 현재 단계에서는 PENDING 주문만 취소 허용.
+         * PAID 주문은 PortOne 취소 API 구현 후 허용하는 게 안전함.
+         */
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new BusinessException(ErrorCode.ORDER_CANCEL_NOT_ALLOWED);
+        }
+
+        if (payment.getStatus() != PaymentStatus.PENDING
+                && payment.getStatus() != PaymentStatus.NOT_PAID) {
+            throw new BusinessException(ErrorCode.ORDER_CANCEL_NOT_ALLOWED);
+        }
+
+        List<OrderItem> orderItems = orderItemRepository
+                .findByOrder_OrderId(order.getOrderId());
+
+        restoreStock(orderItems);
+
+        order.cancel("사용자 요청");
+        payment.cancel();
+
+        log.info("주문 취소 완료: orderId={}, paymentStatus={}",
+                order.getOrderId(), payment.getStatus());
+    }
+
+    private void expirePendingOrderWithLock(Long orderId) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        Payment payment = paymentRepository
+                .findByOrderIdWithPessimisticLock(order.getOrderId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        /*
+         * 온라인 결제 대기 주문만 만료 처리.
+         * 현장결제는 PaymentStatus.NOT_PAID이므로 만료 대상 아님.
+         */
+        if (order.getStatus() != OrderStatus.PENDING) {
+            return;
+        }
+
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            return;
+        }
+
+        List<OrderItem> orderItems = orderItemRepository
+                .findByOrder_OrderId(order.getOrderId());
+
+        restoreStock(orderItems);
+
+        order.expire();
+        payment.cancel();
+
+        log.info("결제 대기 주문 만료 처리 완료: orderId={}", order.getOrderId());
+    }
+
 
     private OrderResponseDto toOrderDto(
             Order order,

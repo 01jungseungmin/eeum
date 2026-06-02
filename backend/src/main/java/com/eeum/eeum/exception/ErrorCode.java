@@ -25,6 +25,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMON_DUPLICATE_REQUEST("COMMON_006", "중복된 요청입니다", HttpStatus.CONFLICT),
     COMMON_CONCURRENT_ACCESS("COMMON_007", "동시 접근 오류입니다. 잠시 후 다시 시도해 주세요", HttpStatus.CONFLICT),
     COMMON_DUPLICATE_RESOURCE("COMMON_008","이미 존재하는 리소스입니다.",HttpStatus.CONFLICT ),
+    COMMON_NOT_FOUND("COMMON_009","존재하지 않는 리소스입니다.",HttpStatus.NOT_FOUND),
+    COMMON_CONFLICT("COMMON_010", "요청 처리 중 충돌이 발생했습니다.", HttpStatus.CONFLICT),
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
     AUTH_EXPIRED_TOKEN("AUTH_002", "만료된 토큰입니다", HttpStatus.UNAUTHORIZED),
@@ -129,7 +131,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     RESERVATION_CAPACITY_EXCEEDED("RESERVATION_002", "예약 가능 인원을 초과했습니다", HttpStatus.BAD_REQUEST),
     RESERVATION_CANCEL_NOT_ALLOWED("RESERVATION_003", "취소할 수 없는 예약 상태입니다", HttpStatus.BAD_REQUEST),
     RESERVATION_ACCESS_DENIED("RESERVATION_004", "예약 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
-    RESERVATION_SLOT_UNAVAILABLE("RESERVATION_005", "해당 시간대는 예약할 수 없습니다", HttpStatus.BAD_REQUEST),
+    RESERVATION_TIME_UNAVAILABLE("RESERVATION_005", "해당 시간대는 예약할 수 없습니다", HttpStatus.BAD_REQUEST),
+    RESERVATION_STORE_NOT_RESERVABLE("RESERVATION_006","현재 예약할 수 없는 상점입니다.",HttpStatus.BAD_REQUEST),
+    RESERVATION_STORE_CLOSED_DAY("RESERVATION_007", "해당 요일은 상점 휴무일입니다.",HttpStatus.BAD_REQUEST),
+    RESERVATION_STORE_OUTSIDE_BUSINESS_HOURS("RESERVATION_008", "상점 영업시간 외에는 예약할 수 없습니다.",HttpStatus.BAD_REQUEST),
+    RESERVATION_STORE_BUSINESS_HOURS_NOT_SET("RESERVATION_009", "상점 영업시간이 등록되어 있지 않습니다.",HttpStatus.BAD_REQUEST),
+    VISIT_RESERVATION_DUPLICATED("RESERVATION_010","해당 시간에는 이미 방문 예약이 있습니다.",HttpStatus.CONFLICT),
+    RESERVATION_TEAM_LIMIT_EXCEEDED("RESERVATION_011","해당 시간대의 예약 가능 팀 수를 초과했습니다.",HttpStatus.CONFLICT),
+    RESERVATION_SETTING_NOT_FOUND("RESERVATION_012","예약 설정을 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
+    RESERVATION_DISABLED("RESERVATION_013","해당 상점은 방문 예약 기능을 사용하지 않습니다.",HttpStatus.BAD_REQUEST),
+    VISIT_RESERVATION_ALREADY_EXISTS("RESERVATION_014","이미 동일시간 예약이 존재합니다.",HttpStatus.CONFLICT),
 
     // ===================== 중고거래 (USED) =====================
     USED_PRODUCT_NOT_FOUND("USED_001", "존재하지 않는 중고 게시글입니다", HttpStatus.NOT_FOUND),
@@ -189,9 +200,14 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     IMAGE_UPLOAD_FAILED("IMAGE_004", "이미지 업로드에 실패했습니다", HttpStatus.INTERNAL_SERVER_ERROR),
     IMAGE_LIMIT_EXCEEDED("IMAGE_005", "이미지는 최대 5장까지 등록 가능합니다", HttpStatus.BAD_REQUEST),
 
+    // ===================== 락 (LOCK) =====================
+    LOCK_ACQUIRE_FAILED("LOCK_001", "요청이 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
+    LOCK_RESERVATION_FAILED("LOCK_002", "예약 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
+    LOCK_PAYMENT_FAILED("LOCK_003", "결제 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
+    LOCK_ORDER_FAILED("LOCK_004", "주문 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
+
     // ===================== 입력값 검증 (VALIDATION) =====================
     VALIDATION_INVALID_INPUT("VALIDATION_001", "입력값이 올바르지 않습니다", HttpStatus.BAD_REQUEST);
-    // ===================== 입력값 검증 (VALIDATION) =====================
 
     private final String code;
     private final String message;
