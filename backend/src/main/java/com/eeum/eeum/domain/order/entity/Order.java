@@ -91,9 +91,7 @@ public class Order extends BaseEntity {
         this.paidAt = LocalDateTime.now();
     }
 
-    public void confirm() {
-        this.status = OrderStatus.CONFIRMED;
-    }
+    public void confirm() {this.status = OrderStatus.CONFIRMED;}
 
     public void ready() {
         this.status = OrderStatus.READY;

@@ -71,4 +71,9 @@ public interface VisitReservationRepository extends JpaRepository<VisitReservati
             LocalTime visitTime,
             Collection<VisitReservationStatus> statuses
     );
+
+    long countByStore_StoreIdAndStatus(
+            Long storeId,
+            VisitReservationStatus status
+    );
 }

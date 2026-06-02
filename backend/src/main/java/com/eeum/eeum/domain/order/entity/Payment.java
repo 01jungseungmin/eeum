@@ -4,6 +4,7 @@ import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
+import com.eeum.eeum.domain.order.enums.RefundStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -60,6 +61,16 @@ public class Payment extends BaseEntity {
     @Column(name = "fail_reason", length = 500)
     private String failReason;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_status", length = 20)
+    private RefundStatus refundStatus;
+
+    @Column(name = "refund_reason", length = 500)
+    private String refundReason;
+
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
     public static Payment create(
             Order order,
             Account account,
@@ -99,5 +110,15 @@ public class Payment extends BaseEntity {
     public void fail(String reason) {
         this.status = PaymentStatus.FAILED;
         this.failReason = reason;
+    }
+    public void requestRefund(String reason) {
+        this.refundStatus = RefundStatus.REQUESTED;
+        this.refundReason = reason;
+    }
+
+    public void completeRefund() {
+        this.refundStatus = RefundStatus.APPROVED;
+        this.refundedAt = LocalDateTime.now();
+        this.status = PaymentStatus.REFUNDED;
     }
 }

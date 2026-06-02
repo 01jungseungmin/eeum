@@ -3,6 +3,8 @@ package com.eeum.eeum.domain.order.repository;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +17,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByOrder_OrderId(Long orderId);
 
     Optional<Payment> findByPortonePaymentId(String portonePaymentId);
+
+    Page<Payment> findByOrder_Account_AccountId(Long accountId, Pageable pageable);
+
+    Optional<Payment> findByOrder_Account_AccountIdAndPaymentId(Long accountId, Long paymentId);
+
 
     boolean existsByIdempotencyKey(String idempotencyKey);
 
