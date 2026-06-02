@@ -19,6 +19,8 @@ import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
+import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
@@ -49,6 +51,7 @@ public class AdminAccountService {
     private final StoreRepository storeRepository;
     private final StoreLocationResolver storeLocationResolver;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -207,6 +210,8 @@ public class AdminAccountService {
 
         ownerInfo.approve();
 
+        createDefaultVisitReservationSettingIfNotExists(store);
+
         tokenService.deleteRefreshToken(account.getAccountId());
 
         log.info("사장 승인: adminId={}, ownerInfoId={}, accountId={}, storeId={}",
@@ -329,5 +334,19 @@ public class AdminAccountService {
                 .openTime(businessHour.getOpenTime())
                 .closeTime(businessHour.getCloseTime())
                 .build();
+    }
+
+    private void createDefaultVisitReservationSettingIfNotExists(Store store) {
+        boolean exists = storeVisitReservationSettingRepository
+                .existsByStore_StoreId(store.getStoreId());
+
+        if (exists) {
+            return;
+        }
+
+        StoreVisitReservationSetting setting =
+                StoreVisitReservationSetting.createDefault(store);
+
+        storeVisitReservationSettingRepository.save(setting);
     }
 }
