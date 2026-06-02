@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ export default function CartScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [cartData, setCartData] = useState<any>(null);
 
-  // ✨ 화면에 들어올 때마다 최신 장바구니 데이터를 불러옵니다.
+  // 화면에 들어올 때마다 최신 장바구니 데이터를 불러옵니다.
   useFocusEffect(
     useCallback(() => {
       loadCartData();
@@ -23,7 +23,7 @@ export default function CartScreen() {
     setIsLoading(true);
     try {
       const data = await cartApi.getCart();
-      setCartData(data); // 데이터가 없거나 비어있으면 null 혹은 빈 배열 처리
+      setCartData(data); 
     } catch (e) {
       console.log('장바구니 조회 실패:', e);
       setCartData(null);
@@ -35,11 +35,11 @@ export default function CartScreen() {
   // 수량 조절 (+, -)
   const handleUpdateQuantity = async (cartItemId: number, currentQty: number, delta: number) => {
     const newQty = currentQty + delta;
-    if (newQty < 1) return; // 1개 미만으로는 줄일 수 없음
+    if (newQty < 1) return; 
 
     try {
       await cartApi.updateQuantity(cartItemId, newQty);
-      loadCartData(); // 수량 변경 성공 후 화면 갱신
+      loadCartData(); 
     } catch (e) {
       Alert.alert('오류', '수량 변경에 실패했습니다.');
     }
@@ -74,7 +74,7 @@ export default function CartScreen() {
         onPress: async () => {
           try {
             await cartApi.clearCart();
-            setCartData(null); // 화면 즉시 비우기
+            setCartData(null); 
           } catch (e) {
             Alert.alert('오류', '장바구니 비우기에 실패했습니다.');
           }
@@ -83,15 +83,32 @@ export default function CartScreen() {
     ]);
   };
 
-  // 🚧 결제 페이지로 이동
+  // 결제 페이지로 이동
   const handleCheckout = () => {
     if (!cartData || !cartData.items || cartData.items.length === 0) {
       Alert.alert('알림', '장바구니가 비어있습니다.');
       return;
     }
     
-    // 결제 페이지로 넘기기 (필요시 라우터 파라미터로 cartId 등을 넘길 수 있습니다)
-    router.push('/order/checkout');
+    // 1. 동적으로 주문명(orderName) 만들기
+    const firstItemName = cartData.items[0].productName || cartData.items[0].name || '반찬';
+    const orderName = cartData.items.length > 1 
+      ? `${firstItemName} 외 ${cartData.items.length - 1}건` 
+      : firstItemName;
+
+    // 2. 동적으로 총 결제 금액(totalPrice) 가져오기 (배달비 완전 제외)
+    const totalPrice = cartData.totalPrice || cartData.items.reduce((sum: any, item: any) => {
+      return sum + (item.lineTotalPrice || (item.price * item.quantity));
+    }, 0);
+
+    // 3. 순수 데이터 보따리를 들고 결제 페이지로 이동!
+    router.push({
+      pathname: '/order/checkout',
+      params: {
+        orderName: orderName,       
+        totalPrice: totalPrice // 순수 상품 가격만 깔끔하게 전달!
+      }
+    });
   };
 
   const isEmpty = !cartData || !cartData.items || cartData.items.length === 0;
@@ -150,7 +167,6 @@ export default function CartScreen() {
                   
                   <Text fontWeight="bold" style={styles.itemPrice}>{item.totalPrice.toLocaleString()}원</Text>
                   
-                  {/* 수량 조절 컨트롤러 */}
                   <View style={styles.qtyContainer}>
                     <TouchableOpacity 
                       style={styles.qtyBtn} 
@@ -172,28 +188,29 @@ export default function CartScreen() {
 
             <View style={styles.divider} />
 
-            {/* 결제 요약 */}
+            {/* 🛠️ 결제 요약 섹션: 배달비 관련 로직 및 레이아웃 완전 청소 */}
             <View style={styles.summarySection}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>상품 금액</Text>
                 <Text style={styles.summaryValue}>{cartData.totalPrice.toLocaleString()}원</Text>
               </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>배달비 (예상)</Text>
-                <Text style={styles.summaryValue}>+ 3,000원</Text>
-              </View>
+              
+              {/* 🗑️ '배달비(예상)' View 영역 통째로 삭제 완료 */}
+
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text fontWeight="bold" style={styles.totalLabel}>총 결제 예상 금액</Text>
-                <Text fontWeight="bold" style={styles.totalValue}>{(cartData.totalPrice + 3000).toLocaleString()}원</Text>
+                {/* ✨ 배달비 합산(+3000) 제거 -> 순수 상품 금액으로 통일 */}
+                <Text fontWeight="bold" style={styles.totalValue}>{cartData.totalPrice.toLocaleString()}원</Text>
               </View>
             </View>
           </ScrollView>
 
-          {/* 하단 결제 버튼 */}
+          {/* 🛠️ 하단 결제 버튼: 배달비 합산 제거 */}
           <View style={styles.bottomBar}>
             <TouchableOpacity style={styles.checkoutBtn} onPress={handleCheckout}>
               <Text fontWeight="bold" style={styles.checkoutBtnText}>
-                {(cartData.totalPrice + 3000).toLocaleString()}원 결제하기
+                {/* ✨ 버튼 텍스트도 순수 장바구니 총액으로 연동 */}
+                {cartData.totalPrice.toLocaleString()}원 결제하기
               </Text>
             </TouchableOpacity>
           </View>
