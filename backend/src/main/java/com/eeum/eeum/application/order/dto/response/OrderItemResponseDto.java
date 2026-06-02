@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.order.dto.response;
 
+import com.eeum.eeum.domain.order.entity.OrderItem;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -46,4 +47,21 @@ public class OrderItemResponseDto {
 
     @Schema(description = "상품 총 금액", example = "9800")
     private BigDecimal lineTotalPrice;
+
+    public static OrderItemResponseDto from(OrderItem orderItem) {
+        return OrderItemResponseDto.builder()
+                .orderItemId(orderItem.getOrderItemId())
+                .productId(orderItem.getProductId())
+                .eventProductId(orderItem.getEventProductId())
+                .productType(orderItem.getProductType().name())
+                .productName(orderItem.getProductName())
+                .thumbnailUrl(orderItem.getThumbnailUrl())
+                .selectedOptionsText(orderItem.getSelectedOptionsText())
+                .basePrice(orderItem.getBasePrice())
+                .optionsTotalPrice(orderItem.getOptionsTotalPrice())
+                .unitPrice(orderItem.getUnitPrice())
+                .quantity(orderItem.getQuantity())
+                .lineTotalPrice(orderItem.getLineTotalPrice())
+                .build();
+    }
 }

@@ -21,6 +21,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
             ProductType productType
     );
 
+    long countByStore_StoreId(Long storeId);
+
+    long countByStore_StoreIdAndStatus(Long storeId, ProductStatus productStatus);
+
     List<Product> findByStore_StoreIdAndStatusNot(Long storeId, ProductStatus productStatus);
 
     void deleteByStore_StoreId(Long storeId);

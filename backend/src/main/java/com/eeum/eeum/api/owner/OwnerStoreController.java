@@ -5,6 +5,7 @@ import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreDashboardResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreResponseDto;
 import com.eeum.eeum.application.store.service.StoreImageService;
@@ -36,6 +37,14 @@ public class OwnerStoreController {
 
     private final StoreService storeService;
     private final StoreImageService storeImageService;
+
+    @Operation(summary = "내 상점 대시보드", description = "현재 로그인한 사장의 상점 대시보드를 조회합니다.")
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<StoreDashboardResponseDto>> getDashboard() {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                storeService.getDashboard(accountId)));
+    }
 
     @Operation(
             summary = "내 상점 조회",

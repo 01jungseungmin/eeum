@@ -115,6 +115,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ORDER_ALREADY_PAID("ORDER_004", "이미 결제된 주문입니다", HttpStatus.CONFLICT),
     ORDER_EXPIRED("ORDER_005", "만료된 주문입니다", HttpStatus.BAD_REQUEST),
     ORDER_TYPE_MISMATCH("ORDER_006", "서로 다른 주문 유형의 상품은 함께 주문할 수 없습니다", HttpStatus.BAD_REQUEST),
+    ORDER_INVALID_STATUS("ORDER_007", "유효하지 않은 주문 상태 입니다.", HttpStatus.BAD_REQUEST),
 
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
@@ -122,9 +123,11 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_CANCEL_NOT_ALLOWED("PAYMENT_003", "취소할 수 없는 결제 상태입니다", HttpStatus.BAD_REQUEST),
     PAYMENT_DUPLICATE("PAYMENT_004", "이미 처리된 결제입니다", HttpStatus.CONFLICT),
     PAYMENT_WEBHOOK_INVALID("PAYMENT_005", "유효하지 않은 Webhook 요청입니다", HttpStatus.UNAUTHORIZED),
-    PAYMENT_REFUND_FAILED("PAYMENT_006", "환불 처리에 실패했습니다", HttpStatus.INTERNAL_SERVER_ERROR),
-    PAYMENT_VERIFY_FAILED("PAYMENT_007", "결제 검증에 실패했습니다", HttpStatus.BAD_REQUEST),
-    PAYMENT_METHOD_NOT_SUPPORTED("PAYMENT_008", "지원하지 않는 결제 수단입니다", HttpStatus.BAD_REQUEST),
+    PAYMENT_INVALID_STATUS("PAYMENT_006", "유효하지 않은 결제 상태입니다", HttpStatus.BAD_REQUEST),
+    PAYMENT_REFUND_FAILED("PAYMENT_007", "환불 처리에 실패했습니다", HttpStatus.INTERNAL_SERVER_ERROR),
+    PAYMENT_VERIFY_FAILED("PAYMENT_008", "결제 검증에 실패했습니다", HttpStatus.BAD_REQUEST),
+    PAYMENT_METHOD_NOT_SUPPORTED("PAYMENT_009", "지원하지 않는 결제 수단입니다", HttpStatus.BAD_REQUEST),
+    PAYMENT_REFUND_ALREADY("PAYMENT_010", "이미 환불 처리 되었습니다.", HttpStatus.CONFLICT),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.order.service;
 
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
+import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
 import com.eeum.eeum.application.order.dto.response.OrderPaymentReadyResponseDto;
 import com.eeum.eeum.application.order.dto.response.OrderResponseDto;
@@ -23,6 +24,7 @@ import com.eeum.eeum.domain.product.repository.ProductImageRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -195,6 +197,24 @@ public class OrderService {
                 ErrorCode.LOCK_ORDER_FAILED,
                 () -> expirePendingOrderWithLock(orderId)
         );
+    }
+
+    @Transactional
+    public void requestOrderRefund(Long accountId, Long orderId, RefundRequestDto request) {
+        Order order = orderRepository
+                .findByOrderIdAndAccount_AccountId(orderId, accountId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (order.getStatus()!=OrderStatus.PAID
+                &&order.getStatus()!=OrderStatus.CONFIRMED
+                &&order.getStatus()!=OrderStatus.READY) {
+            throw new BusinessException(ErrorCode.ORDER_CANCEL_NOT_ALLOWED);
+        }
+
+        Payment payment = paymentRepository.findByOrder_OrderId(orderId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        payment.requestRefund(request.getReason());
     }
 
     // ===================== 내부 유틸 =====================

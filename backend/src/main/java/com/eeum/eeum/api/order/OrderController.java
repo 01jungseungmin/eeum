@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.order;
 
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
+import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderPaymentReadyResponseDto;
 import com.eeum.eeum.application.order.dto.response.OrderResponseDto;
 import com.eeum.eeum.application.order.service.OrderService;
@@ -80,5 +81,15 @@ public class OrderController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         orderService.cancelOrder(accountId, orderId);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "주문 환불 요청", description = "현재 로그인한 사용자가 본인의 결제 완료 주문에 대해 환불을 요청합니다. 실제 환불 처리는 승인 이후 진행됩니다.")
+    @PostMapping("/{orderId}/refund")
+    public ResponseEntity<ApiResponse<Void>> requestRefund(
+            @PathVariable Long orderId,
+            @Valid @RequestBody RefundRequestDto request) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        orderService.requestOrderRefund(accountId, orderId, request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

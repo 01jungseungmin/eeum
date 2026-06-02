@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -23,13 +24,44 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             Pageable pageable
     );
 
+    Optional<Order> findByOrderIdAndAccount_AccountId(Long orderId, Long accountId);
+
+    Page<Order> findByStore_StoreId(Long storeId, Pageable pageable);
+
+    Page<Order> findByStore_StoreIdAndStatus(Long storeId, OrderStatus status, Pageable pageable);
+
     Optional<Order> findByOrderNumber(String orderNumber);
+
+    long countByStore_StoreIdAndCreatedAtBetween(
+            Long storeId,
+            LocalDateTime from,
+            LocalDateTime to
+    );
+
+    long countByStore_StoreIdAndStatus(
+            Long storeId,
+            OrderStatus status
+    );
 
     boolean existsByOrderNumber(String orderNumber);
 
     boolean existsByStore_StoreIdAndStatusIn(
             Long storeId,
             Collection<OrderStatus> statuses
+    );
+
+    @Query("""
+    SELECT COALESCE(SUM(o.totalPrice), 0)
+    FROM Order o
+    WHERE o.store.storeId = :storeId
+      AND o.createdAt BETWEEN :from AND :to
+      AND o.status = :status
+""")
+    BigDecimal sumTotalPriceByStoreAndCreatedAtBetween(
+            @Param("storeId") Long storeId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("status") OrderStatus status
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -65,4 +97,5 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("paymentStatus") PaymentStatus paymentStatus,
             @Param("threshold") LocalDateTime threshold
     );
+
 }

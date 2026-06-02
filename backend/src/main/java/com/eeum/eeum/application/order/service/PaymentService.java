@@ -2,6 +2,8 @@ package com.eeum.eeum.application.order.service;
 
 import com.eeum.eeum.application.order.dto.request.PaymentCompleteRequestDto;
 import com.eeum.eeum.application.order.dto.request.PaymentWebhookRequestDto;
+import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
+import com.eeum.eeum.application.order.dto.response.PaymentResponseDto;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -10,15 +12,17 @@ import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
+import com.eeum.eeum.domain.order.enums.RefundStatus;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
-import com.eeum.eeum.exception.BusinessException;
-import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -63,10 +67,18 @@ public class PaymentService {
         }
 
         /*
-         * TODO: 실제 PortOne Webhook 서명 검증 추가
+         * TODO: PortOne Webhook 서명 검증 로직 구현 필요
          *
-         * 지금은 개발 단계라 rawBody 파싱만 진행.
-         * 실제 운영에서는 rawBody와 signature를 이용해 위변조 여부를 먼저 검증해야 함.
+         * 현재는 개발/테스트 단계이므로 rawBody 파싱 후 Webhook 처리를 진행한다.
+         * 운영 환경에서는 반드시 PortOne에서 전달한 signature와 rawBody를 이용해
+         * 요청 위변조 여부를 검증한 뒤에만 결제 상태를 갱신해야 한다.
+         *
+         * 구현 시 확인할 내용:
+         * 1. PortOne Webhook Secret 또는 검증 키 환경변수 등록
+         * 2. rawBody 기반 HMAC 서명 생성
+         * 3. 요청 헤더 signature 값과 서버 생성 서명 비교
+         * 4. 서명 불일치 시 Webhook 처리 중단
+         * 5. 실패 로그 기록 및 401/400 계열 예외 처리
          */
         validateWebhookSignature(rawBody, signature);
 
@@ -83,6 +95,52 @@ public class PaymentService {
                 ErrorCode.LOCK_PAYMENT_FAILED,
                 () -> handleWebhookWithLock(request)
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PaymentResponseDto> getMyPayments(Long accountId, Pageable pageable) {
+        return paymentRepository
+                .findByOrder_Account_AccountId(accountId, pageable)
+                .map(PaymentResponseDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentResponseDto getPaymentDetail(Long accountId, Long paymentId) {
+        Payment payment = paymentRepository
+                .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
+        return PaymentResponseDto.from(payment);
+    }
+
+    @Transactional
+    public void cancelPayment(Long accountId, Long paymentId) {
+        Payment payment = paymentRepository
+                .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() != PaymentStatus.PAID) {
+            throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+
+        // PortOne 취소 API 호출
+        portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(),payment.getRefundReason());
+        payment.cancel();
+    }
+
+    @Transactional
+    public void requestRefund(Long accountId, Long paymentId, RefundRequestDto request) {
+        Payment payment = paymentRepository
+                .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() != PaymentStatus.PAID) {
+            throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+        if (payment.getRefundStatus() == RefundStatus.REQUESTED) {
+            throw new ConflictException(ErrorCode.PAYMENT_REFUND_ALREADY);
+        }
+
+        payment.requestRefund(request.getReason());
     }
 
     private void handleWebhookWithLock(PaymentWebhookRequestDto request) {
@@ -131,19 +189,16 @@ public class PaymentService {
             return;
         }
 
-        /*
-         * TODO: 실제 PortOne 연동 시 복구
-         *
-         * PortOnePaymentInfo paymentInfo =
-         *         portOnePaymentClient.getPayment(request.getPaymentId());
-         *
-         * validatePaymentAmount(order, paymentInfo);
-         *
-         * if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
-         *     payment.markAsPaid(paymentInfo.getPgProvider());
-         *     order.markAsPaid();
-         * }
-         */
+
+        PortOnePaymentInfo paymentInfo =
+                 portOnePaymentClient.getPayment(request.getPaymentId());
+
+         validatePaymentAmount(order, paymentInfo);
+
+         if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
+             payment.markAsPaid(paymentInfo.getPgProvider());
+             order.markAsPaid();
+        }
 
         payment.markAsPaid("portone-webhook-test");
         order.markAsPaid();
@@ -254,20 +309,16 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
 
-        /*
-         * TODO: 실제 PortOne 연동 시 복구
-         *
-         * PortOnePaymentInfo paymentInfo =
-         *         portOnePaymentClient.getPayment(request.getPaymentId());
-         *
-         * validatePaymentAmount(order, paymentInfo);
-         *
-         * if (!"PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
-         *     payment.fail("결제 상태가 PAID가 아닙니다.");
-         *     orderService.expirePendingOrder(order.getOrderId());
-         *     throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
-         * }
-         */
+        PortOnePaymentInfo paymentInfo =
+                portOnePaymentClient.getPayment(request.getPaymentId());
+
+        validatePaymentAmount(order, paymentInfo);
+
+         if (!"PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
+             payment.fail("결제 상태가 PAID가 아닙니다.");
+             orderService.expirePendingOrder(order.getOrderId());
+             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+         }
 
         payment.updatePortonePaymentId(request.getPaymentId());
         payment.markAsPaid("portone-test");
