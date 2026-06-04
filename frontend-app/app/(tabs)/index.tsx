@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 
-// 새로 분리한 컴포넌트들 Import
 import HomeHeader from '../../components/home/HomeHeader';
 import ShopView from '../../components/home/ShopView';
 import UsedTradeView from '../../components/home/UsedTradeView';
@@ -21,36 +21,59 @@ export default function HomeScreen() {
   const [regions, setRegions] = useState<any[]>([]);
   const [primaryRegionName, setPrimaryRegionName] = useState('동네 로딩중...');
 
-  useEffect(() => {
-    loadRegions();
-  }, []);
+  // 화면에 다시 돌아올 때마다(Focus) 항상 최신 지역 목록을 서버에서 불러온다.
+  useFocusEffect(
+    useCallback(() => {
+      loadRegions();
+    }, [])
+  );
 
-  // 1. 지역 목록 불러오기
+  // =====================================================================
+  // 1. 지역 목록 불러오기 (실제 API 연동)
+  // =====================================================================
   const loadRegions = async () => {
     try {
       const res = await regionApi.getMyRegions();
-      const data = res.data || res; 
-      setRegions(data);
+      const data = (res.success && res.data) ? res.data : []; 
+
+      const normalizedData = data.map((item: any) => {
+        const actualAccountRegionId = item.accountRegionId || item.id; // regionId는 제외하고 mapping ID만 추출
+        
+        return {
+          ...item,
+          accountRegionId: actualAccountRegionId, // 모달창에서 쓸 이름표 강제 통일
+          id: actualAccountRegionId,
+          dong: item.dong || item.region?.dong || item.name || '동네 정보 없음',
+          fullName: item.fullName || item.region?.fullName || ''
+        };
+      });
+
+      setRegions(normalizedData);
       
-      const primary = data.find((r: any) => r.isPrimary);
-      setPrimaryRegionName(primary ? primary.region.name : '동네 설정 필요');
+      const primary = normalizedData.find((r: any) => r.isPrimary);
+      setPrimaryRegionName(primary ? (primary.dong || primary.fullName) : '동네 설정 필요');
     } catch (e) {
       console.log("지역 목록 로딩 실패:", e);
+      setRegions([]); 
       setPrimaryRegionName('동네 설정 필요');
     }
   };
 
+  // =====================================================================
   // 2. 대표 지역 설정하기
+  // =====================================================================
   const handleSetPrimary = async (id: number) => {
     try {
       await regionApi.setPrimaryRegion(id);
-      loadRegions(); 
+      loadRegions(); // 서버에 변경 요청 후 최신 데이터 다시 불러오기
     } catch (e) {
       Alert.alert("오류", "대표 지역 설정에 실패했습니다.");
     }
   };
 
+  // =====================================================================
   // 3. 지역 삭제하기
+  // =====================================================================
   const handleDeleteRegion = (id: number) => {
     Alert.alert("삭제", "이 동네를 삭제하시겠습니까?", [
       { text: "취소", style: "cancel" },
@@ -60,7 +83,7 @@ export default function HomeScreen() {
         onPress: async () => {
           try {
             await regionApi.deleteRegion(id);
-            loadRegions(); 
+            loadRegions(); // 서버에서 삭제 성공 시 최신 데이터 다시 불러오기
           } catch (e) {
             Alert.alert("오류", "삭제에 실패했습니다.");
           }
@@ -69,8 +92,35 @@ export default function HomeScreen() {
     ]);
   };
 
+  // =====================================================================
+  // 4. GPS 동네 인증하기
+  // =====================================================================
+  const handleVerifyRegion = async (id: number) => {
+    try {
+      // 1. GPS 권한 요청 및 현재 위치 좌표 가져오기
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('권한 필요', '동네 인증을 진행하려면 위치 권한이 필요합니다.');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = location.coords;
+
+      await regionApi.verifyRegion(id, latitude, longitude);
+      
+      Alert.alert("인증 성공", "현재 위치 인증이 완료되었습니다! 이제 대표 지역으로 설정할 수 있습니다.");
+      loadRegions(); // 인증 완료 후 상태 반영을 위해 목록 새로고침
+    } catch (e: any) {
+      console.log("GPS 인증 실패:", e);
+      const serverMessage = e.response?.data?.message || "현재 위치가 등록된 동네와 일치하지 않거나 에러가 발생했습니다.";
+      Alert.alert("인증 실패", serverMessage);
+    }
+  };
+
   const handleAddRegion = () => {
-    // 방어 로직: 현재 등록된 동네(regions)가 2개 이상이면 못 넘어감
     if (regions.length >= 2) {
       Alert.alert(
         "동네 추가 불가", 
@@ -78,15 +128,12 @@ export default function HomeScreen() {
       );
       return;
     }
-
-    // 2개 미만일 때만 모달을 닫고 검색 화면으로 보냅니다.
     setModalVisible(false);
     router.push('/region-search');
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}> 
-      {/* 1. 헤더 영역 */}
       <HomeHeader 
         primaryRegionName={primaryRegionName}
         onOpenModal={() => setModalVisible(true)}
@@ -95,20 +142,19 @@ export default function HomeScreen() {
         onSearch={() => router.push({ pathname: '/search' })}
       />
       
-      {/* 2. 컨텐츠 본문 영역 (탭에 따라 스위칭) */}
       {activeTab === 'shop' 
         ? <ShopView router={router} /> 
         : <UsedTradeView router={router} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
       }
 
-      {/* 3. 내 동네 설정 모달 팝업 */}
       <RegionModal 
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         regions={regions}
         onSetPrimary={handleSetPrimary}
         onAddRegion={handleAddRegion}
-        onDeleteRegion={handleDeleteRegion} 
+        onDeleteRegion={handleDeleteRegion}
+        onVerifyRegion={handleVerifyRegion}
       />
     </SafeAreaView>
   );
