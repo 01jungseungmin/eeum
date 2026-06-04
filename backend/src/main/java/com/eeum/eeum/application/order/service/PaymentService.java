@@ -17,7 +17,6 @@ import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.exception.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,13 +66,6 @@ public class PaymentService {
         }
 
         /*
-         * TODO: PortOne Webhook 서명 검증 로직 구현 필요
-         *
-         * 현재는 개발/테스트 단계이므로 rawBody 파싱 후 Webhook 처리를 진행한다.
-         * 운영 환경에서는 반드시 PortOne에서 전달한 signature와 rawBody를 이용해
-         * 요청 위변조 여부를 검증한 뒤에만 결제 상태를 갱신해야 한다.
-         *
-         * 구현 시 확인할 내용:
          * 1. PortOne Webhook Secret 또는 검증 키 환경변수 등록
          * 2. rawBody 기반 HMAC 서명 생성
          * 3. 요청 헤더 signature 값과 서버 생성 서명 비교
@@ -122,8 +114,13 @@ public class PaymentService {
             throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
 
+        String reason = StringUtils.hasText(payment.getRefundReason())
+                ? payment.getRefundReason()
+                : "고객 요청 취소";
+
         // PortOne 취소 API 호출
-        portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(),payment.getRefundReason());
+        portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(), reason);
+
         payment.cancel();
     }
 
@@ -198,48 +195,21 @@ public class PaymentService {
          if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
              payment.markAsPaid(paymentInfo.getPgProvider());
              order.markAsPaid();
-        }
-
-        payment.markAsPaid("portone-webhook-test");
-        order.markAsPaid();
+        }else {
+             log.warn("결제 완료 상태가 아닌 Webhook 수신: paymentId={}, status={}",
+                     payment.getPortonePaymentId(),
+                     paymentInfo.getStatus());
+         }
 
         log.info("Webhook 결제 완료 처리: orderNumber={}",
                 order.getOrderNumber());
     }
 
-    private PaymentWebhookRequestDto parseWebhook(String rawBody) {
-        try {
-            JsonNode root = objectMapper.readTree(rawBody);
-            String paymentId = extractPaymentId(root);
-
-            return new PaymentWebhookRequestDto(paymentId);
-        } catch (JsonProcessingException e) {
-            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
-        }
-    }
-
-    private String extractPaymentId(JsonNode root) {
-        JsonNode direct = root.get("paymentId");
-        if (direct != null && direct.isTextual()) {
-            return direct.asText();
-        }
-
-        JsonNode data = root.get("data");
-        if (data != null) {
-            JsonNode nested = data.get("paymentId");
-            if (nested != null && nested.isTextual()) {
-                return nested.asText();
-            }
-        }
-
-        throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
-    }
-
     private void validateWebhookSignature(String rawBody, String signature) {
         String secret = portOneProperties.webhookSecret();
         if (!StringUtils.hasText(secret)) {
-            log.warn("PortOne Webhook Secret이 설정되지 않아 서명 검증을 건너뜁니다. 운영 환경에서는 반드시 설정하세요.");
-            return;
+            log.error("PortOne Webhook Secret이 설정되지 않았습니다.");
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
 
         if (!StringUtils.hasText(signature)) {
@@ -321,7 +291,7 @@ public class PaymentService {
          }
 
         payment.updatePortonePaymentId(request.getPaymentId());
-        payment.markAsPaid("portone-test");
+        payment.markAsPaid(paymentInfo.getPgProvider());
         order.markAsPaid();
 
         log.info("결제 검증 완료: orderNumber={}, paymentId={}",

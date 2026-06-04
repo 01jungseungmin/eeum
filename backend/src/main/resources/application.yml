@@ -60,3 +60,4 @@ kakao:
 portone:
   api-secret: ${PORTONE_API_SECRET}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
+  webhook-secret: ${PORTONE_WEBHOOK_SECRET}
