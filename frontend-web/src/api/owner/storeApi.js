@@ -24,6 +24,11 @@ export const storeApi = {
   updateStoreInfo: (storeData) =>
     axiosInstance.patch('/owner/stores/me', storeData).then((res) => res.data),
 
+  // 영업시간 조회 / 수정
+  getBusinessHours: () => axiosInstance.get('/owner/stores/me/business-hours'),
+  updateBusinessHours: (data) =>
+    axiosInstance.put('/owner/stores/me/business-hours', data),
+
   // 영업 상태 변경
   updateStatus: (status) =>
     axiosInstance

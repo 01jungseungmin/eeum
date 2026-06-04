@@ -107,7 +107,6 @@ const Desc = styled.p`
   margin: 12px 0;
 `;
 
-// 💡 백엔드 신규 통계 데이터(평점/찜/리뷰) 가시성을 극대화하기 위한 스타일 레이아웃
 const StatsSummaryBar = styled.div`
   display: flex;
   gap: 12px;
@@ -156,8 +155,9 @@ function StoreProfileCard({
   if (!storeInfo) return null;
 
   const getStatusLabel = (status) => {
-    if (status === 'OPERATING' || status === 'OPEN') return '영업중';
+    if (status === 'OPERATING') return '영업중';
     if (status === 'CLOSED') return '영업 종료';
+    if (status === 'TEMP_CLOSED') return '휴식중';
     return '휴식중';
   };
 
@@ -193,7 +193,6 @@ function StoreProfileCard({
 
         <Desc>{storeInfo.description}</Desc>
 
-        {/* 💡 [신규 추가 연동] 백엔드가 내려주는 평점, 찜, 리뷰 데이터 파싱 바인딩 */}
         <StatsSummaryBar>
           <MiniStatItem>
             <Star size={13} fill="#ffbc00" color="#ffbc00" />
@@ -262,13 +261,13 @@ function StoreProfileCard({
           </StatusOptionCard>
 
           <StatusOptionCard
-            $active={storeInfo.status === 'BREAK'}
+            $active={storeInfo.status === 'TEMP_CLOSED'}
             $color="#d46b08"
             $bgColor="#fffbe6"
-            onClick={() => onStatusChange('BREAK')}
+            onClick={() => onStatusChange('TEMP_CLOSED')}
           >
             <span style={{ color: '#d46b08' }}>● 휴식중</span>
-            {storeInfo.status === 'BREAK' && (
+            {storeInfo.status === 'TEMP_CLOSED' && (
               <Check size={16} color="#d46b08" />
             )}
           </StatusOptionCard>

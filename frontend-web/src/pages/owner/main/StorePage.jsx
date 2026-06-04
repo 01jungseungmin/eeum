@@ -4,6 +4,7 @@ import StoreProfileCard from '../../../components/owner/store/StoreProfileCard';
 import StoreNoticeCard from '../../../components/owner/store/StoreNoticeCard';
 import StoreInfoForm from '../../../components/owner/store/StoreInfoForm';
 import StoreImageModal from '../../../components/owner/store/StoreImageModal';
+import StoreHoursForm from '../../../components/owner/store/StoreHoursForm';
 import { storeApi } from '../../../api/owner/storeApi';
 
 const PageContainer = styled.div`
@@ -38,6 +39,7 @@ function StorePage() {
   const [storeImages, setStoreImages] = useState([]);
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [businessHours, setBusinessHours] = useState([]);
 
   // thumbnail: true인 이미지의 imageUrl을 가져옴
   const currentThumbnailUrl =
@@ -105,10 +107,58 @@ function StorePage() {
       .catch((err) => console.error('상점 이미지 로드 실패:', err));
   };
 
+  // 영업시간 조회
+  const fetchBusinessHours = () => {
+    // 서버의 영어 요일을 UI용 한글 요일로 바꾸기 위한 사전
+    const reverseDayMapping = {
+      MONDAY: '월',
+      TUESDAY: '화',
+      WEDNESDAY: '수',
+      THURSDAY: '목',
+      FRIDAY: '금',
+      SATURDAY: '토',
+      SUNDAY: '일',
+    };
+
+    storeApi
+      .getBusinessHours()
+      .then((res) => {
+        const responseData = res.data || res;
+
+        if (responseData.success) {
+          const rawHours = responseData.data || [];
+
+          // 백엔드 데이터 포맷 -> 프론트엔드 UI 포맷으로 역매핑
+          const mappedHours = rawHours.map((item) => {
+            // 값이 존재할 때만 뒤의 초(:00)를 잘라내고, 없으면 기본값 세팅
+            const startTime = item.openTime
+              ? item.openTime.slice(0, 5)
+              : '09:00';
+            const endTime = item.closeTime
+              ? item.closeTime.slice(0, 5)
+              : '19:00';
+
+            return {
+              day: reverseDayMapping[item.dayOfWeek] || '월',
+              start: startTime,
+              end: endTime,
+              isHoliday: item.closed,
+            };
+          });
+
+          setBusinessHours(mappedHours);
+        }
+      })
+      .catch((err) => {
+        console.error('영업시간 조회 실패:', err);
+      });
+  };
+
   useEffect(() => {
     fetchStoreInfo();
     fetchNotices();
     fetchStoreImages();
+    fetchBusinessHours();
   }, []);
 
   // 영업 상태 변경
@@ -118,8 +168,10 @@ function StorePage() {
     storeApi
       .updateStatus(serverStatus)
       .then((res) => {
-        if (res.success)
-          setStoreInfo((prev) => ({ ...prev, status: newStatus }));
+        const responseData = res.data || res;
+        if (responseData.success) {
+          fetchStoreInfo();
+        }
       })
       .catch((err) => {
         console.error('영업 상태 변경 실패:', err);
@@ -127,32 +179,62 @@ function StorePage() {
       });
   };
 
-  // 상점 상세 정보 수정
-  const handleUpdateStoreInfo = (updatedInfo) => {
-    // 백엔드 PATCH 스펙에 맞게 데이터 가공 및 DTO 형태 빌드
-    const requestBody = {
-      name: updatedInfo.name,
-      address: updatedInfo.address,
-      phone: updatedInfo.phone,
-      description: updatedInfo.description,
-      // 요일 배열 데이터를 백엔드가 요구하는 "월~토 09:00~19:00" 형태 문자열로 직렬화
-      businessHours: stringifyOperatingHours(updatedInfo.operatingHours),
-      categoryId: updatedInfo.categoryId || 1, // 없으면 기본값 보정
+  // 상점 정보, 영업시간 수정을 한번에 처리
+  const handleCombinedSave = (combinedData) => {
+    // 요일 변환 매핑 사전
+    const dayMapping = {
+      월: 'MONDAY',
+      화: 'TUESDAY',
+      수: 'WEDNESDAY',
+      목: 'THURSDAY',
+      금: 'FRIDAY',
+      토: 'SATURDAY',
+      일: 'SUNDAY',
     };
 
-    storeApi
-      .updateStoreInfo(requestBody)
-      .then((res) => {
-        if (res.success) {
-          alert('🎉 상점 정보가 성공적으로 서버에 저장되었습니다!');
+    // 프론트엔드 데이터 -> 백엔드 규격으로 가공
+    const formattedBusinessHours = combinedData.operatingHours.map((item) => ({
+      dayOfWeek: dayMapping[item.day] || 'MONDAY',
+      closed: item.isHoliday,
+      openTime: item.start || '09:00',
+      closeTime: item.end || '19:00',
+    }));
+
+    // A. 기본 정보 수정용 바디 빌드
+    const storeInfoBody = {
+      name: combinedData.name,
+      address: combinedData.address,
+      phone: combinedData.phone,
+      description: combinedData.description,
+      businessHours: stringifyOperatingHours(combinedData.operatingHours), // 기존 문자열 변환용
+      categoryId: combinedData.categoryId || 1,
+    };
+
+    // B. 영업 시간 수정용 바디 빌드
+    const hoursBody = {
+      businessHours: formattedBusinessHours,
+    };
+
+    // 두 API 호출 및 처리
+    Promise.all([
+      storeApi.updateStoreInfo(storeInfoBody),
+      storeApi.updateBusinessHours(hoursBody),
+    ])
+      .then(([infoRes, hoursRes]) => {
+        const infoSuccess = infoRes.data?.success || infoRes.success;
+        const hoursSuccess = hoursRes.data?.success || hoursRes.success;
+
+        if (infoSuccess && hoursSuccess) {
+          alert('🎉 상점 정보와 영업시간이 모두 성공적으로 저장되었습니다!');
           fetchStoreInfo();
+          fetchBusinessHours();
         } else {
-          alert(`저장 실패: ${res.message}`);
+          alert('일부 정보 저장에 실패했습니다.');
         }
       })
       .catch((err) => {
-        console.error('상점 정보 수정 중 오류 발생:', err);
-        alert('서버 통신 중 오류가 발생했습니다. 다시 시도해 주세요.');
+        console.error('상점 정보 일괄 수정 중 오류 발생:', err);
+        alert('서버 통신 중 오류가 발생했습니다.');
       });
   };
 
@@ -172,11 +254,6 @@ function StorePage() {
       noticeType: type,
       pinned: true,
     };
-
-    console.log(
-      '서버로 보내는 최종 데이터:',
-      JSON.stringify(requestBody, null, 2),
-    );
 
     storeApi
       .addNotice(requestBody)
@@ -257,6 +334,26 @@ function StorePage() {
       .catch((err) => console.error('이미지 일괄 등록 실패:', err));
   };
 
+  // 영업시간 수정
+  const handleUpdateHours = async (hoursArray) => {
+    try {
+      // 💡 API 명세에 따라 { "businessHours": [요일별 객체들] } 구조로 만듭니다.
+      const requestBody = {
+        businessHours: hoursArray,
+      };
+
+      const response = await storeApi.updateBusinessHours(requestBody);
+
+      if (response.data?.success) {
+        alert('영업시간이 성공적으로 수정되었습니다.');
+        fetchAllData(); // 데이터 재조회로 화면 갱신
+      }
+    } catch (err) {
+      console.error('영업시간 수정 실패:', err);
+      alert('영업시간 수정에 실패했습니다.');
+    }
+  };
+
   // 이미지 삭제
   const handleImageDelete = (imageId) => {
     if (!window.confirm('선택하신 사진을 상점 관리 목록에서 삭제하시겠습니까?'))
@@ -273,12 +370,12 @@ function StorePage() {
       .catch((err) => console.error('이미지 삭제 실패:', err));
   };
 
-  // storeInfo가 아직 로드되지 않은 경우 로딩 메시지 표시
-  if (!storeInfo) {
+  // 상점 정보가 없거나, 영업시간 배열이 아직 텅 비어있다면 로딩바를 띄웁니다.
+  if (!storeInfo || !businessHours || businessHours.length === 0) {
     return (
       <PageContainer style={{ justifyContent: 'center', alignItems: 'center' }}>
         <div style={{ fontSize: '15px', color: '#666', fontWeight: '600' }}>
-          상점 데이터를 안전하게 불러오는 중입니다... ⏳
+          상점 데이터와 영업시간을 안전하게 불러오는 중입니다... ⏳
         </div>
       </PageContainer>
     );
@@ -302,7 +399,13 @@ function StorePage() {
           />
         </LeftSection>
 
-        <StoreInfoForm storeInfo={storeInfo} onSave={handleUpdateStoreInfo} />
+        <StoreInfoForm
+          storeInfo={{
+            ...storeInfo,
+            operatingHours: businessHours,
+          }}
+          onSave={handleCombinedSave}
+        />
 
         <StoreImageModal
           isOpen={isModalOpen}

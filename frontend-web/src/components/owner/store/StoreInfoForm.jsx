@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Pencil, X, Save } from 'lucide-react';
+import StoreHoursForm from './StoreHoursForm'; // 분리된 영업시간 컴포넌트
 
 const Card = styled.div`
   background: white;
@@ -28,7 +29,6 @@ const GridGroup = styled.div`
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
-
   @media (max-width: 640px) {
     grid-template-columns: 1fr;
   }
@@ -104,45 +104,8 @@ const SaveButton = styled(BaseButton)`
   }
 `;
 
-/* 💡 [신규] 요일별 시간 아이템들을 2줄(2열)로 배치하기 위한 그리드 컨테이너 */
-const HoursGridContainer = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr; /* PC/기본창 크기일 때는 양 옆 2열 정렬 */
-  gap: x;
-  column-gap: 24px; /* 좌우 열 사이의 간격 */
-  row-gap: 12px; /* 상하 행 사이의 간격 */
-  margin-top: 12px;
-
-  /* 💡 창의 크기가 작아지면(태블릿, 모바일 등 미디어쿼리 범위) 한 줄로 유연하게 보임 */
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const HourRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  background: #fafafa;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
-`;
-
-const HolidayToggleBtn = styled.button`
-  padding: 4px 10px;
-  border-radius: 12px;
-  border: 1px solid ${(props) => (props.$isHoliday ? '#ff4d4f' : '#2d5a43')};
-  background: white;
-  color: ${(props) => (props.$isHoliday ? '#ff4d4f' : '#2d5a43')};
-  font-size: 12px;
-  font-weight: 600;
-  cursor: ${(props) => (props.disabled ? 'not-allowed' : 'pointer')};
-  margin-left: auto; /* 우측 끝으로 깔끔하게 밀어주기 */
-`;
-
 function StoreInfoForm({ storeInfo, onSave }) {
+  // 💡 백엔드에 데이터가 없거나 조회에 실패했을 때만 띄워줄 최소한의 안전장치(Fallback)
   const mountaineerHoursFallback = [
     { day: '월', start: '09:00', end: '19:00', isHoliday: false },
     { day: '화', start: '09:00', end: '19:00', isHoliday: false },
@@ -153,8 +116,9 @@ function StoreInfoForm({ storeInfo, onSave }) {
     { day: '일', start: '09:00', end: '19:00', isHoliday: true },
   ];
 
+  // 💡 데이터 초기화 헬퍼 함수 수정
   const createInitialFormData = (info) => {
-    if (!info)
+    if (!info) {
       return {
         name: '',
         categoryName: '',
@@ -163,27 +127,33 @@ function StoreInfoForm({ storeInfo, onSave }) {
         address: '',
         operatingHours: mountaineerHoursFallback,
       };
+    }
+
+    // 부모로부터 받아온 원본 데이터 깊은 복사
     const copy = JSON.parse(JSON.stringify(info));
-    if (!copy.operatingHours) {
+
+    // 💡 중요: 부모가 넘겨준 operatingHours(즉 businessHours) 배열이 비어있지 않다면 그것을 우선 사용!
+    // 만약 완전히 비어있을 때만(배열 길이가 0일 때만) 기존 폴백 데이터를 심어줍니다.
+    if (!copy.operatingHours || copy.operatingHours.length === 0) {
       copy.operatingHours = mountaineerHoursFallback;
     }
+
     return copy;
   };
 
   const [isEditing, setIsEditing] = useState(false);
+
+  // 최초 렌더링 시점에 초기 데이터 바인딩
   const [formData, setFormData] = useState(() =>
     createInitialFormData(storeInfo),
   );
 
+  // 💡 부모 컴포넌트(StorePage)에서 비동기로 API 조회가 완료되어 데이터가 변경되면 폼 상태 동기화
   useEffect(() => {
     if (!isEditing && storeInfo) {
       setFormData(createInitialFormData(storeInfo));
     }
   }, [storeInfo, isEditing]);
-
-  if (!formData) {
-    return <Card>데이터를 불러오는 중입니다...</Card>;
-  }
 
   const handleCancel = () => {
     if (
@@ -201,8 +171,17 @@ function StoreInfoForm({ storeInfo, onSave }) {
     setIsEditing(false);
   };
 
+  // 영업시간 텍스트(시작/종료) 변경 핸들러
+  const handleHoursChange = (index, field, value) => {
+    const updatedHours = [...(formData.operatingHours || [])];
+    if (updatedHours[index]) {
+      updatedHours[index][field] = value;
+      setFormData({ ...formData, operatingHours: updatedHours });
+    }
+  };
+
+  // 영업시간 휴무 여부 토글 핸들러
   const handleToggleHoliday = (index) => {
-    if (!isEditing) return;
     const updatedHours = [...(formData.operatingHours || [])];
     if (updatedHours[index]) {
       updatedHours[index].isHoliday = !updatedHours[index].isHoliday;
@@ -287,58 +266,15 @@ function StoreInfoForm({ storeInfo, onSave }) {
         </Field>
       </GridGroup>
 
-      <Field>
+      {/* 영업 시간 지정 서브 섹션 */}
+      <Field style={{ marginBottom: 0 }}>
         <Label>🕒 영업 시간 설정</Label>
-        <HoursGridContainer>
-          {formData.operatingHours?.map((item, idx) => (
-            <HourRow key={item.day || idx}>
-              <span style={{ width: '20px', fontWeight: '700', color: '#333' }}>
-                {item.day}
-              </span>
-              <Input
-                type="text"
-                style={{
-                  padding: '6px 4px',
-                  width: '60px',
-                  textAlign: 'center',
-                  fontSize: '13px',
-                }}
-                disabled={!isEditing || item.isHoliday}
-                value={item.start || ''}
-                onChange={(e) => {
-                  const updated = [...formData.operatingHours];
-                  updated[idx].start = e.target.value;
-                  setFormData({ ...formData, operatingHours: updated });
-                }}
-              />
-              <span style={{ color: '#aaa' }}>~</span>
-              <Input
-                type="text"
-                style={{
-                  padding: '6px 4px',
-                  width: '60px',
-                  textAlign: 'center',
-                  fontSize: '13px',
-                }}
-                disabled={!isEditing || item.isHoliday}
-                value={item.end || ''}
-                onChange={(e) => {
-                  const updated = [...formData.operatingHours];
-                  updated[idx].end = e.target.value;
-                  setFormData({ ...formData, operatingHours: updated });
-                }}
-              />
-              <HolidayToggleBtn
-                type="button"
-                disabled={!isEditing}
-                $isHoliday={item.isHoliday}
-                onClick={() => handleToggleHoliday(idx)}
-              >
-                {item.isHoliday ? '휴무' : '영업'}
-              </HolidayToggleBtn>
-            </HourRow>
-          ))}
-        </HoursGridContainer>
+        <StoreHoursForm
+          isEditing={isEditing}
+          operatingHours={formData.operatingHours}
+          onHoursChange={handleHoursChange}
+          onToggleHoliday={handleToggleHoliday}
+        />
       </Field>
     </Card>
   );
