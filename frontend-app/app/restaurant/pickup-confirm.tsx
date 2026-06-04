@@ -4,26 +4,23 @@ import { Text } from '../../components/CustomText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
 import { shopApi } from '../../api/shop';
-import { userApi } from '../../api/user';
 
-export default function ReservationConfirmScreen() {
+// 💡 나중에 메인 브랜치와 합쳐지면 아래 주석을 풀어주세요!
+// import { userApi } from '../../api/user'; 
+
+export default function PickupConfirmScreen() {
   const router = useRouter();
-  
-  // ✨ 동적으로 넘겨받은 파라미터 (month 포함)
-  const { storeId, month, date, time, people, request } = useLocalSearchParams();
-  
+  const { storeId, month, date, time, request } = useLocalSearchParams();
   const [shopInfo, setShopInfo] = useState<any>(null);
-  
-  // ✨ 실제 유저 데이터를 담을 State
+
+  // 💡 가짜 데이터: 나중에 userApi 연동 후 삭제
   const [userInfo, setUserInfo] = useState({
-    name: '로딩중...',
-    phone: '로딩중...'
+    name: '김수빈 (임시)',
+    phone: '010-1234-1234'
   });
 
   useEffect(() => {
-    // 1. 상점 정보 불러오기
     const fetchShop = async () => {
       try {
         const data = await shopApi.getShopDetail(Number(storeId));
@@ -33,26 +30,42 @@ export default function ReservationConfirmScreen() {
       }
     };
     
-    // 2. 로그인 유저 정보 불러오기 (실제 데이터)
+    // 💡 나중에 백엔드 API 연동 시 주석을 풀고 사용하세요.
+    /*
     const fetchUserInfo = async () => {
       try {
         const myInfo = await userApi.getMyInfo();
-        setUserInfo({
-          name: myInfo.name,
-          phone: myInfo.phone || '전화번호 없음'
-        });
+        setUserInfo({ name: myInfo.name, phone: myInfo.phone || '전화번호 없음' });
       } catch (error) {
         console.error("내 정보 불러오기 실패", error);
       }
     };
+    fetchUserInfo();
+    */
 
     if (storeId) fetchShop();
-    fetchUserInfo();
   }, [storeId]);
 
-  const handleFinalReserve = () => {
-    // 백엔드 예약 API 호출 로직이 들어갈 곳
-    router.push('/restaurant/reservation-success' as any);
+  const handleFinalPickup = async () => {
+    // 🚀 나중에 백엔드 API가 나오면 이 안에 코드를 넣으세요!
+    /*
+    try {
+      const response = await client.post('/pickups', {
+        storeId: Number(storeId),
+        pickupDate: `2026-${month}-${date}`, 
+        pickupTime: time,
+        requestMessage: request
+      });
+      if (response.data.success) {
+        router.push('/restaurant/pickup-success' as any);
+      }
+    } catch (error) {
+      Alert.alert('접수 실패', '픽업 접수에 실패했습니다.');
+    }
+    */
+
+    // 지금은 API가 없으니 버튼을 누르면 바로 성공 화면으로 넘어갑니다.
+    router.push('/restaurant/pickup-success' as any);
   };
 
   return (
@@ -61,29 +74,27 @@ export default function ReservationConfirmScreen() {
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 5 }}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text fontWeight="bold" style={styles.headerTitle}>예약</Text>
+        <Text fontWeight="bold" style={styles.headerTitle}>픽업 주문 확인</Text>
         <View style={{ width: 34 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>예약자</Text>
+          <Text style={styles.sectionTitle}>주문자 정보</Text>
           <View style={styles.card}>
             <View style={styles.row}>
-              <Text fontWeight="bold" style={styles.label}>예약자</Text>
-              {/* ✨ 실제 유저 데이터 렌더링 */}
+              <Text fontWeight="bold" style={styles.label}>주문자</Text>
               <Text style={styles.value}>{userInfo.name}  {userInfo.phone}</Text>
             </View>
             <View style={[styles.row, { marginTop: 10 }]}>
-              <Text fontWeight="bold" style={styles.label}>예약 일정</Text>
-              {/* ✨ 동적으로 전달받은 월/일/시간 렌더링 */}
+              <Text fontWeight="bold" style={styles.label}>픽업 일정</Text>
               <Text style={styles.value}>{month}월 {date}일 {time}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>예약 장소</Text>
+          <Text style={styles.sectionTitle}>픽업 매장</Text>
           <View style={styles.card}>
             <Text fontWeight="bold" style={styles.shopName}>{shopInfo?.name || '상점 이름'}</Text>
             <View style={styles.shopInfoBox}>
@@ -93,26 +104,25 @@ export default function ReservationConfirmScreen() {
               />
               <View style={styles.shopDetails}>
                 <Text style={styles.shopText} numberOfLines={1}>{shopInfo?.address || '주소 정보'}</Text>
-                <Text style={styles.shopText}>예약 일정  {month}월 {date}일 {time}</Text>
-                <Text style={styles.shopText}>예약 인원  {people}명</Text>
+                <Text style={styles.shopText}>픽업 일정  {month}월 {date}일 {time}</Text>
               </View>
             </View>
           </View>
         </View>
 
         <View style={styles.noticeBox}>
-          <Text style={styles.noticeTitle}>예약 주의사항</Text>
+          <Text style={styles.noticeTitle}>픽업 주의사항</Text>
           <Text style={styles.noticeText}>
-            • 예약 시간과 날짜를 반드시 확인하고 변경 시 미리 연락하세요.{'\n'}
-            • 취소 및 환불 규정을 사전에 확인해 불이익을 방지하세요.{'\n'}
-            • 노쇼 방지를 위해 예약 시간에 맞춰 방문해주세요.
+            • 지정된 픽업 시간에 늦지 않게 매장을 방문해 주세요.{'\n'}
+            • 매장 상황에 따라 상품 준비 시간이 조금 달라질 수 있습니다.{'\n'}
+            • 픽업 시 주문 내역 화면을 사장님께 보여주세요.
           </Text>
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.submitBtn} onPress={handleFinalReserve}>
-          <Text fontWeight="bold" style={styles.submitBtnText}>예약하기</Text>
+        <TouchableOpacity style={styles.submitBtn} onPress={handleFinalPickup}>
+          <Text fontWeight="bold" style={styles.submitBtnText}>픽업 접수하기</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -133,7 +143,7 @@ const styles = StyleSheet.create({
   shopName: { fontSize: 16, color: '#333', marginBottom: 15 },
   shopInfoBox: { flexDirection: 'row' },
   shopImage: { width: 70, height: 70, borderRadius: 4, backgroundColor: '#eee', marginRight: 15 },
-  shopDetails: { flex: 1, justifyContent: 'space-around' },
+  shopDetails: { flex: 1, justifyContent: 'center', gap: 6 },
   shopText: { fontSize: 13, color: '#666' },
   noticeBox: { backgroundColor: '#F4F5F7', padding: 20, borderRadius: 8 },
   noticeTitle: { fontSize: 13, color: '#888', marginBottom: 8, fontWeight: 'bold' },
