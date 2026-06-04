@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Owner - EventProduct", description = "사장 이벤트 상품 관리 API")
+@Tag(name = "10. Owner - EventProduct", description = "사장 이벤트 상품 관리 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/owner/event-products")

@@ -5,6 +5,7 @@ import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreDashboardResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreResponseDto;
 import com.eeum.eeum.application.store.service.StoreImageService;
@@ -26,7 +27,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Owner - Store", description = "사장 상점 관리 API")
+@Tag(name = "06. Owner - Store", description = "사장 상점 관리 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/owner/stores/me")
@@ -37,6 +38,14 @@ public class OwnerStoreController {
     private final StoreService storeService;
     private final StoreImageService storeImageService;
 
+    @Operation(summary = "내 상점 대시보드", description = "현재 로그인한 사장의 상점 대시보드를 조회합니다.")
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<StoreDashboardResponseDto>> getDashboard() {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                storeService.getDashboard(accountId)));
+    }
+
     @Operation(
             summary = "내 상점 조회",
             description = "현재 로그인한 사장의 상점 정보를 조회합니다. 상점명, 주소, 연락처, 업종, 설명, 영업시간, 상태, 평점, 찜 수, 리뷰 수 등을 반환합니다."
@@ -45,31 +54,6 @@ public class OwnerStoreController {
     public ResponseEntity<ApiResponse<StoreResponseDto>> getMyStore() {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(storeService.getMyStore(accountId)));
-    }
-
-    @Operation(
-            summary = "상점 정보 수정",
-            description = "현재 로그인한 사장의 상점 기본 정보를 수정합니다. 상점명, 주소, 연락처, 설명, 영업시간, 업종 카테고리를 수정할 수 있습니다."
-    )
-    @PatchMapping
-    public ResponseEntity<ApiResponse<StoreResponseDto>> updateStore(
-            @Valid @RequestBody StoreUpdateRequestDto request
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        return ResponseEntity.ok(ApiResponse.success(storeService.updateStore(accountId, request)));
-    }
-
-    @Operation(
-            summary = "상점 상태 변경",
-            description = "현재 로그인한 사장의 상점 영업 상태를 변경합니다. OPEN(영업중), TEMP_CLOSED(임시 휴업/쉬는 시간), CLOSED(영업 종료) 상태로 변경할 수 있습니다."
-    )
-    @PatchMapping("/status")
-    public ResponseEntity<ApiResponse<Void>> updateStoreStatus(
-            @Valid @RequestBody StoreStatusUpdateRequestDto request
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        storeService.updateStoreStatus(accountId, request);
-        return ResponseEntity.ok(ApiResponse.success());
     }
 
     @Operation(
@@ -155,6 +139,31 @@ public class OwnerStoreController {
         return ResponseEntity.ok(ApiResponse.success());
     }
 
+    @Operation(
+            summary = "상점 정보 수정",
+            description = "현재 로그인한 사장의 상점 기본 정보를 수정합니다. 상점명, 주소, 연락처, 설명, 영업시간, 업종 카테고리를 수정할 수 있습니다."
+    )
+    @PatchMapping
+    public ResponseEntity<ApiResponse<StoreResponseDto>> updateStore(
+            @Valid @RequestBody StoreUpdateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(storeService.updateStore(accountId, request)));
+    }
+
+    @Operation(
+            summary = "상점 상태 변경",
+            description = "현재 로그인한 사장의 상점 영업 상태를 변경합니다. OPEN(영업중), TEMP_CLOSED(임시 휴업/쉬는 시간), CLOSED(영업 종료) 상태로 변경할 수 있습니다."
+    )
+    @PatchMapping("/status")
+    public ResponseEntity<ApiResponse<Void>> updateStoreStatus(
+            @Valid @RequestBody StoreStatusUpdateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        storeService.updateStoreStatus(accountId, request);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
     // OwnerStoreController에 추가
     @Operation(summary = "상점 이미지 목록 조회")
     @GetMapping("/images")
@@ -175,16 +184,6 @@ public class OwnerStoreController {
         ));
     }
 
-    @Operation(summary = "상점 이미지 삭제")
-    @DeleteMapping("/images/{imageId}")
-    public ResponseEntity<ApiResponse<Void>> deleteStoreImage(
-            @PathVariable Long imageId
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        storeImageService.deleteImage(accountId, imageId);
-        return ResponseEntity.ok(ApiResponse.success());
-    }
-
     @Operation(summary = "상점 대표 이미지 설정")
     @PatchMapping("/images/{imageId}/thumbnail")
     public ResponseEntity<ApiResponse<Void>> setStoreThumbnail(
@@ -192,6 +191,16 @@ public class OwnerStoreController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         storeImageService.setThumbnail(accountId, imageId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "상점 이미지 삭제")
+    @DeleteMapping("/images/{imageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteStoreImage(
+            @PathVariable Long imageId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        storeImageService.deleteImage(accountId, imageId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 

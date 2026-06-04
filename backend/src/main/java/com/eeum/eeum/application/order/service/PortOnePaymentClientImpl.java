@@ -12,6 +12,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -43,6 +46,26 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
         } catch (RestClientException e) {
             log.error("PortOne 결제 조회 실패: paymentId={}", paymentId, e);
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+        }
+    }
+
+    @Override
+    public void cancelPayment(String paymentId, BigDecimal amount, String reason) {
+        try {
+            RestClient.create(portOneProperties.baseUrl())
+                    .post()
+                    .uri("/payments/{paymentId}/cancel", paymentId)
+                    .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret())
+                    .body(Map.of(
+                            "reason", reason,
+                            "amount", amount
+                    ))
+                    .retrieve()
+                    .toBodilessEntity();
+
+        } catch (RestClientException e) {
+            log.error("PortOne 결제 취소 실패: paymentId={}", paymentId, e);
+            throw new BusinessException(ErrorCode.PAYMENT_REFUND_FAILED);
         }
     }
 }

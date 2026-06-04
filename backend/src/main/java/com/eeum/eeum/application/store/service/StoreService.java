@@ -5,16 +5,25 @@ import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreDashboardResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreResponseDto;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.repository.OrderRepository;
+import com.eeum.eeum.domain.product.enums.ProductStatus;
+import com.eeum.eeum.domain.product.repository.ProductRepository;
+import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
+import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
+import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.entity.StoreNotice;
 import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
+import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -24,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +51,10 @@ public class StoreService {
     private final StoreNoticeRepository storeNoticeRepository;
     private final CategoryRepository categoryRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final OrderRepository orderRepository;
+    private final ProductRepository productRepository;
+    private final StoreImageRepository storeImageRepository;
+    private final VisitReservationRepository visitReservationRepository;
 
     // ===================== 상점 조회/수정 =====================
 
@@ -82,8 +98,58 @@ public class StoreService {
         log.info("상점 상태 변경: accountId={}, status={}", accountId, request.getStatus());
     }
 
-    // ===================== 상점 운영 시간 관리 =====================
+    // ===================== 대시보드 메서드 =====================
+    @Transactional(readOnly = true)
+    public StoreDashboardResponseDto getDashboard(Long accountId) {
+        Store store = storeRepository.findByAccount_AccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime now = LocalDateTime.now();
+
+        String thumbnailUrl = storeImageRepository
+                .findByStore_StoreIdAndIsThumbnailTrue(store.getStoreId())
+                .map(StoreImage::getImageUrl)
+                .orElse(null);
+
+        long todayOrderCount = orderRepository
+                .countByStore_StoreIdAndCreatedAtBetween(store.getStoreId(), todayStart, now);
+
+        BigDecimal todayRevenue = orderRepository
+                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), todayStart, now, OrderStatus.PAID);
+
+        long monthOrderCount = orderRepository
+                .countByStore_StoreIdAndCreatedAtBetween(store.getStoreId(), monthStart, now);
+
+        BigDecimal monthRevenue = orderRepository
+                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), monthStart, now, OrderStatus.PAID);
+
+        long pendingOrderCount = orderRepository
+                .countByStore_StoreIdAndStatus(store.getStoreId(), OrderStatus.PENDING);
+
+        long pendingReservationCount = visitReservationRepository
+                .countByStore_StoreIdAndStatus(store.getStoreId(), VisitReservationStatus.PENDING);
+
+        long totalProductCount = productRepository
+                .countByStore_StoreId(store.getStoreId());
+
+        long soldOutProductCount = productRepository
+                .countByStore_StoreIdAndStatus(store.getStoreId(), ProductStatus.SOLD_OUT);
+
+        return toDashboardDto(
+                store,
+                thumbnailUrl,
+                todayOrderCount,
+                todayRevenue,
+                monthOrderCount,
+                monthRevenue,
+                pendingOrderCount,
+                pendingReservationCount,
+                totalProductCount,
+                soldOutProductCount
+        );
+    }
     // ===================== 영업시간 관리 =====================
 
     @Transactional(readOnly = true)
@@ -281,6 +347,38 @@ public class StoreService {
                 .modifiedAt(n.getModifiedAt())
                 .build();
     }
+
+    private StoreDashboardResponseDto toDashboardDto(
+            Store store,
+            String thumbnailUrl,
+            long todayOrderCount,
+            BigDecimal todayRevenue,
+            long monthOrderCount,
+            BigDecimal monthRevenue,
+            long pendingOrderCount,
+            long pendingReservationCount,
+            long totalProductCount,
+            long soldOutProductCount
+    ) {
+        return StoreDashboardResponseDto.builder()
+                .storeId(store.getStoreId())
+                .storeName(store.getName())
+                .storeStatus(store.getStatus())
+                .thumbnailUrl(thumbnailUrl)
+                .todayOrderCount(todayOrderCount)
+                .todayRevenue(todayRevenue != null ? todayRevenue : BigDecimal.ZERO)
+                .monthOrderCount(monthOrderCount)
+                .monthRevenue(monthRevenue != null ? monthRevenue : BigDecimal.ZERO)
+                .pendingOrderCount(pendingOrderCount)
+                .pendingReservationCount(pendingReservationCount)
+                .unansweredReviewCount(0L)
+                .totalProductCount(totalProductCount)
+                .soldOutProductCount(soldOutProductCount)
+                .averageRating(store.getRating() != null ? store.getRating() : 0.0)
+                .totalReviewCount(store.getReviewCount() != null ? store.getReviewCount() : 0)
+                .build();
+    }
+
     private List<StoreBusinessHourResponseDto> getBusinessHourDtos(Long storeId) {
         return storeBusinessHourRepository.findByStore_StoreId(storeId)
                 .stream()

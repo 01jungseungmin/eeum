@@ -60,6 +60,9 @@ public class Store extends BaseEntity {
     @Column(name = "review_count", nullable = false)
     private Integer reviewCount;
 
+    @Column(name = "visit_reservation_enabled", nullable = false)
+    private boolean visitReservationEnabled = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private StoreStatus status;

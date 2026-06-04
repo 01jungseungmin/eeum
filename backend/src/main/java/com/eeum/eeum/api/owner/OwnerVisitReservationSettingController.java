@@ -1,0 +1,80 @@
+package com.eeum.eeum.api.owner;
+
+import com.eeum.eeum.application.reservation.dto.request.VisitReservationSettingUpdateRequestDto;
+import com.eeum.eeum.application.reservation.dto.request.VisitReservationTimeSlotUpdateRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.VisitReservationSettingResponseDto;
+import com.eeum.eeum.application.reservation.dto.response.VisitReservationTimeSlotResponseDto;
+import com.eeum.eeum.application.reservation.service.VisitReservationSettingService;
+import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.util.SecurityUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
+
+@Tag(name = "17. Owner - Visit Reservation Setting", description = "사장 방문 예약 설정 API")
+@SecurityRequirement(name = "bearerAuth")
+@RestController
+@RequestMapping("/owner/reservations/visits")
+@RequiredArgsConstructor
+@PreAuthorize("hasRole('OWNER')")
+public class OwnerVisitReservationSettingController {
+
+    private final VisitReservationSettingService visitReservationSettingService;
+
+    @Operation(summary = "방문 예약 기본 설정 조회")
+    @GetMapping("/settings")
+    public ResponseEntity<ApiResponse<VisitReservationSettingResponseDto>> getSetting() {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+
+        return ResponseEntity.ok(ApiResponse.success(
+                visitReservationSettingService.getSetting(accountId)
+        ));
+    }
+
+    @Operation(summary = "방문 예약 기본 설정 수정")
+    @PatchMapping("/settings")
+    public ResponseEntity<ApiResponse<VisitReservationSettingResponseDto>> updateSetting(
+            @Valid @RequestBody VisitReservationSettingUpdateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+
+        return ResponseEntity.ok(ApiResponse.success(
+                visitReservationSettingService.updateSetting(accountId, request)
+        ));
+    }
+
+    @Operation(summary = "특정 날짜 방문 예약 시간대 설정 조회")
+    @GetMapping("/time-slots")
+    public ResponseEntity<ApiResponse<List<VisitReservationTimeSlotResponseDto>>> getTimeSlots(
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+
+        return ResponseEntity.ok(ApiResponse.success(
+                visitReservationSettingService.getTimeSlots(accountId, date)
+        ));
+    }
+
+    @Operation(summary = "특정 날짜 방문 예약 시간대 설정 저장")
+    @PutMapping("/time-slots")
+    public ResponseEntity<ApiResponse<List<VisitReservationTimeSlotResponseDto>>> updateTimeSlots(
+            @Valid @RequestBody VisitReservationTimeSlotUpdateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+
+        return ResponseEntity.ok(ApiResponse.success(
+                visitReservationSettingService.updateTimeSlots(accountId, request)
+        ));
+    }
+}
