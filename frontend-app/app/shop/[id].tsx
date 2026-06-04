@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -15,7 +15,7 @@ export default function ShopDetailScreen() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [shopDetail, setShopDetail] = useState<any>(null);
-  const [shopProducts, setShopProducts] = useState<any[]>([]); // 💡 상품 리스트 상태 추가
+  const [shopProducts, setShopProducts] = useState<any[]>([]);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
 
@@ -23,7 +23,6 @@ export default function ShopDetailScreen() {
     const fetchShopData = async () => {
       try {
         setIsLoading(true);
-        // 상점 상세 정보와 상품 목록을 동시에 가져온다.
         const [detailData, productsData] = await Promise.all([
           shopApi.getShopDetail(shopIdNum),
           shopApi.getShopProducts(shopIdNum)
@@ -52,12 +51,15 @@ export default function ShopDetailScreen() {
 
   const categoryName = shopDetail.categoryName || '기타';
   const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Cover';
+  
+  // ✨ 백엔드에서 주는 카테고리 ID를 바탕으로 식당/상점 구분 (1: 음식점, 2: 카페)
   const isRestaurant = shopDetail.categoryId === 1 || shopDetail.categoryId === 2;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }}>
         
+        {/* 커버 이미지 */}
         <View style={styles.coverContainer}>
           <Image source={{ uri: coverImageUrl }} style={styles.coverImg} />
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -65,6 +67,7 @@ export default function ShopDetailScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* 메인 정보 */}
         <View style={styles.mainInfo}>
           <View style={styles.categoryBadge}><Text style={styles.categoryText}>{categoryName}</Text></View>
           <View style={styles.nameRow}>
@@ -111,22 +114,42 @@ export default function ShopDetailScreen() {
             <Text style={{ color: '#888', marginTop: 10 }}>등록된 메뉴가 없습니다.</Text>
           )}
         </View>
+
       </ScrollView>
 
+      {/* 하단 버튼 영역 */}
       <View style={styles.bottomBar}>
         {isRestaurant ? (
-          <>
-            <TouchableOpacity style={styles.callBtn} onPress={() => Linking.openURL(`tel:${shopDetail.phone}`)}>
-              <Ionicons name="call" size={18} color="#00A859" style={{marginRight: 6}} />
-              <Text fontWeight="bold" style={styles.callBtnText}>전화하기</Text>
+          <View style={{ width: '100%', gap: 10 }}>
+            {/* 식당용 버튼 1 - 방문 예약 */}
+            <TouchableOpacity 
+              style={styles.primaryBtn} 
+              onPress={() => router.push({
+                pathname: '/restaurant/reservation' as any,
+                params: { storeId: shopDetail.storeId }
+              })}
+            >
+              <Text fontWeight="bold" style={styles.primaryBtnText}>방문 예약하기</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reserveBtn} onPress={() => Alert.alert('방문 예약', '예약 페이지로 이동합니다.')}>
-              <Text fontWeight="bold" style={styles.reserveBtnText}>방문 예약하기</Text>
+
+            {/* 식당용 버튼 2 - 픽업 주문 */}
+            <TouchableOpacity 
+              style={styles.secondaryBtn} 
+              onPress={() => router.push({
+                pathname: '/restaurant/pickup' as any,
+                params: { storeId: shopDetail.storeId }
+              })}
+            >
+              <Text fontWeight="bold" style={styles.secondaryBtnText}>픽업 주문하기</Text>
             </TouchableOpacity>
-          </>
+          </View>
         ) : (
-          <TouchableOpacity style={styles.inquiryBtn}>
-            <Text fontWeight="bold" style={styles.inquiryBtnText}>사장님께 문의하기</Text>
+
+          <TouchableOpacity 
+            style={styles.primaryBtn}
+            onPress={() => router.push('/cart')}
+          >
+            <Text fontWeight="bold" style={styles.primaryBtnText}>장바구니 보기</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -149,6 +172,8 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   contactText: { fontSize: 14, color: '#666', marginLeft: 10 },
   divider: { height: 8, backgroundColor: '#F8F8F8' },
+  
+  /* 복원된 메뉴 스타일 */
   menuSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 20 },
   menuCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
@@ -158,15 +183,10 @@ const styles = StyleSheet.create({
   menuPrice: { fontSize: 16, color: '#333' },
   menuImg: { width: 100, height: 100, borderRadius: 8 },
   
-  bottomBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
-  
-  // 식당 버튼
-  callBtn: { flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderWidth: 1, borderColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  callBtnText: { color: '#00A859', fontSize: 16 },
-  reserveBtn: { flex: 2, backgroundColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  reserveBtnText: { color: '#fff', fontSize: 16 },
-  
-  // 상점 버튼
-  inquiryBtn: { flex: 1, backgroundColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  inquiryBtnText: { color: '#fff', fontSize: 16 }
+  /* 버튼 영역 스타일 */
+  bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
+  primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  primaryBtnText: { color: '#fff', fontSize: 16 },
+  secondaryBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  secondaryBtnText: { color: '#00A859', fontSize: 16 }
 });
