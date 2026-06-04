@@ -1,7 +1,6 @@
 package com.eeum.eeum.domain.store.repository;
 
 import com.eeum.eeum.domain.store.entity.StoreReview;
-import com.eeum.eeum.domain.store.repository.CustomerReviewStatProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -35,23 +34,6 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
     Page<StoreReview> findByAccount_AccountIdOrderByCreatedAtDesc(
             Long accountId,
             Pageable pageable
-    );
-
-    /**
-     * 사장용 찜 고객 목록 — 고객별 평균 평점 배치 조회.
-     * IN절 한 번으로 N+1 없이 처리한다.
-     */
-    @Query("""
-        SELECT r.account.accountId AS accountId,
-               AVG(r.rating)       AS avgRating
-        FROM StoreReview r
-        WHERE r.store.storeId     = :storeId
-          AND r.account.accountId IN :accountIds
-        GROUP BY r.account.accountId
-    """)
-    List<CustomerReviewStatProjection> findReviewStatsByStoreAndAccounts(
-            @Param("storeId") Long storeId,
-            @Param("accountIds") List<Long> accountIds
     );
 
     @Query("""

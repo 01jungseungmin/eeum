@@ -3,7 +3,6 @@ package com.eeum.eeum.domain.order.repository;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
-import com.eeum.eeum.domain.order.repository.CustomerOrderStatProjection;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,8 +16,6 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-
-
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
@@ -85,27 +82,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     """)
     Optional<Order> findByOrderNumberWithPessimisticLock(
             @Param("orderNumber") String orderNumber
-    );
-
-    /**
-     * 사장용 찜 고객 목록 — 고객별 완료 주문 통계 배치 조회.
-     * IN절 한 번으로 N+1 없이 처리한다.
-     */
-    @Query("""
-        SELECT o.account.accountId AS accountId,
-               COUNT(o.orderId)    AS orderCount,
-               SUM(o.totalPrice)   AS totalAmount,
-               MAX(o.createdAt)    AS lastOrderedAt
-        FROM Order o
-        WHERE o.store.storeId         = :storeId
-          AND o.account.accountId     IN :accountIds
-          AND o.status                = :status
-        GROUP BY o.account.accountId
-    """)
-    List<CustomerOrderStatProjection> findOrderStatsByStoreAndAccounts(
-            @Param("storeId") Long storeId,
-            @Param("accountIds") List<Long> accountIds,
-            @Param("status") OrderStatus status
     );
 
     @Query("""

@@ -1,7 +1,6 @@
 package com.eeum.eeum.exception;
 
 import com.eeum.eeum.common.dto.response.ApiResponse; //공통 응답 객체
-import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j; //로그
 import org.springframework.http.HttpStatus; //HTTP 상태 코드
 import org.springframework.http.ResponseEntity; //응답 객체 생성
@@ -35,24 +34,6 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         log.warn("[ValidationException] message={}", errorMessage);
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.VALIDATION_INVALID_INPUT.getCode(), errorMessage));
-    }
-
-    // @Validated + @Min/@Max 등 파라미터 레벨 제약 위반 시 발생
-    @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ApiResponse<?>> handleConstraintViolationException(ConstraintViolationException e) {
-        String errorMessage = e.getConstraintViolations().stream()
-                .map(v -> {
-                    String path = v.getPropertyPath().toString();
-                    String param = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
-                    return param + ": " + v.getMessage();
-                })
-                .collect(Collectors.joining(", "));
-
-        log.warn("[ConstraintViolationException] message={}", errorMessage);
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
