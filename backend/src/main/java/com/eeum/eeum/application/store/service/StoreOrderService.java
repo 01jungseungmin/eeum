@@ -3,15 +3,17 @@ package com.eeum.eeum.application.store.service;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.OrderItem;
+import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.enums.PaymentMethod;
+import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.repository.OrderItemRepository;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
+import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
-import com.eeum.eeum.exception.ForbiddenException;
-import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +29,7 @@ public class StoreOrderService {
     private final StoreRepository storeRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final PaymentRepository paymentRepository;
 
     @Transactional(readOnly = true)
     public StoreOrderResponseDto getStoreOrderDetail(Long accountId, Long orderId) {
@@ -61,22 +64,42 @@ public class StoreOrderService {
     }
 
     @Transactional
-    public void confirmOrder(Long accountId, Long orderId) {
-        Store store = storeRepository.findByAccount_AccountId(accountId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
-
+    public void confirmOrder(Long ownerId, Long orderId) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (!order.getStore().getStoreId().equals(store.getStoreId())) {
-            throw new ForbiddenException(ErrorCode.COMMON_FORBIDDEN);
-        }
+        validateOwnerOrder(ownerId, order);
 
-        if (order.getStatus() != OrderStatus.PAID
-                && order.getStatus() != OrderStatus.PENDING) {
+        if (order.getStatus() != OrderStatus.PENDING
+                && order.getStatus() != OrderStatus.PAID) {
             throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
         }
 
+        validatePaymentCompletedBeforeConfirm(order);
+
         order.confirm();
+    }
+
+    private void validateOwnerOrder(Long ownerId, Order order) {
+        Long storeOwnerId = order.getStore()
+                .getAccount()
+                .getAccountId();
+
+        if (!storeOwnerId.equals(ownerId)) {
+            throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
+        }
+    }
+
+    private void validatePaymentCompletedBeforeConfirm(Order order) {
+        Payment payment = paymentRepository.findByOrder_OrderId(order.getOrderId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED));
+
+        if (payment.getPaymentMethod() == PaymentMethod.CASH_ON_SITE) {
+            return;
+        }
+
+        if (payment.getStatus() != PaymentStatus.PAID) {
+            throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
+        }
     }
 }

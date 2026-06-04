@@ -4,6 +4,7 @@ import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.RefundStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -14,9 +15,10 @@ import java.time.LocalDateTime;
 @Builder
 public class PaymentResponseDto {
 
+    @JsonIgnore
     private Long paymentId;
+
     private Long orderId;
-    private String portonePaymentId;
     private BigDecimal amount;
     private PaymentStatus status;
     private PaymentMethod paymentMethod;
@@ -29,7 +31,6 @@ public class PaymentResponseDto {
         return PaymentResponseDto.builder()
                 .paymentId(payment.getPaymentId())
                 .orderId(payment.getOrder().getOrderId())
-                .portonePaymentId(payment.getPortonePaymentId())
                 .amount(payment.getAmount())
                 .status(payment.getStatus())
                 .paymentMethod(payment.getPaymentMethod())

@@ -128,6 +128,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_VERIFY_FAILED("PAYMENT_008", "결제 검증에 실패했습니다", HttpStatus.BAD_REQUEST),
     PAYMENT_METHOD_NOT_SUPPORTED("PAYMENT_009", "지원하지 않는 결제 수단입니다", HttpStatus.BAD_REQUEST),
     PAYMENT_REFUND_ALREADY("PAYMENT_010", "이미 환불 처리 되었습니다.", HttpStatus.CONFLICT),
+    PAYMENT_NOT_COMPLETED("PAYMENT_011", "결제가 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
