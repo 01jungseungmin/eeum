@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { shopApi } from '../../api/shop';
 import { userApi } from '../../api/user';
+import { reservationApi } from '@/api/reservation';
 
 export default function ReservationConfirmScreen() {
   const router = useRouter();
@@ -50,9 +51,52 @@ export default function ReservationConfirmScreen() {
     fetchUserInfo();
   }, [storeId]);
 
-  const handleFinalReserve = () => {
-    // 백엔드 예약 API 호출 로직이 들어갈 곳
-    router.push('/restaurant/reservation-success' as any);
+  const handleFinalReserve = async () => {
+    try {
+      // 1. 백엔드 요구사항에 맞게 YYYY-MM-DD 형식으로 날짜 포맷팅 (예: 2026-06-04)
+      const year = new Date().getFullYear();
+      const formattedMonth = String(month).padStart(2, '0');
+      const formattedDate = String(date).padStart(2, '0');
+      const fullDateString = `${year}-${formattedMonth}-${formattedDate}`;
+
+      const formattedTime = (time as string).length === 5 ? `${time}:00` : time;
+
+      // 2. 예약 생성 API 호출
+      const response = await reservationApi.createVisitReservation(Number(storeId), {
+        visitDate: fullDateString,
+        visitTime: time as string,
+        visitorCount: Number(people) || 1,
+        requestMessage: (request as string) || ''
+      });
+
+      // 3. 응답 성공 시 성공 화면으로 이동
+      if (response.success) {
+        // 백엔드에서 내려준 실제 예약 ID를 성공 화면으로 전달합니다.
+        const newReservationId = response.data.visitReservationId;
+        
+        router.push({
+          pathname: '/restaurant/reservation-success' as any,
+          params: { 
+            reservationId: newReservationId,
+            month: month,
+            date: date,
+            time: time
+          }
+        });
+      } else {
+        Alert.alert('예약 실패', response.message || '예약에 실패했습니다.');
+      }
+    } catch (error) {
+     // 🚨 여기가 핵심입니다! 백엔드가 400 에러와 함께 보내준 진짜 이유를 출력합니다.
+      const err = error as any; 
+
+      // 🚨 백엔드가 400 에러와 함께 보내준 진짜 이유를 출력합니다.
+      console.log('============= 400 에러 상세 원인 =============');
+      console.log(err.response?.data);
+      console.log('==============================================');
+      
+      Alert.alert('예약 실패', err.response?.data?.message || '요청 데이터가 잘못되었습니다.');
+    }
   };
 
   return (
