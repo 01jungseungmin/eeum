@@ -202,7 +202,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     IMAGE_SIZE_EXCEEDED("IMAGE_002", "이미지 크기는 10MB를 초과할 수 없습니다", HttpStatus.BAD_REQUEST),
     IMAGE_NOT_FOUND("IMAGE_003", "존재하지 않는 이미지입니다", HttpStatus.NOT_FOUND),
     IMAGE_UPLOAD_FAILED("IMAGE_004", "이미지 업로드에 실패했습니다", HttpStatus.INTERNAL_SERVER_ERROR),
-    IMAGE_LIMIT_EXCEEDED("IMAGE_005", "이미지는 최대 5장까지 등록 가능합니다", HttpStatus.BAD_REQUEST),
+    IMAGE_LIMIT_EXCEEDED("IMAGE_005", "이미지는 최대 10장까지 등록 가능합니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 락 (LOCK) =====================
     LOCK_ACQUIRE_FAILED("LOCK_001", "요청이 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
