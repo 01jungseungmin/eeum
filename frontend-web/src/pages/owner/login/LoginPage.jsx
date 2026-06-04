@@ -50,31 +50,6 @@ const OptionsRow = styled.div`
   margin-bottom: 25px;
 `;
 
-const Divider = styled.div`
-  display: flex;
-  align-items: center;
-  width: 100%;
-  margin: 20px 0;
-  color: #888;
-  font-size: 12px;
-
-  &::before {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #e0e0e0;
-    margin-right: 10px;
-  }
-
-  &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #e0e0e0;
-    margin-left: 10px;
-  }
-`;
-
 function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -148,7 +123,6 @@ function LoginPage() {
       >
         회원가입
       </div>
-      <Divider>간편 로그인</Divider>
     </PageWrapper>
   );
 }
