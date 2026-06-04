@@ -2,7 +2,7 @@ import { client } from './client';
 
 export const orderApi = {
   // 1. 주문서 생성 (결제 전, 장바구니 데이터를 바탕으로 DB에 주문 정보 먼저 생성)
-  createOrder: async (data: { paymentMethod: string; pickupScheduledAt: string; requestMessage: string; }) => {
+  createOrder: async (data: { paymentMethod: string; pickupScheduledAt?: string; requestMessage?: string; }) => {
     const response = await client.post('/orders', data);
     return response.data?.data || response.data;
   },

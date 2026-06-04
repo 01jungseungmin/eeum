@@ -12,39 +12,43 @@ import { userApi } from '@/api/user';
 export default function CheckoutScreen() {
   const router = useRouter();
   const webViewRef = useRef(null);
-  
-  // 장바구니 화면에서 넘겨준 데이터(params) 받기
   const params = useLocalSearchParams();
 
   const [isPaymentVisible, setIsPaymentVisible] = useState(false);
   const [currentOrderNumber, setCurrentOrderNumber] = useState('');
-  const [currentOrderId, setCurrentOrderId] = useState(''); // complete.tsx 이동용 주문 ID 상태 추가
+  const [currentOrderId, setCurrentOrderId] = useState('');
 
-  // 화면에 보여줄 장바구니 주문 정보 상태
+  // 결제 수단 State (대분류)
+  const [selectedPayMethod, setSelectedPayMethod] = useState('CARD');
+  // 간편결제사 State (소분류)
+  const [easyPayProvider, setEasyPayProvider] = useState('TOSSPAY'); 
+
   const [displayOrder, setDisplayOrder] = useState({
     orderName: params.orderName ? String(params.orderName) : '장바구니 상품',
     totalPrice: Number(params.totalPrice) || 0
   });
 
-  // 화면에 보여줄 내 정보 상태
   const [userInfo, setUserInfo] = useState({
     name: '로딩중...',
     phone: '로딩중...',
     email: ''
   });
 
+  // 포트원 동적 파라미터 세팅 세트
   const [paymentData, setPaymentData] = useState({
     orderNumber: '',
     totalAmount: 0,
     orderName: '',
     customerName: '',
     customerPhone: '',
-    customerEmail: ''
+    customerEmail: '',
+    portonePayMethod: 'CARD', 
+    portoneChannelKey: '',
+    easyPayProvider: ''
   });
 
   const uniquePaymentId = `pay_${new Date().getTime()}`; 
 
-  // 화면이 처음 켜질 때 유저 정보 불러오기
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
@@ -62,17 +66,46 @@ export default function CheckoutScreen() {
   }, []);
 
   const handlePayment = async () => {
+    // ✨ 안전장치: 만약 이미 한 번 주문생성이 완료되어 주문번호가 있다면,
+    // 백엔드 API를 다시 호출하지 않고 (장바구니 비어있음 에러 방지) 곧바로 결제창만 다시 열어줍니다.
+    if (currentOrderNumber && selectedPayMethod !== 'ONSITE') {
+      setPaymentData((prev) => ({
+        ...prev,
+        portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
+        easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
+      }));
+      setIsPaymentVisible(true);
+      return;
+    }
+
     try {
-      const orderResponse = await orderApi.createOrder({
-        paymentMethod: "CARD",
-        pickupScheduledAt: "2026-05-28T13:00:00", 
-        requestMessage: "봉투에 담아주세요."
+      // 백엔드 명세와 동기화 (EASY_PAY일 경우 세부 프로바이더 전달)
+      let backendPayMethod = selectedPayMethod;
+
+      if (selectedPayMethod === 'EASY_PAY') {
+        backendPayMethod = 'EASY_PAY'; // 🎯 TOSSPAY 대신 백엔드가 원하는 대분류 단어로 고정!
+      } else if (selectedPayMethod === 'ONSITE') {
+        backendPayMethod = 'CASH_ON_SITE'; // 🎯 백엔드 로그에 적힌 단어 명세와 일치시킴
+      }
+
+      const res = await orderApi.createOrder({
+        paymentMethod: backendPayMethod
       });
       
-      // 스웨거 명세에 맞춘 주문 식별 데이터 저장
+      const orderResponse = res.data?.data || res.data || res;
+
       setCurrentOrderNumber(orderResponse.orderNumber);
       setCurrentOrderId(String(orderResponse.orderId || '1'));
 
+      // 현장 결제 분기 처리 (포트원 웹뷰 우회)
+      if (selectedPayMethod === 'ONSITE') {
+        Alert.alert("주문 접수", "현장 결제로 주문이 접수되었습니다.", [
+          { text: "확인", onPress: () => navigateToComplete() }
+        ]);
+        return; 
+      }
+
+      // 토스페이먼츠 단일 채널 및 간편결제 프로바이더 데이터 동적 주입
       setPaymentData({
         orderNumber: orderResponse.orderNumber,          
         totalAmount: orderResponse.totalPrice,           
@@ -81,51 +114,44 @@ export default function CheckoutScreen() {
         customerEmail: (userInfo.email && userInfo.email.includes('@') && !userInfo.email.includes('*')) 
                         ? userInfo.email 
                         : 'test@eeum.com',
-        customerPhone: userInfo.phone
+        customerPhone: userInfo.phone,
+        portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
+        portoneChannelKey: process.env.EXPO_PUBLIC_PORTONE_TOSS_CHANNEL_KEY || '', 
+        easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
       });
 
       setIsPaymentVisible(true);
     } catch (error) {
       console.error(error);
-      Alert.alert("주문 생성 실패", "장바구니 정보를 처리하는 중 문제가 발생했습니다.");
+      Alert.alert("주문 생성 실패", "결제 준비 중 문제가 발생했습니다.");
     }
   };
 
-  // 주문 완료(complete) 페이지로 안전하게 진짜 데이터를 실어 이동시키는 헬퍼 함수
   const navigateToComplete = () => {
     router.push({
       pathname: '/order/complete',
       params: {
         orderId: currentOrderId,
         orderNumber: currentOrderNumber,
-        orderName: paymentData.orderName,
-        totalPrice: paymentData.totalAmount
+        orderName: displayOrder.orderName,
+        totalPrice: displayOrder.totalPrice
       }
     });
   };
 
   const handleWebViewMessage = async (event: any) => {
-    console.log("\n========================================");
-    console.log("🚩 [STEP 1] 결제창에서 이벤트 수신됨!");
-
     const response = JSON.parse(event.nativeEvent.data);
     setIsPaymentVisible(false);
 
     if (response.code != null) {
-      console.log("❌ [STEP 2] 포트원 결제 자체 실패:", response.message);
       Alert.alert("결제 실패", response.message);
     } else {
-      console.log("✅ [STEP 2] 포트원 결제 성공! (API 검증 시작)");
       try {
-        console.log("🚀 [STEP 3] 백엔드로 /payments/verify API 요청 쏘는 중...");
         await orderApi.verifyPayment(response.paymentId, currentOrderNumber);
-        
-        console.log("🎉 [STEP 4] 백엔드 검증 완료!");
         Alert.alert("결제 성공", "주문이 완료되었습니다!", [
           { text: "확인", onPress: () => navigateToComplete() }
         ]);
       } catch (e: any) {
-        console.error("\n🚨 [STEP 4 - ERROR] 백엔드 검증 중 에러 발생!!");
         Alert.alert("결제 검증 실패", "결제는 진행되었으나 서버 검증에 실패했습니다.");
       }
     }
@@ -134,32 +160,29 @@ export default function CheckoutScreen() {
   const handleShouldStartLoadWithRequest = (request: any) => {
     const { url } = request;
 
+    // 1. 결제 완료 성공 주소 낚아채기
     if (url.includes('http://localhost/payment/success')) {
       setIsPaymentVisible(false);
       const urlParts = url.split('paymentId=');
-      
       if (urlParts.length > 1) {
         const paymentId = urlParts[1].split('&')[0];
-        console.log("✅ 결제 성공 낚아채기 완료! PaymentId:", paymentId);
-        
         orderApi.verifyPayment(paymentId, currentOrderNumber)
           .then(() => {
             Alert.alert("결제 성공", "주문이 완료되었습니다!", [
               { text: "확인", onPress: () => navigateToComplete() }
             ]);
           })
-          .catch((e) => {
-             console.error("검증 실패:", e);
-             Alert.alert("검증 실패", "서버 검증에 실패했습니다.");
-          });
+          .catch(() => Alert.alert("검증 실패", "서버 검증에 실패했습니다."));
       }
       return false; 
     }
 
+    // 2. 일반 웹 주소(http, https)는 웹뷰 안에서 그대로 보여주기
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('about:blank')) {
       return true;
     }
 
+    // ✨ 3. 안드로이드 딥링크(Intent) 파싱 및 외부 앱 호출 로직 복원 (토스/카카오 앱 오픈 핵심)
     if (Platform.OS === 'android' && url.startsWith('intent')) {
       const intentParts = url.split('#Intent;');
       const urlBeforeIntent = intentParts[0].replace('intent://', ''); 
@@ -175,28 +198,37 @@ export default function CheckoutScreen() {
       }
 
       if (scheme) {
+        // 실제 외부 앱 스키마 주소 조립 (예: supertoss://...)
         const realAppUrl = `${scheme}://${urlBeforeIntent}`;
         Linking.openURL(realAppUrl).catch(() => {
+          // 앱이 설치 안 되어 있으면 구글 플레이스토어로 이동
           if (packageName) {
             Linking.openURL(`market://details?id=${packageName}`);
           }
         });
+      } else if (packageName) {
+        Linking.openURL(`market://details?id=${packageName}`);
       }
       return false; 
     }
 
+    // 4. iOS 및 기타 커스텀 스키마 외부 앱 열기 (supertoss:// 등)
     Linking.openURL(url).catch(() => {
-      Alert.alert('앱 실행 실패', '해당 결제 앱이 설치되어 있지 않습니다.');
+      Alert.alert('앱 실행 실패', '결제 앱이 설치되어 있지 않거나 열 수 없습니다.');
     });
     return false;
   };
 
+  const easyPayScript = paymentData.portonePayMethod === 'EASY_PAY' 
+    ? `easyPay: { easyPayProvider: '${paymentData.easyPayProvider}' },` 
+    : '';
+
+  // 🛠️ storeId 단락의 누락되었던 여는 따옴표(') 완벽히 보완 완료
   const htmlContent = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; }</style>
         <script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
       </head>
       <body>
@@ -204,13 +236,14 @@ export default function CheckoutScreen() {
           window.onload = async function() {
             try {
               await PortOne.requestPayment({
-                storeId: 'store-adeb0b11-deef-4d93-9e5d-b74e64e521ff',
-                channelKey: 'channel-key-9cd0714c-def7-4d01-b6c5-9a4ec5557bec',
+                storeId: '${process.env.EXPO_PUBLIC_PORTONE_STORE_ID}',
+                channelKey: '${process.env.EXPO_PUBLIC_PORTONE_DEFAULT_KEY}',
                 paymentId: '${uniquePaymentId}',
                 orderName: '${paymentData.orderName}', 
                 totalAmount: ${paymentData.totalAmount}, 
                 currency: 'CURRENCY_KRW',
-                payMethod: 'CARD',
+                payMethod: '${paymentData.portonePayMethod}', 
+                ${easyPayScript}
                 customer: {
                   fullName: '${paymentData.customerName}',
                   phoneNumber: '${paymentData.customerPhone}',
@@ -241,9 +274,6 @@ export default function CheckoutScreen() {
           originWhitelist={['*']} 
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           style={{ flex: 1 }}
-          scalesPageToFit={false} 
-          textZoom={100} 
-          bounces={false} 
         />
       </SafeAreaView>
     );
@@ -255,46 +285,102 @@ export default function CheckoutScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>주문 / 결제</Text>
+        <Text fontWeight="bold" style={styles.headerTitle}>주문/결제</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
+          <Text fontWeight="bold" style={styles.sectionTitle}>주문자</Text>
+          <View style={styles.buyerBox}>
+            <Text style={styles.buyerText}>{userInfo.name}  {userInfo.phone}</Text>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.section}>
           <Text fontWeight="bold" style={styles.sectionTitle}>주문 상품</Text>
           <Text style={styles.summaryText}>{displayOrder.orderName}</Text>
         </View>
+
         <View style={styles.divider} />
 
         <View style={styles.section}>
-          <Text fontWeight="bold" style={styles.sectionTitle}>배송지 정보</Text>
-          <View style={styles.inputBox}>
-            <Text style={styles.inputLabel}>받으시는 분</Text>
-            <Text style={styles.inputValue}>{userInfo.name}님</Text>
+          <Text fontWeight="bold" style={styles.sectionTitle}>결제 수단</Text>
+          
+          <View style={styles.payMethodRow}>
+            {['CARD', 'EASY_PAY', 'TRANSFER', 'ONSITE'].map((method, index) => {
+              const labels = ['카드', '간편결제', '계좌이체', '현장결제'];
+              const isActive = selectedPayMethod === method;
+              return (
+                <TouchableOpacity 
+                  key={method}
+                  style={[styles.payMethodBtn, isActive && styles.payMethodBtnActive]}
+                  onPress={() => setSelectedPayMethod(method)}
+                >
+                  <Text style={[styles.payMethodText, isActive && styles.payMethodTextActive]}>
+                    {labels[index]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          <View style={styles.inputBox}>
-            <Text style={styles.inputLabel}>연락처</Text>
-            <Text style={styles.inputValue}>{userInfo.phone}</Text>
-          </View>
+
+          {selectedPayMethod === 'EASY_PAY' && (
+            <View style={styles.subPayMethodRow}>
+              {['TOSSPAY', 'KAKAOPAY', 'NAVERPAY'].map((provider, index) => {
+                const labels = ['토스페이', '카카오페이', '네이버페이'];
+                const isActive = easyPayProvider === provider;
+                return (
+                  <TouchableOpacity 
+                    key={provider}
+                    style={[styles.subPayMethodBtn, isActive && styles.subPayMethodBtnActive]}
+                    onPress={() => setEasyPayProvider(provider)}
+                  >
+                    <Text style={[styles.subPayMethodText, isActive && styles.subPayMethodTextActive]}>
+                      {labels[index]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {selectedPayMethod === 'CARD' && (
+            <View style={styles.payMethodHintBox}>
+              <Text style={styles.payMethodHintText}>결제하기 버튼을 누른 후 카드를 선택해주세요.</Text>
+            </View>
+          )}
+
+          {selectedPayMethod === 'ONSITE' && (
+            <View style={styles.payMethodHintBox}>
+              <Text style={styles.payMethodHintText}>매장에 방문하여 상품 수령 시 현장에서 결제해주세요.</Text>
+            </View>
+          )}
         </View>
+
         <View style={styles.divider} />
 
         <View style={styles.section}>
-          <Text fontWeight="bold" style={styles.sectionTitle}>결제 상세</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>주문 금액</Text>
-            <Text style={styles.priceValue}>{displayOrder.totalPrice.toLocaleString()}원</Text>
-          </View>
-          <View style={[styles.priceRow, { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderColor: '#eee' }]}>
-            <Text fontWeight="bold" style={styles.totalPriceLabel}>총 결제 금액</Text>
-            <Text fontWeight="bold" style={styles.totalPriceValue}>{displayOrder.totalPrice.toLocaleString()}원</Text>
+          <View style={styles.priceSummaryBox}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>상품 금액</Text>
+              <Text style={styles.priceValue}>{displayOrder.totalPrice.toLocaleString()}원</Text>
+            </View>
+            <View style={[styles.priceRow, { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderColor: '#eee' }]}>
+              <Text fontWeight="bold" style={styles.totalPriceLabel}>총 결제</Text>
+              <Text fontWeight="bold" style={styles.totalPriceValue}>{displayOrder.totalPrice.toLocaleString()}원</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.payBtn} onPress={handlePayment}>
-          <Text fontWeight="bold" style={styles.payBtnText}>{displayOrder.totalPrice.toLocaleString()}원 결제하기</Text>
+          <Text fontWeight="bold" style={styles.payBtnText}>
+            {selectedPayMethod === 'ONSITE' ? '현장 결제로 주문하기' : `${displayOrder.totalPrice.toLocaleString()}원 결제하기`}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -303,22 +389,34 @@ export default function CheckoutScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#00A859' },
   backButton: { padding: 5, marginLeft: -5 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   section: { padding: 20 },
-  sectionTitle: { fontSize: 18, color: '#333', marginBottom: 15 },
+  sectionTitle: { fontSize: 16, color: '#333', marginBottom: 15 },
+  buyerBox: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, padding: 15 },
+  buyerText: { fontSize: 15, color: '#333' },
   summaryText: { fontSize: 15, color: '#555' },
   divider: { height: 8, backgroundColor: '#F8F8F8' },
-  inputBox: { marginBottom: 15 },
-  inputLabel: { fontSize: 13, color: '#888', marginBottom: 5 },
-  inputValue: { fontSize: 15, color: '#333', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  priceLabel: { fontSize: 15, color: '#666' },
-  priceValue: { fontSize: 15, color: '#333' },
+  payMethodRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  payMethodBtn: { flex: 1, backgroundColor: '#F5F5F5', paddingVertical: 12, borderRadius: 20, alignItems: 'center', marginHorizontal: 3 },
+  payMethodBtnActive: { backgroundColor: '#00A859' },
+  payMethodText: { fontSize: 13, color: '#666', fontWeight: '500' },
+  payMethodTextActive: { color: '#fff', fontWeight: 'bold' },
+  subPayMethodRow: { flexDirection: 'row', justifyContent: 'flex-start', marginTop: 10, gap: 8 },
+  subPayMethodBtn: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' },
+  subPayMethodBtnActive: { borderColor: '#00A859', backgroundColor: '#E8F5E9' },
+  subPayMethodText: { fontSize: 13, color: '#666' },
+  subPayMethodTextActive: { color: '#00A859', fontWeight: 'bold' },
+  payMethodHintBox: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, padding: 15, marginTop: 15 },
+  payMethodHintText: { color: '#888', fontSize: 14 },
+  priceSummaryBox: { backgroundColor: '#F8F9FA', padding: 20, borderRadius: 12 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  priceLabel: { fontSize: 14, color: '#666' },
+  priceValue: { fontSize: 14, color: '#333' },
   totalPriceLabel: { fontSize: 16, color: '#333' },
   totalPriceValue: { fontSize: 20, color: '#00A859' },
-  bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff' },
+  bottomBar: { padding: 20, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
   payBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center' },
   payBtnText: { color: '#fff', fontSize: 16 },
   closeBtn: { padding: 15, alignItems: 'flex-end', backgroundColor: '#fff' }
