@@ -12,4 +12,7 @@ public interface StoreImageRepository extends JpaRepository<StoreImage, Long> {
     void deleteByStore_StoreId(Long storeId);
     boolean existsByStore_StoreIdAndIsThumbnailTrue(Long storeId);
     Optional<StoreImage> findByStore_StoreIdAndIsThumbnailTrue(Long storeId);
+
+    /** 상점 찜 목록 N+1 방지 — 여러 상점의 썸네일을 IN절 한 번으로 조회 */
+    List<StoreImage> findByStore_StoreIdInAndIsThumbnailTrue(List<Long> storeIds);
 }

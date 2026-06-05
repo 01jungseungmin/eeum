@@ -52,13 +52,12 @@ function MemberPage() {
   const token =
     localStorage.getItem('accessToken') ||
     sessionStorage.getItem('accessToken');
+  const headers = { Authorization: token ? `Bearer ${token}` : '' };
 
   const fetchAllMembers = () => {
     axios
       .get('http://localhost:8080/admin/accounts?page=0&size=1000', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
+        headers,
       })
       .then((response) => {
         if (response.data && response.data.success) {
@@ -185,9 +184,7 @@ function MemberPage() {
         url,
         {},
         {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
+          headers,
         },
       );
     });
@@ -215,9 +212,7 @@ function MemberPage() {
       return;
     axios
       .delete(`http://localhost:8080/admin/accounts/${accountId}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
+        headers,
       })
       .then(() => {
         alert(`${name} 회원이 탈퇴 처리되었습니다.`);
@@ -240,9 +235,7 @@ function MemberPage() {
         `http://localhost:8080/admin/accounts/${accountId}/withdrawal/cancel`,
         {},
         {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
+          headers,
         },
       )
       .then((response) => {

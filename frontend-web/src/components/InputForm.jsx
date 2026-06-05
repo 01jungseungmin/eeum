@@ -54,6 +54,8 @@ const InputForm = forwardRef(
       onChange,
       buttonText,
       onButtonClick,
+      maxLength, // 추가
+      inputMode, // 추가
     },
     ref,
   ) => {
@@ -67,6 +69,8 @@ const InputForm = forwardRef(
             placeholder={placeholder}
             value={value}
             onChange={onChange}
+            maxLength={maxLength}
+            inputMode={inputMode}
           />
           {buttonText && (
             <ActionButton type="button" onClick={onButtonClick}>

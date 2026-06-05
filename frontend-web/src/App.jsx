@@ -10,6 +10,7 @@ import AdminDashboardPage from './pages/admin/main/DashBoardPage';
 import ApprovalPage from './pages/admin/main/ApprovalPage';
 import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
 import MemberPage from './pages/admin/main/MemberPage';
+import StorePage from './pages/owner/main/StorePage';
 
 function App() {
   return (
@@ -32,7 +33,7 @@ function App() {
 
         {/* 나중에 추가될 다른 메뉴들 */}
         <Route path="/dashboard" element={<OwnerDashboardPage />} />
-        <Route path="/store" element={<div>상점 관리 페이지 (준비중)</div>} />
+        <Route path="/store" element={<StorePage />} />
         <Route
           path="/products"
           element={<div>상품 관리 페이지 (준비중)</div>}
