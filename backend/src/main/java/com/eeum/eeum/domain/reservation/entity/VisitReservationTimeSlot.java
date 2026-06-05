@@ -3,9 +3,7 @@ package com.eeum.eeum.domain.reservation.entity;
 import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.store.entity.Store;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -45,7 +43,8 @@ public class VisitReservationTimeSlot extends BaseEntity {
             LocalDate slotDate,
             LocalTime slotTime,
             Integer maxVisitorCount,
-            Integer maxTeamCount
+            Integer maxTeamCount,
+            Boolean enabled
     ) {
         VisitReservationTimeSlot slot = new VisitReservationTimeSlot();
         slot.store = store;
@@ -53,6 +52,7 @@ public class VisitReservationTimeSlot extends BaseEntity {
         slot.slotTime = slotTime;
         slot.maxVisitorCount = maxVisitorCount;
         slot.maxTeamCount = maxTeamCount;
+        slot.enabled = enabled != null ? enabled : true;
         return slot;
     }
 

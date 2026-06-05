@@ -6,10 +6,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Collection;
+import java.util.List;
 
 public interface VisitReservationRepository extends JpaRepository<VisitReservation, Long> {
 
@@ -76,4 +78,22 @@ public interface VisitReservationRepository extends JpaRepository<VisitReservati
             Long storeId,
             VisitReservationStatus status
     );
+
+    @Query("""
+    SELECT r.visitTime          AS reservationTime,
+           SUM(r.visitorCount)  AS reservedPeople,
+           COUNT(r)             AS reservedTeams
+    FROM VisitReservation r
+        where r.store.storeId = :storeId
+          and r.visitDate = :date
+          and r.status in :statuses
+        group by r.visitTime
+    """)
+    List<VisitReservationTimeSlotCountProjection> countTimeSlotsByStoreAndDate(
+            @Param("storeId") Long storeId,
+            @Param("date") LocalDate date,
+            @Param("statuses") List<VisitReservationStatus> statuses
+    );
+
+    List<VisitReservation> findByStore_StoreIdAndVisitDateAndVisitTimeAndStatusIn(Long storeId, LocalDate date, LocalTime slotTime, List<VisitReservationStatus> pending);
 }

@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.owner;
 
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationStatusUpdateRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.VisitReservationLeftTimeSlotResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationResponseDto;
 import com.eeum.eeum.application.reservation.service.VisitReservationService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -16,6 +17,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "16. Owner - Visit Reservation", description = "사장 방문 예약 관리 API")
 @SecurityRequirement(name = "bearerAuth")
@@ -79,5 +83,16 @@ public class OwnerReservationController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         visitReservationService.completeReservation(accountId, reservationId);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "잔여 예약 가능 시간대 조회", description = "특정 날짜의 시간대별 잔여 팀 수, 잔여 인원 수, 마감 여부를 조회합니다.")
+    @GetMapping("/timeslot")
+    public ResponseEntity<ApiResponse<List<VisitReservationLeftTimeSlotResponseDto>>> getOwnerReservationTimeSlots(
+            @RequestParam LocalDate date
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                visitReservationService.getOwnerLeftTimeSlot(accountId, date)
+        ));
     }
 }
