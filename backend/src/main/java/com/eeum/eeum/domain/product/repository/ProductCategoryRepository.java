@@ -38,6 +38,15 @@ public interface ProductCategoryRepository extends JpaRepository<ProductCategory
     """)
     int countProductsByCategoryId(@Param("categoryId") Long categoryId);
 
+    @Query("""
+        select pc.productCategoryId, count(p.productId)
+        from ProductCategory pc
+        left join Product p on p.productCategory = pc
+        where pc.store.storeId = :storeId
+        group by pc.productCategoryId
+    """)
+    List<Object[]> countProductsByStoreIdGroupByCategoryId(@Param("storeId") Long storeId);
+
     boolean existsByStore_StoreId(Long storeId);
 
     Optional<ProductCategory> findByStore_StoreIdAndName(Long storeId, String name);

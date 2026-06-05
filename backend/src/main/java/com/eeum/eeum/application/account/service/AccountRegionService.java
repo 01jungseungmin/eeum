@@ -3,7 +3,7 @@ package com.eeum.eeum.application.account.service;
 import com.eeum.eeum.application.account.dto.request.LocationDto;
 import com.eeum.eeum.application.account.dto.request.RegionRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountRegionResponseDto;
-import com.eeum.eeum.application.account.mapper.AccountMapper;
+import com.eeum.eeum.application.account.mapper.AccountRegionMapper;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Location;
@@ -33,7 +33,7 @@ public class AccountRegionService {
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final LocationRepository locationRepository;
-    private final AccountMapper accountMapper;
+    private final AccountRegionMapper accountRegionMapper;
 
     // ===================== 활동 지역 목록 조회 =====================
 
@@ -42,7 +42,7 @@ public class AccountRegionService {
         Account account = getAccount(accountId);
         return accountRegionRepository.findByAccount_AccountId(accountId)
                 .stream()
-                .map(ar -> accountMapper.toRegionDto(ar,account))
+                .map(ar -> accountRegionMapper.toRegionDto(ar,account))
                 .toList();
     }
 
@@ -71,7 +71,7 @@ public class AccountRegionService {
         accountRegionRepository.save(accountRegion);
 
         log.info("활동 지역 등록: accountId={}, regionId={}", accountId, region.getRegionId());
-        return accountMapper.toRegionDto(accountRegion,account);
+        return accountRegionMapper.toRegionDto(accountRegion,account);
     }
 
     // ===================== GPS 인증 =====================
@@ -105,7 +105,7 @@ public class AccountRegionService {
         }
 
         log.info("활동 지역 GPS 인증 완료: accountId={}, accountRegionId={}", accountId, accountRegionId);
-        return accountMapper.toRegionDto(accountRegion,account);
+        return accountRegionMapper.toRegionDto(accountRegion,account);
     }
 
     // ===================== 특정 지역 조회 =====================
@@ -114,7 +114,7 @@ public class AccountRegionService {
         Account account = getAccount(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
 
-        return accountMapper.toRegionDto(accountRegion,account);
+        return accountRegionMapper.toRegionDto(accountRegion,account);
     }
 
     // ===================== 대표 지역 설정 =====================

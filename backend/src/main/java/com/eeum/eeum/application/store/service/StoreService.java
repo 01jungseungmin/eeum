@@ -8,6 +8,7 @@ import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto
 import com.eeum.eeum.application.store.dto.response.StoreDashboardResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreResponseDto;
+import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -55,6 +56,7 @@ public class StoreService {
     private final ProductRepository productRepository;
     private final StoreImageRepository storeImageRepository;
     private final VisitReservationRepository visitReservationRepository;
+    private final StoreMapper storeMapper;
 
     // ===================== 상점 조회/수정 =====================
 
