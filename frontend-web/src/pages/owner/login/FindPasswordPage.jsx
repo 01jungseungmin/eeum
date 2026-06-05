@@ -62,7 +62,7 @@ function FindPassword() {
 
     try {
       const response = await axios.post(
-        'http://localhost:8080/auth/email/verify-code',
+        'http://localhost:8080/auth/email/verify',
         { email: email, code: code },
       );
       console.log('Code verified successfully:', response.data);

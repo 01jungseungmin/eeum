@@ -1,6 +1,7 @@
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
+import axios from 'axios';
 
 const SideContainer = styled.div`
   width: 260px;
@@ -120,6 +121,46 @@ function Sidebar() {
     adminReports: 5,
   };
 
+  const handleMenuClick = async (item) => {
+    if (item.action === 'LOGOUT') {
+      const accessToken = localStorage.getItem('accessToken');
+      const refreshToken = localStorage.getItem('refreshToken');
+      const currentRole = localStorage.getItem('role');
+
+      const targetPath =
+        currentRole === 'ROLE_ADMIN' ? '/admin/login' : '/login';
+
+      try {
+        if (accessToken && refreshToken) {
+          await axios.post(
+            'http://localhost:8080/auth/logout',
+            { refreshToken: refreshToken },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+              },
+            },
+          );
+        }
+      } catch (error) {
+        console.error(
+          '로그아웃 API 호출 실패 (아마도 토큰 만료):',
+          error.response?.status,
+        );
+      } finally {
+        // 성공하든 실패하든(401 등) 로컬 스토리지는 비우고 페이지를 이동
+        localStorage.removeItem('role');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+
+        console.log('로컬 상태 정리 완료, 이동 경로:', targetPath);
+        navigate(targetPath);
+      }
+    } else if (item.path && item.path !== '#') {
+      navigate(item.path);
+    }
+  };
+
   return (
     <SideContainer $isAdmin={isAdmin}>
       <LogoSection $isAdmin={isAdmin}>
@@ -137,7 +178,7 @@ function Sidebar() {
               return (
                 <MenuItem
                   key={item.id}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleMenuClick(item)}
                   $active={isActive}
                   $isAdmin={isAdmin}
                 >
