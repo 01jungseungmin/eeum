@@ -20,6 +20,7 @@ export default function HomeScreen() {
   
   const [regions, setRegions] = useState<any[]>([]);
   const [primaryRegionName, setPrimaryRegionName] = useState('동네 로딩중...');
+  const [primaryRegionId, setPrimaryRegionId] = useState<number | null>(null);
 
   // 화면에 다시 돌아올 때마다(Focus) 항상 최신 지역 목록을 서버에서 불러온다.
   useFocusEffect(
@@ -51,7 +52,14 @@ export default function HomeScreen() {
       setRegions(normalizedData);
       
       const primary = normalizedData.find((r: any) => r.isPrimary);
-      setPrimaryRegionName(primary ? (primary.dong || primary.fullName) : '동네 설정 필요');
+    
+      if (primary) {
+        setPrimaryRegionName(primary.dong || primary.fullName);
+        setPrimaryRegionId(primary.accountRegionId || primary.id); // ✨ 아이디 저장!
+      } else {
+        setPrimaryRegionName('동네 설정 필요');
+        setPrimaryRegionId(null); // ✨ 동네가 없을 땐 null
+      }
     } catch (e) {
       console.log("지역 목록 로딩 실패:", e);
       setRegions([]); 
@@ -96,6 +104,7 @@ export default function HomeScreen() {
   // 4. GPS 동네 인증하기
   // =====================================================================
   const handleVerifyRegion = async (id: number) => {
+    console.log("🚨 백엔드로 보내는 인증 ID:", id);
     try {
       // 1. GPS 권한 요청 및 현재 위치 좌표 가져오기
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -143,7 +152,7 @@ export default function HomeScreen() {
       />
       
       {activeTab === 'shop' 
-        ? <ShopView router={router} /> 
+        ? <ShopView router={router} regionId={primaryRegionId} /> 
         : <UsedTradeView router={router} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
       }
 
