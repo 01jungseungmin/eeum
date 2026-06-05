@@ -3,6 +3,7 @@ import InputForm from '../../../components/InputForm';
 import { useState, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { authApi } from '../../../api/authApi';
 
 const PageWrapper = styled.div`
   max-width: 450px;
@@ -85,12 +86,7 @@ function SignUp() {
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/email/send-verification',
-        {
-          email: email,
-        },
-      );
+      await authApi.sendEmailVerification(email);
 
       alert('인증코드가 이메일로 전송되었습니다. 이메일을 확인해주세요.');
     } catch (error) {
@@ -108,15 +104,10 @@ function SignUp() {
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/email/verify',
-        {
-          email: email,
-          code: code,
-        },
-      );
-      setToken(response.data.data);
+      const response = await authApi.verifyEmailCode(email, code);
+      const responseData = response.data || response;
 
+      setToken(responseData.data);
       alert('인증코드가 확인되었습니다. 회원가입을 계속 진행해주세요.');
     } catch (error) {
       console.error('인증코드 확인 실패:', error);
@@ -138,6 +129,13 @@ function SignUp() {
   const handlePhoneChange = (setter) => (e) => {
     const formattedValue = formatPhoneNumber(e.target.value);
     setter(formattedValue);
+  };
+
+  // 개업일자 입력에서 숫자만 허용
+  const handleOpeningDateChange = (e) => {
+    const onlyNumbers = e.target.value.replace(/[^0-9]/g, '');
+
+    setOpeningDate(onlyNumbers);
   };
 
   const handleSignUp = async (e) => {
@@ -178,24 +176,20 @@ function SignUp() {
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/signup/owner',
-        {
-          email: email,
-          password: password,
-          name: businessName,
-          phone: phone,
-          businessNumber: businessNumber,
-          storeName: storeName,
-          openingDate: openingDate,
-          storeAddress: location,
-          storePhone: storePhone,
-          emailVerificationToken: token,
-        },
-      );
+      await authApi.signUpOwner({
+        email: email,
+        password: password,
+        name: businessName,
+        phone: phone,
+        businessNumber: businessNumber,
+        storeName: storeName,
+        openingDate: openingDate,
+        storeAddress: location,
+        storePhone: storePhone,
+        emailVerificationToken: token,
+      });
 
       alert('회원가입이 완료되었습니다!');
-
       navigate('/login');
     } catch (error) {
       console.error('회원가입 실패:', error);
@@ -275,9 +269,11 @@ function SignUp() {
       <InputForm
         ref={openingDateRef}
         title="개업일자"
-        placeholder="개업일자를 입력해주세요"
+        placeholder="YYYYMMDD 형식으로 입력해주세요 (예: 20260605)"
         value={openingDate}
-        onChange={(e) => setOpeningDate(e.target.value)}
+        onChange={handleOpeningDateChange}
+        maxLength={8}
+        inputMode="numeric"
       />
       <InputForm
         ref={locationRef}
