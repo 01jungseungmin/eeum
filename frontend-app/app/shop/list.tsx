@@ -1,24 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import { Text } from '../../components/CustomText';
 
+import { regionApi } from '../../api/region';
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
+import { favoriteApi } from '@/api/favorite';
 
 export default function ShopListScreen() {
   const router = useRouter();
-
-  const { regionId } = useLocalSearchParams(); 
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const categoryListRef = useRef<FlatList<any>>(null);
+
+  const [hasRegion, setHasRegion] = useState(false);
   
   const handleCategoryPress = (id: number, index: number) => {
     setSelectedCategoryId(id);
@@ -37,47 +39,73 @@ export default function ShopListScreen() {
   };
 
   useEffect(() => {
-    const fetchShopList = async () => {
-      if (!regionId) {
-        setShopList([]);
-        return;
-      }
-
+    const fetchShopsByPrimaryRegion = async () => {
       setIsLoading(true);
       try {
-        const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
+        // 1. 내 동네 목록 전체 조회
+        const res = await regionApi.getMyRegions();
         
-        // ✨ 3. 백엔드에 보낼 파라미터에 regionId를 추가해서 요청합니다!
-        const params: any = { categoryId: categoryParam, size: 20 };
-        if (regionId) {
-          params.regionId = Number(regionId);
-        }
+        // 2. 서버 응답 구조 확인 (res.data에 배열이 들어있는지 확인)
+        // 스웨거 예시를 보면 success: true, data: [...] 구조일 수 있습니다.
+        const regions = res.data || []; 
+        
+        // 3. isPrimary가 true인 놈을 찾기!
+        const primary = regions.find((r: any) => r.isPrimary === true);
 
-        const res = await shopApi.getShops(params);
-        const shops = res.data?.content || [];
-        setShopList(shops);
+        if (primary) {
+          setHasRegion(true); // ✨ 동네가 있음을 알림
+          const shopRes = await shopApi.getShops({ regionId: primary.regionId, size: 20 });
+          setShopList(shopRes.data?.content || []);
+        } else {
+          setHasRegion(false);
+        }
       } catch (e) {
-        console.error('상점 목록 API 로딩 실패:', e);
+        console.error(e);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchShopList();
-  }, [selectedCategoryId, regionId]); // ✨ useEffect 의존성 배열에도 regionId 추가
+    fetchShopsByPrimaryRegion();
+  }, [selectedCategoryId]);
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
   };
 
-  const renderShopCard = ({ item }: any) => {
-    const thumbnailUrl = item.thumbnailUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
+  const handleListToggleFavorite = async (storeId: number, currentStatus: boolean) => {
+    try {
+      // 서버에 토글 요청
+      const res = await favoriteApi.toggleFavorite('STORE', storeId);
+      const { favorited, favoriteCount: newCount } = res.data.data;
+
+      // 현재 목록(shopList)에서 해당 상점만 찾아서 상태 업데이트
+      setShopList(prevList => 
+        prevList.map(shop => 
+          shop.storeId === storeId 
+            ? { ...shop, isFavorited: favorited, favoriteCount: newCount } 
+            : shop
+        )
+      );
+    } catch (error) {
+      Alert.alert("알림", "찜 상태 변경에 실패했습니다.");
+    }
+  };
+
+ const renderShopCard = ({ item }: any) => {
+  const thumbnailUrl = item.thumbnailUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
 
     return (
       <TouchableOpacity style={styles.cardContainer} onPress={() => router.push(`/shop/${item.storeId}`)}>
         <Image source={{ uri: thumbnailUrl }} style={styles.cardImage} />
         <View style={styles.cardTitleRow}>
           <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.name}</Text>
-          <Ionicons name="heart-outline" size={20} color="#999" />
+          <TouchableOpacity onPress={() => handleListToggleFavorite(item.storeId, item.isFavorited)}>
+            <Ionicons 
+              name={item.isFavorited ? "heart" : "heart-outline"} 
+              size={20} 
+              color={item.isFavorited ? "#FF5252" : "#999"} 
+            />
+          </TouchableOpacity>
         </View>
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={14} color="#FFD700" />
@@ -146,7 +174,7 @@ export default function ShopListScreen() {
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#00A859" />
         </View>
-      ): !regionId ? ( // ✨ 2. 동네 설정이 없을 때 띄워줄 빈 화면
+      ): !hasRegion ? ( 
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <Ionicons name="location-outline" size={48} color="#CCC" style={{ marginBottom: 10 }} />
           <Text style={{ color: '#888', fontSize: 16 }}>동네를 먼저 설정해 주세요!</Text>
