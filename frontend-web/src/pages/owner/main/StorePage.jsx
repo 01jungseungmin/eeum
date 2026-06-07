@@ -337,7 +337,6 @@ function StorePage() {
   // 영업시간 수정
   const handleUpdateHours = async (hoursArray) => {
     try {
-      // 💡 API 명세에 따라 { "businessHours": [요일별 객체들] } 구조로 만듭니다.
       const requestBody = {
         businessHours: hoursArray,
       };
@@ -370,7 +369,7 @@ function StorePage() {
       .catch((err) => console.error('이미지 삭제 실패:', err));
   };
 
-  // 상점 정보가 없거나, 영업시간 배열이 아직 텅 비어있다면 로딩바를 띄웁니다.
+  // 상점 정보가 없거나, 영업시간 배열이 아직 텅 비어있다면 보여주는 로딩바
   if (!storeInfo || !businessHours || businessHours.length === 0) {
     return (
       <PageContainer style={{ justifyContent: 'center', alignItems: 'center' }}>

@@ -3,6 +3,7 @@ import InputForm from '../../../components/InputForm';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { authApi } from '../../../api/authApi';
 import axios from 'axios';
 
 const PageWrapper = styled.div`
@@ -60,16 +61,13 @@ function LoginPage() {
     e.preventDefault();
 
     try {
-      const response = await axios.post('http://localhost:8080/auth/login', {
-        email,
-        password,
-      });
+      const response = await authApi.login(email, password);
 
-      const { success, data, message } = response.data;
+      const responseData = response.data || response;
+      const { success, data, message } = responseData;
 
       if (success) {
         login(data.accessToken, data.role, data.refreshToken);
-
         alert(message);
 
         const redirectPath =
@@ -77,7 +75,7 @@ function LoginPage() {
 
         navigate(redirectPath);
       } else {
-        alert(response.data.error?.message || '로그인에 실패했습니다.');
+        alert(responseData.error?.message || '로그인에 실패했습니다.');
       }
     } catch (error) {
       console.error('로그인 에러:', error);
