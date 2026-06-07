@@ -1,6 +1,6 @@
 import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../../api/authApi';
@@ -49,7 +49,7 @@ const SubmitButton = styled.button`
   margin-top: 30px;
 `;
 
-function SignUp() {
+function SignUpPage() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -76,6 +76,9 @@ function SignUp() {
   const storePhoneRef = useRef(null);
 
   const navigate = useNavigate();
+
+  // 비밀번호 유효성 통과 여부 및 에러 메시지 상태 관리
+  const [isPwValid, setIsPwValid] = useState(false);
 
   const handleEmailVerification = async (e) => {
     e.preventDefault();
@@ -115,15 +118,39 @@ function SignUp() {
     }
   };
 
-  // 전화번호 포맷팅
+  // 요구사항을 완벽하게 반영한 전화번호 포맷팅 함수
   const formatPhoneNumber = (value) => {
+    if (!value) return value;
     const numbers = value.replace(/[^0-9]/g, '');
 
+    // 무조건 11자리일 때
+    if (numbers.length === 11) {
+      return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7)}`;
+    }
+
+    // 서울 지역번호 '02'로 시작하는 경우 (9자리 또는 10자리)
+    if (numbers.startsWith('02')) {
+      if (numbers.length <= 2) return numbers;
+      if (numbers.length <= 6) {
+        return `${numbers.slice(0, 2)}-${numbers.slice(2)}`;
+      }
+      // 10자리 전까지(9자리 이하)는 무조건 02-1111-XXX 형태로 유지 (흔들림 방지)
+      if (numbers.length <= 9) {
+        return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+      }
+      // 딱 10자리일 때 -> 02-XXXX-XXXX
+      return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6, 10)}`;
+    }
+
+    // 그 외 일반 번호
     if (numbers.length <= 3) return numbers;
     if (numbers.length <= 7) {
-      return numbers.replace(/(\d{3})(\d{1,4})/, '$1-$2');
+      return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
     }
-    return numbers.replace(/(\d{3})(\d{4})(\d{1,4})/, '$1-$2-$3');
+    if (numbers.length <= 10) {
+      return `${numbers.slice(0, 3)}-${numbers.slice(3, 6)}-${numbers.slice(6)}`;
+    }
+    return numbers;
   };
 
   const handlePhoneChange = (setter) => (e) => {
@@ -167,6 +194,13 @@ function SignUp() {
     if (emptyField) {
       alert(`${emptyField.msg} 항목을 입력해주세요.`);
       emptyField.ref.current?.focus();
+      return;
+    }
+
+    if (!isPwValid) {
+      alert(
+        '비밀번호 보안 규칙을 확인해 주세요. (영문/숫자/특수문자 조합 8자 이상)',
+      );
       return;
     }
 
@@ -221,21 +255,33 @@ function SignUp() {
         onButtonClick={handleCodeVerification}
       />
       <InputForm
-        ref={passwordRef}
         title="비밀번호"
         type="password"
-        placeholder="비밀번호를 입력해주세요"
+        placeholder="영문, 숫자, 특수문자 조합 8자 이상"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        errorType="password"
+        onValidate={setIsPwValid}
       />
       <InputForm
-        ref={confirmPasswordRef}
         title="비밀번호 확인"
         type="password"
-        placeholder="비밀번호를 다시 입력해주세요"
+        placeholder="비밀번호를 한번 더 입력해주세요"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
       />
+      {confirmPassword && password !== confirmPassword && (
+        <p
+          style={{
+            fontSize: '12px',
+            color: '#ff4d4d',
+            textAlign: 'left',
+            marginTop: '-15px',
+          }}
+        >
+          ⚠️ 비밀번호가 일치하지 않습니다.
+        </p>
+      )}
       <InputForm
         ref={businessNumberRef}
         title="사업자번호"
@@ -306,4 +352,4 @@ function SignUp() {
   );
 }
 
-export default SignUp;
+export default SignUpPage;
