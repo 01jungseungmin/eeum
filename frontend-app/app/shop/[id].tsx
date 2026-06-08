@@ -129,7 +129,10 @@ export default function ShopDetailScreen() {
             <Text fontWeight="bold" style={styles.sectionTitle}>상점 리뷰</Text>
             <TouchableOpacity 
               style={styles.reviewWriteBtn}
-              onPress={() => router.push(`/review/write?storeId=${shopDetail.storeId}`)}
+              onPress={() => router.push({
+                pathname: '/review/write' as any,
+                params: { storeId: shopDetail.storeId }
+              })}
             >
               <Text style={styles.reviewWriteBtnText}>리뷰 쓰기</Text>
             </TouchableOpacity>
@@ -157,7 +160,10 @@ export default function ShopDetailScreen() {
           {shopReviews.length > 0 && (
             <TouchableOpacity 
               style={styles.moreReviewBtn}
-              onPress={() => router.push(`/review/list?storeId=${shopDetail.storeId}`)}
+              onPress={() => router.push({
+                pathname: '/review/list' as any,
+                params: { storeId: shopDetail.storeId }
+              })}
             >
               <Text style={styles.moreReviewBtnText}>리뷰 더 보기</Text>
               <Ionicons name="chevron-forward" size={16} color="#666" />
