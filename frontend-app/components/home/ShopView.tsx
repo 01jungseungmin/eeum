@@ -5,6 +5,7 @@ import { Text } from '../CustomText';
 
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
+import { regionApi } from '@/api/region';
 
 interface ShopViewProps {
   router: any;
@@ -16,27 +17,35 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const fetchHomeShops = async () => {
+    const fetchHomeData = async () => {
       setIsLoading(true);
       try {
-        // 동네(regionId)가 필수가 아니도록 수정
+        const res = await regionApi.getMyRegions();
+        const regions = res.data || [];
+        const primary = regions.find((r: any) => r.isPrimary === true);
+        
+        // ✨ 핵심 수정: primary가 없어도 API를 호출하거나 전체를 불러오도록 변경
+        // primary가 있다면 해당 동네 id로, 없다면 전체 조회(파라미터 없음)
         const params: any = { size: 5 };
-        if (regionId) {
-          params.regionId = regionId;
+        if (primary) {
+          params.regionId = primary.regionId;
         }
-
-        const res = await shopApi.getShops(params);
-        const shops = res.data?.content || [];
-        setShopList(shops);
+        
+        const shopRes = await shopApi.getShops(params); 
+        setShopList(shopRes.data?.content || []); 
       } catch (e) {
         console.error('홈 화면 상점 로딩 실패:', e);
+        // 에러가 나도 전체 조회를 시도할 수 있도록 추가 조치
+        try {
+          const fallbackRes = await shopApi.getShops({ size: 5 });
+          setShopList(fallbackRes.data?.content || []);
+        } catch (fallbackError) {}
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchHomeShops();
-  }, [regionId]);
+    fetchHomeData();
+  }, []);
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';

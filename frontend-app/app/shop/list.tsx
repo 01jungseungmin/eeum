@@ -2,66 +2,62 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import { Text } from '../../components/CustomText';
-
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
+import { regionApi } from '../../api/region'; // 찜 브랜치 로직 유지
 
 export default function ShopListScreen() {
   const router = useRouter();
-  const { regionId } = useLocalSearchParams();
+  const { regionId } = useLocalSearchParams(); 
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const categoryListRef = useRef<FlatList<any>>(null);
-
+  
   const handleCategoryPress = (id: number, index: number) => {
     setSelectedCategoryId(id);
-
     setTimeout(() => {
       try {
-        categoryListRef.current?.scrollToIndex({
-          index,
-          animated: true,
-          viewPosition: 0.5,
-        });
-      } catch (e) {
-        console.log("스크롤 이동 실패 (안전망):", e);
-      }
-    }, 50);
+        categoryListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+      } catch (e) { console.log(e); }
+    }, 50); 
   };
 
   useEffect(() => {
-    const fetchShopList = async () => {
+    const fetchShops = async () => {
       setIsLoading(true);
       try {
-        const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
-
-        // 동네(regionId)가 필수가 아니도록 수정 (있으면 넣고 없으면 뺌)
-        const params: any = { categoryId: categoryParam, size: 20 };
-        if (regionId) {
-          params.regionId = Number(regionId);
+        // favorite 브랜치와 동일한 데이터 조회 로직 사용
+        let targetRegionId = regionId ? Number(regionId) : null;
+        
+        if (!targetRegionId) {
+          const res = await regionApi.getMyRegions();
+          const regions = res.data || [];
+          const primary = regions.find((r: any) => r.isPrimary === true);
+          if (primary) targetRegionId = primary.regionId;
         }
 
+        const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
+        const params: any = { categoryId: categoryParam, size: 20 };
+        if (targetRegionId) params.regionId = targetRegionId;
+
         const res = await shopApi.getShops(params);
-        const shops = res.data?.content || [];
-        setShopList(shops);
+        // 서버 응답 구조(res.data.content) 그대로 사용
+        setShopList(res.data?.content || []);
       } catch (e) {
-        console.error('상점 목록 API 로딩 실패:', e);
+        console.error('상점 목록 로딩 실패:', e);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchShopList();
-  }, [selectedCategoryId, regionId]);
+    fetchShops();
+  }, [selectedCategoryId, regionId]); 
 
-  const getCategoryName = (id: number) => {
-    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
-  };
+  const getCategoryName = (id: number) => SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
 
   const renderShopCard = ({ item }: any) => {
     const thumbnailUrl = item.thumbnailUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
@@ -71,19 +67,11 @@ export default function ShopListScreen() {
         <Image source={{ uri: thumbnailUrl }} style={styles.cardImage} />
         <View style={styles.cardTitleRow}>
           <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.name}</Text>
-          <Ionicons name="heart-outline" size={20} color="#999" />
         </View>
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={14} color="#FFD700" />
           <Text fontWeight="bold" style={styles.ratingText}>{item.rating?.toFixed(1) || '0.0'}</Text>
           <Text style={styles.reviewText}>({item.reviewCount || 0})</Text>
-        </View>
-        <Text style={styles.locationText}>{item.categoryName || getCategoryName(item.categoryId)}</Text>
-        <View style={styles.footerRow}>
-          <View style={styles.footerItem}>
-            <Ionicons name="heart" size={12} color="#999" />
-            <Text style={styles.footerText}>{item.favoriteCount || 0}</Text>
-          </View>
         </View>
       </TouchableOpacity>
     );
@@ -98,62 +86,34 @@ export default function ShopListScreen() {
         <Text fontWeight="bold" style={styles.headerTitle}>우리 동네 상점</Text>
       </View>
 
-      <View style={styles.categoryWrapper}>
-        <FlatList
-          ref={categoryListRef}
-          data={SHOP_CATEGORIES || []}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          ListHeaderComponent={<View style={{ width: 20 }} />}
-          ListFooterComponent={<View style={{ width: 20 }} />}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              style={[styles.categoryPill, selectedCategoryId === item.id && styles.categoryPillActive]}
-              onPress={() => handleCategoryPress(item.id, index)}
-            >
-              <Text style={[styles.categoryText, selectedCategoryId === item.id && styles.categoryTextActive]}>
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          )}
-          getItemLayout={(data, index) => ({ length: 80, offset: 80 * index, index })}
-          onScrollToIndexFailed={(info) => {
-            const wait = new Promise(resolve => setTimeout(resolve, 300));
-            wait.then(() => {
-              categoryListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
-            });
-          }}
-        />
-      </View>
-
-      <View style={styles.listHeader}>
-        <Text style={styles.totalText}>총 {(shopList || []).length}개</Text>
-        <TouchableOpacity style={styles.sortButton}>
-          <Text style={styles.sortText}>최신순</Text>
-          <Ionicons name="chevron-down" size={14} color="#666" />
-        </TouchableOpacity>
-      </View>
-
-      {isLoading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#00A859" />
-        </View>
-      ) : shopList.length === 0 ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: '#888' }}>해당 조건에 맞는 상점이 없습니다.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={shopList}
-          keyExtractor={(item) => item.storeId.toString()}
-          renderItem={renderShopCard}
-          numColumns={2}
-          columnWrapperStyle={styles.rowWrapper}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 30 }}
-        />
-      )}
+      <FlatList
+        data={shopList}
+        keyExtractor={(item) => item.storeId.toString()}
+        renderItem={renderShopCard}
+        numColumns={2}
+        columnWrapperStyle={styles.rowWrapper}
+        style={{ flex: 1 }}
+        ListHeaderComponent={
+          <View style={styles.categoryWrapper}>
+            <FlatList
+              ref={categoryListRef}
+              data={SHOP_CATEGORIES || []}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item, index }) => (
+                <TouchableOpacity 
+                  style={[styles.categoryPill, selectedCategoryId === item.id && styles.categoryPillActive]}
+                  onPress={() => handleCategoryPress(item.id, index)} 
+                >
+                  <Text style={[styles.categoryText, selectedCategoryId === item.id && styles.categoryTextActive]}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -162,25 +122,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15 },
   headerTitle: { fontSize: 18, color: '#333' },
-  categoryWrapper: { marginBottom: 15 },
+  categoryWrapper: { marginBottom: 15, paddingHorizontal: 20 },
   categoryPill: { backgroundColor: '#F5F5F5', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
   categoryPillActive: { backgroundColor: '#00A859' },
   categoryText: { color: '#666', fontSize: 14 },
   categoryTextActive: { color: '#fff', fontWeight: 'bold' },
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 15 },
-  totalText: { fontSize: 14, color: '#333', fontWeight: 'bold' },
-  sortButton: { flexDirection: 'row', alignItems: 'center' },
-  sortText: { fontSize: 13, color: '#666', marginRight: 4 },
   rowWrapper: { justifyContent: 'space-between', paddingHorizontal: 20 },
   cardContainer: { width: '48%', marginBottom: 25 },
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 12, marginBottom: 10 },
-  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  shopName: { fontSize: 16, color: '#333', flex: 1, marginRight: 5 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  ratingText: { fontSize: 13, color: '#333', marginLeft: 4, marginRight: 4 },
-  reviewText: { fontSize: 12, color: '#888' },
-  locationText: { fontSize: 12, color: '#888', marginBottom: 6 },
-  footerRow: { flexDirection: 'row', alignItems: 'center' },
-  footerItem: { flexDirection: 'row', alignItems: 'center', marginRight: 10 },
-  footerText: { fontSize: 11, color: '#999', marginLeft: 4 },
+  cardTitleRow: { marginBottom: 4 },
+  shopName: { fontSize: 16, color: '#333' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center' },
+  ratingText: { fontSize: 13, color: '#333', marginLeft: 4 },
+  reviewText: { fontSize: 12, color: '#888', marginLeft: 4 }
 });
