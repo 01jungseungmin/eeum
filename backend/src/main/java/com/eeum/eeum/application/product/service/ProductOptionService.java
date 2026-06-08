@@ -3,7 +3,7 @@ package com.eeum.eeum.application.product.service;
 import com.eeum.eeum.application.product.dto.request.ProductOptionCreateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductOptionUpdateRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductOptionDto;
-import com.eeum.eeum.application.product.dto.response.ProductOptionItemDto;
+import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.entity.ProductOption;
 import com.eeum.eeum.domain.product.entity.ProductOptionItem;
@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -32,15 +34,35 @@ public class ProductOptionService {
     private final ProductRepository productRepository;
     private final ProductOptionRepository productOptionRepository;
     private final ProductOptionItemRepository productOptionItemRepository;
+    private final ProductMapper productMapper;
 
     // 옵션 목록 조회
     @Transactional(readOnly = true)
     public List<ProductOptionDto> getOptions(Long accountId, Long productId) {
         getProductWithOwnerCheck(accountId, productId);
-        return productOptionRepository
-                .findByProduct_ProductIdOrderByDisplayOrderAsc(productId)
-                .stream()
-                .map(this::toDto)
+        List<ProductOption> options = productOptionRepository
+                .findByProduct_ProductIdOrderByDisplayOrderAsc(productId);
+        if (options.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> optionIds = options.stream()
+                .map(ProductOption::getProductOptionId)
+                .toList();
+
+        List<ProductOptionItem> optionItems = productOptionItemRepository
+                .findByOptionIdsOrderByOptionDisplayOrderAndItemDisplayOrder(optionIds);
+
+        Map<Long, List<ProductOptionItem>> itemMap = optionItems.stream()
+                .collect(Collectors.groupingBy(
+                        item -> item.getProductOption().getProductOptionId()
+                ));
+
+        return options.stream()
+                .map(option -> productMapper.toProductOptionDto(
+                        option,
+                        itemMap.getOrDefault(option.getProductOptionId(), List.of())
+                ))
                 .toList();
     }
 
@@ -75,7 +97,7 @@ public class ProductOptionService {
         productOptionItemRepository.saveAll(items);
 
         log.info("옵션 그룹 생성: productId={}, optionId={}", productId, option.getProductOptionId());
-        return toDto(option);
+        return productMapper.toProductOptionDto(option,List.of());
     }
 
     // 옵션 그룹 전체 교체 (PUT)
@@ -106,7 +128,7 @@ public class ProductOptionService {
         productOptionItemRepository.saveAll(items);
 
         log.info("옵션 그룹 전체 교체: optionId={}", optionId);
-        return toDto(option);
+        return productMapper.toProductOptionDto(option,items);
     }
 
     // 옵션 그룹 삭제
@@ -183,30 +205,5 @@ public class ProductOptionService {
         return productOptionRepository
                 .findByProductOptionIdAndProduct_ProductId(optionId, productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_OPTION_NOT_FOUND));
-    }
-
-    private ProductOptionDto toDto(ProductOption option) {
-        List<ProductOptionItemDto> items = productOptionItemRepository
-                .findByProductOption_ProductOptionIdOrderByDisplayOrderAsc(
-                        option.getProductOptionId())
-                .stream()
-                .map(item -> ProductOptionItemDto.builder()
-                        .itemId(item.getProductOptionItemId())
-                        .itemName(item.getItemName())
-                        .additionalPrice(item.getAdditionalPrice())
-                        .isDefault(item.isDefault())
-                        .displayOrder(item.getDisplayOrder())
-                        .isAvailable(item.isAvailable())
-                        .build())
-                .toList();
-
-        return ProductOptionDto.builder()
-                .optionId(option.getProductOptionId())
-                .groupName(option.getGroupName())
-                .selectionType(option.getSelectionType())
-                .isRequired(option.isRequired())
-                .displayOrder(option.getDisplayOrder())
-                .items(items)
-                .build();
     }
 }

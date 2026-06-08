@@ -4,6 +4,7 @@ import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateR
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationStatusUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationLeftTimeSlotResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationResponseDto;
+import com.eeum.eeum.application.reservation.mapper.VisitReservationMapper;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -53,6 +54,7 @@ public class VisitReservationService {
     private final VisitReservationTimeSlotRepository visitReservationTimeSlotRepository;
     private final RedisLockService redisLockService;
     private final TransactionTemplate transactionTemplate;
+    private final VisitReservationMapper visitReservationMapper;
 
     // ===================== 사용자 예약 =====================
     @Transactional
@@ -61,11 +63,6 @@ public class VisitReservationService {
             Long storeId,
             VisitReservationCreateRequestDto request
     ) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-
-        Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
         String lockKey = createReservationLockKey(
                 storeId,
@@ -89,7 +86,7 @@ public class VisitReservationService {
     ) {
         return visitReservationRepository
                 .findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable)
-                .map(this::toDto);
+                .map(visitReservationMapper::toVisitReservationResponseDto);
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +100,7 @@ public class VisitReservationService {
             throw new BusinessException(ErrorCode.COMMON_FORBIDDEN);
         }
 
-        return toDto(reservation);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
     @Transactional
@@ -142,7 +139,7 @@ public class VisitReservationService {
         if (status == null) {
             return visitReservationRepository
                     .findByStore_StoreIdOrderByVisitDateDescVisitTimeDesc(store.getStoreId(), pageable)
-                    .map(this::toDto);
+                    .map(visitReservationMapper::toVisitReservationResponseDto);
         }
 
         return visitReservationRepository
@@ -151,7 +148,7 @@ public class VisitReservationService {
                         status,
                         pageable
                 )
-                .map(this::toDto);
+                .map(visitReservationMapper::toVisitReservationResponseDto);
     }
 
     @Transactional(readOnly = true)
@@ -164,7 +161,7 @@ public class VisitReservationService {
 
         validateStoreOwner(store, reservation);
 
-        return toDto(reservation);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
     @Transactional
@@ -500,7 +497,7 @@ public class VisitReservationService {
         log.info("방문 예약 생성: accountId={}, storeId={}, reservationId={}",
                 accountId, storeId, reservation.getVisitReservationId());
 
-        return toDto(reservation);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
     /**
@@ -519,27 +516,5 @@ public class VisitReservationService {
         return times;
     }
 
-    private VisitReservationResponseDto toDto(VisitReservation reservation) {
-        Store store = reservation.getStore();
-        Account account = reservation.getAccount();
 
-        return VisitReservationResponseDto.builder()
-                .visitReservationId(reservation.getVisitReservationId())
-                .storeId(store.getStoreId())
-                .storeName(store.getName())
-                .storeAddress(store.getAddress())
-                .storePhone(store.getPhone())
-                .accountId(account.getAccountId())
-                .customerName(account.getName())
-                .customerPhone(account.getPhone())
-                .visitDate(reservation.getVisitDate())
-                .visitTime(reservation.getVisitTime())
-                .visitorCount(reservation.getVisitorCount())
-                .requestMessage(reservation.getRequestMessage())
-                .rejectReason(reservation.getRejectReason())
-                .status(reservation.getStatus())
-                .createdAt(reservation.getCreatedAt())
-                .modifiedAt(reservation.getModifiedAt())
-                .build();
-    }
 }
