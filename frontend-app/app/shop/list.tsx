@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useRouter, useLocalSearchParams } from 'expo-router'; 
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
@@ -11,18 +11,17 @@ import { shopApi } from '../../api/shop';
 
 export default function ShopListScreen() {
   const router = useRouter();
-
-  const { regionId } = useLocalSearchParams(); 
+  const { regionId } = useLocalSearchParams();
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const categoryListRef = useRef<FlatList<any>>(null);
-  
+
   const handleCategoryPress = (id: number, index: number) => {
     setSelectedCategoryId(id);
-    
+
     setTimeout(() => {
       try {
         categoryListRef.current?.scrollToIndex({
@@ -33,21 +32,16 @@ export default function ShopListScreen() {
       } catch (e) {
         console.log("스크롤 이동 실패 (안전망):", e);
       }
-    }, 50); 
+    }, 50);
   };
 
   useEffect(() => {
     const fetchShopList = async () => {
-      if (!regionId) {
-        setShopList([]);
-        return;
-      }
-
       setIsLoading(true);
       try {
         const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
-        
-        // ✨ 3. 백엔드에 보낼 파라미터에 regionId를 추가해서 요청합니다!
+
+        // 동네(regionId)가 필수가 아니도록 수정 (있으면 넣고 없으면 뺌)
         const params: any = { categoryId: categoryParam, size: 20 };
         if (regionId) {
           params.regionId = Number(regionId);
@@ -63,7 +57,7 @@ export default function ShopListScreen() {
       }
     };
     fetchShopList();
-  }, [selectedCategoryId, regionId]); // ✨ useEffect 의존성 배열에도 regionId 추가
+  }, [selectedCategoryId, regionId]);
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
@@ -97,7 +91,6 @@ export default function ShopListScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 1. 상단 헤더 (항상 고정) */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 10 }}>
           <Ionicons name="chevron-back" size={24} color="#333" />
@@ -115,9 +108,9 @@ export default function ShopListScreen() {
           ListFooterComponent={<View style={{ width: 20 }} />}
           keyExtractor={(item) => item.id.toString()}
           renderItem={({ item, index }) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.categoryPill, selectedCategoryId === item.id && styles.categoryPillActive]}
-              onPress={() => handleCategoryPress(item.id, index)} 
+              onPress={() => handleCategoryPress(item.id, index)}
             >
               <Text style={[styles.categoryText, selectedCategoryId === item.id && styles.categoryTextActive]}>
                 {item.name}
@@ -145,11 +138,6 @@ export default function ShopListScreen() {
       {isLoading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#00A859" />
-        </View>
-      ): !regionId ? ( // ✨ 2. 동네 설정이 없을 때 띄워줄 빈 화면
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Ionicons name="location-outline" size={48} color="#CCC" style={{ marginBottom: 10 }} />
-          <Text style={{ color: '#888', fontSize: 16 }}>동네를 먼저 설정해 주세요!</Text>
         </View>
       ) : shopList.length === 0 ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

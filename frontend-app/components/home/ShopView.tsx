@@ -6,27 +6,28 @@ import { Text } from '../CustomText';
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
 
-// ✨ 1. regionId를 props로 받도록 추가합니다.
-export default function ShopView({ router, regionId }: { router: any, regionId: number | null }) {
+interface ShopViewProps {
+  router: any;
+  regionId: number | null;
+}
+
+export default function ShopView({ router, regionId }: ShopViewProps) {
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✨ 2. regionId가 변경될 때마다 다시 실행되도록 의존성 배열을 수정합니다.
   useEffect(() => {
     const fetchHomeShops = async () => {
-      // 동네 설정이 아직 안 된 상태라면 상점 목록을 부르지 않고 비워둡니다.
-      if (!regionId) {
-        setShopList([]);
-        return;
-      }
-
       setIsLoading(true);
       try {
-        // ✨ 3. 백엔드 API에 regionId를 파라미터로 함께 넘겨줍니다!
-        const res = await shopApi.getShops({ size: 5, regionId: regionId }); 
-        
+        // 동네(regionId)가 필수가 아니도록 수정
+        const params: any = { size: 5 };
+        if (regionId) {
+          params.regionId = regionId;
+        }
+
+        const res = await shopApi.getShops(params);
         const shops = res.data?.content || [];
-        setShopList(shops); 
+        setShopList(shops);
       } catch (e) {
         console.error('홈 화면 상점 로딩 실패:', e);
       } finally {
@@ -35,7 +36,7 @@ export default function ShopView({ router, regionId }: { router: any, regionId: 
     };
 
     fetchHomeShops();
-  }, [regionId]); 
+  }, [regionId]);
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
@@ -46,10 +47,10 @@ export default function ShopView({ router, regionId }: { router: any, regionId: 
       <View style={styles.bannerPlaceholder}>
         <Text style={{ color: '#fff' }}>이벤트 배너 영역</Text>
       </View>
-      
+
       <View style={styles.sectionContainer}>
-        <TouchableOpacity 
-          style={styles.sectionHeader} 
+        <TouchableOpacity
+          style={styles.sectionHeader}
           onPress={() => router.push({
             pathname: '/shop/list' as any,
             params: { regionId: regionId }
@@ -59,12 +60,7 @@ export default function ShopView({ router, regionId }: { router: any, regionId: 
           <Ionicons name="chevron-forward" size={20} color="#333" />
         </TouchableOpacity>
 
-        {/* ✨ 4. 동네 설정이 안 되어 있을 때의 안내 문구 추가 */}
-        {!regionId ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>상단에서 동네를 먼저 설정해 주세요!</Text>
-          </View>
-        ) : isLoading ? (
+        {isLoading ? (
           <ActivityIndicator size="small" color="#00A859" style={{ marginTop: 20 }} />
         ) : shopList.length === 0 ? (
           <View style={styles.emptyState}>
@@ -74,12 +70,12 @@ export default function ShopView({ router, regionId }: { router: any, regionId: 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {shopList.map((shop) => {
               const thumbnailUrl = shop.thumbnailUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store';
-              
+
               return (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={shop.storeId}
-                  style={styles.shopCard} 
-                  onPress={() => router.push(`/shop/${shop.storeId}`)} 
+                  style={styles.shopCard}
+                  onPress={() => router.push(`/shop/${shop.storeId}` as any)}
                 >
                   <Image source={{ uri: thumbnailUrl }} style={styles.shopImage} />
                   <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
