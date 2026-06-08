@@ -2,7 +2,9 @@ package com.eeum.eeum.domain.product.repository;
 
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.enums.EventProductStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -84,4 +86,8 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
                 LocalDateTime.now()
         );
     }
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select ep from EventProduct ep where ep.eventProductId = :eventProductId")
+    Optional<EventProduct> findByIdWithPessimisticLock(Long eventProductId);
 }

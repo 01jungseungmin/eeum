@@ -5,6 +5,7 @@ import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestD
 import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
+import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.entity.ProductCategory;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
@@ -30,19 +31,20 @@ public class ProductService {
     private final StoreRepository storeRepository;
     private final ProductRepository productRepository;
     private final ProductCategoryRepository productCategoryRepository;
+    private final ProductMapper productMapper;
 
     @Transactional(readOnly = true)
     public List<ProductResponseDto> getMyProducts(Long accountId) {
         Store store = getStore(accountId);
         return productRepository.findByStore_StoreId(store.getStoreId())
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toProductResponseDto)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public ProductResponseDto getProduct(Long accountId, Long productId) {
-        return toDto(getProductWithOwnerCheck(accountId, productId));
+        return productMapper.toProductResponseDto(getProductWithOwnerCheck(accountId, productId));
     }
 
     @Transactional
@@ -94,7 +96,7 @@ public class ProductService {
         );
 
         log.info("상품 수정: productId={}", productId);
-        return toDto(product);
+        return productMapper.toProductResponseDto(product);
     }
 
     @Transactional
@@ -142,25 +144,5 @@ public class ProductService {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
         }
         return product;
-    }
-
-    private ProductResponseDto toDto(Product product) {
-        ProductCategory category = product.getProductCategory();
-
-        return ProductResponseDto.builder()
-                .productId(product.getProductId())
-                .storeId(product.getStore().getStoreId())
-                .categoryId(category.getProductCategoryId())
-                .categoryName(category.getName())
-                .name(product.getName())
-                .description(product.getDescription())
-                .price(product.getPrice())
-                .stock(product.getStock())
-                .productType(product.getProductType().name())
-                .status(product.getStatus().name())
-                .viewCount(product.getViewCount())
-                .createdAt(product.getCreatedAt())
-                .modifiedAt(product.getModifiedAt())
-                .build();
     }
 }

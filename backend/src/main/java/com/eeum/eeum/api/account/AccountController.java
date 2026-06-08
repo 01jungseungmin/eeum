@@ -20,7 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Account", description = "회원 정보 API")
+@Tag(name = "02. Account", description = "회원 정보 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/accounts/me")

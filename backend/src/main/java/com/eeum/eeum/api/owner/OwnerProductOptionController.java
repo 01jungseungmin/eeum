@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Owner - ProductOption", description = "상품 옵션 관리 API")
+@Tag(name = "09. Owner - ProductOption", description = "상품 옵션 관리 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/owner/products/{productId}/options")
@@ -60,17 +60,6 @@ public class OwnerProductOptionController {
                 productOptionService.replaceOption(accountId, productId, optionId, request)));
     }
 
-    @Operation(summary = "옵션 그룹 삭제")
-    @DeleteMapping("/{optionId}")
-    public ResponseEntity<ApiResponse<Void>> deleteOption(
-            @PathVariable Long productId,
-            @PathVariable Long optionId
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        productOptionService.deleteOption(accountId, productId, optionId);
-        return ResponseEntity.ok(ApiResponse.success());
-    }
-
     @Operation(summary = "선택지 품절 토글")
     @PatchMapping("/items/{itemId}/availability")
     public ResponseEntity<ApiResponse<Void>> toggleItemAvailability(
@@ -79,6 +68,17 @@ public class OwnerProductOptionController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         productOptionService.toggleItemAvailability(accountId, productId, itemId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "옵션 그룹 삭제")
+    @DeleteMapping("/{optionId}")
+    public ResponseEntity<ApiResponse<Void>> deleteOption(
+            @PathVariable Long productId,
+            @PathVariable Long optionId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        productOptionService.deleteOption(accountId, productId, optionId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 }

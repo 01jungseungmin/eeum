@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Owner - Product Category", description = "[사장] 상품 카테고리 관리 API")
+@Tag(name = "07. Owner - Product Category", description = "사장 상품 카테고리 관리 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/owner/product-categories")
@@ -52,16 +52,6 @@ public class OwnerProductCategoryController {
         return ResponseEntity.ok(ApiResponse.success(productCategoryService.updateCategory(accountId, categoryId, request)));
     }
 
-    @Operation(summary = "[사장] 상품 카테고리 삭제")
-    @DeleteMapping("/{categoryId}")
-    public ResponseEntity<ApiResponse<Void>> deleteCategory(
-            @PathVariable Long categoryId
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        productCategoryService.deleteCategory(accountId, categoryId);
-        return ResponseEntity.ok(ApiResponse.success());
-    }
-
     @Operation(summary = "[사장] 상품 카테고리 활성화")
     @PatchMapping("/{categoryId}/activate")
     public ResponseEntity<ApiResponse<Void>> activateCategory(
@@ -79,6 +69,16 @@ public class OwnerProductCategoryController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         productCategoryService.deactivateCategory(accountId, categoryId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "[사장] 상품 카테고리 삭제")
+    @DeleteMapping("/{categoryId}")
+    public ResponseEntity<ApiResponse<Void>> deleteCategory(
+            @PathVariable Long categoryId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        productCategoryService.deleteCategory(accountId, categoryId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 }

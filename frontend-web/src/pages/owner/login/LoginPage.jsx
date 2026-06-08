@@ -2,6 +2,8 @@ import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { authApi } from '../../../api/authApi';
 import axios from 'axios';
 
 const PageWrapper = styled.div`
@@ -49,56 +51,9 @@ const OptionsRow = styled.div`
   margin-bottom: 25px;
 `;
 
-const Divider = styled.div`
-  display: flex;
-  align-items: center;
-  width: 100%;
-  margin: 20px 0;
-  color: #888;
-  font-size: 12px;
-
-  &::before {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #e0e0e0;
-    margin-right: 10px;
-  }
-
-  &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #e0e0e0;
-    margin-left: 10px;
-  }
-`;
-
-// const SocialLogin = styled.div`
-//   margin-top: 30px;
-//   display: flex;
-//   gap: 20px;
-// `;
-
-// const SocialCircle = styled.div`
-//   width: 45px;
-//   height: 45px;
-//   border-radius: 50%;
-//   display: flex;
-//   align-items: center;
-//   justify-content: center;
-//   cursor: pointer;
-//   overflow: hidden;
-
-//   img {
-//     width: 100%;
-//     height: 100%;
-//     object-fit: contain;
-//   }
-// `;
-
 function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -106,22 +61,21 @@ function LoginPage() {
     e.preventDefault();
 
     try {
-      const response = await axios.post('http://localhost:8080/auth/login', {
-        email: email,
-        password: password,
-      });
+      const response = await authApi.login(email, password);
 
-      const { success, data, message } = response.data;
+      const responseData = response.data || response;
+      const { success, data, message } = responseData;
 
       if (success) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('role', data.role);
-
+        login(data.accessToken, data.role, data.refreshToken);
         alert(message);
 
-        navigate('/approval-status');
+        const redirectPath =
+          data.role === 'ROLE_ADMIN' ? '/admin/dashboard' : '/approval-status';
+
+        navigate(redirectPath);
       } else {
-        alert(response.data.error.message || '로그인에 실패했습니다.');
+        alert(responseData.error?.message || '로그인에 실패했습니다.');
       }
     } catch (error) {
       console.error('로그인 에러:', error);
@@ -167,16 +121,6 @@ function LoginPage() {
       >
         회원가입
       </div>
-      <Divider>간편 로그인</Divider>
-
-      {/* <SocialLogin>
-        <SocialCircle>
-          <img src={kakaoIcon} alt="카카오 로그인" />
-        </SocialCircle>
-        <SocialCircle>
-          <img src={naverIcon} alt="네이버 로그인" />
-        </SocialCircle>
-      </SocialLogin> */}
     </PageWrapper>
   );
 }

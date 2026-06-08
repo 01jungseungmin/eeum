@@ -80,11 +80,6 @@ public class EmailService {
     /**
      * 회원가입 시 인증 토큰 검증
      */
-    public String validateAndConsumeVerificationToken(String token) {
-        String email = validateVerificationToken(token);
-        consumeVerificationToken(token);
-        return email;
-    }
 
     public String validateVerificationToken(String token) {
         String email = redisUtil.get(EMAIL_TOKEN_PREFIX + token)

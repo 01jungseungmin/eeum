@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.product.dto.response;
 
+import com.eeum.eeum.domain.product.enums.EventProductDisplayStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -52,5 +53,5 @@ public class EventProductResponseDto {
     private boolean ongoing;
 
     @Schema(description = "이벤트 상태", example = "ONGOING", allowableValues = {"SCHEDULED", "ONGOING", "ENDED", "INACTIVE", "SOLD_OUT"})
-    private String eventStatus;
+    private EventProductDisplayStatus eventStatus;
 }

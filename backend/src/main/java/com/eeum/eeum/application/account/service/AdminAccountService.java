@@ -7,6 +7,8 @@ import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
+import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
+import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
@@ -19,8 +21,9 @@ import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
+import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
 import com.eeum.eeum.domain.store.entity.Store;
-import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -41,7 +44,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AdminAccountService {
 
-    private final AccountMapper accountMapper;
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final OwnerInfoRepository ownerInfoRepository;
@@ -49,6 +51,10 @@ public class AdminAccountService {
     private final StoreRepository storeRepository;
     private final StoreLocationResolver storeLocationResolver;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
+    private final AccountMapper accountMapper;
+    private final OwnerApplicationMapper ownerApplicationMapper;
+    private final StoreApprovalMapper storeApprovalMapper;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -80,7 +86,7 @@ public class AdminAccountService {
         List<AccountRegion> regions = accountRegionRepository.findByAccount_AccountId(accountId);
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId).orElse(null);
 
-        return toAccountDetailResponseDto(account, regions, ownerInfo);
+        return accountMapper.toAccountDetailResponseDto(account, regions, ownerInfo);
     }
 
     // ===================== 관리자 - 회원 상태 변경 =====================
@@ -207,6 +213,8 @@ public class AdminAccountService {
 
         ownerInfo.approve();
 
+        createDefaultVisitReservationSettingIfNotExists(store);
+
         tokenService.deleteRefreshToken(account.getAccountId());
 
         log.info("사장 승인: adminId={}, ownerInfoId={}, accountId={}, storeId={}",
@@ -228,106 +236,34 @@ public class AdminAccountService {
 
     // ===================== 내부 유틸 =====================
 
-    private AccountDetailResponseDto toAccountDetailResponseDto(
-            Account account,
-            List<AccountRegion> regions,
-            OwnerInfo ownerInfo
-    ) {
-        return AccountDetailResponseDto.builder()
-                .accountId(account.getAccountId())
-                .email(account.getEmail())
-                .nickname(account.getNickname())
-                .name(account.getName())
-                .profileImageUrl(account.getProfileImageUrl())
-                .role(account.getRole().name())
-                .status(account.getStatus().name())
-                .provider(account.getProvider().name())
-                .emailVerified(account.isEmailVerified())
-                .regions(regions.stream()
-                        .map(region -> accountMapper.toRegionDto(region, account))
-                        .toList())
-                .ownerInfo(ownerInfo != null ? accountMapper.toOwnerAdminResponseDto(ownerInfo) : null)
-                .createdAt(account.getCreatedAt())
-                .deletedAt(account.getDeletedAt())
-                .build();
-    }
-
-    public OwnerApplicationListResponseDto toOwnerApplicationListDto(
-            OwnerInfo ownerInfo,
-            Store store
-    ) {
-        Account account = ownerInfo.getAccount();
-
-        return OwnerApplicationListResponseDto.builder()
-                .ownerInfoId(ownerInfo.getOwnerInfoId())
-                .accountId(account.getAccountId())
-                .email(account.getEmail())
-                .ownerName(account.getName())
-                .phone(account.getPhone())
-                .businessNumber(ownerInfo.getBusinessNumber())
-                .openingDate(ownerInfo.getOpeningDate())
-                .approvalStatus(ownerInfo.getApprovalStatus().name())
-                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
-                .storeId(store != null ? store.getStoreId() : null)
-                .storeName(store != null ? store.getName() : null)
-                .storeAddress(store != null ? store.getAddress() : null)
-                .storeStatus(store != null ? store.getStatus().name() : null)
-                .createdAt(ownerInfo.getCreatedAt())
-                .build();
-    }
-
     private OwnerApplicationDetailResponseDto toOwnerApplicationDetailDto(
             OwnerInfo ownerInfo,
             Store store
     ) {
-        Account account = ownerInfo.getAccount();
+        List<StoreBusinessHourResponseDto> businessHours = getBusinessHours(store.getStoreId());
 
-        return OwnerApplicationDetailResponseDto.builder()
-                .ownerInfoId(ownerInfo.getOwnerInfoId())
-                .accountId(account.getAccountId())
-                .ownerName(account.getName())
-                .email(account.getEmail())
-                .phone(account.getPhone())
-                .businessNumber(ownerInfo.getBusinessNumber())
-                .openingDate(ownerInfo.getOpeningDate())
-                .approvalStatus(ownerInfo.getApprovalStatus().name())
-                .rejectionReason(ownerInfo.getRejectionReason())
-                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
-                .createdAt(ownerInfo.getCreatedAt())
-                .storeId(store.getStoreId())
-                .storeName(store.getName())
-                .storeAddress(store.getAddress())
-                .storePhone(store.getPhone())
-                .storeCategoryId(
-                        store.getCategory() != null
-                                ? store.getCategory().getCategoryId()
-                                : null
-                )
-                .storeCategoryName(
-                        store.getCategory() != null
-                                ? store.getCategory().getName()
-                                : null
-                )
-                .storeDescription(store.getDescription())
-                .businessHours(getBusinessHours(store.getStoreId()))
-                .storeStatus(store.getStatus().name())
-                .build();
+        return ownerApplicationMapper.toOwnerAdminStoreResponseDto(ownerInfo,store,businessHours);
     }
+
     private List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
         return storeBusinessHourRepository.findByStore_StoreId(storeId)
                 .stream()
                 .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
-                .map(this::toBusinessHourDto)
+                .map(storeApprovalMapper::toBusinessHourDto)
                 .toList();
     }
 
-    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
-        return StoreBusinessHourResponseDto.builder()
-                .dayOfWeek(businessHour.getDayOfWeek())
-                .dayLabel(businessHour.getDayOfWeek().getLabel())
-                .closed(businessHour.isClosed())
-                .openTime(businessHour.getOpenTime())
-                .closeTime(businessHour.getCloseTime())
-                .build();
+    private void createDefaultVisitReservationSettingIfNotExists(Store store) {
+        boolean exists = storeVisitReservationSettingRepository
+                .existsByStore_StoreId(store.getStoreId());
+
+        if (exists) {
+            return;
+        }
+
+        StoreVisitReservationSetting setting =
+                StoreVisitReservationSetting.createDefault(store);
+
+        storeVisitReservationSettingRepository.save(setting);
     }
 }

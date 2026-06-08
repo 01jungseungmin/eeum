@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Region", description = "지역 검색 API")
+@Tag(name = "04. Region", description = "지역 검색 API")
 @RestController
 @RequestMapping("/regions")
 @RequiredArgsConstructor

@@ -1,5 +1,6 @@
 import styled from 'styled-components';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, Navigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 
@@ -25,6 +26,32 @@ const PageContainer = styled.div`
 `;
 
 function MainLayout() {
+  const { accessToken, isLoading } = useAuth(); // 💡 인증 상태 꺼내기
+
+  // 로딩 중 일때 사용자에게 안내 메시지 보여줌
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          color: '#009e60',
+        }}
+      >
+        안전하게 세션을 연결하는 중입니다... 🔐
+      </div>
+    );
+  }
+
+  // 인증 토큰이 없으면 로그인 페이지로 리다이렉트
+  if (!accessToken) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
     <LayoutWrapper>
       {/* 왼쪽 사이드바 (메뉴바) */}

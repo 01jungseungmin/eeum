@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+
+import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import { Text } from '../../components/CustomText';
 
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
@@ -10,12 +11,15 @@ import { shopApi } from '../../api/shop';
 
 export default function ShopListScreen() {
   const router = useRouter();
+
+  const { regionId } = useLocalSearchParams(); 
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const categoryListRef = useRef<FlatList<any>>(null);
-
+  
   const handleCategoryPress = (id: number, index: number) => {
     setSelectedCategoryId(id);
     
@@ -34,10 +38,22 @@ export default function ShopListScreen() {
 
   useEffect(() => {
     const fetchShopList = async () => {
+      if (!regionId) {
+        setShopList([]);
+        return;
+      }
+
       setIsLoading(true);
       try {
         const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
-        const res = await shopApi.getShops({ categoryId: categoryParam, size: 20 });
+        
+        // ✨ 3. 백엔드에 보낼 파라미터에 regionId를 추가해서 요청합니다!
+        const params: any = { categoryId: categoryParam, size: 20 };
+        if (regionId) {
+          params.regionId = Number(regionId);
+        }
+
+        const res = await shopApi.getShops(params);
         const shops = res.data?.content || [];
         setShopList(shops);
       } catch (e) {
@@ -47,7 +63,7 @@ export default function ShopListScreen() {
       }
     };
     fetchShopList();
-  }, [selectedCategoryId]);
+  }, [selectedCategoryId, regionId]); // ✨ useEffect 의존성 배열에도 regionId 추가
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
@@ -129,6 +145,15 @@ export default function ShopListScreen() {
       {isLoading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#00A859" />
+        </View>
+      ): !regionId ? ( // ✨ 2. 동네 설정이 없을 때 띄워줄 빈 화면
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Ionicons name="location-outline" size={48} color="#CCC" style={{ marginBottom: 10 }} />
+          <Text style={{ color: '#888', fontSize: 16 }}>동네를 먼저 설정해 주세요!</Text>
+        </View>
+      ) : shopList.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#888' }}>해당 조건에 맞는 상점이 없습니다.</Text>
         </View>
       ) : (
         <FlatList

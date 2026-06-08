@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
@@ -25,6 +26,7 @@ public class StoreImageService {
 
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
+    private final StoreMapper storeMapper;
 
     @Transactional(readOnly = true)
     public List<ImageResponseDto> getImages(Long accountId) {
@@ -32,7 +34,7 @@ public class StoreImageService {
         return storeImageRepository
                 .findByStore_StoreIdOrderByDisplayOrderAsc(store.getStoreId())
                 .stream()
-                .map(this::toDto)
+                .map(storeMapper::toImageResponseDto)
                 .toList();
     }
 
@@ -89,7 +91,7 @@ public class StoreImageService {
                 store.getStoreId(), savedImages.size());
 
         return savedImages.stream()
-                .map(this::toDto)
+                .map(storeMapper::toImageResponseDto)
                 .toList();
     }
 
@@ -141,14 +143,6 @@ public class StoreImageService {
         return image;
     }
 
-    private ImageResponseDto toDto(StoreImage image) {
-        return ImageResponseDto.builder()
-                .imageId(image.getStoreImageId())
-                .imageUrl(image.getImageUrl())
-                .displayOrder(image.getDisplayOrder())
-                .isThumbnail(image.isThumbnail())
-                .build();
-    }
     private void validateThumbnailCount(ImageUploadListRequestDto request) {
         long thumbnailCount = request.getImages().stream()
                 .filter(image -> Boolean.TRUE.equals(image.isThumbnail()))

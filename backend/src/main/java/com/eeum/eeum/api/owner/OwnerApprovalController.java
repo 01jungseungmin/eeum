@@ -20,7 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Owner - Approval", description = "사장 입점 심사 API")
+@Tag(name = "05. Owner - Approval", description = "사장 입점 심사 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/owner/stores/me")

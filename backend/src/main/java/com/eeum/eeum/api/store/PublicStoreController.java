@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Store", description = "상점 조회 API (비회원 포함)")
+@Tag(name = "11. Store", description = "상점 조회 API (비회원 포함)")
 @RestController
 @RequestMapping
 @RequiredArgsConstructor
@@ -43,6 +43,20 @@ public class PublicStoreController {
                 publicStoreService.getStores(categoryId, regionId, keyword, pageable)));
     }
 
+    @Operation(summary = "주변 상점 조회", description = "현재 위치 기준 반경 내 상점을 조회합니다.")
+    @GetMapping("/stores/nearby")
+    public ResponseEntity<ApiResponse<List<StoreListResponseDto>>> getNearbyStores(
+            @RequestParam double latitude,
+            @RequestParam double longitude,
+            @RequestParam(defaultValue = "3.0") double radiusKm,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Long regionId,
+            @RequestParam(required = false) String keyword
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                publicStoreService.getNearbyStores(latitude, longitude, radiusKm,categoryId,regionId,keyword)));
+    }
+
     @Operation(summary = "상점 상세 조회",
             description = "상점 상세 정보, 이미지, 공지를 조회합니다. 비회원 접근 가능.")
     @GetMapping("/stores/{storeId}")
@@ -63,18 +77,22 @@ public class PublicStoreController {
                 publicStoreService.getStoreProducts(storeId)));
     }
 
-    @Operation(
-            summary = "상품 상세 조회",
-            description = "상품 상세 정보와 이미지를 조회합니다. 비회원 접근 가능하며, 동일 IP 기준 6시간 내 중복 조회수 증가는 제한합니다."
-    )
-    @GetMapping("/products/{productId}")
-    public ResponseEntity<ApiResponse<ProductDetailResponseDto>> getProductDetail(
-            @PathVariable Long productId,
-            HttpServletRequest request
+    @Operation(summary = "상점 상품 카테고리 조회", description = "특정 상점의 상품 카테고리 목록을 조회합니다.")
+    @GetMapping("/stores/{storeId}/product-categories")
+    public ResponseEntity<ApiResponse<List<ProductCategoryResponseDto>>> getStoreProductCategories(
+            @PathVariable Long storeId
     ) {
-        String viewerKey = viewerKeyResolver.resolve(request); // 위임
         return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getProductDetail(productId, viewerKey)));
+                publicStoreService.getStoreProductCategories(storeId)));
+    }
+
+    @Operation(summary = "상점 공지 목록 조회", description = "특정 상점의 공지 목록을 조회합니다.")
+    @GetMapping("/stores/{storeId}/notices")
+    public ResponseEntity<ApiResponse<List<StoreNoticeResponseDto>>> getStoreNotices(
+            @PathVariable Long storeId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                publicStoreService.getStoreNotices(storeId)));
     }
 
     @Operation(summary = "상점 이벤트 상품 조회",
@@ -87,39 +105,18 @@ public class PublicStoreController {
                 publicStoreService.getEventProducts(storeId)));
     }
 
-
-    @Operation(summary = "주변 상점 조회", description = "현재 위치 기준 반경 내 상점을 조회합니다.")
-    @GetMapping("/stores/nearby")
-    public ResponseEntity<ApiResponse<List<StoreListResponseDto>>> getNearbyStores(
-            @RequestParam double latitude,
-            @RequestParam double longitude,
-            @RequestParam(defaultValue = "3.0") double radiusKm,
-            @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Long regionId,
-            @RequestParam(required = false) String keyword
+    @Operation(
+            summary = "상품 상세 조회",
+            description = "상품 상세 정보와 이미지를 조회합니다. 비회원 접근 가능하며, 동일 IP 기준 6시간 내 중복 조회수 증가는 제한합니다."
+    )
+    @GetMapping("/products/{productId}")
+    public ResponseEntity<ApiResponse<ProductDetailResponseDto>> getProductDetail(
+            @PathVariable Long productId,
+            HttpServletRequest request
     ) {
+        String viewerKey = viewerKeyResolver.resolve(request); // 위임
         return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getNearbyStores(latitude, longitude, radiusKm,categoryId,regionId,keyword)));
-    }
-
-
-
-    @Operation(summary = "상점 공지 목록 조회", description = "특정 상점의 공지 목록을 조회합니다.")
-    @GetMapping("/stores/{storeId}/notices")
-    public ResponseEntity<ApiResponse<List<StoreNoticeResponseDto>>> getStoreNotices(
-            @PathVariable Long storeId
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getStoreNotices(storeId)));
-    }
-
-    @Operation(summary = "상점 상품 카테고리 조회", description = "특정 상점의 상품 카테고리 목록을 조회합니다.")
-    @GetMapping("/stores/{storeId}/product-categories")
-    public ResponseEntity<ApiResponse<List<ProductCategoryResponseDto>>> getStoreProductCategories(
-            @PathVariable Long storeId
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getStoreProductCategories(storeId)));
+                publicStoreService.getProductDetail(productId, viewerKey)));
     }
 
     @Operation(summary = "상품 옵션 조회", description = "특정 상품의 옵션 목록을 조회합니다.")

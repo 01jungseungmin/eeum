@@ -3,15 +3,15 @@ package com.eeum.eeum.api.account;
 import com.eeum.eeum.application.account.dto.request.OwnerInfoSearchDto;
 import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.service.AdminAccountService;
+import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
-import com.eeum.eeum.common.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 
-@Tag(name = "Admin Account", description = "[관리자] 회원 관리 API")
+@Tag(name = "15. Admin Account", description = "관리자 회원 관리 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/admin/accounts")
@@ -56,15 +56,6 @@ public class AdminAccountController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @Operation(summary = "[관리자] 탈퇴 예정 회원 목록 조회", description = "탈퇴 처리된 회원 목록을 페이징으로 조회합니다.")
-    @GetMapping("/withdrawn")
-    public ResponseEntity<ApiResponse<Page<AccountResponseDto>>> getWithdrawnAccounts(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
-    ) {
-        Page<AccountResponseDto> response = adminAccountService.getWithdrawnAccounts(pageable);
-        return ResponseEntity.ok(ApiResponse.success(response));
-    }
-
     @Operation(summary = "[관리자] 회원 상세 조회", description = "특정 회원의 상세 정보를 조회합니다.")
     @GetMapping("/{accountId}")
     public ResponseEntity<ApiResponse<AccountDetailResponseDto>> getAccountDetail(
@@ -72,6 +63,15 @@ public class AdminAccountController {
             @PathVariable @Positive Long accountId
     ) {
         AccountDetailResponseDto response = adminAccountService.getAccountDetail(accountId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @Operation(summary = "[관리자] 탈퇴 예정 회원 목록 조회", description = "탈퇴 처리된 회원 목록을 페이징으로 조회합니다.")
+    @GetMapping("/withdrawn")
+    public ResponseEntity<ApiResponse<Page<AccountResponseDto>>> getWithdrawnAccounts(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        Page<AccountResponseDto> response = adminAccountService.getWithdrawnAccounts(pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
