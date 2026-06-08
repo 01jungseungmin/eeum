@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { shopApi } from '../../api/shop';
 import { favoriteApi } from '../../api/favorite';
+import { reviewApi } from '../../api/review';
 
 const { width } = Dimensions.get('window');
 
@@ -19,6 +20,7 @@ export default function ShopDetailScreen() {
   const [shopProducts, setShopProducts] = useState<any[]>([]);
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
   const [favoriteCount, setFavoriteCount] = useState<number>(0);
+  const [shopReviews, setShopReviews] = useState<any[]>([]);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
 
@@ -27,13 +29,15 @@ export default function ShopDetailScreen() {
     const fetchShopData = async () => {
       try {
         setIsLoading(true);
-        const [detailData, productsData, checkRes, countRes] = await Promise.all([
+        const [detailData, productsData, checkRes, countRes, reviewsRes] = await Promise.all([
           shopApi.getShopDetail(shopIdNum),
           shopApi.getShopProducts(shopIdNum),
           favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
-          favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null)
+          favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null),
+          reviewApi.getReviews(shopIdNum).catch(() => null)
         ]);
         
+        setShopReviews(reviewsRes?.content || reviewsRes?.data || []);
         setShopDetail(detailData);
         setShopProducts(productsData || []);
         if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
@@ -117,6 +121,50 @@ export default function ShopDetailScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.reviewSection}>
+          <View style={styles.reviewHeader}>
+            <Text fontWeight="bold" style={styles.sectionTitle}>상점 리뷰</Text>
+            <TouchableOpacity 
+              style={styles.reviewWriteBtn}
+              onPress={() => router.push(`/review/write?storeId=${shopDetail.storeId}`)}
+            >
+              <Text style={styles.reviewWriteBtnText}>리뷰 쓰기</Text>
+            </TouchableOpacity>
+          </View>
+
+          {shopReviews.length === 0 ? (
+            <Text style={styles.emptyReviewText}>아직 등록된 리뷰가 없습니다.</Text>
+          ) : (
+            shopReviews.slice(0, 3).map((review: any) => (
+              <View key={review.storereviewId} style={styles.reviewCard}>
+                <View style={styles.reviewUserRow}>
+                  <Ionicons name="star" size={14} color="#FFD700" />
+                  <Text style={styles.reviewRatingText}>{review.rating}</Text>
+                  <Text style={styles.reviewWriterText}>{review.nickname || '익명'}</Text>
+                </View>
+                <Text style={styles.reviewContentText}>{review.content}</Text>
+                {review.images && review.images.length > 0 && (
+                  <Image source={{ uri: review.images[0].imageUrl }} style={styles.reviewImage} />
+                )}
+              </View>
+            ))
+          )}
+          
+          {/* 리뷰가 3개 이상일 때만 더보기 버튼 노출 */}
+          {shopReviews.length > 0 && (
+            <TouchableOpacity 
+              style={styles.moreReviewBtn}
+              onPress={() => router.push(`/review/list?storeId=${shopDetail.storeId}`)}
+            >
+              <Text style={styles.moreReviewBtnText}>리뷰 더 보기</Text>
+              <Ionicons name="chevron-forward" size={16} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+
       </ScrollView>
 
       {/* 하단 버튼 영역 */}
@@ -160,6 +208,21 @@ const styles = StyleSheet.create({
   menuDesc: { fontSize: 13, color: '#888', marginBottom: 10 },
   menuPrice: { fontSize: 16, color: '#333' },
   menuImg: { width: 100, height: 100, borderRadius: 8 },
+  
+  reviewSection: { padding: 20 },
+  reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  reviewWriteBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#E8F5E9', borderRadius: 4 },
+  reviewWriteBtnText: { color: '#00A859', fontSize: 13, fontWeight: 'bold' },
+  emptyReviewText: { color: '#888', textAlign: 'center', paddingVertical: 20 },
+  reviewCard: { marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 15 },
+  reviewUserRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  reviewRatingText: { fontWeight: 'bold', marginLeft: 4, fontSize: 14, color: '#333' },
+  reviewWriterText: { color: '#888', marginLeft: 10, fontSize: 12 },
+  reviewContentText: { fontSize: 14, color: '#333', lineHeight: 20 },
+  reviewImage: { width: 80, height: 80, borderRadius: 8, marginTop: 10 },
+  moreReviewBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15 },
+  moreReviewBtnText: { color: '#666', fontSize: 14, marginRight: 4, fontWeight: '500' },
+
   bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   primaryBtnText: { color: '#fff', fontSize: 16 },
