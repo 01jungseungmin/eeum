@@ -1,4 +1,7 @@
 spring:
+  config:
+    import: optional:file:../.env[.properties]
+
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/eeum}
     username: ${DB_USERNAME:root}
@@ -61,3 +64,7 @@ portone:
   api-secret: ${PORTONE_API_SECRET}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
   webhook-secret: ${PORTONE_WEBHOOK_SECRET}
+
+fcm:
+  project-id: ${FCM_PROJECT_ID}
+  service-account-key-path: ${FCM_SERVICE_ACCOUNT_KEY_PATH}
