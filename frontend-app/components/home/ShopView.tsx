@@ -1,39 +1,94 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 
-// 더미 데이터 내부 포함
-const SHOP_LIST = [
-  { id: 's1', name: '라떼가 맛있는 집', category: '카페', img: 'https://via.placeholder.com/150/333333/FFFFFF?text=Cafe' },
-  { id: 's2', name: '소문난 한식당', category: '식당', img: 'https://via.placeholder.com/150/555555/FFFFFF?text=Korean' },
-  { id: 's3', name: '매일 굽는 베이커리', category: '베이커리', img: 'https://via.placeholder.com/150/777777/FFFFFF?text=Bakery' },
-];
+import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { shopApi } from '../../api/shop';
 
-export default function ShopView({ router }: { router: any }) {
+// ✨ 1. regionId를 props로 받도록 추가합니다.
+export default function ShopView({ router, regionId }: { router: any, regionId: number | null }) {
+  const [shopList, setShopList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ✨ 2. regionId가 변경될 때마다 다시 실행되도록 의존성 배열을 수정합니다.
+  useEffect(() => {
+    const fetchHomeShops = async () => {
+      // 동네 설정이 아직 안 된 상태라면 상점 목록을 부르지 않고 비워둡니다.
+      if (!regionId) {
+        setShopList([]);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        // ✨ 3. 백엔드 API에 regionId를 파라미터로 함께 넘겨줍니다!
+        const res = await shopApi.getShops({ size: 5, regionId: regionId }); 
+        
+        const shops = res.data?.content || [];
+        setShopList(shops); 
+      } catch (e) {
+        console.error('홈 화면 상점 로딩 실패:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHomeShops();
+  }, [regionId]); 
+
+  const getCategoryName = (id: number) => {
+    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
+  };
+
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
       <View style={styles.bannerPlaceholder}>
         <Text style={{ color: '#fff' }}>이벤트 배너 영역</Text>
       </View>
+      
       <View style={styles.sectionContainer}>
-        <View style={styles.sectionHeader}>
+        <TouchableOpacity 
+          style={styles.sectionHeader} 
+          onPress={() => router.push({
+            pathname: '/shop/list' as any,
+            params: { regionId: regionId }
+          })}
+        >
           <Text style={styles.sectionTitle}>우리 동네 상점</Text>
           <Ionicons name="chevron-forward" size={20} color="#333" />
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {SHOP_LIST.map((shop) => (
-            <TouchableOpacity 
-              key={shop.id} 
-              style={styles.shopCard} 
-              onPress={() => router.push({ pathname: '/shop/[id]', params: { id: shop.id } })}
-            >
-              <Image source={{ uri: shop.img }} style={styles.shopImage} />
-              <Text style={styles.shopName}>{shop.name}</Text>
-              <Text style={styles.shopCategory}>{shop.category}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        </TouchableOpacity>
+
+        {/* ✨ 4. 동네 설정이 안 되어 있을 때의 안내 문구 추가 */}
+        {!regionId ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>상단에서 동네를 먼저 설정해 주세요!</Text>
+          </View>
+        ) : isLoading ? (
+          <ActivityIndicator size="small" color="#00A859" style={{ marginTop: 20 }} />
+        ) : shopList.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>우리 동네에는 아직 등록된 상점이 없어요.</Text>
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {shopList.map((shop) => {
+              const thumbnailUrl = shop.thumbnailUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store';
+              
+              return (
+                <TouchableOpacity 
+                  key={shop.storeId}
+                  style={styles.shopCard} 
+                  onPress={() => router.push(`/shop/${shop.storeId}`)} 
+                >
+                  <Image source={{ uri: thumbnailUrl }} style={styles.shopImage} />
+                  <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
+                  <Text style={styles.shopCategory}>{shop.categoryName || getCategoryName(shop.categoryId)}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
     </ScrollView>
   );
@@ -48,4 +103,6 @@ const styles = StyleSheet.create({
   shopImage: { width: 120, height: 120, borderRadius: 8, marginBottom: 8 },
   shopName: { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 2 },
   shopCategory: { fontSize: 12, color: '#888' },
+  emptyState: { paddingVertical: 30, alignItems: 'center', paddingRight: 20 },
+  emptyText: { color: '#888', fontSize: 14 }
 });
