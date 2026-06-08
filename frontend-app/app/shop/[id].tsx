@@ -83,6 +83,7 @@ export default function ShopDetailScreen() {
 
         <View style={styles.divider} />
 
+        {/* 메뉴 섹션 */}
         <View style={styles.menuSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>메뉴</Text>
           {shopProducts.map((menu: any) => (
@@ -132,19 +133,16 @@ export default function ShopDetailScreen() {
               <Text fontWeight="bold" style={styles.primaryBtnText}>방문 예약하기</Text>
             </TouchableOpacity>
 
-            {/* 식당용 버튼 2 - 픽업 주문 */}
+            {/* 식당용 버튼 2 - 사장님과 채팅 (위아래로 꽉 찬 디자인) */}
             <TouchableOpacity 
-              style={styles.secondaryBtn} 
-              onPress={() => router.push({
-                pathname: '/restaurant/pickup' as any,
-                params: { storeId: shopDetail.storeId }
-              })}
+              style={styles.chatBtn} 
+              onPress={() => Alert.alert('안내', '채팅 기능은 준비 중입니다.')}
             >
-              <Text fontWeight="bold" style={styles.secondaryBtnText}>픽업 주문하기</Text>
+              <Text style={styles.chatBtnText}>사장님과 채팅</Text>
             </TouchableOpacity>
           </View>
         ) : (
-
+          /* 일반 상점용 장바구니 버튼 (유지) */
           <TouchableOpacity 
             style={styles.primaryBtn}
             onPress={() => router.push('/cart')}
@@ -173,7 +171,6 @@ const styles = StyleSheet.create({
   contactText: { fontSize: 14, color: '#666', marginLeft: 10 },
   divider: { height: 8, backgroundColor: '#F8F8F8' },
   
-  /* 복원된 메뉴 스타일 */
   menuSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 20 },
   menuCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
@@ -187,6 +184,8 @@ const styles = StyleSheet.create({
   bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   primaryBtnText: { color: '#fff', fontSize: 16 },
-  secondaryBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  secondaryBtnText: { color: '#00A859', fontSize: 16 }
+  
+  /* 사장님과 채팅 버튼 스타일 (풀사이즈) */
+  chatBtn: { width: '100%', paddingVertical: 16, borderRadius: 8, borderWidth: 1, borderColor: '#00A859', alignItems: 'center', justifyContent: 'center' },
+  chatBtnText: { color: '#00A859', fontSize: 16, fontWeight: 'bold' }
 });
