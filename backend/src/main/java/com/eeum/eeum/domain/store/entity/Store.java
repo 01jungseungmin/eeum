@@ -71,12 +71,7 @@ public class Store extends BaseEntity {
     @Column(name = "version", nullable = false)
     private Long version;
 
-    /**
-     * 사장 회원가입 시 상점 기본 생성
-     *
-     * 이때 사업자 승인은 아직 완료되지 않았으므로
-     * store.status는 TEMP_CLOSED 상태로 생성한다.
-     */
+    // 사장 회원가입 시 상점 기본 생성
     public static Store createForOwnerSignup(
             Account account,
             String name,
@@ -95,38 +90,27 @@ public class Store extends BaseEntity {
         return store;
     }
 
-    /**
-     * 관리자 승인 시 상점 영업 가능 상태로 변경
-     */
+    // 상점 영업 가능 상태로 변경
     public void open() {
         this.status = StoreStatus.OPEN;
     }
 
-    /**
-     * 임시 휴무 처리
-     */
+    // 임시 상태로 변경
     public void tempClose() {
         this.status = StoreStatus.TEMP_CLOSED;
     }
 
-    /**
-     * 임시 휴무 해제 후 다시 영업
-     */
+    // 임시 휴무 해제 후 다시 영업 상태로 변경
     public void reopen() {
         this.status = StoreStatus.OPEN;
     }
 
-    /**
-     * 영업 종료
-     */
+    // 영업 종료 상태로 변경
     public void close() {
         this.status = StoreStatus.CLOSED;
     }
 
-    /**
-     * 상점 정보 설정
-     */
-
+    // 상점 정보 설정
     public void updateBusinessInfo(
             Category category,
             String description
@@ -136,9 +120,7 @@ public class Store extends BaseEntity {
     }
 
 
-    /**
-     * 상점 기본 정보 수정
-     */
+    // 상점 기본 정보 수정
     public void updateBasicInfo(
             String name,
             String address,
@@ -151,9 +133,7 @@ public class Store extends BaseEntity {
         this.description = description;
     }
 
-    /**
-     * 상점 위치 정보 수정
-     */
+    // 상점 위치 정보 수정
     public void updateLocation(
             Region region,
             Double latitude,
@@ -177,13 +157,9 @@ public class Store extends BaseEntity {
 
     // ===================== 리뷰/평점 도메인 메서드 =====================
 
-    /**
-     * 평균 평점 재계산.
-     * 리뷰 작성/수정/삭제 후 새로운 평균과 리뷰 수를 전달받아 갱신한다.
-     *
-     * @param newRating 새 평균 평점 (소수점 1자리 반올림)
-     * @param newCount  새 리뷰 수
-     */
+    // 평균 평점 재계산 리뷰 작성/수정/삭제 후 새로운 평균과 리뷰 수를 전달받아 갱신
+    // @param newRating 새 평균 평점 (소수점 1자리 반올림)
+    // @param newCount  새 리뷰 수
     public void updateRating(double newRating, int newCount) {
         this.rating = Math.round(newRating * 10.0) / 10.0;
         this.reviewCount = newCount;

@@ -1,14 +1,16 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
+import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
 import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreBusinessHourUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreBusinessInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
-import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
+import com.eeum.eeum.domain.account.event.OwnerApplicationSubmittedEvent;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -28,12 +30,11 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -50,6 +51,9 @@ public class OwnerApprovalService {
     private final CategoryRepository categoryRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final OwnerApplicationMapper ownerApplicationMapper;
+    private final StoreApprovalMapper storeApprovalMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 체크리스트 조회 =====================
 
@@ -77,37 +81,17 @@ public class OwnerApprovalService {
         boolean settlementAccountRegistered =
                 settlementAccountRepository.existsByStore_StoreId(store.getStoreId());
 
-        boolean allCompleted = businessVerified
-                && storeInfoCompleted
-                && menuRegistered
-                && businessHoursSet
-                && settlementAccountRegistered;
-
-        return OwnerChecklistResponseDto.builder()
-                .businessVerified(businessVerified)
-                .storeInfoCompleted(storeInfoCompleted)
-                .menuRegistered(menuRegistered)
-                .businessHoursSet(businessHoursSet)
-                .settlementAccountRegistered(settlementAccountRegistered)
-                .allCompleted(allCompleted)
-                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
-                .approvalStatus(ownerInfo.getApprovalStatus().name())
-                .rejectionReason(ownerInfo.getRejectionReason())
-                .build();
+        return ownerApplicationMapper.toOwnerChecklistResponseDto(
+                ownerInfo,
+                businessVerified,
+                storeInfoCompleted,
+                menuRegistered,
+                businessHoursSet,
+                settlementAccountRegistered
+        );
     }
 
     // ===================== 영업시간 설정 =====================
-
-    @Transactional(readOnly = true)
-    public List<StoreBusinessHourResponseDto> getBusinessHours(Long accountId) {
-        Store store = getStore(accountId);
-
-        return storeBusinessHourRepository.findByStore_StoreId(store.getStoreId())
-                .stream()
-                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
-                .map(this::toBusinessHourDto)
-                .toList();
-    }
 
 
     @Transactional
@@ -208,7 +192,7 @@ public class OwnerApprovalService {
 
         log.info("정산 계좌 저장 완료: accountId={}", accountId);
 
-        return toSettlementAccountDto(settlementAccount);
+        return storeApprovalMapper.toSettlementAccountDto(settlementAccount);
     }
 
     // ===================== 심사 요청 =====================
@@ -228,6 +212,11 @@ public class OwnerApprovalService {
         ownerInfo.requestReview();
 
         log.info("입점 심사 요청 완료: accountId={}", accountId);
+
+        eventPublisher.publishEvent(new OwnerApplicationSubmittedEvent(
+                accountId,
+                store.getAccount().getName(),
+                store.getName()));
     }
 
     // ===================== 대표 메뉴 설정 =====================
@@ -318,25 +307,6 @@ public class OwnerApprovalService {
         }
     }
 
-    private SettlementAccountResponseDto toSettlementAccountDto(SettlementAccount settlementAccount) {
-        return SettlementAccountResponseDto.builder()
-                .settlementAccountId(settlementAccount.getSettlementAccountId())
-                .bankName(settlementAccount.getBankName())
-                .accountNumber(maskAccountNumber(settlementAccount.getAccountNumber()))
-                .accountHolder(settlementAccount.getAccountHolder())
-                .build();
-    }
-
-    private String maskAccountNumber(String accountNumber) {
-        if (!hasText(accountNumber) || accountNumber.length() < 4) {
-            return accountNumber;
-        }
-
-        return accountNumber.substring(0, 3)
-                + "-****-"
-                + accountNumber.substring(accountNumber.length() - 4);
-    }
-
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -394,15 +364,5 @@ public class OwnerApprovalService {
         if (!item.getOpenTime().isBefore(item.getCloseTime())) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
-    }
-
-    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
-        return StoreBusinessHourResponseDto.builder()
-                .dayOfWeek(businessHour.getDayOfWeek())
-                .dayLabel(businessHour.getDayOfWeek().getLabel())
-                .closed(businessHour.isClosed())
-                .openTime(businessHour.getOpenTime())
-                .closeTime(businessHour.getCloseTime())
-                .build();
     }
 }

@@ -2,6 +2,7 @@ package com.eeum.eeum.application.product.service;
 
 import com.eeum.eeum.application.product.dto.request.ProductCategoryRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductCategoryResponseDto;
+import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.domain.product.entity.ProductCategory;
 import com.eeum.eeum.domain.product.repository.ProductCategoryRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -12,7 +13,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -21,16 +25,29 @@ public class ProductCategoryService {
 
     private final StoreRepository storeRepository;
     private final ProductCategoryRepository productCategoryRepository;
+    private final ProductMapper productMapper;
 
     // 카테고리 목록 조회
     @Transactional(readOnly = true)
     public List<ProductCategoryResponseDto> getCategories(Long accountId) {
         Store store = getStore(accountId);
 
-        return productCategoryRepository
-                .findByStore_StoreIdOrderByDisplayOrderAsc(store.getStoreId())
+        List<ProductCategory> categories = productCategoryRepository
+                .findByStore_StoreIdOrderByDisplayOrderAsc(store.getStoreId());
+
+        Map<Long, Integer> productCountMap = productCategoryRepository
+                .countProductsByStoreIdGroupByCategoryId(store.getStoreId())
                 .stream()
-                .map(this::toDto)
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> ((Long) row[1]).intValue()
+                ));
+
+        return categories.stream()
+                .map(category -> productMapper.toProductCategoryResponseDto(
+                        category,
+                        productCountMap.getOrDefault(category.getProductCategoryId(), 0)
+                ))
                 .toList();
     }
 
@@ -63,7 +80,7 @@ public class ProductCategoryService {
 
         log.info("상품 카테고리 생성: accountId={}, storeId={}, categoryId={}", accountId, store.getStoreId(), category.getProductCategoryId());
 
-        return toDto(category);
+        return productMapper.toProductCategoryResponseDto(category,0);
     }
 
     // 카테고리 수정
@@ -75,8 +92,10 @@ public class ProductCategoryService {
         validateDuplicateCategoryNameForUpdate(category.getStore().getStoreId(), request.getName(), categoryId);
         category.update(request.getName(), request.getDisplayOrder());
 
+        int productCount = productCategoryRepository.countProductsByCategoryId(category.getProductCategoryId());
+
         log.info("상품 카테고리 수정: accountId={}, categoryId={}",accountId, categoryId);
-        return toDto(category);
+        return productMapper.toProductCategoryResponseDto(category,productCount);
     }
 
     // 카테고리 삭제 (소속 상품 있으면 비활성화)
@@ -139,18 +158,5 @@ public class ProductCategoryService {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
         }
         return category;
-    }
-
-    private ProductCategoryResponseDto toDto(ProductCategory category) {
-        int productCount = productCategoryRepository
-                .countProductsByCategoryId(category.getProductCategoryId());
-        return ProductCategoryResponseDto.builder()
-                .productCategoryId(category.getProductCategoryId())
-                .storeId(category.getStore().getStoreId())
-                .name(category.getName())
-                .displayOrder(category.getDisplayOrder())
-                .isActive(category.isActive())
-                .productCount(productCount)
-                .build();
     }
 }

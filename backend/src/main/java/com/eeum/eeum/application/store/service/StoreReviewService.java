@@ -13,6 +13,8 @@ import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.entity.StoreReviewImage;
 import com.eeum.eeum.domain.store.entity.StoreReviewReply;
+import com.eeum.eeum.domain.store.event.StoreReviewCreatedEvent;
+import com.eeum.eeum.domain.store.event.StoreReviewReplyCreatedEvent;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewReplyRepository;
@@ -21,6 +23,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,12 +45,11 @@ public class StoreReviewService {
     private final StoreReviewReplyRepository storeReviewReplyRepository;
     private final OrderRepository orderRepository;
     private final AccountRepository accountRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 공개 조회 =====================
 
-    /**
-     * 상점 리뷰 목록 조회 (비회원 포함)
-     */
+    //상점 리뷰 목록 조회 (비회원 포함)
     @Transactional(readOnly = true)
     public Page<StoreReviewResponseDto> getReviews(Long storeId, Pageable pageable) {
         getStoreOrThrow(storeId);
@@ -56,9 +58,7 @@ public class StoreReviewService {
         return reviews.map(this::toResponseDto);
     }
 
-    /**
-     * 상점 리뷰 단건 상세 조회 (비회원 포함)
-     */
+    // 상점 리뷰 단건 상세 조회 (비회원 포함)
     @Transactional(readOnly = true)
     public StoreReviewDetailResponseDto getReviewDetail(Long storeId, Long reviewId) {
         StoreReview review = getReviewOrThrow(storeId, reviewId);
@@ -70,9 +70,7 @@ public class StoreReviewService {
 
     // ===================== 리뷰 작성/수정/삭제 (일반 회원) =====================
 
-    /**
-     * 리뷰 작성 — 거래 완료(COMPLETED) 주문만 허용, 1주문 1리뷰
-     */
+    // 리뷰 작성 — 거래 완료(COMPLETED) 주문만 허용, 1주문 1리뷰
     @Transactional
     public StoreReviewResponseDto createReview(
             Long accountId,
@@ -121,14 +119,19 @@ public class StoreReviewService {
         log.info("상점 리뷰 작성: storeId={}, accountId={}, reviewId={}",
                 storeId, accountId, review.getStorereviewId());
 
+        eventPublisher.publishEvent(new StoreReviewCreatedEvent(
+                store.getAccount().getAccountId(),
+                account.getName(),
+                store.getName(),
+                storeId,
+                review.getStorereviewId()));
+
         List<StoreReviewImage> savedImages = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         return StoreReviewResponseDto.of(review, savedImages, null);
     }
 
-    /**
-     * 리뷰 수정 — 본인만 가능
-     */
+    // 리뷰 수정 — 본인만 가능
     @Transactional
     public StoreReviewResponseDto updateReview(
             Long accountId,
@@ -155,9 +158,7 @@ public class StoreReviewService {
         return StoreReviewResponseDto.of(review, images, replyDto);
     }
 
-    /**
-     * 리뷰 삭제 — 본인만 가능
-     */
+    // 리뷰 삭제 — 본인만 가능
     @Transactional
     public void deleteReview(Long accountId, Long storeId, Long reviewId) {
         StoreReview review = getReviewOrThrow(storeId, reviewId);
@@ -178,9 +179,7 @@ public class StoreReviewService {
 
     // ===================== 리뷰 이미지 관리 =====================
 
-    /**
-     * 리뷰 이미지 추가
-     */
+    // 리뷰 이미지 추가
     @Transactional
     public StoreReviewResponseDto addReviewImages(
             Long accountId,
@@ -213,9 +212,7 @@ public class StoreReviewService {
         return StoreReviewResponseDto.of(review, images, replyDto);
     }
 
-    /**
-     * 리뷰 이미지 삭제
-     */
+    // 리뷰 이미지 삭제
     @Transactional
     public void deleteReviewImage(Long accountId, Long storeId, Long reviewId, Long imageId) {
         StoreReview review = getReviewOrThrow(storeId, reviewId);
@@ -241,9 +238,7 @@ public class StoreReviewService {
         log.info("리뷰 이미지 삭제: imageId={}", imageId);
     }
 
-    /**
-     * 리뷰 대표 이미지 지정
-     */
+    // 리뷰 대표 이미지 지정
     @Transactional
     public void setReviewImageThumbnail(
             Long accountId, Long storeId, Long reviewId, Long imageId
@@ -268,9 +263,7 @@ public class StoreReviewService {
 
     // ===================== 사장 답글 (ROLE_OWNER) =====================
 
-    /**
-     * 답글 작성 — 해당 상점의 사장만 가능, 1리뷰 1답글
-     */
+    // 답글 작성 — 해당 상점의 사장만 가능, 1리뷰 1답글
     @Transactional
     public StoreReviewReplyResponseDto createReply(
             Long accountId,
@@ -295,12 +288,17 @@ public class StoreReviewService {
         }
 
         log.info("리뷰 답글 작성: reviewId={}, accountId={}", reviewId, accountId);
+
+        eventPublisher.publishEvent(new StoreReviewReplyCreatedEvent(
+                review.getAccount().getAccountId(),
+                review.getStore().getName(),
+                storeId,
+                reviewId));
+
         return StoreReviewReplyResponseDto.from(reply);
     }
 
-    /**
-     * 답글 수정 — 해당 상점의 사장만 가능
-     */
+    // 답글 수정 — 해당 상점의 사장만 가능
     @Transactional
     public StoreReviewReplyResponseDto updateReply(
             Long accountId,
@@ -321,9 +319,7 @@ public class StoreReviewService {
         return StoreReviewReplyResponseDto.from(reply);
     }
 
-    /**
-     * 답글 삭제 — 해당 상점의 사장만 가능
-     */
+    // 답글 삭제 — 해당 상점의 사장만 가능
     @Transactional
     public void deleteReply(Long accountId, Long storeId, Long reviewId) {
         checkStoreOwnership(storeId, accountId);
@@ -339,9 +335,7 @@ public class StoreReviewService {
 
     // ===================== 사장용 조회 (ROLE_OWNER) =====================
 
-    /**
-     * 사장용 리뷰 목록 조회
-     */
+    //사장용 리뷰 목록 조회
     @Transactional(readOnly = true)
     public Page<OwnerStoreReviewResponseDto> getReviewsForOwner(
             Long accountId, Long storeId, Pageable pageable
@@ -358,9 +352,7 @@ public class StoreReviewService {
         });
     }
 
-    /**
-     * 사장용 리뷰 상세 조회
-     */
+    //사장용 리뷰 상세 조회
     @Transactional(readOnly = true)
     public OwnerStoreReviewDetailResponseDto getReviewDetailForOwner(
             Long accountId, Long storeId, Long reviewId
@@ -375,10 +367,7 @@ public class StoreReviewService {
 
     // ===================== 내부 헬퍼 =====================
 
-    /**
-     * 평균 평점 재계산 후 Store 엔티티에 반영.
-     * 전체 리뷰를 조회하는 대신 집계 쿼리를 사용해 효율적으로 처리한다.
-     */
+    // 평균 평점 재계산 후 Store 엔티티에 반영(전체 리뷰를 조회하는 대신 집계 쿼리를 사용)
     private void recalculateStoreRating(Store store) {
         double avg = storeReviewRepository.calculateAverageRating(store.getStoreId());
         int count = Math.toIntExact(storeReviewRepository.countByStoreId(store.getStoreId()));
@@ -387,12 +376,8 @@ public class StoreReviewService {
         log.debug("Store 평점 갱신: storeId={}, avg={}, count={}", store.getStoreId(), avg, count);
     }
 
-    /**
-     * 리뷰 이미지 목록을 저장한다.
-     *
-     * @param currentCount 이미 저장된 이미지 수 (호출 측에서 조회한 값을 재사용해 중복 쿼리 방지).
-     *                     신규 리뷰 생성 시에는 0을 전달한다.
-     */
+    // 리뷰 이미지 목록을 저장
+    // @param currentCount 이미 저장된 이미지 수 (호출 측에서 조회한 값을 재사용해 중복 쿼리 방지) - 신규 리뷰 생성 시에는 0을 전달
     private void saveReviewImages(StoreReview review, List<String> imageUrls, int currentCount) {
         boolean hasExistingThumbnail = storeReviewImageRepository
                 .existsByStoreReview_StorereviewIdAndIsThumbnailTrue(review.getStorereviewId());

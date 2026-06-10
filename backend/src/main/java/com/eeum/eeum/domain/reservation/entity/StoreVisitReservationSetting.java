@@ -42,11 +42,11 @@ public class StoreVisitReservationSetting extends BaseEntity {
     @Column(name = "cancel_deadline_minutes", nullable = false)
     private Integer cancelDeadlineMinutes = 30;
 
-    /** 예약 가능 시작 시간 (기본 09:00) */
+    // 예약 가능 시작 시간 (기본 09:00)
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime = LocalTime.of(9, 0);
 
-    /** 예약 가능 종료 시간 — 이 시각 미만의 슬롯만 생성 (기본 18:00) */
+    // 예약 가능 종료 시간 — 이 시각 미만의 슬롯만 생성 (기본 18:00)
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime = LocalTime.of(18, 0);
 

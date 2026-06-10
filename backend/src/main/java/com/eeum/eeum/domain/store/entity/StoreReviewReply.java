@@ -7,9 +7,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * 상점 리뷰 답글 — 사장 회원만 작성 가능, 리뷰당 1개 (UNIQUE 제약)
- */
+// 상점 리뷰 답글 — 사장 회원만 작성 가능, 리뷰당 1개
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

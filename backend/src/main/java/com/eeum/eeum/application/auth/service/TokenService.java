@@ -101,10 +101,8 @@ public class TokenService {
         return reAuthToken; //생성한 ReAuth Token을 반환
     }
 
-    /**
-     * ReAuth Token 검증 후 즉시 삭제한다.
-     * 비밀번호 변경, 회원 탈퇴 등 민감 작업에서 사용한다.
-     */
+    // ReAuth Token 검증 후 즉시 삭제
+    //비밀번호 변경, 회원 탈퇴 등 민감 작업에서 사용한
     //ReAuth Token을 검증하고, 성공하면 accountId를 반환
     public void validateReAuthToken(Long currentAccountId, String reAuthToken) {
         if (!jwtProvider.isValid(reAuthToken)) { //토큰 자체가 유효한지 검사
@@ -150,10 +148,7 @@ public class TokenService {
         return resetToken; //재인증 토큰 반환
     }
 
-    /**
-     * Password Reset Token 검증 후 즉시 삭제한다.
-     * 검증 성공 시 토큰의 accountId를 반환한다.
-     */
+    // Password Reset Token 검증 후 즉시 삭제 검증 성공 시 토큰의 accountId를 반환
     //비밀번호 재설정 토큰을 검증하는 메서드
     public Long validatePasswordResetToken(String resetToken) {
         if (!jwtProvider.isValid(resetToken)) { //resetToken 자체가 유효한 JWT인지 검사
@@ -181,12 +176,6 @@ public class TokenService {
 
     // ===================== 로그아웃 =====================
 
-    /**
-     * 로그아웃 처리
-     * 1. Access Token 블랙리스트 등록
-     * 2. Refresh Token 삭제
-     */
-    //로그아웃 처리 메서드
     public void logout(Long accountId, String accessToken) {
         blacklistAccessToken(accessToken); //Access Token을 Redis 블랙리스트에 등록
         deleteRefreshToken(accountId); //Redis에 저장된 Refresh Token을 삭제

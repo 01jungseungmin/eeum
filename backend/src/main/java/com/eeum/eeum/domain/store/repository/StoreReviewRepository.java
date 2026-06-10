@@ -37,10 +37,8 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
             Pageable pageable
     );
 
-    /**
-     * 사장용 찜 고객 목록 — 고객별 평균 평점 배치 조회.
-     * IN절 한 번으로 N+1 없이 처리한다.
-     */
+    // 사장용 찜 고객 목록 — 고객별 평균 평점 배치 조회 IN절 한 번으로 N+1 없이 처리
+
     @Query("""
         SELECT r.account.accountId AS accountId,
                AVG(r.rating)       AS avgRating

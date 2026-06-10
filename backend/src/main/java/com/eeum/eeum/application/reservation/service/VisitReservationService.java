@@ -4,6 +4,7 @@ import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateR
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationStatusUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationLeftTimeSlotResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationResponseDto;
+import com.eeum.eeum.application.reservation.mapper.VisitReservationMapper;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -11,6 +12,9 @@ import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.entity.VisitReservation;
 import com.eeum.eeum.domain.reservation.entity.VisitReservationTimeSlot;
 import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
+import com.eeum.eeum.domain.reservation.event.ReservationApprovedEvent;
+import com.eeum.eeum.domain.reservation.event.ReservationCreatedEvent;
+import com.eeum.eeum.domain.reservation.event.ReservationRejectedEvent;
 import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationTimeSlotCountProjection;
@@ -25,6 +29,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -53,6 +58,8 @@ public class VisitReservationService {
     private final VisitReservationTimeSlotRepository visitReservationTimeSlotRepository;
     private final RedisLockService redisLockService;
     private final TransactionTemplate transactionTemplate;
+    private final VisitReservationMapper visitReservationMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 사용자 예약 =====================
     @Transactional
@@ -61,11 +68,6 @@ public class VisitReservationService {
             Long storeId,
             VisitReservationCreateRequestDto request
     ) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-
-        Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
         String lockKey = createReservationLockKey(
                 storeId,
@@ -89,7 +91,7 @@ public class VisitReservationService {
     ) {
         return visitReservationRepository
                 .findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable)
-                .map(this::toDto);
+                .map(visitReservationMapper::toVisitReservationResponseDto);
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +105,7 @@ public class VisitReservationService {
             throw new BusinessException(ErrorCode.COMMON_FORBIDDEN);
         }
 
-        return toDto(reservation);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
     @Transactional
@@ -142,7 +144,7 @@ public class VisitReservationService {
         if (status == null) {
             return visitReservationRepository
                     .findByStore_StoreIdOrderByVisitDateDescVisitTimeDesc(store.getStoreId(), pageable)
-                    .map(this::toDto);
+                    .map(visitReservationMapper::toVisitReservationResponseDto);
         }
 
         return visitReservationRepository
@@ -151,7 +153,7 @@ public class VisitReservationService {
                         status,
                         pageable
                 )
-                .map(this::toDto);
+                .map(visitReservationMapper::toVisitReservationResponseDto);
     }
 
     @Transactional(readOnly = true)
@@ -164,7 +166,7 @@ public class VisitReservationService {
 
         validateStoreOwner(store, reservation);
 
-        return toDto(reservation);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
     @Transactional
@@ -187,6 +189,14 @@ public class VisitReservationService {
         }
 
         log.info("방문 예약 승인: ownerAccountId={}, reservationId={}", ownerAccountId, reservationId);
+
+        eventPublisher.publishEvent(new ReservationApprovedEvent(
+                reservation.getAccount().getAccountId(),
+                reservation.getStore().getName(),
+                reservation.getVisitDate(),
+                reservation.getVisitTime(),
+                reservation.getVisitReservationId()
+        ));
     }
 
     @Transactional
@@ -213,6 +223,15 @@ public class VisitReservationService {
         }
 
         log.info("방문 예약 거절: ownerAccountId={}, reservationId={}", ownerAccountId, reservationId);
+
+        eventPublisher.publishEvent(new ReservationRejectedEvent(
+                reservation.getAccount().getAccountId(),
+                reservation.getStore().getName(),
+                reservation.getVisitDate(),
+                reservation.getVisitTime(),
+                reservation.getRejectReason(),
+                reservation.getVisitReservationId()
+        ));
     }
 
     @Transactional
@@ -237,14 +256,10 @@ public class VisitReservationService {
         log.info("방문 예약 완료: ownerAccountId={}, reservationId={}", ownerAccountId, reservationId);
     }
 
-    /**
-     * 사장용 특정 날짜의 시간대별 잔여 예약 현황 조회.
-     * ① 설정의 startTime/endTime/interval 로 슬롯 시각 목록 동적 생성 (DB 불필요)
-     * ② DB 오버라이드 슬롯 배치 조회 (1쿼리)
-     * ③ PENDING·APPROVED 예약 집계 배치 조회 (1쿼리)
-     * → N+1 없이 최대 2쿼리로 처리.
-     * closed = !enabled OR 잔여팀 ≤ 0 OR 잔여인원 ≤ 0
-     */
+    //사장용 특정 날짜의 시간대별 잔여 예약 현황 조회
+    // 1. 설정의 startTime/endTime/interval 로 슬롯 시각 목록 동적 생성 (DB 불필요)
+    // 2. DB 오버라이드 슬롯 배치 조회 (1쿼리), PENDING·APPROVED 예약 집계 배치 조회 (1쿼리) → N+1 없이 최대 2쿼리로 처리
+    // closed = !enabled OR 잔여팀 ≤ 0 OR 잔여인원 ≤ 0
     @Transactional(readOnly = true)
     public List<VisitReservationLeftTimeSlotResponseDto> getOwnerLeftTimeSlot(
             Long ownerAccountId,
@@ -500,13 +515,20 @@ public class VisitReservationService {
         log.info("방문 예약 생성: accountId={}, storeId={}, reservationId={}",
                 accountId, storeId, reservation.getVisitReservationId());
 
-        return toDto(reservation);
+        eventPublisher.publishEvent(new ReservationCreatedEvent(
+                store.getAccount().getAccountId(),
+                account.getName(),
+                store.getName(),
+                reservation.getVisitDate(),
+                reservation.getVisitTime(),
+                reservation.getVisitReservationId()
+        ));
+
+        return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
-    /**
-     * 설정(startTime, endTime, slotIntervalMinutes)에서 슬롯 시각 목록을 동적으로 생성.
-     * endTime 미만의 시각까지만 생성.
-     */
+    //설정(startTime, endTime, slotIntervalMinutes)에서 슬롯 시각 목록을 동적으로 생성 - endTime 미만의 시각까지만 생성
+
     private List<LocalTime> generateSlotTimes(StoreVisitReservationSetting setting) {
         List<LocalTime> times = new ArrayList<>();
         LocalTime current = setting.getStartTime();
@@ -519,27 +541,5 @@ public class VisitReservationService {
         return times;
     }
 
-    private VisitReservationResponseDto toDto(VisitReservation reservation) {
-        Store store = reservation.getStore();
-        Account account = reservation.getAccount();
 
-        return VisitReservationResponseDto.builder()
-                .visitReservationId(reservation.getVisitReservationId())
-                .storeId(store.getStoreId())
-                .storeName(store.getName())
-                .storeAddress(store.getAddress())
-                .storePhone(store.getPhone())
-                .accountId(account.getAccountId())
-                .customerName(account.getName())
-                .customerPhone(account.getPhone())
-                .visitDate(reservation.getVisitDate())
-                .visitTime(reservation.getVisitTime())
-                .visitorCount(reservation.getVisitorCount())
-                .requestMessage(reservation.getRequestMessage())
-                .rejectReason(reservation.getRejectReason())
-                .status(reservation.getStatus())
-                .createdAt(reservation.getCreatedAt())
-                .modifiedAt(reservation.getModifiedAt())
-                .build();
-    }
 }

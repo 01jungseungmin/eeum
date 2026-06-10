@@ -14,10 +14,9 @@ public final class SecurityUtil {
         // 유틸 클래스이므로 인스턴스 생성을 막는다.
     }
 
-    /**
-     * 현재 로그인한 회원의 accountId를 반환한다.
-     * 인증 정보가 없거나 비로그인 상태면 COMMON_UNAUTHORIZED 예외를 던진다.
-     */
+    // 현재 로그인한 회원의 accountId를 반환
+    // 인증 정보가 없거나 비로그인 상태면 COMMON_UNAUTHORIZED 예외
+
     public static Long getCurrentAccountId() {
         Authentication authentication = getAuthentication();
 
@@ -34,20 +33,16 @@ public final class SecurityUtil {
         throw new BusinessException(ErrorCode.COMMON_UNAUTHORIZED);
     }
 
-    /**
-     * 로그인 여부를 반환한다.
-     * 비회원 접근이 허용되는 API에서 로그인 여부만 확인할 때 사용한다.
-     */
+    // 로그인 여부를 반환 비회원 접근이 허용되는 API에서 로그인 여부만 확인할 때 사용
+
     public static boolean isAuthenticated() {
         Authentication authentication = getAuthentication();
         return isValidAuthentication(authentication)
                 && authentication.getPrincipal() instanceof CustomUserDetails;
     }
 
-    /**
-     * 현재 로그인한 회원의 accountId를 반환한다.
-     * 비로그인 상태면 null을 반환한다.
-     */
+    // 재 로그인한 회원의 accountId를 반환 비로그인 상태면 null을 반환
+
     public static Long getCurrentAccountIdOrNull() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 

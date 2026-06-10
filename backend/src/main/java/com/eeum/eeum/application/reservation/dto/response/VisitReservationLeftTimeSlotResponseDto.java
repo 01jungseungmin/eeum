@@ -20,16 +20,13 @@ public class VisitReservationLeftTimeSlotResponseDto {
     private int reservedPeople;
     private int leftPeople;
 
-    /** enabled=false이거나 팀·인원 정원 초과이면 true */
+    // enabled=false이거나 팀·인원 정원 초과이면 true
     private boolean closed;
 
-    /** 슬롯 활성화 여부 (false면 사장이 직접 비활성화한 슬롯) */
+    // 슬롯 활성화 여부 (false면 사장이 직접 비활성화한 슬롯)
     private boolean enabled;
 
-    /**
-     * @param timeSlotId DB 슬롯 ID
-     * @param enabled    슬롯 활성화 여부 — false이면 closed도 강제 true
-     */
+    // @param timeSlotId DB 슬롯 ID @param enabled    슬롯 활성화 여부 — false이면 closed도 강제 true
     public static VisitReservationLeftTimeSlotResponseDto of(
             Long timeSlotId,
             LocalTime time,

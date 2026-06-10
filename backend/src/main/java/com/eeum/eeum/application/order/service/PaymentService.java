@@ -13,6 +13,8 @@ import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.RefundStatus;
+import com.eeum.eeum.domain.order.event.OrderPaidEvent;
+import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.exception.*;
@@ -20,6 +22,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -45,6 +48,7 @@ public class PaymentService {
     private final OrderService orderService;
     private final PortOnePaymentClient portOnePaymentClient;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
@@ -195,6 +199,7 @@ public class PaymentService {
          if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
              payment.markAsPaid(paymentInfo.getPgProvider());
              order.markAsPaid();
+             publishPaidEvents(order);
         }else {
              log.warn("결제 완료 상태가 아닌 Webhook 수신: paymentId={}, status={}",
                      payment.getPortonePaymentId(),
@@ -293,9 +298,29 @@ public class PaymentService {
         payment.updatePortonePaymentId(request.getPaymentId());
         payment.markAsPaid(paymentInfo.getPgProvider());
         order.markAsPaid();
+        publishPaidEvents(order);
 
         log.info("결제 검증 완료: orderNumber={}, paymentId={}",
                 order.getOrderNumber(), request.getPaymentId());
+    }
+
+    // 온라인 결제 완료 시점에 알림 이벤트를 발행한다.
+    // - 사장에게 NEW_ORDER (결제가 끝난 주문만 알림)
+    // - 고객에게 PAYMENT_COMPLETED
+    private void publishPaidEvents(Order order) {
+        eventPublisher.publishEvent(new OrderPlacedEvent(
+                order.getStore().getAccount().getAccountId(),
+                order.getAccount().getName(),
+                order.getStore().getName(),
+                order.getOrderNumber(),
+                order.getOrderId()));
+
+        eventPublisher.publishEvent(new OrderPaidEvent(
+                order.getAccount().getAccountId(),
+                order.getStore().getName(),
+                order.getOrderNumber(),
+                order.getTotalPrice(),
+                order.getOrderId()));
     }
 
     private String normalizeSignature(String signature) {
