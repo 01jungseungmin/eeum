@@ -1,6 +1,8 @@
 import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { authApi } from '../../../api/authApi';
 import axios from 'axios';
 
 const PageWrapper = styled.div`
@@ -40,16 +42,17 @@ function FindPassword() {
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [token, setToken] = useState(null);
 
+  const navigate = useNavigate();
+
+  // 이메일로 인증코드 요청
   const handleEmailVerification = async (e) => {
     e.preventDefault();
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/password/reset-request',
-        { email: email },
-      );
-      console.log('Verification code sent:', response.data);
+      const response = await authApi.requestPasswordReset(email);
+
       alert('인증코드가 이메일로 발송되었습니다. 이메일을 확인해주세요.');
     } catch (error) {
       console.error('Error occurred while changing password:', error);
@@ -57,15 +60,15 @@ function FindPassword() {
     }
   };
 
+  // 인증코드 확인
   const handleCodeVerification = async (e) => {
     e.preventDefault();
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/email/verify',
-        { email: email, code: code },
-      );
-      console.log('Code verified successfully:', response.data);
+      const response = await authApi.verifyPasswordResetCode(email, code);
+      const responseData = response.data || response;
+
+      setToken(responseData.data);
       alert('인증코드가 확인되었습니다. 새로운 비밀번호를 입력해주세요.');
     } catch (error) {
       console.error('Error occurred while verifying code:', error);
@@ -73,6 +76,7 @@ function FindPassword() {
     }
   };
 
+  // 비밀번호 변경
   const handleChangePassword = async (e) => {
     e.preventDefault();
 
@@ -81,17 +85,20 @@ function FindPassword() {
       return;
     }
 
+    if (!token) {
+      alert('인증 유효 시간이 만료되었거나 코드가 확인되지 않았습니다.');
+      return;
+    }
+
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/password/reset',
-        {
-          // email: email,
-          // code: code,
-          // newPassword: newPassword
-        },
-      );
-      console.log('Password changed successfully:', response.data);
+      const response = await authApi.resetPassword({
+        newPassword: newPassword,
+        newPasswordConfirm: confirmPassword,
+        passwordResetToken: token,
+      });
+
       alert('비밀번호가 성공적으로 변경되었습니다.');
+      navigate('/login'); // 변경 후 로그인 페이지로 이동 처리
     } catch (error) {
       console.error('Error occurred while changing password:', error);
       alert('비밀번호 변경 중 오류가 발생했습니다. 다시 시도해주세요.');

@@ -12,17 +12,19 @@ const { width } = Dimensions.get('window');
 
 export default function ShopDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); 
-  
+  const { id } = useLocalSearchParams();
+
   const [isLoading, setIsLoading] = useState(true);
   const [shopDetail, setShopDetail] = useState<any>(null);
   const [shopProducts, setShopProducts] = useState<any[]>([]);
+  
+  // 찜 기능 상태 (HEAD의 코드 보존)
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
   const [favoriteCount, setFavoriteCount] = useState<number>(0);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
 
-  // 1. 데이터 로딩
+  // 1. 데이터 로딩 (찜 조회 포함)
   useEffect(() => {
     const fetchShopData = async () => {
       try {
@@ -33,7 +35,7 @@ export default function ShopDetailScreen() {
           favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
           favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null)
         ]);
-        
+
         setShopDetail(detailData);
         setShopProducts(productsData || []);
         if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
@@ -46,10 +48,11 @@ export default function ShopDetailScreen() {
         setIsLoading(false);
       }
     };
+
     if (shopIdNum) fetchShopData();
   }, [shopIdNum]);
 
-  // 2. 찜 토글 함수
+  // 2. 찜 토글 함수 (HEAD의 코드 보존)
   const handleToggleFavorite = async () => {
     try {
       const res = await favoriteApi.toggleFavorite('STORE', shopIdNum);
@@ -72,12 +75,14 @@ export default function ShopDetailScreen() {
   if (!shopDetail) return null;
 
   const categoryName = shopDetail.categoryName || '기타';
-  const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Store';
+  const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Cover';
   const isRestaurant = shopDetail.categoryId === 1 || shopDetail.categoryId === 2;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }}>
+
+        {/* 커버 이미지 */}
         <View style={styles.coverContainer}>
           <Image source={{ uri: coverImageUrl }} style={styles.coverImg} />
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -90,6 +95,7 @@ export default function ShopDetailScreen() {
           <View style={styles.nameRow}>
             <Text fontWeight="bold" style={styles.shopName}>{shopDetail.name}</Text>
             <View style={styles.ratingRow}>
+              {/* 찜 버튼 UI (HEAD의 코드 보존) */}
               <TouchableOpacity onPress={handleToggleFavorite} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
                 <Ionicons name={isFavorited ? "heart" : "heart-outline"} size={22} color={isFavorited ? "#FF5252" : "#999"} />
                 <Text style={{ marginLeft: 4, fontSize: 16, color: '#333' }}>{favoriteCount}</Text>
@@ -104,10 +110,19 @@ export default function ShopDetailScreen() {
 
         <View style={styles.divider} />
 
+        {/* 메뉴 섹션 */}
         <View style={styles.menuSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>메뉴</Text>
           {shopProducts.map((menu: any) => (
-            <TouchableOpacity key={menu.productId} style={styles.menuCard} onPress={() => router.push(`/product/${menu.productId}`)}>
+            <TouchableOpacity
+              key={menu.productId}
+              style={styles.menuCard}
+              // 장바구니 분기 처리를 위한 isRestaurant 파라미터 전달 (develop 코드 채택)
+              onPress={() => router.push({
+                pathname: `/product/${menu.productId}` as any,
+                params: { isRestaurant: isRestaurant ? 'true' : 'false' }
+              })}
+            >
               <View style={styles.menuTextContainer}>
                 <Text fontWeight="bold" style={styles.menuName}>{menu.name}</Text>
                 <Text style={styles.menuDesc} numberOfLines={2}>{menu.description}</Text>
@@ -123,12 +138,29 @@ export default function ShopDetailScreen() {
       <View style={styles.bottomBar}>
         {isRestaurant ? (
           <View style={{ width: '100%', gap: 10 }}>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push({ pathname: '/restaurant/reservation' as any, params: { storeId: shopDetail.storeId }})}>
+            {/* 방문 예약 및 채팅 버튼 (develop 코드 채택) */}
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => router.push({
+                pathname: '/restaurant/reservation' as any,
+                params: { storeId: shopDetail.storeId }
+              })}
+            >
               <Text fontWeight="bold" style={styles.primaryBtnText}>방문 예약하기</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.chatBtn}
+              onPress={() => Alert.alert('안내', '채팅 기능은 준비 중입니다.')}
+            >
+              <Text style={styles.chatBtnText}>사장님과 채팅</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/cart')}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => router.push('/cart')}
+          >
             <Text fontWeight="bold" style={styles.primaryBtnText}>장바구니 보기</Text>
           </TouchableOpacity>
         )}
@@ -152,6 +184,7 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   contactText: { fontSize: 14, color: '#666', marginLeft: 10 },
   divider: { height: 8, backgroundColor: '#F8F8F8' },
+
   menuSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 20 },
   menuCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
@@ -160,9 +193,11 @@ const styles = StyleSheet.create({
   menuDesc: { fontSize: 13, color: '#888', marginBottom: 10 },
   menuPrice: { fontSize: 16, color: '#333' },
   menuImg: { width: 100, height: 100, borderRadius: 8 },
+
   bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   primaryBtnText: { color: '#fff', fontSize: 16 },
-  secondaryBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  secondaryBtnText: { color: '#00A859', fontSize: 16 }
+
+  chatBtn: { width: '100%', paddingVertical: 16, borderRadius: 8, borderWidth: 1, borderColor: '#00A859', alignItems: 'center', justifyContent: 'center' },
+  chatBtnText: { color: '#00A859', fontSize: 16, fontWeight: 'bold' }
 });

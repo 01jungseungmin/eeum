@@ -48,9 +48,7 @@ public class CartItem extends BaseEntity {
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    /**
-     * 상품 기본 가격 + 옵션 추가 금액이 반영된 1개 기준 최종 단가
-     */
+    // 상품 기본 가격 + 옵션 추가 금액을 계산한 1개 기준 최종 단가
     @Column(name = "unit_price", nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
 

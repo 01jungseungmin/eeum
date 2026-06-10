@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.product.service;
 
+import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
@@ -28,6 +29,7 @@ public class ProductImageService {
     private final StoreRepository storeRepository;
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
+    private final ProductMapper productMapper;
 
     @Transactional(readOnly = true)
     public List<ImageResponseDto> getImages(Long accountId, Long productId) {
@@ -35,7 +37,7 @@ public class ProductImageService {
         return productImageRepository
                 .findByProduct_ProductIdOrderByDisplayOrderAsc(productId)
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toImageResponseDto)
                 .toList();
     }
 
@@ -96,7 +98,7 @@ public class ProductImageService {
                 productId, savedImages.size());
 
         return savedImages.stream()
-                .map(this::toDto)
+                .map(productMapper::toImageResponseDto)
                 .toList();
     }
 
@@ -156,15 +158,6 @@ public class ProductImageService {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
         }
         return image;
-    }
-
-    private ImageResponseDto toDto(ProductImage image) {
-        return ImageResponseDto.builder()
-                .imageId(image.getProductImageId())
-                .imageUrl(image.getImageUrl())
-                .displayOrder(image.getDisplayOrder())
-                .isThumbnail(image.isThumbnail())
-                .build();
     }
 
     private void validateThumbnailCount(ImageUploadListRequestDto request) {

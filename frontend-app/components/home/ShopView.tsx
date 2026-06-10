@@ -9,10 +9,10 @@ import { regionApi } from '../../api/region';
 
 interface ShopViewProps {
   router: any;
+  regionId: number | null;
 }
 
-// ✨ 1. regionId를 props로 받도록 추가합니다.
-export default function ShopView({ router }: ShopViewProps) { 
+export default function ShopView({ router, regionId }: ShopViewProps) {
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -20,29 +20,33 @@ export default function ShopView({ router }: ShopViewProps) {
     const fetchHomeData = async () => {
       setIsLoading(true);
       try {
-        // 1. 서버에서 대표 지역 ID를 스스로 찾기
         const res = await regionApi.getMyRegions();
         const regions = res.data || [];
         const primary = regions.find((r: any) => r.isPrimary === true);
         
-        if (!primary) {
-          setShopList([]);
-          setIsLoading(false);
-          return;
+        // ✨ 핵심 수정: primary가 없어도 API를 호출하거나 전체를 불러오도록 변경
+        // primary가 있다면 해당 동네 id로, 없다면 전체 조회(파라미터 없음)
+        const params: any = { size: 5 };
+        if (primary) {
+          params.regionId = primary.regionId;
         }
-
-        // 2. 찾은 ID로 상점 조회
-        const shopRes = await shopApi.getShops({ size: 5, regionId: primary.regionId }); 
+        
+        const shopRes = await shopApi.getShops(params); 
         setShopList(shopRes.data?.content || []); 
       } catch (e) {
         console.error('홈 화면 상점 로딩 실패:', e);
+        // 에러가 나도 전체 조회를 시도할 수 있도록 추가 조치
+        try {
+          const fallbackRes = await shopApi.getShops({ size: 5 });
+          setShopList(fallbackRes.data?.content || []);
+        } catch (fallbackError) {}
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchHomeData();
-  }, []); // 의존성 배열을 비워두면 됩니다.
+  }, []);
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
@@ -53,11 +57,14 @@ export default function ShopView({ router }: ShopViewProps) {
       <View style={styles.bannerPlaceholder}>
         <Text style={{ color: '#fff' }}>이벤트 배너 영역</Text>
       </View>
-      
+
       <View style={styles.sectionContainer}>
-        <TouchableOpacity 
-          style={styles.sectionHeader} 
-          onPress={() => router.navigate('/shop/list')}
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={() => router.push({
+            pathname: '/shop/list' as any,
+            params: { regionId: regionId }
+          })}
         >
           <Text style={styles.sectionTitle}>우리 동네 상점</Text>
           <Ionicons name="chevron-forward" size={20} color="#333" />
@@ -71,17 +78,21 @@ export default function ShopView({ router }: ShopViewProps) {
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {shopList.map((shop) => (
-              <TouchableOpacity 
-                key={shop.storeId}
-                style={styles.shopCard} 
-                onPress={() => router.push(`/shop/${shop.storeId}` as any)} 
-              >
-                <Image source={{ uri: shop.thumbnailUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store' }} style={styles.shopImage} />
-                <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
-                <Text style={styles.shopCategory}>{shop.categoryName || getCategoryName(shop.categoryId)}</Text>
-              </TouchableOpacity>
-            ))}
+            {shopList.map((shop) => {
+              const thumbnailUrl = shop.thumbnailUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store';
+
+              return (
+                <TouchableOpacity
+                  key={shop.storeId}
+                  style={styles.shopCard}
+                  onPress={() => router.push(`/shop/${shop.storeId}` as any)}
+                >
+                  <Image source={{ uri: thumbnailUrl }} style={styles.shopImage} />
+                  <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
+                  <Text style={styles.shopCategory}>{shop.categoryName || getCategoryName(shop.categoryId)}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         )}
       </View>

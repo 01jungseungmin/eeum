@@ -22,11 +22,8 @@ public class OwnerStoreWithdrawalService {
     private final ProductRepository productRepository;
     private final EventProductRepository eventProductRepository;
 
-    /**
-     * 사장 회원 탈퇴 시 상점/상품/이벤트 상품을 노출되지 않도록 비활성화한다.
-     *
-     * 실제 물리 삭제는 30일 후 영구 삭제 스케줄러에서 처리한다.
-     */
+    // 사장 회원 탈퇴 시 상점/상품/이벤트 상품을 노출되지 않도록 비활성화 실제 물리 삭제는 30일 후 영구 삭제 스케줄러에서 처리
+
     @Transactional
     public void deactivateForWithdrawal(Long accountId) {
         Store store = storeRepository.findByAccount_AccountId(accountId)

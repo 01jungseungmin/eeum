@@ -2,6 +2,7 @@ package com.eeum.eeum.application.product.service;
 
 import com.eeum.eeum.application.product.dto.request.EventProductRequestDto;
 import com.eeum.eeum.application.product.dto.response.EventProductResponseDto;
+import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.enums.EventProductStatus;
@@ -19,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -31,6 +31,7 @@ public class EventProductService {
     private final ProductRepository productRepository;
     private final EventProductRepository eventProductRepository;
     private final StoreRepository storeRepository;
+    private final ProductMapper productMapper;
 
     @Transactional(readOnly = true)
     public List<EventProductResponseDto> getMyEventProducts(Long accountId) {
@@ -39,7 +40,7 @@ public class EventProductService {
         return eventProductRepository
                 .findByProduct_Store_StoreIdOrderByCreatedAtDesc(store.getStoreId())
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toEventProductResponseDto)
                 .toList();
     }
 
@@ -77,7 +78,7 @@ public class EventProductService {
 
         log.info("이벤트 상품 등록: productId={}", product.getProductId());
 
-        return toDto(eventProduct);
+        return productMapper.toEventProductResponseDto(eventProduct);
     }
 
     @Transactional
@@ -109,7 +110,7 @@ public class EventProductService {
 
         log.info("이벤트 상품 수정: eventProductId={}", eventProductId);
 
-        return toDto(eventProduct);
+        return productMapper.toEventProductResponseDto(eventProduct);
     }
 
     @Transactional
@@ -173,55 +174,5 @@ public class EventProductService {
         if (startAt == null || endAt == null || !startAt.isBefore(endAt) || startAt.isBefore(LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
-    }
-
-    private EventProductResponseDto toDto(EventProduct eventProduct) {
-        Product product = eventProduct.getProduct();
-
-        return EventProductResponseDto.builder()
-                .eventProductId(eventProduct.getEventProductId())
-                .productId(product.getProductId())
-                .productName(product.getName())
-                .originalPrice(product.getPrice())
-                .eventPrice(eventProduct.getEventPrice())
-                .discountRate(calculateDiscountRate(product.getPrice(), eventProduct.getEventPrice()))
-                .eventStock(eventProduct.getEventStock())
-                .soldCount(eventProduct.getSoldCount())
-                .remainingStock(eventProduct.getRemainingStock())
-                .startAt(eventProduct.getStartAt())
-                .endAt(eventProduct.getEndAt())
-                .ongoing(eventProduct.isOngoing())
-                .eventStatus(resolveEventStatus(eventProduct))
-                .build();
-    }
-
-    private Integer calculateDiscountRate(BigDecimal originalPrice, BigDecimal eventPrice) {
-        if (originalPrice == null || originalPrice.compareTo(BigDecimal.ZERO) == 0) {
-            return 0;
-        }
-
-        return originalPrice.subtract(eventPrice)
-                .multiply(BigDecimal.valueOf(100))
-                .divide(originalPrice, 0, RoundingMode.HALF_UP)
-                .intValue();
-    }
-
-    private String resolveEventStatus(EventProduct eventProduct) {
-        LocalDateTime now = LocalDateTime.now();
-
-
-        if (eventProduct.getRemainingStock() <= 0) {
-            return "SOLD_OUT";
-        }
-
-        if (now.isBefore(eventProduct.getStartAt())) {
-            return "SCHEDULED";
-        }
-
-        if (now.isAfter(eventProduct.getEndAt())) {
-            return "ENDED";
-        }
-
-        return "ONGOING";
     }
 }

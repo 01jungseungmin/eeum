@@ -1,12 +1,14 @@
 package com.eeum.eeum.application.store.service;
 
-import com.eeum.eeum.application.store.dto.response.*;
-import com.eeum.eeum.common.dto.response.ImageResponseDto;
-import com.eeum.eeum.common.util.MaskingUtil;
+import com.eeum.eeum.application.store.dto.response.AdminStoreDetailResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
+import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
-import com.eeum.eeum.domain.store.entity.*;
+import com.eeum.eeum.domain.store.entity.SettlementAccount;
+import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.*;
 import com.eeum.eeum.exception.BusinessException;
@@ -32,12 +34,13 @@ public class AdminStoreService {
     private final StoreImageRepository storeImageRepository;
     private final StoreNoticeRepository storeNoticeRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final StoreMapper storeMapper;
 
     @Transactional(readOnly = true)
     public Page<StoreListResponseDto> getStores(
             String keyword, String status, Pageable pageable) {
         return storeRepository.searchAdminStores(keyword, status, pageable)
-                .map(this::toDto);
+                .map(storeMapper::toStoreListResponseDto);
     }
 
     @Transactional(readOnly = true)
@@ -76,11 +79,11 @@ public class AdminStoreService {
                 .approvalStatus(ownerInfo != null ? ownerInfo.getApprovalStatus().name() : null)
                 .rejectionReason(ownerInfo != null ? ownerInfo.getRejectionReason() : null)
                 .reviewRequestedAt(ownerInfo != null ? ownerInfo.getReviewRequestedAt() : null)
-                .settlementAccount(toSettlementDto(settlementAccount))
+                .settlementAccount(storeMapper.toSettlementDto(settlementAccount))
                 .images(storeImageRepository.findByStore_StoreIdOrderByDisplayOrderAsc(storeId)
-                        .stream().map(this::toImageDto).toList())
+                        .stream().map(storeMapper::toImageDto).toList())
                 .notices(storeNoticeRepository.findByStore_StoreIdAndIsActiveTrueOrderByIsPinnedDescCreatedAtDesc(storeId)
-                        .stream().map(this::toNoticeDto).toList())
+                        .stream().map(storeMapper::toNoticeDto).toList())
                 .createdAt(store.getCreatedAt())
                 .modifiedAt(store.getModifiedAt())
                 .build();
@@ -117,57 +120,12 @@ public class AdminStoreService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
     }
 
-    private StoreListResponseDto toDto(Store store) {
-        return StoreListResponseDto.builder()
-                .storeId(store.getStoreId())
-                .name(store.getName())
-                .address(store.getAddress())
-                .phone(store.getPhone())
-                .description(store.getDescription())
-                .status(store.getStatus().name())
-                .rating(store.getRating())
-                .favoriteCount(store.getFavoriteCount())
-                .reviewCount(store.getReviewCount())
-                .categoryId(store.getCategory() != null
-                        ? store.getCategory().getCategoryId() : null)
-                .categoryName(store.getCategory() != null
-                        ? store.getCategory().getName() : null)
-                .latitude(store.getLatitude())
-                .longitude(store.getLongitude())
-                .build();
-    }
-    private SettlementAccountResponseDto toSettlementDto(SettlementAccount settlementAccount) {
-        if (settlementAccount == null) {
-            return null;
-        }
-
-        return SettlementAccountResponseDto.builder()
-                .settlementAccountId(settlementAccount.getSettlementAccountId())
-                .bankName(settlementAccount.getBankName())
-                .accountNumber(MaskingUtil.maskAccountNumber(settlementAccount.getAccountNumber()))
-                .accountHolder(settlementAccount.getAccountHolder())
-                .build();
-    }
-
-    private ImageResponseDto toImageDto(StoreImage image) {
-        return ImageResponseDto.builder()
-                .imageId(image.getStoreImageId())
-                .imageUrl(image.getImageUrl())
-                .displayOrder(image.getDisplayOrder())
-                .isThumbnail(image.isThumbnail())
-                .build();
-    }
-
-    private StoreNoticeResponseDto toNoticeDto(StoreNotice notice) {
-        return StoreNoticeResponseDto.builder()
-                .noticeId(notice.getNoticeId())
-                .title(notice.getTitle())
-                .content(notice.getContent())
-                .noticeType(notice.getNoticeType())
-                .pinned(notice.isPinned())
-                .createdAt(notice.getCreatedAt())
-                .modifiedAt(notice.getModifiedAt())
-                .build();
+    public List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
+        return storeBusinessHourRepository.findByStore_StoreId(storeId)
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(storeMapper::toBusinessHourDto)
+                .toList();
     }
 
     private String formatRegionName(Store store) {
@@ -176,22 +134,5 @@ public class AdminStoreService {
                 store.getRegion().getGunGu(),
                 store.getRegion().getDong()
         );
-    }
-    private List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
-        return storeBusinessHourRepository.findByStore_StoreId(storeId)
-                .stream()
-                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
-                .map(this::toBusinessHourDto)
-                .toList();
-    }
-
-    private StoreBusinessHourResponseDto toBusinessHourDto(StoreBusinessHour businessHour) {
-        return StoreBusinessHourResponseDto.builder()
-                .dayOfWeek(businessHour.getDayOfWeek())
-                .dayLabel(businessHour.getDayOfWeek().getLabel())
-                .closed(businessHour.isClosed())
-                .openTime(businessHour.getOpenTime())
-                .closeTime(businessHour.getCloseTime())
-                .build();
     }
 }

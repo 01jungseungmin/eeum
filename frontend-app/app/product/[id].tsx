@@ -1,20 +1,24 @@
-// 📄 product/[id].tsx 
-
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { Text } from '../../components/CustomText'; 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { shopApi } from '../../api/shop';
+import { cartApi } from '../../api/cart';
 
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); 
   
+  // ✨ 1. id와 함께 shop/[id].tsx에서 넘겨준 isRestaurant 파라미터를 받아옵니다.
+  const { id, isRestaurant } = useLocalSearchParams(); 
+  
+  // ✨ 2. 넘어온 값이 문자열 'true'인지 확인하여 장바구니 버튼 숨김 여부를 결정합니다.
+  const hideCartButton = isRestaurant === 'true';
+
   const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [product, setProduct] = useState<any>(null);
@@ -39,10 +43,24 @@ export default function ProductDetailScreen() {
   }, [productIdNum]);
 
   const handleAddToCart = async () => {
-    Alert.alert("장바구니", `[${product.name}] 상품을 담았습니다!`, [
-      { text: "계속 쇼핑", style: "cancel" },
-      { text: "장바구니 가기", onPress: () => router.push('/cart') }
-    ]);
+    try {
+      // 백엔드 스웨거 명세서에 맞춰 데이터 전송
+      await cartApi.addCartItem({
+        productId: product.productId,
+        quantity: 1, // 기본 수량 1개
+        selectedOptionItemIds: [], // 나중에 옵션 기능 추가 시 배열 안에 ID를 넣으면 된다.
+      });
+
+      Alert.alert("장바구니", `[${product.name}] 상품을 담았습니다!`, [
+        { text: "계속 쇼핑", style: "cancel" },
+        { text: "장바구니 가기", onPress: () => router.push('/cart') }
+      ]);
+    } catch (e: any) {
+      console.log("장바구니 담기 에러:", e);
+      // 백엔드에서 보내준 에러 메시지(예: 재고 부족)가 있으면 띄우고, 없으면 기본 메시지
+      const errorMsg = e.response?.data?.message || "장바구니 담기에 실패했습니다.";
+      Alert.alert("오류", errorMsg);
+    }
   };
 
   if (isLoading || !product) {
@@ -52,9 +70,6 @@ export default function ProductDetailScreen() {
   const hasEvent = product.hasEvent;
   const currentPrice = hasEvent ? product.eventPrice : product.price;
   const productImageUrl = product.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
-
-  // 💡 백엔드에서 내려주는 데이터에 따라 식당/상점 구분 (임시로 상점 처리)
-  const isRestaurant = product.categoryId === 1 || product.categoryId === 2; 
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -89,17 +104,15 @@ export default function ProductDetailScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      <View style={styles.bottomBar}>
-        {isRestaurant ? (
+      {/* ✨ 3. 식당이 아닐 때(!hideCartButton)만 하단 장바구니 버튼 영역 노출 */}
+      {!hideCartButton && (
+        <View style={styles.bottomBar}>
           <TouchableOpacity 
-            style={[styles.cartBtn, { backgroundColor: '#00A859' }]} 
-            onPress={handleAddToCart}
-          >
-            <Text fontWeight="bold" style={{ color: '#fff', fontSize: 16 }}>픽업 장바구니 담기</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.cartBtn, { backgroundColor: '#00A859' }]} 
+            // 💡 품절일 경우 버튼 색상을 회색(#CCC)으로 처리하여 UX 개선
+            style={[
+              styles.cartBtn, 
+              { backgroundColor: product.status === 'SOLD_OUT' ? '#CCC' : '#00A859' }
+            ]} 
             onPress={handleAddToCart}
             disabled={product.status === 'SOLD_OUT'}
           >
@@ -107,8 +120,8 @@ export default function ProductDetailScreen() {
               {product.status === 'SOLD_OUT' ? '품절된 상품입니다' : '장바구니 담기'}
             </Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

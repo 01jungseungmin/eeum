@@ -41,10 +41,7 @@ public class FavoriteService {
 
     // ===================== 찜 토글 =====================
 
-    /**
-     * 찜 토글 — 이미 찜한 상태면 해제, 없으면 등록.
-     * refType별로 대상 도메인 존재 여부를 검증한 뒤 처리한다.
-     */
+    // 찜 토글 — 이미 찜한 상태면 해제, 없으면 등록 refType별로 대상 도메인 존재 여부를 검증한 뒤 처리
     @Transactional
     public FavoriteToggleResponseDto toggleFavorite(
             Long accountId,
@@ -63,10 +60,8 @@ public class FavoriteService {
         }
     }
 
-    /**
-     * 찜 삭제 — favoriteId 기반.
-     * 내 찜 목록 화면처럼 favoriteId를 이미 알고 있을 때 사용한다.
-     */
+    // 찜 삭제 — favoriteId 기반 내 찜 목록 화면처럼 favoriteId를 이미 알고 있을 때 사용
+
     @Transactional
     public void deleteFavorite(Long accountId, Long favoriteId) {
         Favorite favorite = favoriteRepository
@@ -80,11 +75,8 @@ public class FavoriteService {
         log.info("찜 삭제(id): favoriteId={}, accountId={}", favoriteId, accountId);
     }
 
-    /**
-     * 찜 삭제 — refType + refId 기반.
-     * 상점 상세 화면처럼 storeId만 알고 favoriteId를 모를 때 사용한다.
-     * 별도 check API 호출 없이 바로 삭제할 수 있어 왕복 횟수를 줄인다.
-     */
+    // 찜 삭제 — refType + refId 기반 상점 상세 화면처럼 storeId만 알고 favoriteId를 모를 때 사용
+
     @Transactional
     public void deleteFavoriteByRef(Long accountId, FavoriteRefType refType, Long refId) {
         Favorite favorite = favoriteRepository
@@ -100,9 +92,8 @@ public class FavoriteService {
 
     // ===================== 내 찜 목록 조회 =====================
 
-    /**
-     * 내 찜 전체 목록 — refType 무관, 최신순.
-     */
+    // 내 찜 전체 목록 — refType 무관, 최신순
+
     @Transactional(readOnly = true)
     public Page<FavoriteResponseDto> getMyFavorites(Long accountId, Pageable pageable) {
         return favoriteRepository
@@ -110,10 +101,9 @@ public class FavoriteService {
                 .map(FavoriteResponseDto::from);
     }
 
-    /**
-     * 상점 찜 목록 — Store + 썸네일을 IN절 배치 조회로 N+1 방지.
-     * Favorite 1번 + Store 1번 + Thumbnail 1번 = 총 3 쿼리.
-     */
+    // 상점 찜 목록 — Store + 썸네일을 IN절 배치 조회로 N+1 방지
+    // Favorite 1번 + Store 1번 + Thumbnail 1번 = 총 3 쿼리.
+
     @Transactional(readOnly = true)
     public Page<FavoriteStoreResponseDto> getMyFavoriteStores(Long accountId, Pageable pageable) {
         Page<Favorite> favorites = favoriteRepository
@@ -153,9 +143,7 @@ public class FavoriteService {
 
     // ===================== 찜 여부 확인 =====================
 
-    /**
-     * 단건 찜 여부 조회 (상세 화면 진입 시).
-     */
+    // 단건 찜 여부 조회 (상세 화면 진입 시)
     @Transactional(readOnly = true)
     public FavoriteCheckResponseDto checkFavorite(
             Long accountId,
@@ -169,9 +157,7 @@ public class FavoriteService {
         return FavoriteCheckResponseDto.of(refType, refId, favorited, favoriteId);
     }
 
-    /**
-     * 배치 찜 여부 조회 — 목록 화면 N+1 방지 (QueryDSL IN절 한 번).
-     */
+    // 배치 찜 여부 조회 — 목록 화면 N+1 방지 (QueryDSL IN절 한 번)
     @Transactional(readOnly = true)
     public List<FavoriteCheckResponseDto> checkFavoritesBatch(
             Long accountId,
@@ -191,9 +177,7 @@ public class FavoriteService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 대상별 총 찜 수 조회 (상세 화면 표시용).
-     */
+    // 대상별 총 찜 수 조회 (상세 화면 표시용)
     @Transactional(readOnly = true)
     public long getFavoriteCount(FavoriteRefType refType, Long refId) {
         return favoriteRepository.countByRefTypeAndRefId(refType, refId);
@@ -201,10 +185,7 @@ public class FavoriteService {
 
     // ===================== 내부 CASCADE (다른 서비스 호출) =====================
 
-    /**
-     * 대상 도메인 삭제 시 연관 찜 일괄 삭제.
-     * (UsedProduct, Store 삭제 시 해당 Service에서 호출)
-     */
+    // 대상 도메인 삭제 시 연관 찜 일괄 삭제
     @Transactional
     public void deleteAllByRefTypeAndRefId(FavoriteRefType refType, Long refId) {
         long count = favoriteRepository.countByRefTypeAndRefId(refType, refId);
@@ -212,10 +193,7 @@ public class FavoriteService {
         log.info("찜 CASCADE 삭제: refType={}, refId={}, count={}", refType, refId, count);
     }
 
-    /**
-     * 회원 탈퇴 시 해당 회원의 찜 일괄 삭제.
-     * 찜한 Store들의 favoriteCount를 먼저 감소한 뒤 레코드를 일괄 삭제한다.
-     */
+    // 회원 탈퇴 시 해당 회원의 찜 일괄 삭제.
     @Transactional
     public void deleteAllByAccountId(Long accountId) {
         // STORE 찜에 대해 favoriteCount 원자 감소 (USED_PRODUCT 구현 후 분기 추가)
@@ -262,10 +240,7 @@ public class FavoriteService {
         return FavoriteToggleResponseDto.removed(refType, refId, count);
     }
 
-    /**
-     * refType별 대상 도메인 존재 여부 검증.
-     * FK 제약이 없으므로 Service 레이어에서 직접 검증한다. (SDD 명세)
-     */
+    // refType별 대상 도메인 존재 여부 검증
     private void validateRef(FavoriteRefType refType, Long refId) {
         switch (refType) {
             case STORE -> {
@@ -280,10 +255,7 @@ public class FavoriteService {
         }
     }
 
-    /**
-     * DB 원자 UPDATE로 찜 카운트 +1.
-     * Store만 구현 (UsedProduct는 도메인 구현 후 분기 추가).
-     */
+    // DB 원자 UPDATE로 찜 카운트 +1.
     private void incrementCount(FavoriteRefType refType, Long refId) {
         if (refType == FavoriteRefType.STORE) {
             storeRepository.incrementFavoriteCount(refId);
@@ -291,9 +263,7 @@ public class FavoriteService {
         // USED_PRODUCT: usedProductRepository.incrementFavoriteCount(refId);
     }
 
-    /**
-     * DB 원자 UPDATE로 찜 카운트 -1 (favoriteCount > 0 가드).
-     */
+    // DB 원자 UPDATE로 찜 카운트 -1 (favoriteCount > 0 가드).
     private void decrementCount(FavoriteRefType refType, Long refId) {
         if (refType == FavoriteRefType.STORE) {
             storeRepository.decrementFavoriteCount(refId);

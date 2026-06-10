@@ -67,14 +67,10 @@ public class VisitReservationSettingService {
         return toSettingDto(setting);
     }
 
-    /**
-     * 특정 날짜의 시간대 설정 목록 조회.
-     * ① 설정에서 슬롯 시간 목록 동적 생성 (DB 불필요)
-     * ② DB 예외(오버라이드) 슬롯 1쿼리 조회
-     * ③ 예약 집계 배치 1쿼리 → 총 2쿼리 (N+1 없음)
-     *
-     * 오버라이드가 없는 슬롯은 설정 기본값으로 표시, timeSlotId = null.
-     */
+    // 특정 날짜의 시간대 설정 목록 조회.
+    // 1. 설정에서 슬롯 시간 목록 동적 생성 (DB 불필요)
+    // 2. DB 예외(오버라이드) 슬롯 1쿼리 조회 예약 집계 배치 1쿼리 → 총 2쿼리 (N+1 없음)
+    // 오버라이드가 없는 슬롯은 설정 기본값으로 표시, timeSlotId = null.
     @Transactional(readOnly = true)
     public List<VisitReservationTimeSlotResponseDto> getTimeSlots(
             Long ownerAccountId,
@@ -107,11 +103,8 @@ public class VisitReservationSettingService {
                 .toList();
     }
 
-    /**
-     * 특정 날짜의 시간대 설정 수정.
-     * 기본값과 동일한 슬롯은 오버라이드 레코드를 삭제(또는 생성 안 함).
-     * 기본값과 다른 슬롯만 DB에 저장 → exception-only 패턴.
-     */
+    // 특정 날짜의 시간대 설정 수정
+    // 기본값과 동일한 슬롯은 오버라이드 레코드를 삭제(또는 생성 안 함) 다른 슬롯만 DB에 저장
     @Transactional
     public List<VisitReservationTimeSlotResponseDto> updateTimeSlots(
             Long ownerAccountId,
@@ -181,10 +174,7 @@ public class VisitReservationSettingService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SETTING_NOT_FOUND));
     }
 
-    /**
-     * 설정(startTime, endTime, slotIntervalMinutes)에서 슬롯 시각 목록을 동적으로 생성.
-     * endTime 미만의 시각까지 생성 (endTime 자체는 포함 안 함).
-     */
+    // 설정(startTime, endTime, slotIntervalMinutes)에서 슬롯 시각 목록을 동적으로 생성
     private List<LocalTime> generateSlotTimes(StoreVisitReservationSetting setting) {
         List<LocalTime> times = new ArrayList<>();
         LocalTime current = setting.getStartTime();
@@ -197,9 +187,7 @@ public class VisitReservationSettingService {
         return times;
     }
 
-    /**
-     * DB에 저장된 오버라이드 슬롯을 Map<슬롯시각, 슬롯>으로 반환 (1쿼리).
-     */
+    // DB에 저장된 오버라이드 슬롯을 Map<슬롯시각, 슬롯>으로 반환 (1쿼리)
     private Map<LocalTime, VisitReservationTimeSlot> buildOverrideMap(Long storeId, LocalDate date) {
         return visitReservationTimeSlotRepository
                 .findByStore_StoreIdAndSlotDateOrderBySlotTimeAsc(storeId, date)
@@ -207,9 +195,7 @@ public class VisitReservationSettingService {
                 .collect(Collectors.toMap(VisitReservationTimeSlot::getSlotTime, s -> s));
     }
 
-    /**
-     * PENDING·APPROVED 예약을 시간대별로 배치 집계 → Map 반환 (1쿼리).
-     */
+    // PENDING,APPROVED 예약을 시간대별로 배치 집계 → Map 반환 (1쿼리)
     private Map<LocalTime, VisitReservationTimeSlotCountProjection> buildCountMap(
             Long storeId, LocalDate date
     ) {
@@ -235,12 +221,8 @@ public class VisitReservationSettingService {
                 .build();
     }
 
-    /**
-     * 슬롯 데이터 + 미리 집계된 카운트 → DTO 변환.
-     * closed = !enabled OR 잔여팀 ≤ 0 OR 잔여인원 ≤ 0
-     *
-     * @param timeSlotId DB 오버라이드 슬롯 ID (기본 슬롯이면 null)
-     */
+    // 슬롯 데이터 + 미리 집계된 카운트 → DTO 변환(closed = !enabled OR 잔여팀 ≤ 0 OR 잔여인원 ≤ 0)
+    // @param timeSlotId DB 오버라이드 슬롯 ID (기본 슬롯이면 null)
     private VisitReservationTimeSlotResponseDto toTimeSlotDto(
             Long timeSlotId,
             LocalTime time,

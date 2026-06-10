@@ -31,7 +31,7 @@ public class FavoriteToggleResponseDto {
     @Schema(description = "찜 등록 시각 (해제 시 null)")
     private LocalDateTime createdAt;
 
-    /** 찜 등록 응답 */
+    // 찜 등록 응답
     public static FavoriteToggleResponseDto added(Favorite favorite, long favoriteCount) {
         return FavoriteToggleResponseDto.builder()
                 .favorited(true)
@@ -43,7 +43,7 @@ public class FavoriteToggleResponseDto {
                 .build();
     }
 
-    /** 찜 해제 응답 */
+    // 찜 해제 응답
     public static FavoriteToggleResponseDto removed(FavoriteRefType refType, Long refId, long favoriteCount) {
         return FavoriteToggleResponseDto.builder()
                 .favorited(false)

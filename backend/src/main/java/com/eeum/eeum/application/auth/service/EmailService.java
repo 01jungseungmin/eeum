@@ -56,9 +56,7 @@ public class EmailService {
         log.info("이메일 인증 코드 발송 완료: {}", email);
     }
 
-    /**
-     * 인증 코드 검증 후 1회성 인증 토큰 반환
-     */
+    // 인증 코드 검증 후 1회성 인증 토큰 반환
     public String verifyCodeAndIssueToken(String email, String code) {
         String stored = redisUtil.get(EMAIL_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));
@@ -77,14 +75,7 @@ public class EmailService {
         return token;
     }
 
-    /**
-     * 회원가입 시 인증 토큰 검증
-     */
-    public String validateAndConsumeVerificationToken(String token) {
-        String email = validateVerificationToken(token);
-        consumeVerificationToken(token);
-        return email;
-    }
+    //회원가입 시 인증 토큰 검증
 
     public String validateVerificationToken(String token) {
         String email = redisUtil.get(EMAIL_TOKEN_PREFIX + token)
@@ -116,9 +107,7 @@ public class EmailService {
         log.info("비밀번호 재설정 메일 발송 완료: {}", email);
     }
 
-    /**
-     * 인증 토큰 발급 (비밀번호 재설정 요청 시 같이 보내는 값)
-     */
+    // 인증 토큰 발급 (비밀번호 재설정 요청 시 같이 보내는 값)
     public void verifyPasswordResetCode(String email, String code) {
         String stored = redisUtil.get(PASSWORD_RESET_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));

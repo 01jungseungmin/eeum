@@ -87,10 +87,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("orderNumber") String orderNumber
     );
 
-    /**
-     * 사장용 찜 고객 목록 — 고객별 완료 주문 통계 배치 조회.
-     * IN절 한 번으로 N+1 없이 처리한다.
-     */
+     //사장용 찜 고객 목록 — 고객별 완료 주문 통계 배치 조회.
+     //IN절 한 번으로 N+1 없이 처리한다.
     @Query("""
         SELECT o.account.accountId AS accountId,
                COUNT(o.orderId)    AS orderCount,

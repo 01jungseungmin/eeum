@@ -1,6 +1,8 @@
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
+import { useAuth } from '../contexts/AuthContext';
+import { authApi } from '../api/authApi';
 import axios from 'axios';
 
 const SideContainer = styled.div`
@@ -104,6 +106,7 @@ const StatusBadge = styled.span`
 function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   // 로컬스토리지에 있는 role에 따라 관리자용 메뉴, 사장님용 메뉴를 구분해서 보여줌
   const role = localStorage.getItem('role');
@@ -123,7 +126,6 @@ function Sidebar() {
 
   const handleMenuClick = async (item) => {
     if (item.action === 'LOGOUT') {
-      const accessToken = localStorage.getItem('accessToken');
       const refreshToken = localStorage.getItem('refreshToken');
       const currentRole = localStorage.getItem('role');
 
@@ -131,16 +133,8 @@ function Sidebar() {
         currentRole === 'ROLE_ADMIN' ? '/admin/login' : '/login';
 
       try {
-        if (accessToken && refreshToken) {
-          await axios.post(
-            'http://localhost:8080/auth/logout',
-            { refreshToken: refreshToken },
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
-            },
-          );
+        if (refreshToken) {
+          await authApi.logout(refreshToken);
         }
       } catch (error) {
         console.error(
@@ -148,10 +142,7 @@ function Sidebar() {
           error.response?.status,
         );
       } finally {
-        // 성공하든 실패하든(401 등) 로컬 스토리지는 비우고 페이지를 이동
-        localStorage.removeItem('role');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        logout();
 
         console.log('로컬 상태 정리 완료, 이동 경로:', targetPath);
         navigate(targetPath);
