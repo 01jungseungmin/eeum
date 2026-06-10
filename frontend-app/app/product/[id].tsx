@@ -8,6 +8,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { shopApi } from '../../api/shop';
+import { cartApi } from '../../api/cart';
 
 const { width } = Dimensions.get('window');
 
@@ -39,10 +40,24 @@ export default function ProductDetailScreen() {
   }, [productIdNum]);
 
   const handleAddToCart = async () => {
-    Alert.alert("장바구니", `[${product.name}] 상품을 담았습니다!`, [
-      { text: "계속 쇼핑", style: "cancel" },
-      { text: "장바구니 가기", onPress: () => router.push('/cart') }
-    ]);
+    try {
+      // 백엔드 스웨거 명세서에 맞춰 데이터 전송
+      await cartApi.addCartItem({
+        productId: product.productId,
+        quantity: 1, // 기본 수량 1개
+        selectedOptionItemIds: [], // 나중에 옵션 기능 추가 시 배열 안에 ID를 넣으면 된다.
+      });
+
+      Alert.alert("장바구니", `[${product.name}] 상품을 담았습니다!`, [
+        { text: "계속 쇼핑", style: "cancel" },
+        { text: "장바구니 가기", onPress: () => router.push('/cart') }
+      ]);
+    } catch (e: any) {
+      console.log("장바구니 담기 에러:", e);
+      // 백엔드에서 보내준 에러 메시지(예: 재고 부족)가 있으면 띄우고, 없으면 기본 메시지
+      const errorMsg = e.response?.data?.message || "장바구니 담기에 실패했습니다.";
+      Alert.alert("오류", errorMsg);
+    }
   };
 
   if (isLoading || !product) {
