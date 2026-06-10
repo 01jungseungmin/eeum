@@ -23,6 +23,5 @@ public class VisitReservationTimeSlotResponseDto {
 
     private Boolean enabled;
 
-    /** 팀 정원 or 인원 정원 초과, 혹은 disabled 슬롯이면 true */
     private Boolean closed;
 }

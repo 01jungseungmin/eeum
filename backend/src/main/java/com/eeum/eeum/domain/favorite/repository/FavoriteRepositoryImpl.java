@@ -19,10 +19,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     private final JPAQueryFactory queryFactory;
     private final QFavorite favorite = QFavorite.favorite;
 
-    /**
-     * 목록 화면 배치 조회 — 사용자가 찜한 refId Set 반환.
-     * IN절 한 번으로 N+1을 방지한다.
-     */
+    // 목록 화면 배치 조회 — 사용자가 찜한 refId Set 반환 IN절 한 번으로 N+1을 방지
+
     @Override
     public Set<Long> findFavoriteRefIdsByAccountIdAndType(
             Long accountId,
@@ -42,9 +40,7 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                 .collect(Collectors.toSet());
     }
 
-    /**
-     * 관리자 통계 — refType + 기간 필터 + 상위 N개 인기 항목.
-     */
+    // 관리자 통계 — refType + 기간 필터 + 상위 N개 인기 항목
     @Override
     public List<FavoriteStatProjection> findFavoriteStats(
             FavoriteRefType refType,

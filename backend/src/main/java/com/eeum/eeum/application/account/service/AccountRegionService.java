@@ -175,9 +175,7 @@ public class AccountRegionService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.REGION_NOT_FOUND));
     }
 
-    /**
-     * Haversine 공식으로 두 좌표 간 거리(km) 계산
-     */
+    // Haversine 공식으로 두 좌표 간 거리(km) 계산
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);

@@ -252,10 +252,7 @@ public class StoreService {
 
     // ===================== 유틸 =====================
 
-    /**
-     * 사장 accountId로 내 상점 ID를 조회한다.
-     * Owner 전용 컨트롤러에서 {storeId} 없이 동작할 때 공통으로 사용한다.
-     */
+    // 사장 accountId로 내 상점 ID를 조회
     public Long getOwnerStoreId(Long accountId) {
         return getStore(accountId).getStoreId();
     }

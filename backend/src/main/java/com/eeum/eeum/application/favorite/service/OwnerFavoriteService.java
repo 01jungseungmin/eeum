@@ -35,14 +35,9 @@ public class OwnerFavoriteService {
     private final OrderRepository orderRepository;
     private final StoreReviewRepository storeReviewRepository;
 
-    /**
-     * 사장용 찜 고객 목록 조회.
-     * storeId 없이 ownerId만으로 내 상점을 조회한다 (/owner/stores/me 패턴).
-     * Favorite 1번 + Order 집계 1번 + Review 집계 1번 = 총 3 쿼리로 N+1 없이 처리한다.
-     *
-     * @param ownerId  요청 사장 accountId
-     * @param pageable 페이지 정보 (기본 최신순)
-     */
+    // 사장용 찜 고객 목록 조회 Favorite 1번 + Order 집계 1번 + Review 집계 1번 = 총 3 쿼리로 N+1 없이 처리
+    //@param ownerId  요청 사장 accountId
+    // @param pageable 페이지 정보 (기본 최신순)
     @Transactional(readOnly = true)
     public Page<FavoriteCustomerResponseDto> getFavoriteCustomers(
             Long ownerId, Pageable pageable
@@ -83,7 +78,7 @@ public class OwnerFavoriteService {
         ));
     }
 
-    /** 사장 accountId로 내 상점 ID 조회 — /owner/stores/me 패턴 공통 유틸 */
+    // 사장 accountId로 내 상점 ID 조회 — /owner/stores/me 패턴 공통 유틸
     private Long getOwnerStoreId(Long ownerId) {
         return storeRepository.findByAccount_AccountId(ownerId)
                 .map(Store::getStoreId)

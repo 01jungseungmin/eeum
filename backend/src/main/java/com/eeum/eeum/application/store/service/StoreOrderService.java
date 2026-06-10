@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
+import com.eeum.eeum.domain.order.event.OrderStatusChangedEvent;
 import com.eeum.eeum.domain.order.repository.OrderItemRepository;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
@@ -15,6 +16,7 @@ import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ public class StoreOrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final PaymentRepository paymentRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public StoreOrderResponseDto getStoreOrderDetail(Long accountId, Long orderId) {
@@ -78,6 +81,13 @@ public class StoreOrderService {
         validatePaymentCompletedBeforeConfirm(order);
 
         order.confirm();
+
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                order.getAccount().getAccountId(),
+                order.getStore().getName(),
+                order.getOrderNumber(),
+                "확정",
+                order.getOrderId()));
     }
 
     private void validateOwnerOrder(Long ownerId, Order order) {

@@ -10,6 +10,7 @@ import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
+import com.eeum.eeum.domain.account.event.OwnerApplicationSubmittedEvent;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -29,6 +30,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +53,7 @@ public class OwnerApprovalService {
     private final StoreBusinessHourRepository storeBusinessHourRepository;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 체크리스트 조회 =====================
 
@@ -209,6 +212,11 @@ public class OwnerApprovalService {
         ownerInfo.requestReview();
 
         log.info("입점 심사 요청 완료: accountId={}", accountId);
+
+        eventPublisher.publishEvent(new OwnerApplicationSubmittedEvent(
+                accountId,
+                store.getAccount().getName(),
+                store.getName()));
     }
 
     // ===================== 대표 메뉴 설정 =====================
