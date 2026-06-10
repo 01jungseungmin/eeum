@@ -152,7 +152,7 @@ export default function HomeScreen() {
       />
       
       {activeTab === 'shop' 
-        ? <ShopView router={router} regionId={primaryRegionId} /> 
+        ? <ShopView router={router} />
         : <UsedTradeView router={router} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
       }
 

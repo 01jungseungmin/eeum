@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { shopApi } from '../../api/shop';
+import { favoriteApi } from '../../api/favorite';
 
 const { width } = Dimensions.get('window');
 
@@ -16,22 +17,32 @@ export default function ShopDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [shopDetail, setShopDetail] = useState<any>(null);
   const [shopProducts, setShopProducts] = useState<any[]>([]);
+  
+  // 찜 기능 상태 (HEAD의 코드 보존)
+  const [isFavorited, setIsFavorited] = useState<boolean>(false);
+  const [favoriteCount, setFavoriteCount] = useState<number>(0);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
 
+  // 1. 데이터 로딩 (찜 조회 포함)
   useEffect(() => {
     const fetchShopData = async () => {
       try {
         setIsLoading(true);
-        const [detailData, productsData] = await Promise.all([
+        const [detailData, productsData, checkRes, countRes] = await Promise.all([
           shopApi.getShopDetail(shopIdNum),
-          shopApi.getShopProducts(shopIdNum)
+          shopApi.getShopProducts(shopIdNum),
+          favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
+          favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null)
         ]);
 
         setShopDetail(detailData);
         setShopProducts(productsData || []);
+        if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
+        if (countRes?.data) setFavoriteCount(countRes.data.data);
       } catch (e) {
-        Alert.alert("오류", "상점 정보를 불러오지 못했습니다.");
+        console.log("❌ 에러:", e);
+        Alert.alert("오류", "정보를 불러오지 못했습니다.");
         router.back();
       } finally {
         setIsLoading(false);
@@ -41,13 +52,27 @@ export default function ShopDetailScreen() {
     if (shopIdNum) fetchShopData();
   }, [shopIdNum]);
 
-  if (isLoading || !shopDetail) {
+  // 2. 찜 토글 함수 (HEAD의 코드 보존)
+  const handleToggleFavorite = async () => {
+    try {
+      const res = await favoriteApi.toggleFavorite('STORE', shopIdNum);
+      const { favorited, favoriteCount: newCount } = res.data.data;
+      setIsFavorited(favorited);
+      setFavoriteCount(newCount);
+    } catch (error) {
+      Alert.alert("알림", "찜 상태를 변경할 수 없습니다.");
+    }
+  };
+
+  if (isLoading) {
     return (
       <View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor: '#fff'}}>
         <ActivityIndicator size="large" color="#00A859" />
       </View>
     );
   }
+
+  if (!shopDetail) return null;
 
   const categoryName = shopDetail.categoryName || '기타';
   const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Cover';
@@ -65,12 +90,16 @@ export default function ShopDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 메인 정보 */}
         <View style={styles.mainInfo}>
           <View style={styles.categoryBadge}><Text style={styles.categoryText}>{categoryName}</Text></View>
           <View style={styles.nameRow}>
             <Text fontWeight="bold" style={styles.shopName}>{shopDetail.name}</Text>
             <View style={styles.ratingRow}>
+              {/* 찜 버튼 UI (HEAD의 코드 보존) */}
+              <TouchableOpacity onPress={handleToggleFavorite} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
+                <Ionicons name={isFavorited ? "heart" : "heart-outline"} size={22} color={isFavorited ? "#FF5252" : "#999"} />
+                <Text style={{ marginLeft: 4, fontSize: 16, color: '#333' }}>{favoriteCount}</Text>
+              </TouchableOpacity>
               <Ionicons name="star" size={18} color="#FFD700" />
               <Text fontWeight="bold" style={styles.ratingText}>{shopDetail.rating?.toFixed(1) || '0.0'}</Text>
             </View>
@@ -88,6 +117,7 @@ export default function ShopDetailScreen() {
             <TouchableOpacity
               key={menu.productId}
               style={styles.menuCard}
+              // 장바구니 분기 처리를 위한 isRestaurant 파라미터 전달 (develop 코드 채택)
               onPress={() => router.push({
                 pathname: `/product/${menu.productId}` as any,
                 params: { isRestaurant: isRestaurant ? 'true' : 'false' }
@@ -96,33 +126,19 @@ export default function ShopDetailScreen() {
               <View style={styles.menuTextContainer}>
                 <Text fontWeight="bold" style={styles.menuName}>{menu.name}</Text>
                 <Text style={styles.menuDesc} numberOfLines={2}>{menu.description}</Text>
-                {menu.hasEvent ? (
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <Text style={{textDecorationLine: 'line-through', color: '#bbb', marginRight: 6, fontSize: 13}}>
-                      {menu.price?.toLocaleString()}원
-                    </Text>
-                    <Text fontWeight="bold" style={[styles.menuPrice, {color: '#FF5252'}]}>
-                      {menu.eventPrice?.toLocaleString()}원
-                    </Text>
-                  </View>
-                ) : (
-                  <Text fontWeight="bold" style={styles.menuPrice}>{menu.price?.toLocaleString()}원</Text>
-                )}
+                <Text fontWeight="bold" style={styles.menuPrice}>{menu.price?.toLocaleString()}원</Text>
               </View>
               {menu.thumbnailUrl && <Image source={{ uri: menu.thumbnailUrl }} style={styles.menuImg} />}
             </TouchableOpacity>
           ))}
-          {shopProducts.length === 0 && (
-            <Text style={{ color: '#888', marginTop: 10 }}>등록된 메뉴가 없습니다.</Text>
-          )}
         </View>
-
       </ScrollView>
 
       {/* 하단 버튼 영역 */}
       <View style={styles.bottomBar}>
         {isRestaurant ? (
           <View style={{ width: '100%', gap: 10 }}>
+            {/* 방문 예약 및 채팅 버튼 (develop 코드 채택) */}
             <TouchableOpacity
               style={styles.primaryBtn}
               onPress={() => router.push({

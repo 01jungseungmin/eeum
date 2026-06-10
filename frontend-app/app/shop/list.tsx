@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, } from 'react';
+import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router'; 
+import { useRouter, useFocusEffect } from 'expo-router'; 
 import { Text } from '../../components/CustomText';
 
 import { regionApi } from '../../api/region';
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
+import { favoriteApi } from '@/api/favorite';
 
 export default function ShopListScreen() {
   const router = useRouter();
@@ -35,44 +36,96 @@ export default function ShopListScreen() {
     }, 50); 
   };
 
-  // ✨ favorite 브랜치와 100% 동일한 동네 기반 조회 로직
-  useEffect(() => {
-    const fetchShopsByPrimaryRegion = async () => {
-      setIsLoading(true);
-      try {
-        const res = await regionApi.getMyRegions();
-        const regions = res.data || []; 
-        const primary = regions.find((r: any) => r.isPrimary === true);
-
-        if (primary) {
-          setHasRegion(true);
-          // 카테고리 필터링 적용 (0이면 전체)
-          const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
-          
-          const shopRes = await shopApi.getShops({ 
-            regionId: primary.regionId, 
-            categoryId: categoryParam, // ✨ 카테고리 선택 시 필터링 반영
-            size: 20 
-          });
-          
-          setShopList(shopRes.data?.content || []);
-        } else {
-          setHasRegion(false);
+  // ✨ 카테고리 필터링(develop) + 지역 기반 조회(HEAD) 결합 로직
+  useFocusEffect(
+    useCallback(() => {
+      const fetchShopsByPrimaryRegion = async () => {
+        if (shopList.length === 0) {
+          setIsLoading(true);
         }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchShopsByPrimaryRegion();
-  }, [selectedCategoryId]);
+        try {
+          // 1. 내 동네 목록 전체 조회
+          const res = await regionApi.getMyRegions();
+          const regions = res.data || []; 
+          
+          // 2. 대표 동네(isPrimary) 찾기
+          const primary = regions.find((r: any) => r.isPrimary === true);
+
+          if (primary) {
+            setHasRegion(true);
+            
+            // 카테고리 필터링 적용 (0이면 전체)
+            const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
+            
+            const shopRes = await shopApi.getShops({ 
+              regionId: primary.regionId, 
+              categoryId: categoryParam, 
+              size: 20 
+            });
+            
+            const shops = shopRes.data?.content || [];
+
+            // ✨ 핵심: 백엔드 목록 API가 주지 않는 찜(isFavorited) 상태를 개별적으로 조회해서 합쳐줍니다.
+            const updatedShops = await Promise.all(
+              shops.map(async (shop: any) => {
+                try {
+                  const [checkRes, countRes] = await Promise.all([
+                    favoriteApi.checkFavorite('STORE', shop.storeId).catch(() => null),
+                    favoriteApi.getFavoriteCount('STORE', shop.storeId).catch(() => null)
+                  ]);
+
+                  return {
+                    ...shop,
+                    // 서버 응답 구조에 맞게 안전하게 가공 (실패 시 기존값 유지)
+                    isFavorited: checkRes?.data?.data?.favorited ?? false,
+                    favoriteCount: countRes?.data?.data ?? countRes?.data ?? shop.favoriteCount ?? 0,
+                  };
+                } catch (e) {
+                  return shop; // 에러 발생 시 원래 상점 데이터 유지
+                }
+              })
+            );
+            
+            setShopList(updatedShops);
+          } else {
+            setHasRegion(false);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      fetchShopsByPrimaryRegion();
+    }, [selectedCategoryId])
+  );
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
   };
 
+  // ✨ 리스트 내 찜 토글 로직 (HEAD 유지)
+  const handleListToggleFavorite = async (storeId: number, currentStatus: boolean) => {
+    try {
+      // 서버에 토글 요청
+      const res = await favoriteApi.toggleFavorite('STORE', storeId);
+      const { favorited, favoriteCount: newCount } = res.data.data;
+
+      // 현재 목록(shopList)에서 해당 상점만 찾아서 상태 업데이트
+      setShopList(prevList => 
+        prevList.map(shop => 
+          shop.storeId === storeId 
+            ? { ...shop, isFavorited: favorited, favoriteCount: newCount } 
+            : shop
+        )
+      );
+    } catch (error) {
+      Alert.alert("알림", "찜 상태 변경에 실패했습니다.");
+    }
+  };
+
+  // ✨ 상점 카드 렌더링 (하트 UI 보존)
   const renderShopCard = ({ item }: any) => {
     const thumbnailUrl = item.thumbnailUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
 
@@ -81,7 +134,15 @@ export default function ShopListScreen() {
         <Image source={{ uri: thumbnailUrl }} style={styles.cardImage} />
         <View style={styles.cardTitleRow}>
           <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.name}</Text>
-          {/* 🗑️ 찜(하트) 아이콘 영역 삭제 */}
+          
+          {/* 하트 아이콘 영역 유지 */}
+          <TouchableOpacity onPress={() => handleListToggleFavorite(item.storeId, item.isFavorited)}>
+            <Ionicons 
+              name={item.isFavorited ? "heart" : "heart-outline"} 
+              size={20} 
+              color={item.isFavorited ? "#FF5252" : "#999"} 
+            />
+          </TouchableOpacity>
         </View>
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={14} color="#FFD700" />
@@ -89,12 +150,10 @@ export default function ShopListScreen() {
           <Text style={styles.reviewText}>({item.reviewCount || 0})</Text>
         </View>
         <Text style={styles.locationText}>{item.categoryName || getCategoryName(item.categoryId)}</Text>
-        {/* 🗑️ 하단 찜 개수 카운트 영역 삭제 */}
       </TouchableOpacity>
     );
   };
 
-  // ✨ favorite 브랜치와 100% 동일한 UI 레이아웃 구조 (하얀 화면 에러 방지)
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* 1. 상단 헤더 */}
@@ -144,7 +203,7 @@ export default function ShopListScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 4. 메인 상점 리스트 (조건부 렌더링 구조 복구) */}
+      {/* 4. 메인 상점 리스트 (조건부 렌더링) */}
       {isLoading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#00A859" />

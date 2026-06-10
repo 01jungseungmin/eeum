@@ -5,7 +5,7 @@ import { Text } from '../CustomText';
 
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
-import { regionApi } from '@/api/region';
+import { regionApi } from '../../api/region';
 
 interface ShopViewProps {
   router: any;
@@ -44,6 +44,7 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
         setIsLoading(false);
       }
     };
+
     fetchHomeData();
   }, []);
 
