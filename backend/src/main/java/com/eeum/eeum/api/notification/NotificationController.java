@@ -38,19 +38,9 @@ public class NotificationController {
 
     // ===================== SSE 실시간 구독 =====================
 
-    /**
-     * SSE(Server-Sent Events) 구독 엔드포인트.
-     * <p>
-     * 웹 클라이언트(사장님/관리자 대시보드)에서 한 번 연결하면,
-     * 새 알림이 생성될 때마다 서버가 unread-count 이벤트를 자동으로 push한다.
-     * <p>
-     * 이벤트 형식:
-     * <pre>
-     * event: unread-count
-     * data: 3
-     * </pre>
-     * 클라이언트는 연결이 끊기면 EventSource API가 자동으로 재연결한다.
-     */
+     //SSE(Server-Sent Events)
+     //웹 클라이언트(사장님/관리자 대시보드)에서 한 번 연결하면 새 알림이 생성될 때마다 서버가 unread-count 이벤트를 자동으로 push
+     //클라이언트는 연결이 끊기면 EventSource API가 자동으로 재연결한다.
     @Operation(
             summary = "SSE 실시간 알림 구독",
             description = "웹 사장님/관리자 대시보드용 실시간 배지 카운트 스트림. " +

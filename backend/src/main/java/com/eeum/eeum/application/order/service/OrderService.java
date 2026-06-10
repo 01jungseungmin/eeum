@@ -14,11 +14,13 @@ import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.OrderType;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
+import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.*;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.enums.ProductType;
+import com.eeum.eeum.domain.product.event.ProductStockWarningEvent;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductImageRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
@@ -27,6 +29,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -54,8 +57,12 @@ public class OrderService {
     private final EventProductRepository eventProductRepository;
     private final ProductImageRepository productImageRepository;
     private final RedisLockService redisLockService;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final Duration ORDER_LOCK_LEASE_TIME = Duration.ofSeconds(10);
+
+    // 재고가 이 값 이하로 떨어지면 사장에게 STOCK_WARNING 알림
+    private static final int LOW_STOCK_THRESHOLD = 5;
 
     @Transactional
     public OrderPaymentReadyResponseDto createOrder(
@@ -131,6 +138,18 @@ public class OrderService {
 
         log.info("주문 생성: accountId={}, orderNumber={}, orderType={}, paymentMethod={}",
                 accountId, orderNumber, orderType, request.getPaymentMethod());
+
+        // 현장결제는 별도 결제 단계가 없으므로 주문 생성 시점에 사장에게 NEW_ORDER 알림.
+        // 온라인 결제는 결제 완료(PaymentService) 시점에 발행한다.
+        if (request.getPaymentMethod() == PaymentMethod.CASH_ON_SITE) {
+            eventPublisher.publishEvent(new OrderPlacedEvent(
+                    order.getStore().getAccount().getAccountId(),
+                    account.getName(),
+                    order.getStore().getName(),
+                    order.getOrderNumber(),
+                    order.getOrderId()
+            ));
+        }
 
         return OrderPaymentReadyResponseDto.builder()
                 .orderId(order.getOrderId())
@@ -276,7 +295,20 @@ public class OrderService {
                 }
 
                 if (product.getStock() != null) {
+                    int stockBefore = product.getStock();
                     product.decreaseStock(item.getQuantity());
+                    int stockAfter = product.getStock();
+
+                    // 임계값을 막 넘어선 순간에만 1회 발행 (주문마다 반복 알림 방지)
+                    if (stockBefore > LOW_STOCK_THRESHOLD && stockAfter <= LOW_STOCK_THRESHOLD) {
+                        eventPublisher.publishEvent(new ProductStockWarningEvent(
+                                product.getStore().getAccount().getAccountId(),
+                                product.getStore().getName(),
+                                product.getName(),
+                                stockAfter,
+                                product.getProductId()
+                        ));
+                    }
                 }
             }
 

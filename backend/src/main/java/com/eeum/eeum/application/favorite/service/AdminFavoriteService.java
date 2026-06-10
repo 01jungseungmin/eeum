@@ -23,10 +23,8 @@ public class AdminFavoriteService {
     private final FavoriteRepository favoriteRepository;
     private final StoreRepository storeRepository;
 
-    /**
-     * 인기 항목 통계 — 기간 + refType + 상위 N개.
-     * refType별로 이름을 조회해 함께 반환한다.
-     */
+    // 인기 항목 통계 — 기간 + refType + 상위 N개 refType별로 이름을 조회해 함께 반환
+
     @Transactional(readOnly = true)
     public List<FavoriteStatResponseDto> getFavoriteStats(
             FavoriteRefType refType,
@@ -45,11 +43,8 @@ public class AdminFavoriteService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Store.favoriteCount 정합성 재계산.
-     * 장애·대량 삭제·수동 DB 수정 후 favorite 테이블 실제 수와 Store 컬럼이 어긋났을 때 사용한다.
-     * 단일 UPDATE ... SELECT로 처리 — N번 쿼리 없이 전체 동기화.
-     */
+    // Store.favoriteCount 정합성 재계산 장애·대량 삭제·수동 DB 수정 후 favorite 테이블 실제 수와 Store 컬럼이 어긋났을 때 사용
+    // 단일 UPDATE ... SELECT로 처리 — N번 쿼리 없이 전체 동기화.
     @Transactional
     public int recalculateFavoriteCounts() {
         int updated = storeRepository.recalculateAllFavoriteCounts();

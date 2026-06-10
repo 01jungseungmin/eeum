@@ -25,9 +25,7 @@ public class AccountCleanupService {
     private final OwnerInfoRepository ownerInfoRepository;
     private final StorePhysicalDeleteService storePhysicalDeleteService;
 
-    /**
-     * 탈퇴 후 30일이 지난 계정을 물리 삭제한다.
-     */
+    // 탈퇴 후 30일이 지난 계정을 물리 삭제
     @Transactional
     public void deleteWithdrawnAccountsAfter30Days() {
         LocalDateTime threshold = LocalDateTime.now().minusDays(30);

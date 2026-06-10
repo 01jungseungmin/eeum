@@ -26,7 +26,7 @@ public interface NotificationRepository
     Page<Notification> findAllByAccount_AccountIdAndIsReadFalseOrderByCreatedAtDesc(
             Long accountId, Pageable pageable);
 
-    /** 카테고리 필터 — UI 탭별 조회 */
+    // 카테고리 필터 — UI 탭별 조회
     @Query("""
         SELECT n FROM Notification n
         WHERE n.account.accountId = :accountId

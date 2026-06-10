@@ -1,9 +1,5 @@
 package com.eeum.eeum.domain.notification.enums;
 
-/**
- * 알림 Polymorphic 참조 타입.
- * refId는 해당 도메인의 PK를 가리킨다.
- */
 public enum NotificationRefType {
     ORDER,
     PAYMENT,

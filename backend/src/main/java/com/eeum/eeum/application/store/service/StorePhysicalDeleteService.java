@@ -36,9 +36,7 @@ public class StorePhysicalDeleteService {
     private final StoreNoticeRepository storeNoticeRepository;
     private final SettlementAccountRepository settlementAccountRepository;
 
-    /**
-     * 계정 영구 삭제 시 연결된 상점 하위 데이터를 물리 삭제한다.
-     */
+    // 계정 영구 삭제 시 연결된 상점 하위 데이터를 물리 삭제
     @Transactional
     public void deleteStoreDataByAccountId(Long accountId) {
         Store store = storeRepository.findByAccount_AccountId(accountId)

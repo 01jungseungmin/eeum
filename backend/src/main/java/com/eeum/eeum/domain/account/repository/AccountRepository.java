@@ -46,4 +46,8 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     //ID만 조회
     @Query("SELECT a.accountId FROM Account a WHERE a.status = 'ACTIVE'")
     List<Long> findAllActiveAccountIds();
+
+    //관리자 계정 ID 조회 (관리자 알림 수신 대상)
+    @Query("SELECT a.accountId FROM Account a WHERE a.role = 'ROLE_ADMIN' AND a.status = 'ACTIVE'")
+    List<Long> findAdminAccountIds();
 }

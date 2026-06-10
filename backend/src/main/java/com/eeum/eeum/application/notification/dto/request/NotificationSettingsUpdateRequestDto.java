@@ -5,11 +5,8 @@ import lombok.Getter;
 
 import java.time.LocalTime;
 
-/**
- * 알림 설정 수정 요청.
- * null인 필드는 변경하지 않는다 (부분 업데이트 방식).
- * ORDER / RESERVATION / SYSTEM은 필수이므로 수정 불가 (서버에서 무시).
- */
+// 알림 설정 수정 요청 null인 필드는 변경 X
+// ORDER / RESERVATION / SYSTEM은 필수이므로 수정 불가
 @Getter
 @Schema(description = "알림 수신 설정 수정 요청")
 public class NotificationSettingsUpdateRequestDto {

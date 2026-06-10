@@ -32,12 +32,7 @@ public class NotificationSettingsService {
 
     // ===================== 수정 =====================
 
-    /**
-     * 알림 설정 부분 업데이트.
-     * null 필드는 변경하지 않는다.
-     * ORDER / RESERVATION / SYSTEM은 필수 알림이므로 서버에서 무시한다.
-     * marketingAgreedAt 법적 증빙 시각은 agreeToMarketing() / disagreeToMarketing() 에서 자동 관리.
-     */
+    // 알림 설정 부분 업데이트(null 필드는 변경 X)
     @Transactional
     public NotificationSettingsResponseDto updateSettings(
             Long accountId,
@@ -113,7 +108,7 @@ public class NotificationSettingsService {
         return NotificationSettingsResponseDto.from(settings);
     }
 
-    /** 발송 전 수신 동의 여부 검증 */
+    // 발송 전 수신 동의 여부 검증
     @Transactional(readOnly = true)
     public boolean isAllowedForAccount(Long accountId, NotificationType type) {
         return settingsRepository.findByAccount_AccountId(accountId)
@@ -123,7 +118,7 @@ public class NotificationSettingsService {
 
     // ===================== 내부 헬퍼 =====================
 
-    /** 설정이 없으면 기본값으로 자동 생성한다 (지연 초기화) */
+    // 설정이 없으면 기본값으로 자동 생성한다 (지연 초기화)
     private NotificationSettings getOrCreateSettings(Long accountId) {
         return settingsRepository.findByAccount_AccountId(accountId)
                 .orElseGet(() -> {

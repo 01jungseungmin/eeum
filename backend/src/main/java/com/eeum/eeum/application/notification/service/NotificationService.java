@@ -38,7 +38,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class NotificationService {
 
-    /** Redis 키 패턴: unread:account:{accountId} */
+    // Redis 키 패턴: unread:account:{accountId}
     private static final String UNREAD_KEY_PREFIX = "unread:account:";
 
     private final NotificationRepository notificationRepository;
@@ -50,10 +50,8 @@ public class NotificationService {
 
     // ===================== SSE 구독 =====================
 
-    /**
-     * 클라이언트(웹)가 SSE 구독을 요청할 때 호출.
-     * 연결 직후 현재 unread 카운트를 즉시 전송한다.
-     */
+    // 클라이언트(웹)가 SSE 구독을 요청할 때 호출
+    // 연결 직후 현재 unread 카운트를 즉시 전송
     public SseEmitter subscribe(Long accountId) {
         SseEmitter emitter = sseEmitterManager.subscribe(accountId);
         // 구독 직후 현재 카운트를 즉시 전달 (페이지 진입 시 배지 즉시 표시)
@@ -65,7 +63,7 @@ public class NotificationService {
     // ===================== 알림 생성 (다른 도메인 서비스에서 호출) =====================
 
     /**
-     * 단건 알림 생성.
+     * 단건 알림 생성
      * 1. 수신 동의 여부 확인
      * 2. Notification 저장 + Redis unread INCR
      * 3. SSE로 웹 클라이언트에 unread 카운트 즉시 전달
@@ -116,10 +114,7 @@ public class NotificationService {
         return NotificationResponseDto.from(notification);
     }
 
-    /**
-     * 다수 사용자 일괄 알림 생성 (그룹 채팅, 시스템 공지 등).
-     * 거부된 사용자는 건너뛰고 나머지만 저장한다.
-     */
+    // 다수 사용자 일괄 알림 생성 (그룹 채팅, 시스템 공지 등) 거부된 사용자는 건너뛰고 나머지만 저장
     @Transactional
     public List<NotificationResponseDto> createNotificationsBatch(
             List<NotificationCreateRequestDto> requests
@@ -148,10 +143,7 @@ public class NotificationService {
                 .map(NotificationResponseDto::from);
     }
 
-    /**
-     * 카테고리별 알림 조회 (웹 UI 탭 필터).
-     * category == null 이면 전체 조회.
-     */
+    // 카테고리별 알림 조회 (웹 UI 탭 필터) category == null 이면 전체 조회
     @Transactional(readOnly = true)
     public Page<NotificationResponseDto> getMyNotificationsByCategory(
             Long accountId,
@@ -167,9 +159,7 @@ public class NotificationService {
                 .map(NotificationResponseDto::from);
     }
 
-    /**
-     * 안 읽은 알림 수 — Redis 우선 조회, 캐시 미스 시 DB fallback 후 Redis 복구.
-     */
+    // 안 읽은 알림 수 — Redis 우선 조회, 캐시 미스 시 DB fallback 후 Redis 복구
     @Transactional(readOnly = true)
     public UnreadCountResponseDto getUnreadCount(Long accountId) {
         String key = UNREAD_KEY_PREFIX + accountId;
@@ -232,7 +222,7 @@ public class NotificationService {
         sseEmitterManager.sendUnreadCount(accountId, 0L);
     }
 
-    /** 대상 도메인 삭제 시 연관 알림 일괄 삭제 (다른 서비스에서 호출) */
+    // 대상 도메인 삭제 시 연관 알림 일괄 삭제 (다른 서비스에서 호출)
     @Transactional
     public void deleteAllByRefTypeAndRefId(NotificationRefType refType, Long refId) {
         notificationRepository.deleteAllByRefTypeAndRefId(refType, refId);
@@ -255,13 +245,13 @@ public class NotificationService {
         eventPublisher.publishEvent(new NotificationPushEvent(pushMessage, account.getAccountId()));
     }
 
-    /** Redis INCR 후 현재 값 반환 */
+    // Redis INCR 후 현재 값 반환
     private long incrementUnreadCount(Long accountId) {
         Long val = redisTemplate.opsForValue().increment(UNREAD_KEY_PREFIX + accountId);
         return val != null ? val : 0L;
     }
 
-    /** Redis DECR 후 현재 값 반환 (0 미만으로 내려가지 않음) */
+    // Redis DECR 후 현재 값 반환 (0 미만으로 내려가지 않음)
     private long decrementUnreadCount(Long accountId) {
         String key = UNREAD_KEY_PREFIX + accountId;
         String val = redisTemplate.opsForValue().get(key);

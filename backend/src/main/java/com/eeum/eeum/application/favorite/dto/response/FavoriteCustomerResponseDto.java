@@ -62,10 +62,8 @@ public class FavoriteCustomerResponseDto {
                 .build();
     }
 
-    /**
-     * 이름 마스킹 처리.
-     * "이승민" → "이*민", "김영" → "김*", "이" → "이"
-     */
+    // 이름 마스킹 처리.
+
     private static String maskName(String name) {
         if (name == null || name.length() <= 1) return name;
         if (name.length() == 2) return name.charAt(0) + "*";

@@ -27,7 +27,7 @@ public class NotificationSettings extends BaseEntity {
     @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
 
-    // ─── 푸시 ON/OFF 토글 ──────────────────────────────────────────────────
+    // 푸시 ON/OFF 토글
 
     // 주문/결제 알림 (필수 — UI에서 비활성화 불가)
     @Column(name = "order_enabled", nullable = false)
@@ -78,16 +78,15 @@ public class NotificationSettings extends BaseEntity {
     @Column(name = "dnd_enabled", nullable = false)
     private boolean dndEnabled = false;
 
-    /** DND 시작 시각 (기본 22:00) */
+    // 방해 금지 시작 시각 (기본 22:00)
     @Column(name = "dnd_start_time", nullable = false)
     private LocalTime dndStartTime = LocalTime.of(22, 0);
 
-    /** DND 종료 시각 (기본 08:00, 자정 넘김 가능) */
+    // 방해 금지 종료 시각 (기본 08:00, 자정 넘김 가능)
     @Column(name = "dnd_end_time", nullable = false)
     private LocalTime dndEndTime = LocalTime.of(8, 0);
 
     //이메일 수신 설정 (카테고리별)
-
     @Column(name = "order_email_enabled", nullable = false)
     private boolean orderEmailEnabled = true;
 
@@ -107,7 +106,6 @@ public class NotificationSettings extends BaseEntity {
     private boolean settlementEmailEnabled = true;
 
     //알림음 설정 (카테고리별)
-
     @Column(name = "order_sound_enabled", nullable = false)
     private boolean orderSoundEnabled = true;
 
@@ -128,7 +126,7 @@ public class NotificationSettings extends BaseEntity {
 
     // ===================== 정적 팩토리 =====================
 
-    /** 회원가입 시 기본 설정으로 생성 */
+    // 회원가입 시 기본 설정으로 생성
     public static NotificationSettings createDefault(Account account) {
         NotificationSettings notificationSettings = new NotificationSettings();
         notificationSettings.account            = account;
@@ -165,13 +163,11 @@ public class NotificationSettings extends BaseEntity {
 
     // ===================== 도메인 메서드 =====================
 
-    /**
-     * 해당 타입의 푸시 수신 동의 여부.
-     * ORDER / RESERVATION / SYSTEM / 관리자 전용 알림은 항상 true (필수).
-     */
+    //  해당 타입의 푸시 수신 동의 여부
+    //  ORDER / RESERVATION / SYSTEM / 관리자 전용 알림은 항상 true (필수)
     public boolean isAllowed(NotificationType type) {
         return switch (type) {
-            // ── 필수 알림 (끌 수 없음) ──
+            // 필수 알림 (끌 수 없음)
             case ORDER_STATUS_CHANGED, PAYMENT_COMPLETED  -> true;
             case RESERVATION_CONFIRMED, RESERVATION_CANCELLED, RESERVATION_REMINDER -> true;
             case SYSTEM_NOTICE                            -> true;
@@ -182,7 +178,7 @@ public class NotificationSettings extends BaseEntity {
             // 관리자 전용 (항상 수신)
             case OWNER_APPLICATION_SUBMITTED, REPORT_SUBMITTED, INQUIRY_SUBMITTED -> true;
 
-            // ── 선택 알림 ──
+            // 선택 알림
             case CHAT_MESSAGE                             -> chatEnabled;
             case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE -> communityEnabled;
             case STORE_REVIEW, STORE_REVIEW_REPLY, STORE_PRODUCT_RESTOCK -> storeReviewEnabled;
@@ -193,10 +189,9 @@ public class NotificationSettings extends BaseEntity {
         };
     }
 
-    /**
-     * 현재 시각이 DND 구간 내에 있는지 판단.
-     * dndStartTime > dndEndTime 이면 자정 걸치는 범위 (예: 22:00 ~ 08:00).
-     */
+    // 현재 시각이 방해 금지 구간 내에 있는지 판단
+    // dndStartTime > dndEndTime 이면 자정 걸치는 범위 (예: 22:00 ~ 08:00)
+
     public boolean isDndActive() {
         if (!dndEnabled) return false;
         LocalTime now = LocalTime.now();
@@ -209,10 +204,9 @@ public class NotificationSettings extends BaseEntity {
         }
     }
 
-    /**
-     * 해당 알림 타입에 대한 이메일 수신 여부.
-     * 관리자/필수 알림 카테고리에 해당하지 않으면 false.
-     */
+    // 해당 알림 타입에 대한 이메일 수신 여부
+    // 관리자/필수 알림 카테고리에 해당하지 않으면 false
+
     public boolean isEmailEnabled(NotificationType type) {
         NotificationCategory category = type.getCategory();
         return switch (category) {
@@ -225,9 +219,7 @@ public class NotificationSettings extends BaseEntity {
         };
     }
 
-    /**
-     * 해당 알림 타입에 대한 알림음 활성화 여부.
-     */
+    // 해당 알림 타입에 대한 알림음 활성화 여부.
     public boolean isSoundEnabled(NotificationType type) {
         NotificationCategory category = type.getCategory();
         return switch (category) {
@@ -251,26 +243,26 @@ public class NotificationSettings extends BaseEntity {
 
     // ===================== 업데이트 메서드 =====================
 
-    /** 마케팅 수신 동의 */
+    // 마케팅 수신 동의
     public void agreeToMarketing() {
         this.marketingEnabled  = true;
         this.marketingAgreedAt = LocalDateTime.now();
     }
 
-    /** 마케팅 수신 거부 */
+    // 마케팅 수신 거부
     public void disagreeToMarketing() {
         this.marketingEnabled  = false;
         this.marketingAgreedAt = null;
     }
 
-    /** DND 설정 변경 */
+    // 방해 금지 설정 변경
     public void updateDnd(boolean dndEnabled, LocalTime startTime, LocalTime endTime) {
         this.dndEnabled   = dndEnabled;
         this.dndStartTime = startTime != null ? startTime : this.dndStartTime;
         this.dndEndTime   = endTime   != null ? endTime   : this.dndEndTime;
     }
 
-    /** 이메일 수신 설정 일괄 업데이트 */
+    // 이메일 수신 설정 일괄 업데이트
     public void updateEmailSettings(
             Boolean orderEmail, Boolean chatEmail, Boolean reviewEmail,
             Boolean reservationEmail, Boolean stockEmail, Boolean settlementEmail
@@ -283,7 +275,7 @@ public class NotificationSettings extends BaseEntity {
         if (settlementEmail  != null) this.settlementEmailEnabled  = settlementEmail;
     }
 
-    /** 알림음 설정 일괄 업데이트 */
+    // 알림음 설정 일괄 업데이트
     public void updateSoundSettings(
             Boolean orderSound, Boolean chatSound, Boolean reviewSound,
             Boolean reservationSound, Boolean stockSound, Boolean settlementSound

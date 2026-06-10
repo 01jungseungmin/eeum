@@ -5,11 +5,7 @@ import com.eeum.eeum.domain.notification.enums.NotificationType;
 import lombok.Builder;
 import lombok.Getter;
 
-/**
- * 알림 생성 요청 DTO.
- * 다른 도메인 서비스(OrderService, StoreReviewService 등)에서 호출할 때 사용한다.
- * REST API 노출 없이 내부 서비스 간 호출 전용.
- */
+// 알림 생성 요청 DTO
 @Getter
 @Builder
 public class NotificationCreateRequestDto {

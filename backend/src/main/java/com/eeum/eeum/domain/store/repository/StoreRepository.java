@@ -19,16 +19,12 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
 
     // ===================== 찜 카운트 원자 UPDATE (SDD 명세) =====================
 
-    /**
-     * 찜 카운트 +1 — DB 원자 UPDATE, 영향받은 행 수 반환.
-     */
+    //찜 카운트 +1 — DB 원자 UPDATE, 영향받은 행 수 반환
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Store s SET s.favoriteCount = s.favoriteCount + 1 WHERE s.storeId = :storeId")
     int incrementFavoriteCount(@Param("storeId") Long storeId);
 
-    /**
-     * 찜 카운트 -1 — favoriteCount > 0 가드, 영향받은 행 수 반환.
-     */
+    // 찜 카운트 -1 — favoriteCount > 0 가드, 영향받은 행 수 반환
     @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE Store s
@@ -38,10 +34,8 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
         """)
     int decrementFavoriteCount(@Param("storeId") Long storeId);
 
-    /**
-     * 정합성 재계산 — favorite 테이블 실제 row 수로 모든 상점의 favoriteCount 일괄 갱신.
-     * 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 동기화한다.
-     */
+    // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 상점의 favoriteCount 일괄 갱신
+    // 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 처리
     @Modifying(clearAutomatically = true)
     @Query(value = """
         UPDATE store s
