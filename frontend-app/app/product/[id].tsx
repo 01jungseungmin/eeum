@@ -1,7 +1,5 @@
-// 📄 product/[id].tsx 
-
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { Text } from '../../components/CustomText'; 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -14,8 +12,13 @@ const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); 
   
+  // ✨ 1. id와 함께 shop/[id].tsx에서 넘겨준 isRestaurant 파라미터를 받아옵니다.
+  const { id, isRestaurant } = useLocalSearchParams(); 
+  
+  // ✨ 2. 넘어온 값이 문자열 'true'인지 확인하여 장바구니 버튼 숨김 여부를 결정합니다.
+  const hideCartButton = isRestaurant === 'true';
+
   const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [product, setProduct] = useState<any>(null);
@@ -68,9 +71,6 @@ export default function ProductDetailScreen() {
   const currentPrice = hasEvent ? product.eventPrice : product.price;
   const productImageUrl = product.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
 
-  // 💡 백엔드에서 내려주는 데이터에 따라 식당/상점 구분 (임시로 상점 처리)
-  const isRestaurant = product.categoryId === 1 || product.categoryId === 2; 
-
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -104,17 +104,15 @@ export default function ProductDetailScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      <View style={styles.bottomBar}>
-        {isRestaurant ? (
+      {/* ✨ 3. 식당이 아닐 때(!hideCartButton)만 하단 장바구니 버튼 영역 노출 */}
+      {!hideCartButton && (
+        <View style={styles.bottomBar}>
           <TouchableOpacity 
-            style={[styles.cartBtn, { backgroundColor: '#00A859' }]} 
-            onPress={handleAddToCart}
-          >
-            <Text fontWeight="bold" style={{ color: '#fff', fontSize: 16 }}>픽업 장바구니 담기</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.cartBtn, { backgroundColor: '#00A859' }]} 
+            // 💡 품절일 경우 버튼 색상을 회색(#CCC)으로 처리하여 UX 개선
+            style={[
+              styles.cartBtn, 
+              { backgroundColor: product.status === 'SOLD_OUT' ? '#CCC' : '#00A859' }
+            ]} 
             onPress={handleAddToCart}
             disabled={product.status === 'SOLD_OUT'}
           >
@@ -122,8 +120,8 @@ export default function ProductDetailScreen() {
               {product.status === 'SOLD_OUT' ? '품절된 상품입니다' : '장바구니 담기'}
             </Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

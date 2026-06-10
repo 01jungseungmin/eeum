@@ -88,7 +88,10 @@ export default function ShopDetailScreen() {
             <TouchableOpacity
               key={menu.productId}
               style={styles.menuCard}
-              onPress={() => router.push(`/product/${menu.productId}`)}
+              onPress={() => router.push({
+                pathname: `/product/${menu.productId}` as any,
+                params: { isRestaurant: isRestaurant ? 'true' : 'false' }
+              })}
             >
               <View style={styles.menuTextContainer}>
                 <Text fontWeight="bold" style={styles.menuName}>{menu.name}</Text>
