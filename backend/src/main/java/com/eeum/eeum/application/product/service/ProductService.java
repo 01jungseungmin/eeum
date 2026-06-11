@@ -86,12 +86,11 @@ public class ProductService {
                 )
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
 
-        product.update(
+        product.update_info(
                 productCategory,
                 request.getName(),
                 request.getDescription() == null ? "" : request.getDescription(),
                 BigDecimal.valueOf(request.getBasePrice()),
-                request.getStockQuantity(),
                 request.getProductType()
         );
 

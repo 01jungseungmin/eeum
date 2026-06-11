@@ -70,7 +70,7 @@ public class ProductController {
 
     @Operation(
             summary = "상품 수정",
-            description = "현재 로그인한 사장의 상점에 등록된 상품 정보를 수정합니다. 상품명, 설명, 가격, 재고, 예약 가능 인원, 상품 유형 등을 수정할 수 있으며 본인 상점의 상품만 수정할 수 있습니다."
+            description = "현재 로그인한 사장의 상점에 등록된 상품 정보를 수정합니다. 상품명, 설명, 가격, 예약 가능 인원, 상품 유형 등을 수정할 수 있으며 본인 상점의 상품만 수정할 수 있습니다."
     )
     @PatchMapping("/{productId}")
     public ResponseEntity<ApiResponse<ProductResponseDto>> updateProduct(
@@ -123,7 +123,18 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success());
     }
 
-    // ProductController에 추가
+    @Operation(summary = "상품 대표 이미지 조회")
+    @GetMapping("/{productId}/image")
+    public ResponseEntity<ApiResponse<ImageResponseDto>> getProductThumbnailImage(
+            @PathVariable Long productId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+
+        return ResponseEntity.ok(ApiResponse.success(
+                productImageService.getImage(accountId, productId)
+        ));
+    }
+
     @Operation(summary = "상품 이미지 목록 조회")
     @GetMapping("/{productId}/images")
     public ResponseEntity<ApiResponse<List<ImageResponseDto>>> getProductImages(
