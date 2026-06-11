@@ -9,7 +9,7 @@ import { regionApi } from '../../api/region';
 
 interface ShopViewProps {
   router: any;
-  regionId: number | null;
+  regionId?: number | null;
 }
 
 export default function ShopView({ router, regionId }: ShopViewProps) {
