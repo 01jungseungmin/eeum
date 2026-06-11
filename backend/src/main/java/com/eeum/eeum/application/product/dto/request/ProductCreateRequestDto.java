@@ -31,10 +31,6 @@ public class ProductCreateRequestDto {
     @PositiveOrZero(message = "재고 수량은 0 이상이어야 합니다.")
     private Integer stockQuantity;
 
-    @Schema(description = "예약 가능 인원", example = "4")
-    @PositiveOrZero(message = "예약 가능 인원은 0 이상이어야 합니다.")
-    private Integer reservationCapacity;
-
     @Schema(description = "상품 설명", example = "직접 끓인 김치찌개입니다.")
     private String description;
 }
