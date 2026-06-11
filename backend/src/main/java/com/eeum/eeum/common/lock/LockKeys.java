@@ -20,4 +20,20 @@ public final class LockKeys {
     public static String portonePayment(String portonePaymentId) {
         return "lock:portone-payment:" + portonePaymentId;
     }
+
+    public static String chatRoom(Long creatorId) {
+        return "lock:chat-room:creator:" + creatorId;
+    }
+
+    public static String chatRoomStore(Long storeId) {
+        return "lock:chat-room:store:" + storeId;
+    }
+
+    public static String chatRoomInvite(Long roomId) {
+        return "lock:chat-room:" + roomId + ":invite";
+    }
+
+    public static String chatRoomLeave(Long roomId) {
+        return "lock:chat-room:" + roomId + ":leave";
+    }
 }
