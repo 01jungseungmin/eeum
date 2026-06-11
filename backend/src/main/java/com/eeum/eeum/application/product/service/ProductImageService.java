@@ -32,6 +32,17 @@ public class ProductImageService {
     private final ProductMapper productMapper;
 
     @Transactional(readOnly = true)
+    public ImageResponseDto getImage(Long accountId, Long productId) {
+        getProductWithOwnerCheck(accountId, productId);
+
+        ProductImage productImage = productImageRepository
+                .findFirstByProduct_ProductIdAndIsThumbnailTrueOrderByDisplayOrderAsc(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_IMAGE_NOT_FOUND));
+
+        return productMapper.toImageResponseDto(productImage);
+    }
+
+    @Transactional(readOnly = true)
     public List<ImageResponseDto> getImages(Long accountId, Long productId) {
         getProductWithOwnerCheck(accountId, productId);
         return productImageRepository
