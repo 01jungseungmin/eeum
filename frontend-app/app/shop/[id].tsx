@@ -39,7 +39,6 @@ export default function ShopDetailScreen() {
           reviewApi.getReviews(shopIdNum).catch(() => null)
         ]);
 
-        // ✨ HEAD에서 추가한 리뷰 데이터 세팅 로직 유지
         setShopReviews(reviewsRes?.content || reviewsRes?.data || []);
         setShopDetail(detailData);
         setShopProducts(productsData || []);
@@ -139,18 +138,10 @@ export default function ShopDetailScreen() {
 
         <View style={styles.divider} />
 
+        {/* 리뷰 섹션 (리뷰 쓰기 버튼 제거됨) */}
         <View style={styles.reviewSection}>
           <View style={styles.reviewHeader}>
             <Text fontWeight="bold" style={styles.sectionTitle}>상점 리뷰</Text>
-            <TouchableOpacity 
-              style={styles.reviewWriteBtn}
-              onPress={() => router.push({
-                pathname: '/review/write' as any,
-                params: { storeId: shopDetail.storeId }
-              })}
-            >
-              <Text style={styles.reviewWriteBtnText}>리뷰 쓰기</Text>
-            </TouchableOpacity>
           </View>
 
           {shopReviews.length === 0 ? (
@@ -247,11 +238,8 @@ const styles = StyleSheet.create({
   menuPrice: { fontSize: 16, color: '#333' },
   menuImg: { width: 100, height: 100, borderRadius: 8 },
 
-  // ✨ HEAD에서 추가한 리뷰 관련 스타일 유지
   reviewSection: { padding: 20 },
   reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  reviewWriteBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#E8F5E9', borderRadius: 4 },
-  reviewWriteBtnText: { color: '#00A859', fontSize: 13, fontWeight: 'bold' },
   emptyReviewText: { color: '#888', textAlign: 'center', paddingVertical: 20 },
   reviewCard: { marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 15 },
   reviewUserRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
