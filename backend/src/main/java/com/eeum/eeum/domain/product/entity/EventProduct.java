@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.product.entity;
 
 import com.eeum.eeum.common.entity.BaseEntity;
+import com.eeum.eeum.domain.product.enums.EventProductDisplayStatus;
 import com.eeum.eeum.domain.product.enums.EventProductStatus;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -88,6 +89,24 @@ public class EventProduct extends BaseEntity {
         this.status = EventProductStatus.ENDED;
     }
 
+    public EventProductDisplayStatus resolveDisplayStatus() {
+        LocalDateTime now = LocalDateTime.now();
+
+        if (this.status == EventProductStatus.ENDED || now.isAfter(this.endAt)) {
+            return EventProductDisplayStatus.ENDED;
+        }
+
+        if (getRemainingStock() <= 0) {
+            return EventProductDisplayStatus.SOLD_OUT;
+        }
+
+        if (now.isBefore(this.startAt)) {
+            return EventProductDisplayStatus.SCHEDULED;
+        }
+
+        return EventProductDisplayStatus.ONGOING;
+    }
+
     public boolean isOngoing() {
         LocalDateTime now = LocalDateTime.now();
         return this.status == EventProductStatus.ACTIVE
@@ -110,5 +129,13 @@ public class EventProduct extends BaseEntity {
         if (startAt == null || endAt == null || !startAt.isBefore(endAt)) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
+    }
+
+    public void restoreStock(int quantity) {
+        if (quantity <= 0) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        this.soldCount = Math.max(0, this.soldCount - quantity);
     }
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { MoreVertical } from 'lucide-react';
 
@@ -7,7 +7,6 @@ const TableContainer = styled.div`
   border: 1px solid #e8e8e8;
   border-top: none;
   border-radius: 0 0 16px 16px;
-  overflow: hidden;
 `;
 
 const Table = styled.table`
@@ -70,8 +69,27 @@ const StatusBadge = styled.span`
   border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
-  background: ${(props) => (props.$isActive ? '#e8f5e9' : '#fff1f0')};
-  color: ${(props) => (props.$isActive ? '#2e7d32' : '#f5222d')};
+  display: inline-block;
+  text-align: center;
+
+  background-color: ${(props) =>
+    props.$status === 'ACTIVE'
+      ? '#e8f5e9'
+      : props.$status === 'SUSPENDED'
+        ? '#fff1f0'
+        : '#f5f5f5'};
+
+  color: ${(props) =>
+    props.$status === 'ACTIVE'
+      ? '#2e7d32'
+      : props.$status === 'SUSPENDED'
+        ? '#f5222d'
+        : '#8c8c8c'};
+`;
+
+const ActionTd = styled.td`
+  position: relative;
+  width: 40px;
 `;
 
 const ActionButton = styled.button`
@@ -81,22 +99,73 @@ const ActionButton = styled.button`
   cursor: pointer;
   display: flex;
   align-items: center;
+  padding: 4px;
+  border-radius: 4px;
   &:hover {
+    background: #f5f5f5;
     color: #333;
   }
 `;
 
-function MemberTable({ data, selectedIds, onSelectRow, onSelectAll }) {
+const DropdownMenu = styled.div`
+  position: absolute;
+  right: 16px;
+  top: 45px;
+  background: white;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  min-width: 100px;
+  overflow: hidden;
+`;
+
+const DropdownItem = styled.button`
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 13px;
+  border: none;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  color: ${(props) => (props.$danger ? '#f5222d' : '#333')};
+
+  &:hover {
+    background: #f5f5f5;
+  }
+`;
+
+function MemberTable({
+  data,
+  selectedIds,
+  onSelectRow,
+  onSelectAll,
+  onActionSuspend,
+  onActionWithdraw,
+  onActionRestore,
+}) {
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
   const isAllSelected =
     data.length > 0 && data.every((row) => selectedIds.includes(row.accountId));
+
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveMenuId(null);
+    if (activeMenuId !== null) {
+      window.addEventListener('click', handleOutsideClick);
+    }
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [activeMenuId]);
 
   const formatDate = (isoString) => {
     if (!isoString) return '-';
     const date = new Date(isoString);
-    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(
-      2,
-      '0',
-    )}.${String(date.getDate()).padStart(2, '0')}`;
+    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  const handleMenuToggle = (e, accountId) => {
+    e.stopPropagation();
+    setActiveMenuId(activeMenuId === accountId ? null : accountId);
   };
 
   return (
@@ -124,7 +193,7 @@ function MemberTable({ data, selectedIds, onSelectRow, onSelectAll }) {
         <tbody>
           {data.map((row) => {
             const isOwner = row.role === 'ROLE_OWNER';
-            const isActive = row.status === 'ACTIVE';
+            const isMenuOpen = activeMenuId === row.accountId;
 
             return (
               <tr key={row.accountId}>
@@ -156,15 +225,80 @@ function MemberTable({ data, selectedIds, onSelectRow, onSelectAll }) {
                   {formatDate(row.createdAt)}
                 </td>
                 <td>
-                  <StatusBadge $isActive={isActive}>
-                    {isActive ? '활성' : '정지'}
+                  <StatusBadge $status={row.status}>
+                    {row.status === 'ACTIVE' && '활성'}
+                    {row.status === 'SUSPENDED' && '정지'}
+                    {row.status === 'WITHDRAWN' && '탈퇴'}
                   </StatusBadge>
                 </td>
-                <td>
-                  <ActionButton>
+
+                <ActionTd>
+                  <ActionButton
+                    onClick={(e) => handleMenuToggle(e, row.accountId)}
+                  >
                     <MoreVertical size={16} />
                   </ActionButton>
-                </td>
+                  {isMenuOpen && (
+                    <DropdownMenu>
+                      {row.status === 'ACTIVE' && (
+                        <>
+                          <DropdownItem
+                            onClick={() =>
+                              onActionSuspend(
+                                row.accountId,
+                                row.name,
+                                row.status,
+                              )
+                            }
+                          >
+                            회원 정지
+                          </DropdownItem>
+                          <DropdownItem
+                            $danger
+                            onClick={() =>
+                              onActionWithdraw(row.accountId, row.name)
+                            }
+                          >
+                            강제 탈퇴
+                          </DropdownItem>
+                        </>
+                      )}
+                      {row.status === 'SUSPENDED' && (
+                        <>
+                          <DropdownItem
+                            onClick={() =>
+                              onActionSuspend(
+                                row.accountId,
+                                row.name,
+                                row.status,
+                              )
+                            }
+                          >
+                            정지 해제
+                          </DropdownItem>
+                          <DropdownItem
+                            $danger
+                            onClick={() =>
+                              onActionWithdraw(row.accountId, row.name)
+                            }
+                          >
+                            강제 탈퇴
+                          </DropdownItem>
+                        </>
+                      )}
+
+                      {row.status === 'WITHDRAWN' && (
+                        <DropdownItem
+                          onClick={() =>
+                            onActionRestore(row.accountId, row.name)
+                          }
+                        >
+                          탈퇴 해제 (복구)
+                        </DropdownItem>
+                      )}
+                    </DropdownMenu>
+                  )}
+                </ActionTd>
               </tr>
             );
           })}

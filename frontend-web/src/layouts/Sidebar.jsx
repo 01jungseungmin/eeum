@@ -1,6 +1,9 @@
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
+import { useAuth } from '../contexts/AuthContext';
+import { authApi } from '../api/authApi';
+import axios from 'axios';
 
 const SideContainer = styled.div`
   width: 260px;
@@ -103,6 +106,7 @@ const StatusBadge = styled.span`
 function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   // 로컬스토리지에 있는 role에 따라 관리자용 메뉴, 사장님용 메뉴를 구분해서 보여줌
   const role = localStorage.getItem('role');
@@ -118,6 +122,34 @@ function Sidebar() {
     alerts: 8,
     adminApproval: 12,
     adminReports: 5,
+  };
+
+  const handleMenuClick = async (item) => {
+    if (item.action === 'LOGOUT') {
+      const refreshToken = localStorage.getItem('refreshToken');
+      const currentRole = localStorage.getItem('role');
+
+      const targetPath =
+        currentRole === 'ROLE_ADMIN' ? '/admin/login' : '/login';
+
+      try {
+        if (refreshToken) {
+          await authApi.logout(refreshToken);
+        }
+      } catch (error) {
+        console.error(
+          '로그아웃 API 호출 실패 (아마도 토큰 만료):',
+          error.response?.status,
+        );
+      } finally {
+        logout();
+
+        console.log('로컬 상태 정리 완료, 이동 경로:', targetPath);
+        navigate(targetPath);
+      }
+    } else if (item.path && item.path !== '#') {
+      navigate(item.path);
+    }
   };
 
   return (
@@ -137,7 +169,7 @@ function Sidebar() {
               return (
                 <MenuItem
                   key={item.id}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleMenuClick(item)}
                   $active={isActive}
                   $isAdmin={isAdmin}
                 >

@@ -7,7 +7,7 @@ import com.eeum.eeum.application.account.dto.request.UpdateInfoRequestDto;
 import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.MyPageResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.application.account.service.AccountService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -20,7 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Account", description = "회원 정보 API")
+@Tag(name = "02. Account", description = "회원 정보 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/accounts/me")
@@ -84,9 +84,9 @@ public class AccountController {
 
     @Operation(summary = "내 사업자 정보 조회", description = "내 사업자 정보와 승인 상태를 조회합니다.")
     @GetMapping("/owner")
-    public ResponseEntity<ApiResponse<OwnerResponseDto>> getMyOwnerInfo() {
+    public ResponseEntity<ApiResponse<OwnerApplicationDetailResponseDto>> getMyOwnerInfo() {
         Long accountId = SecurityUtil.getCurrentAccountId();
-        OwnerResponseDto response = accountService.getMyOwnerInfo(accountId);
+        OwnerApplicationDetailResponseDto response = accountService.getMyOwnerInfo(accountId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

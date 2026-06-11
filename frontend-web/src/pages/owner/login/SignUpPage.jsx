@@ -1,8 +1,9 @@
 import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { authApi } from '../../../api/authApi';
 
 const PageWrapper = styled.div`
   max-width: 450px;
@@ -48,7 +49,7 @@ const SubmitButton = styled.button`
   margin-top: 30px;
 `;
 
-function SignUp() {
+function SignUpPage() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -76,6 +77,9 @@ function SignUp() {
 
   const navigate = useNavigate();
 
+  // 비밀번호 유효성 통과 여부 및 에러 메시지 상태 관리
+  const [isPwValid, setIsPwValid] = useState(false);
+
   const handleEmailVerification = async (e) => {
     e.preventDefault();
 
@@ -85,12 +89,7 @@ function SignUp() {
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/email/send-verification',
-        {
-          email: email,
-        },
-      );
+      await authApi.sendEmailVerification(email);
 
       alert('인증코드가 이메일로 전송되었습니다. 이메일을 확인해주세요.');
     } catch (error) {
@@ -108,20 +107,62 @@ function SignUp() {
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/email/verify',
-        {
-          email: email,
-          code: code,
-        },
-      );
-      setToken(response.data.data);
+      const response = await authApi.verifyEmailCode(email, code);
+      const responseData = response.data || response;
 
+      setToken(responseData.data);
       alert('인증코드가 확인되었습니다. 회원가입을 계속 진행해주세요.');
     } catch (error) {
       console.error('인증코드 확인 실패:', error);
       alert('인증코드 확인에 실패했습니다. 다시 시도해주세요.');
     }
+  };
+
+  // 요구사항을 완벽하게 반영한 전화번호 포맷팅 함수
+  const formatPhoneNumber = (value) => {
+    if (!value) return value;
+    const numbers = value.replace(/[^0-9]/g, '');
+
+    // 무조건 11자리일 때
+    if (numbers.length === 11) {
+      return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7)}`;
+    }
+
+    // 서울 지역번호 '02'로 시작하는 경우 (9자리 또는 10자리)
+    if (numbers.startsWith('02')) {
+      if (numbers.length <= 2) return numbers;
+      if (numbers.length <= 6) {
+        return `${numbers.slice(0, 2)}-${numbers.slice(2)}`;
+      }
+      // 10자리 전까지(9자리 이하)는 무조건 02-1111-XXX 형태로 유지 (흔들림 방지)
+      if (numbers.length <= 9) {
+        return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+      }
+      // 딱 10자리일 때 -> 02-XXXX-XXXX
+      return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6, 10)}`;
+    }
+
+    // 그 외 일반 번호
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 7) {
+      return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+    }
+    if (numbers.length <= 10) {
+      return `${numbers.slice(0, 3)}-${numbers.slice(3, 6)}-${numbers.slice(6)}`;
+    }
+    return numbers;
+  };
+
+  const handlePhoneChange = (setter) => (e) => {
+    const formattedValue = formatPhoneNumber(e.target.value);
+    setter(formattedValue);
+  };
+
+  // 개업일자 입력에서 숫자만 허용
+  const handleOpeningDateChange = (e) => {
+    const onlyNumbers = e.target.value.replace(/[^0-9]/g, '');
+
+    setOpeningDate(onlyNumbers);
   };
 
   const handleSignUp = async (e) => {
@@ -156,30 +197,33 @@ function SignUp() {
       return;
     }
 
+    if (!isPwValid) {
+      alert(
+        '비밀번호 보안 규칙을 확인해 주세요. (영문/숫자/특수문자 조합 8자 이상)',
+      );
+      return;
+    }
+
     if (password !== confirmPassword) {
       alert('비밀번호가 일치하지 않습니다.');
       return;
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/auth/signup/owner',
-        {
-          email: email,
-          password: password,
-          name: businessName,
-          phone: phone,
-          businessNumber: businessNumber,
-          storeName: storeName,
-          openingDate: openingDate,
-          storeAddress: location,
-          storePhone: storePhone,
-          emailVerificationToken: token,
-        },
-      );
+      await authApi.signUpOwner({
+        email: email,
+        password: password,
+        name: businessName,
+        phone: phone,
+        businessNumber: businessNumber,
+        storeName: storeName,
+        openingDate: openingDate,
+        storeAddress: location,
+        storePhone: storePhone,
+        emailVerificationToken: token,
+      });
 
       alert('회원가입이 완료되었습니다!');
-
       navigate('/login');
     } catch (error) {
       console.error('회원가입 실패:', error);
@@ -211,21 +255,33 @@ function SignUp() {
         onButtonClick={handleCodeVerification}
       />
       <InputForm
-        ref={passwordRef}
         title="비밀번호"
         type="password"
-        placeholder="비밀번호를 입력해주세요"
+        placeholder="영문, 숫자, 특수문자 조합 8자 이상"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        errorType="password"
+        onValidate={setIsPwValid}
       />
       <InputForm
-        ref={confirmPasswordRef}
         title="비밀번호 확인"
         type="password"
-        placeholder="비밀번호를 다시 입력해주세요"
+        placeholder="비밀번호를 한번 더 입력해주세요"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
       />
+      {confirmPassword && password !== confirmPassword && (
+        <p
+          style={{
+            fontSize: '12px',
+            color: '#ff4d4d',
+            textAlign: 'left',
+            marginTop: '-15px',
+          }}
+        >
+          ⚠️ 비밀번호가 일치하지 않습니다.
+        </p>
+      )}
       <InputForm
         ref={businessNumberRef}
         title="사업자번호"
@@ -243,9 +299,11 @@ function SignUp() {
       <InputForm
         ref={phoneRef}
         title="전화번호"
-        placeholder="전화번호를 입력해주세요"
+        placeholder="010-1234-5678"
         value={phone}
-        onChange={(e) => setPhone(e.target.value)}
+        onChange={handlePhoneChange(setPhone)}
+        maxLength={13}
+        inputMode="numeric"
       />
       <InputForm
         ref={storeNameRef}
@@ -257,9 +315,11 @@ function SignUp() {
       <InputForm
         ref={openingDateRef}
         title="개업일자"
-        placeholder="개업일자를 입력해주세요"
+        placeholder="YYYYMMDD 형식으로 입력해주세요 (예: 20260605)"
         value={openingDate}
-        onChange={(e) => setOpeningDate(e.target.value)}
+        onChange={handleOpeningDateChange}
+        maxLength={8}
+        inputMode="numeric"
       />
       <InputForm
         ref={locationRef}
@@ -271,9 +331,11 @@ function SignUp() {
       <InputForm
         ref={storePhoneRef}
         title="사업장 전화번호"
-        placeholder="사업장 전화번호를 입력해주세요"
+        placeholder="010-1234-5678"
         value={storePhone}
-        onChange={(e) => setStorePhone(e.target.value)}
+        onChange={handlePhoneChange(setStorePhone)}
+        maxLength={13}
+        inputMode="numeric"
       />
 
       <CheckboxContainer>
@@ -290,4 +352,4 @@ function SignUp() {
   );
 }
 
-export default SignUp;
+export default SignUpPage;

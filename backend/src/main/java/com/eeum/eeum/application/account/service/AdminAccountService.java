@@ -1,11 +1,17 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.account.dto.request.OwnerInfoSearchDto;
 import com.eeum.eeum.application.account.dto.request.RejectRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationListResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
+import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
+import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
+import com.eeum.eeum.application.store.service.StoreLocationResolver;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
@@ -15,7 +21,10 @@ import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
+import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -26,6 +35,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 @Slf4j
@@ -33,12 +44,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AdminAccountService {
 
-    private final AccountMapper accountMapper;
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final TokenService tokenService;
     private final StoreRepository storeRepository;
+    private final StoreLocationResolver storeLocationResolver;
+    private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
+    private final AccountMapper accountMapper;
+    private final OwnerApplicationMapper ownerApplicationMapper;
+    private final StoreApprovalMapper storeApprovalMapper;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -57,13 +73,6 @@ public class AdminAccountService {
             AccountRole role,
             String keyword
     ) {
-        // TODO:
-        // 현재는 필터 파라미터만 받을 수 있게 시그니처를 맞춘 상태.
-        // 실제 status / role / keyword 검색은 QueryDSL 또는 Repository 커스텀 쿼리로 구현 필요.
-        //
-        // 예:
-        // return accountQueryRepository.searchAccounts(pageable, status, role, keyword)
-        //         .map(accountMapper::toAccountResponseDto);
 
         return accountRepository.findAll(pageable)
                 .map(accountMapper::toAccountResponseDto);
@@ -77,7 +86,7 @@ public class AdminAccountService {
         List<AccountRegion> regions = accountRegionRepository.findByAccount_AccountId(accountId);
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId).orElse(null);
 
-        return toAccountDetailResponseDto(account, regions, ownerInfo);
+        return accountMapper.toAccountDetailResponseDto(account, regions, ownerInfo);
     }
 
     // ===================== 관리자 - 회원 상태 변경 =====================
@@ -141,30 +150,19 @@ public class AdminAccountService {
     // ===================== 관리자 - 사장 승인/거절 =====================
 
     @Transactional(readOnly = true)
-    public Page<AccountDetailResponseDto> getOwnerRequests(
-            Pageable pageable,
-            ApprovalStatus approvalStatus
+    public Page<OwnerApplicationListResponseDto> getOwnerRequests(
+            OwnerInfoSearchDto condition,
+            Pageable pageable
     ) {
-        ApprovalStatus status = approvalStatus != null
-                ? approvalStatus
-                : ApprovalStatus.PENDING;
-
-        Page<OwnerInfo> ownerInfos;
-
-        if (status == ApprovalStatus.PENDING) {
-            ownerInfos = ownerInfoRepository
-                    .findByApprovalStatusAndReviewRequestedAtIsNotNull(status, pageable);
-        } else {
-            ownerInfos = ownerInfoRepository.findByApprovalStatus(status, pageable);
+        if (condition.getApprovalStatus() == null) {
+            condition.setApprovalStatus(ApprovalStatus.PENDING);
         }
 
-        return ownerInfos.map(ownerInfo ->
-                getAccountDetail(ownerInfo.getAccount().getAccountId())
-        );
+        return ownerInfoRepository.searchOwnerApplications(condition, pageable);
     }
 
     @Transactional(readOnly = true)
-    public OwnerResponseDto getOwnerApplicationDetail(Long ownerInfoId) {
+    public OwnerApplicationDetailResponseDto getOwnerApplicationDetail(Long ownerInfoId) {
         OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
@@ -173,7 +171,7 @@ public class AdminAccountService {
         Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
-        return accountMapper.toOwnerAdminStoreResponseDto(ownerInfo, store);
+        return toOwnerApplicationDetailDto(ownerInfo, store);
     }
 
     @Transactional
@@ -183,13 +181,44 @@ public class AdminAccountService {
 
         Account account = ownerInfo.getAccount();
 
-        ownerInfo.approve();
-        // 내부에서 approvalStatus = APPROVED, account.approveOwner() 처리
+        Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
-        storeRepository.findByAccount_AccountId(account.getAccountId())
-                .ifPresent(Store::open);
+        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
+        if (store.getRegion() == null || store.getLatitude() == null || store.getLongitude() == null) {
+            storeLocationResolver.resolveAndApplyLocation(store);
+        }
+
+        account.updatePrimaryRegion(store.getRegion().getRegionId());
+
+        boolean exists = accountRegionRepository
+                .existsByAccount_AccountIdAndRegion_RegionId(
+                        account.getAccountId(),
+                        store.getRegion().getRegionId()
+                );
+
+        if (!exists) {
+            AccountRegion accountRegion = AccountRegion.builder()
+                    .account(account)
+                    .region(store.getRegion())
+                    .verified(true)
+                    .verifiedAt(LocalDateTime.now())
+                    .build();
+
+            accountRegionRepository.save(accountRegion);
+        }
+
+        ownerInfo.approve();
+
+        createDefaultVisitReservationSettingIfNotExists(store);
 
         tokenService.deleteRefreshToken(account.getAccountId());
+
+        log.info("사장 승인: adminId={}, ownerInfoId={}, accountId={}, storeId={}",
+                adminId, ownerInfoId, account.getAccountId(), store.getStoreId());
     }
 
     @Transactional
@@ -207,27 +236,34 @@ public class AdminAccountService {
 
     // ===================== 내부 유틸 =====================
 
-    private AccountDetailResponseDto toAccountDetailResponseDto(
-            Account account,
-            List<AccountRegion> regions,
-            OwnerInfo ownerInfo
+    private OwnerApplicationDetailResponseDto toOwnerApplicationDetailDto(
+            OwnerInfo ownerInfo,
+            Store store
     ) {
-        return AccountDetailResponseDto.builder()
-                .accountId(account.getAccountId())
-                .email(account.getEmail())
-                .nickname(account.getNickname())
-                .name(account.getName())
-                .profileImageUrl(account.getProfileImageUrl())
-                .role(account.getRole().name())
-                .status(account.getStatus().name())
-                .provider(account.getProvider().name())
-                .emailVerified(account.isEmailVerified())
-                .regions(regions.stream()
-                        .map(region -> accountMapper.toRegionDto(region, account))
-                        .toList())
-                .ownerInfo(ownerInfo != null ? accountMapper.toOwnerAdminResponseDto(ownerInfo) : null)
-                .createdAt(account.getCreatedAt())
-                .deletedAt(account.getDeletedAt())
-                .build();
+        List<StoreBusinessHourResponseDto> businessHours = getBusinessHours(store.getStoreId());
+
+        return ownerApplicationMapper.toOwnerAdminStoreResponseDto(ownerInfo,store,businessHours);
+    }
+
+    private List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
+        return storeBusinessHourRepository.findByStore_StoreId(storeId)
+                .stream()
+                .sorted(Comparator.comparingInt(hour -> hour.getDayOfWeek().getOrder()))
+                .map(storeApprovalMapper::toBusinessHourDto)
+                .toList();
+    }
+
+    private void createDefaultVisitReservationSettingIfNotExists(Store store) {
+        boolean exists = storeVisitReservationSettingRepository
+                .existsByStore_StoreId(store.getStoreId());
+
+        if (exists) {
+            return;
+        }
+
+        StoreVisitReservationSetting setting =
+                StoreVisitReservationSetting.createDefault(store);
+
+        storeVisitReservationSettingRepository.save(setting);
     }
 }

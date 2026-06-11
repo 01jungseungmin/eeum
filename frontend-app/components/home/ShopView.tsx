@@ -1,39 +1,100 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 
-// 더미 데이터 내부 포함
-const SHOP_LIST = [
-  { id: 's1', name: '라떼가 맛있는 집', category: '카페', img: 'https://via.placeholder.com/150/333333/FFFFFF?text=Cafe' },
-  { id: 's2', name: '소문난 한식당', category: '식당', img: 'https://via.placeholder.com/150/555555/FFFFFF?text=Korean' },
-  { id: 's3', name: '매일 굽는 베이커리', category: '베이커리', img: 'https://via.placeholder.com/150/777777/FFFFFF?text=Bakery' },
-];
+import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { shopApi } from '../../api/shop';
+import { regionApi } from '../../api/region';
 
-export default function ShopView({ router }: { router: any }) {
+interface ShopViewProps {
+  router: any;
+  regionId: number | null;
+}
+
+export default function ShopView({ router, regionId }: ShopViewProps) {
+  const [shopList, setShopList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchHomeData = async () => {
+      setIsLoading(true);
+      try {
+        const res = await regionApi.getMyRegions();
+        const regions = res.data || [];
+        const primary = regions.find((r: any) => r.isPrimary === true);
+        
+        // ✨ 핵심 수정: primary가 없어도 API를 호출하거나 전체를 불러오도록 변경
+        // primary가 있다면 해당 동네 id로, 없다면 전체 조회(파라미터 없음)
+        const params: any = { size: 5 };
+        if (primary) {
+          params.regionId = primary.regionId;
+        }
+        
+        const shopRes = await shopApi.getShops(params); 
+        setShopList(shopRes.data?.content || []); 
+      } catch (e) {
+        console.error('홈 화면 상점 로딩 실패:', e);
+        // 에러가 나도 전체 조회를 시도할 수 있도록 추가 조치
+        try {
+          const fallbackRes = await shopApi.getShops({ size: 5 });
+          setShopList(fallbackRes.data?.content || []);
+        } catch (fallbackError) {}
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHomeData();
+  }, []);
+
+  const getCategoryName = (id: number) => {
+    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
+  };
+
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
       <View style={styles.bannerPlaceholder}>
         <Text style={{ color: '#fff' }}>이벤트 배너 영역</Text>
       </View>
+
       <View style={styles.sectionContainer}>
-        <View style={styles.sectionHeader}>
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={() => router.push({
+            pathname: '/shop/list' as any,
+            params: { regionId: regionId }
+          })}
+        >
           <Text style={styles.sectionTitle}>우리 동네 상점</Text>
           <Ionicons name="chevron-forward" size={20} color="#333" />
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {SHOP_LIST.map((shop) => (
-            <TouchableOpacity 
-              key={shop.id} 
-              style={styles.shopCard} 
-              onPress={() => router.push({ pathname: '/shop/[id]', params: { id: shop.id } })}
-            >
-              <Image source={{ uri: shop.img }} style={styles.shopImage} />
-              <Text style={styles.shopName}>{shop.name}</Text>
-              <Text style={styles.shopCategory}>{shop.category}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        </TouchableOpacity>
+
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#00A859" style={{ marginTop: 20 }} />
+        ) : shopList.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>우리 동네에는 아직 등록된 상점이 없어요.</Text>
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {shopList.map((shop) => {
+              const thumbnailUrl = shop.thumbnailUrl || 'https://via.placeholder.com/150/E8F5E9/00A859?text=Store';
+
+              return (
+                <TouchableOpacity
+                  key={shop.storeId}
+                  style={styles.shopCard}
+                  onPress={() => router.push(`/shop/${shop.storeId}` as any)}
+                >
+                  <Image source={{ uri: thumbnailUrl }} style={styles.shopImage} />
+                  <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
+                  <Text style={styles.shopCategory}>{shop.categoryName || getCategoryName(shop.categoryId)}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
     </ScrollView>
   );
@@ -48,4 +109,6 @@ const styles = StyleSheet.create({
   shopImage: { width: 120, height: 120, borderRadius: 8, marginBottom: 8 },
   shopName: { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 2 },
   shopCategory: { fontSize: 12, color: '#888' },
+  emptyState: { paddingVertical: 30, alignItems: 'center', paddingRight: 20 },
+  emptyText: { color: '#888', fontSize: 14 }
 });

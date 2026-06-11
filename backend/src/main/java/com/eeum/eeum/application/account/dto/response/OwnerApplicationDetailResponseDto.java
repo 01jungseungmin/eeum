@@ -1,16 +1,18 @@
 package com.eeum.eeum.application.account.dto.response;
 
+import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
 @Schema(description = "관리자 사장 신청 상세 응답")
-public class OwnerResponseDto {
+public class OwnerApplicationDetailResponseDto {
 
     @Schema(description = "사업자 정보 ID", example = "1")
     private Long ownerInfoId;
@@ -66,8 +68,8 @@ public class OwnerResponseDto {
     @Schema(description = "상점 설명", example = "동네 반찬을 판매하는 가게입니다.")
     private String storeDescription;
 
-    @Schema(description = "영업시간", example = "월~토 09:00~19:00")
-    private String businessHours;
+    @Schema(description = "영업시간", example = "월~토 10:00~20:00")
+    private List<StoreBusinessHourResponseDto> businessHours;
 
     @Schema(description = "상점 상태", example = "TEMP_CLOSED")
     private String storeStatus;

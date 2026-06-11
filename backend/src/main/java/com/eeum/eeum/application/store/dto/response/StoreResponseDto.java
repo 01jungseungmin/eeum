@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -27,7 +28,7 @@ public class StoreResponseDto {
     private String description;
 
     @Schema(description = "영업시간", example = "월~토 09:00~19:00")
-    private String businessHours;
+    private List<StoreBusinessHourResponseDto> businessHours;
 
     @Schema(description = "상점 상태", example = "OPEN")
     private String status;

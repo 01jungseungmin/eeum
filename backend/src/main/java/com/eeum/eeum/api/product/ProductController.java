@@ -1,10 +1,13 @@
 package com.eeum.eeum.api.product;
 
-import com.eeum.eeum.application.product.dto.request.*;
+import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
 import com.eeum.eeum.application.product.service.ProductImageService;
 import com.eeum.eeum.application.product.service.ProductService;
-import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -19,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Owner - Product", description = "사장 상품 관리 API")
+@Tag(name = "08. Owner - Product", description = "사장 상품 관리 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/owner/products")
@@ -41,18 +44,6 @@ public class ProductController {
     }
 
     @Operation(
-            summary = "상품 상세 조회",
-            description = "현재 로그인한 사장의 상점에 등록된 특정 상품의 상세 정보를 조회합니다. 본인 상점에 속한 상품만 조회할 수 있습니다."
-    )
-    @GetMapping("/{productId}")
-    public ResponseEntity<ApiResponse<ProductResponseDto>> getProduct(
-            @PathVariable Long productId
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        return ResponseEntity.ok(ApiResponse.success(productService.getProduct(accountId, productId)));
-    }
-
-    @Operation(
             summary = "상품 등록",
             description = "현재 로그인한 사장의 상점에 상품을 등록합니다. 상품 유형은 SALE(판매 상품), RESERVATION(예약 상품), MENU(메뉴 상품) 중 하나를 선택합니다. 사장 입점 심사 단계에서는 MENU 상품 1개 이상 등록 여부가 대표 메뉴 등록 완료 기준으로 사용됩니다."
     )
@@ -63,6 +54,18 @@ public class ProductController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         productService.createProduct(accountId, request);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(
+            summary = "상품 상세 조회",
+            description = "현재 로그인한 사장의 상점에 등록된 특정 상품의 상세 정보를 조회합니다. 본인 상점에 속한 상품만 조회할 수 있습니다."
+    )
+    @GetMapping("/{productId}")
+    public ResponseEntity<ApiResponse<ProductResponseDto>> getProduct(
+            @PathVariable Long productId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(productService.getProduct(accountId, productId)));
     }
 
     @Operation(
@@ -133,24 +136,14 @@ public class ProductController {
 
     @Operation(summary = "상품 이미지 등록 (최대 20장)")
     @PostMapping("/{productId}/images")
-    public ResponseEntity<ApiResponse<ImageResponseDto>> addProductImage(
+    public ResponseEntity<ApiResponse<List<ImageResponseDto>>> addProductImages(
             @PathVariable Long productId,
-            @Valid @RequestBody ImageUploadRequestDto request
+            @Valid @RequestBody ImageUploadListRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                productImageService.addImage(accountId, productId, request)));
-    }
-
-    @Operation(summary = "상품 이미지 삭제")
-    @DeleteMapping("/{productId}/images/{imageId}")
-    public ResponseEntity<ApiResponse<Void>> deleteProductImage(
-            @PathVariable Long productId,
-            @PathVariable Long imageId
-    ) {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        productImageService.deleteImage(accountId, productId, imageId);
-        return ResponseEntity.ok(ApiResponse.success());
+                productImageService.addImages(accountId, productId, request)
+        ));
     }
 
     @Operation(summary = "상품 대표 이미지 설정")
@@ -161,6 +154,17 @@ public class ProductController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         productImageService.setThumbnail(accountId, productId, imageId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "상품 이미지 삭제")
+    @DeleteMapping("/{productId}/images/{imageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteProductImage(
+            @PathVariable Long productId,
+            @PathVariable Long imageId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        productImageService.deleteImage(accountId, productId, imageId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 }

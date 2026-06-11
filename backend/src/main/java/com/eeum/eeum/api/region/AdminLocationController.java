@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Admin - Location", description = "관리자 지역 데이터 동기화 API")
+@Tag(name = "20. Admin - Location", description = "관리자 지역 데이터 동기화 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/admin/locations")

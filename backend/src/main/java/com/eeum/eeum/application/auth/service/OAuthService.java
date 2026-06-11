@@ -6,9 +6,8 @@ import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
 
 import java.util.Map;
 
@@ -26,6 +25,20 @@ public class OAuthService {
             case NAVER -> fetchNaverProfile(accessToken);
             default -> throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         };
+    }
+
+    public void validateToken(OAuthProvider provider, String accessToken, String expectedProviderId) {
+        try {
+            OAuthUserInfo userInfo = getUserInfo(provider, accessToken);
+
+            if (userInfo.getProviderId() == null || !userInfo.getProviderId().equals(expectedProviderId)) {
+                throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (RestClientException | ClassCastException e) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
     }
 
     // ======================== 카카오 ========================

@@ -5,6 +5,7 @@ import com.eeum.eeum.application.auth.dto.response.OAuthLoginResponseDto;
 import com.eeum.eeum.application.auth.dto.response.OAuthUserInfo;
 import com.eeum.eeum.application.auth.dto.response.ReAuthResponseDto;
 import com.eeum.eeum.application.auth.dto.response.TokenResponseDto;
+import com.eeum.eeum.application.product.service.ProductCategoryService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
@@ -47,6 +48,7 @@ public class AuthService {
     private final RedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final BusinessVerificationService businessVerificationService;
+    private final ProductCategoryService productCategoryService;
 
     // ===================== 이메일 인증 =====================
 
@@ -146,6 +148,8 @@ public class AuthService {
         );
 
         storeRepository.save(store);
+
+        productCategoryService.createDefaultCategories(store);
 
         emailService.consumeVerificationToken(request.getEmailVerificationToken());
 
@@ -448,7 +452,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
 
-        // TODO: oAuthClient.validateToken(account.getProvider(), request.getOauthToken());
+        oAuthService.validateToken(account.getProvider(), request.getOauthToken(), account.getProviderId());
     }
 
     private LocalDate parseOpeningDate(String openingDate) {

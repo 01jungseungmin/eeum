@@ -6,13 +6,14 @@ import com.eeum.eeum.application.account.dto.request.UpdateInfoRequestDto;
 import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.MyPageResponseDto;
-import com.eeum.eeum.application.account.dto.response.OwnerResponseDto;
+import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
+import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
-import com.eeum.eeum.common.util.MaskingUtil;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
@@ -36,7 +37,9 @@ public class AccountService {
     private final AccountRegionRepository accountRegionRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     private final AccountMapper accountMapper;
+    private final OwnerApplicationMapper ownerApplicationMapper;
 
     // ===================== 내 정보 조회 =====================
 
@@ -45,7 +48,7 @@ public class AccountService {
         Account account = getActiveAccount(accountId);
         List<AccountRegion> regions = accountRegionRepository.findByAccount_AccountId(accountId);
 
-        return toMyPageResponseDto(account, regions);
+        return accountMapper.toMyPageResponseDto(account, regions);
     }
 
     // ===================== 내 정보 수정 =====================
@@ -114,13 +117,18 @@ public class AccountService {
         // 2. 활성 회원 조회
         Account account = getActiveAccount(accountId);
 
-        // 3. 탈퇴 처리
+        // 3. 사장 계정이면 상점/상품/이벤트 상품 비활성화
+        if (account.getRole() == AccountRole.ROLE_OWNER) {
+            ownerStoreWithdrawalService.deactivateForWithdrawal(accountId);
+        }
+
+        // 4. 탈퇴 처리
         account.withdraw();
 
-        // 4. ReAuthToken 삭제
+        // 5. ReAuthToken 삭제
         tokenService.consumeReAuthToken(accountId);
 
-        // 5. Refresh Token 삭제
+        // 6. Refresh Token 삭제
         tokenService.deleteRefreshToken(accountId);
 
 
@@ -138,23 +146,22 @@ public class AccountService {
     // ===================== 사장 정보 조회 =====================
 
     @Transactional(readOnly = true)
-    public OwnerResponseDto getMyOwnerInfo(Long accountId) {
+    public OwnerApplicationDetailResponseDto getMyOwnerInfo(Long accountId) {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        return accountMapper.toOwnerResponseDto(ownerInfo);
+        return ownerApplicationMapper.toOwnerApplicationResponseDto(ownerInfo);
     }
 
     // ===================== 사장 정보 수정 =====================
 
     @Transactional
     public void updateOwnerInfo(Long accountId, OwnerInfoRequestDto request) {
-        Account account = getActiveAccount(accountId);
+        getActiveAccount(accountId);
 
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        // 사업자번호 변경 시 중복 확인
         if (request.getBusinessNumber() != null
                 && !request.getBusinessNumber().equals(ownerInfo.getBusinessNumber())
                 && ownerInfoRepository.existsByBusinessNumber(request.getBusinessNumber())) {
@@ -167,24 +174,6 @@ public class AccountService {
     }
 
     // ===================== 내부 유틸 =====================
-
-    private MyPageResponseDto toMyPageResponseDto(Account account, List<AccountRegion> regions) {
-        return MyPageResponseDto.builder()
-                .accountId(account.getAccountId())
-                .email(MaskingUtil.maskEmail(account.getEmail()))
-                .nickname(account.getNickname())
-                .name(MaskingUtil.maskName(account.getName()))
-                .profileImageUrl(account.getProfileImageUrl())
-                .role(account.getRole().name())
-                .status(account.getStatus().name())
-                .provider(account.getProvider().name())
-                .primaryRegionId(account.getPrimaryRegionId())
-                .regions(regions.stream()
-                        .map(region -> accountMapper.toRegionDto(region, account))
-                        .toList())
-                .createdAt(account.getCreatedAt())
-                .build();
-    }
 
     private Account getActiveAccount(Long accountId) {
         Account account = accountRepository.findById(accountId)
@@ -205,5 +194,4 @@ public class AccountService {
         return request.getNickname() == null
                 && request.getProfileImageUrl() == null;
     }
-
 }

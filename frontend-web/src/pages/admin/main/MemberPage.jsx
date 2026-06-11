@@ -42,43 +42,27 @@ const PageButton = styled.button`
 
 function MemberPage() {
   const [activeTab, setActiveTab] = useState('all');
-  const [currentStatusFilter, setCurrentStatusFilter] = useState('ALL'); // 'ALL', 'ACTIVE', 'SUSPENDED'
+  const [currentStatusFilter, setCurrentStatusFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState([]);
-  const [memberList, setMemberList] = useState([]);
-  const [pageInfo, setPageInfo] = useState({
-    totalElements: 0,
-    suspendedCount: 0,
-  });
+  const [originMemberList, setOriginMemberList] = useState([]);
 
   const [currentPage, setCurrentPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 10;
 
-  const fetchMembers = () => {
-    const token =
-      localStorage.getItem('accessToken') ||
-      sessionStorage.getItem('accessToken');
+  const token =
+    localStorage.getItem('accessToken') ||
+    sessionStorage.getItem('accessToken');
+  const headers = { Authorization: token ? `Bearer ${token}` : '' };
 
+  const fetchAllMembers = () => {
     axios
-      .get('http://localhost:8080/admin/accounts', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
+      .get('http://localhost:8080/admin/accounts?page=0&size=1000', {
+        headers,
       })
       .then((response) => {
         if (response.data && response.data.success) {
           const apiData = response.data.data;
-
-          setMemberList(apiData.content || []);
-
-          const total = apiData.totalElements || apiData.content.length;
-          const suspended = (apiData.content || []).filter(
-            (m) => m.status === 'SUSPENDED',
-          ).length;
-
-          setPageInfo({
-            totalElements: total,
-            suspendedCount: suspended,
-          });
+          setOriginMemberList(apiData.content || []);
         }
       })
       .catch((error) => {
@@ -87,35 +71,70 @@ function MemberPage() {
   };
 
   useEffect(() => {
-    fetchMembers(currentPage);
-  }, [currentPage]);
+    fetchAllMembers();
+  }, []);
 
+  const tabCounts = useMemo(() => {
+    // 탈퇴하지 않은 정상 유저들 베이스
+    const activeUsers = originMemberList.filter(
+      (m) => m.status !== 'WITHDRAWN',
+    );
+
+    return {
+      all: activeUsers.length,
+      general: activeUsers.filter((m) => m.role === 'ROLE_USER').length,
+      owner: activeUsers.filter((m) => m.role === 'ROLE_OWNER').length,
+      suspended: activeUsers.filter((m) => m.status === 'SUSPENDED').length,
+      withdrawn: originMemberList.filter((m) => m.status === 'WITHDRAWN')
+        .length,
+    };
+  }, [originMemberList]);
+
+  const filteredList = useMemo(() => {
+    let result = [...originMemberList];
+
+    // '탈퇴 회원' 탭이 아닐 때는 목록에서 탈퇴자들을 기본적으로 숨김
+    if (activeTab !== 'withdrawn') {
+      result = result.filter((m) => m.status !== 'WITHDRAWN');
+
+      if (activeTab === 'general') {
+        result = result.filter((m) => m.role === 'ROLE_USER');
+      } else if (activeTab === 'owner') {
+        result = result.filter((m) => m.role === 'ROLE_OWNER');
+      } else if (activeTab === 'suspended') {
+        result = result.filter((m) => m.status === 'SUSPENDED');
+      }
+
+      // 상단 드롭다운 상태 필터 적용
+      if (currentStatusFilter !== 'ALL') {
+        result = result.filter((m) => m.status === currentStatusFilter);
+      }
+    } else {
+      // '탈퇴 회원' 탭일 때는 오직 WITHDRAWN 상태인 회원만 노출
+      result = result.filter((m) => m.status === 'WITHDRAWN');
+    }
+
+    return result;
+  }, [activeTab, currentStatusFilter, originMemberList]);
+
+  // 필터링된 결과 개수에 맞춰 하단 총 페이지 수를 계산
+  const totalPages = useMemo(() => {
+    const pages = Math.ceil(filteredList.length / PAGE_SIZE);
+    return pages === 0 ? 1 : pages;
+  }, [filteredList]);
+
+  // 현재 페이지 번호(0, 1...)에 맞춰 최종 테이블에 10개씩만 슬라이스해서 보여줍니다.
+  const pagedMemberList = useMemo(() => {
+    const start = currentPage * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return filteredList.slice(start, end);
+  }, [currentPage, filteredList]);
+
+  // 탭이나 상단 필터가 바뀌면 무조건 페이지를 1페이지(0)로 초기화
   useEffect(() => {
     setCurrentPage(0);
     setSelectedIds([]);
   }, [activeTab, currentStatusFilter]);
-
-  const filteredMemberList = useMemo(() => {
-    let result = [...memberList];
-
-    if (activeTab === 'general') {
-      result = result.filter((m) => m.role === 'ROLE_USER');
-    } else if (activeTab === 'owner') {
-      result = result.filter((m) => m.role === 'ROLE_OWNER');
-    } else if (activeTab === 'suspended') {
-      result = result.filter((m) => m.status === 'SUSPENDED');
-    }
-
-    if (currentStatusFilter !== 'ALL') {
-      result = result.filter((m) => m.status === currentStatusFilter);
-    }
-
-    return result;
-  }, [activeTab, currentStatusFilter, memberList]);
-
-  useEffect(() => {
-    setSelectedIds([]);
-  }, [activeTab]);
 
   const handleSelectRow = (id) => {
     setSelectedIds((prev) =>
@@ -123,39 +142,144 @@ function MemberPage() {
     );
   };
 
-  // 상단 전체 헤더 체크박스 토글 핸들러
+  // 전체 선택은 현재 눈에 보이는 페이지의 10개 기준 처리
   const handleSelectAll = () => {
-    if (selectedIds.length === memberList.length) {
-      setSelectedIds([]);
+    const visibleIds = pagedMemberList.map((m) => m.accountId);
+    const isAllVisibleSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((id) => selectedIds.includes(id));
+
+    if (isAllVisibleSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
     } else {
-      setSelectedIds(memberList.map((m) => m.accountId));
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
     }
+  };
+
+  // 정지/해제 API (단건/일괄 모두 처리)
+  const handleToggleSuspend = (targetId, targetName, currentStatus) => {
+    const idsToProcess = targetId ? [targetId] : selectedIds;
+    if (idsToProcess.length === 0) {
+      alert('대상을 선택해 주세요.');
+      return;
+    }
+
+    // 단건 처리일 때 현재 상태에 따라 멘트와 URL 분기
+    // 일괄 처리(상단 바 버튼)일 때는 기본적으로 '정지'로 작동하게 설정
+    const isRelease = targetId && currentStatus === 'SUSPENDED';
+
+    const confirmMessage = isRelease
+      ? `[${targetName}] 회원의 정지를 해제하시겠습니까?`
+      : targetId
+        ? `[${targetName}] 회원을 정지하시겠습니까?`
+        : `선택한 ${idsToProcess.length}명의 회원을 정말로 정지하시겠습니까?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    const requests = idsToProcess.map((accountId) => {
+      const url = isRelease
+        ? `http://localhost:8080/admin/accounts/${accountId}/activate` // 정지 해제 API
+        : `http://localhost:8080/admin/accounts/${accountId}/suspend`; // 정지 API
+      return axios.patch(
+        url,
+        {},
+        {
+          headers,
+        },
+      );
+    });
+
+    axios
+      .all(requests)
+      .then(() => {
+        alert(
+          isRelease
+            ? `${targetName} 회원의 정지가 해제되었습니다.`
+            : '처리가 완료되었습니다.',
+        );
+        setSelectedIds([]);
+        fetchAllMembers();
+      })
+      .catch((error) => {
+        console.error('정지/해제 처리 중 에러:', error);
+        alert('요청 처리 중 오류가 발생했습니다.');
+      });
+  };
+
+  // 강제 탈퇴 API
+  const handleActionWithdraw = (accountId, name) => {
+    if (!window.confirm(`[${name}] 회원을 정말로 강제 탈퇴시키겠습니까?`))
+      return;
+    axios
+      .delete(`http://localhost:8080/admin/accounts/${accountId}`, {
+        headers,
+      })
+      .then(() => {
+        alert(`${name} 회원이 탈퇴 처리되었습니다.`);
+        fetchAllMembers();
+      })
+      .catch((error) => alert('탈퇴 처리 중 오류가 발생했습니다.'));
+  };
+
+  // 탈퇴 복구 API
+  const handleRestoreMember = (accountId, name) => {
+    if (
+      !window.confirm(
+        `[${name}] 회원의 탈퇴를 취소하고 계정을 복구하시겠습니까?`,
+      )
+    )
+      return;
+
+    axios
+      .patch(
+        `http://localhost:8080/admin/accounts/${accountId}/withdrawal/cancel`,
+        {},
+        {
+          headers,
+        },
+      )
+      .then((response) => {
+        if (response.data && response.data.success) {
+          alert(`${name} 회원의 탈퇴 해제(복구)가 완료되었습니다.`);
+          fetchAllMembers();
+        }
+      })
+      .catch((error) => {
+        console.error('탈퇴 복구 실패:', error);
+        alert(
+          error.response?.data?.error?.message ||
+            '탈퇴 해제 처리 중 오류가 발생했습니다.',
+        );
+      });
   };
 
   return (
     <div style={{ padding: '10px' }}>
-      <MemberOverview
-        total={pageInfo.totalElements}
-        suspended={pageInfo.suspendedCount}
-      />
+      <MemberOverview total={tabCounts.all} suspended={tabCounts.suspended} />
       <MemberFilterBar
         selectedCount={selectedIds.length}
-        onBulkSuspend={() => alert('선택한 회원을 정지합니다.')}
-        onBulkActivate={() => alert('선택한 회원의 정지를 해제합니다.')}
+        onBulkSuspend={() => handleToggleSuspend()}
+        onBulkActivate={() => handleActionWithdraw()}
         onApplyFilter={(status) => setCurrentStatusFilter(status)}
       />
+
       <MemberTabs
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        rawData={memberList}
+        tabCounts={tabCounts}
       />
+
       <MemberTable
-        data={filteredMemberList}
+        data={pagedMemberList}
         selectedIds={selectedIds}
         onSelectRow={handleSelectRow}
         onSelectAll={handleSelectAll}
+        onActionSuspend={handleToggleSuspend}
+        onActionWithdraw={handleActionWithdraw}
+        onActionRestore={handleRestoreMember}
       />
-      {totalPages > 0 && (
+
+      {totalPages > 1 && (
         <PaginationContainer>
           <PageButton
             disabled={currentPage === 0}
@@ -172,7 +296,6 @@ function MemberPage() {
               {index + 1}
             </PageButton>
           ))}
-
           <PageButton
             disabled={currentPage === totalPages - 1}
             onClick={() => setCurrentPage((prev) => prev + 1)}

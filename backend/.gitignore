@@ -26,6 +26,10 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 
+# Firebase service account
+src/main/resources/firebase/service-account-key.json
+src/main/resources/firebase/
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/

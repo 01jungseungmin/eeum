@@ -19,6 +19,8 @@ import {
   FileText,
   FolderTree,
   UserCheck,
+  Settings,
+  LogOut,
 } from 'lucide-react';
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
@@ -176,6 +178,24 @@ export const OWNER_MENU_CONFIG = [
       },
     ],
   },
+  {
+    group: '설정',
+    items: [
+      {
+        id: 'settings',
+        name: '상점 설정',
+        path: '/settings',
+        icon: <Settings {...iconProps} />, // lucide-react에서 Settings 추가 필요
+      },
+      {
+        id: 'logout',
+        name: '로그아웃',
+        path: '#', // 실제 페이지 경로가 아님을 명시
+        action: 'LOGOUT', // 로그아웃을 실행하겠다는 명시적 표시
+        icon: <LogOut {...iconProps} />, // lucide-react에서 LogOut 추가 필요
+      },
+    ],
+  },
 ];
 
 // 관리자 전용 메뉴
@@ -240,6 +260,24 @@ export const ADMIN_MENU_CONFIG = [
         path: '/admin/logs',
         icon: <ClipboardList {...iconProps} />,
         subtitle: '관리자 계정들의 활동 행동 로그를 조회합니다.',
+      },
+    ],
+  },
+  {
+    group: '설정',
+    items: [
+      {
+        id: 'admin-settings',
+        name: '설정',
+        path: '/admin/settings',
+        icon: <Settings {...iconProps} />,
+      },
+      {
+        id: 'admin-logout',
+        name: '로그아웃',
+        path: '#', // 실제 페이지 경로가 아님을 명시
+        action: 'LOGOUT', // 로그아웃을 실행하겠다는 명시적 표시
+        icon: <LogOut {...iconProps} />,
       },
     ],
   },

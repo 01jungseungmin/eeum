@@ -1,6 +1,5 @@
 package com.eeum.eeum.common.entity;
 
-import com.eeum.eeum.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
@@ -28,14 +27,6 @@ public abstract class ImageBase extends BaseEntity {
         this.isThumbnail = isThumbnail;
     }
 
-    public void updateImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
-    }
-
-    public void updateDisplayOrder(int displayOrder) {
-        this.displayOrder = displayOrder;
-    }
-
     public void markAsThumbnail() {
         this.isThumbnail = true;
     }
@@ -51,4 +42,5 @@ public abstract class ImageBase extends BaseEntity {
     public void changeDisplayOrder(int displayOrder) {
         this.displayOrder = displayOrder;
     }
+
 }

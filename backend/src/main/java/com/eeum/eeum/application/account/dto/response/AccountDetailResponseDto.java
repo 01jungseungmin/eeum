@@ -43,7 +43,7 @@ public class AccountDetailResponseDto {
     private List<AccountRegionResponseDto> regions;
 
     @Schema(description = "사업자 정보 (사장인 경우)")
-    private OwnerResponseDto ownerInfo;
+    private OwnerApplicationDetailResponseDto ownerInfo;
 
     @Schema(description = "가입일시", example = "2026-05-06T12:00:00")
     private LocalDateTime createdAt;

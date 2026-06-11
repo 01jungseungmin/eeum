@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
+import { useRouter } from 'expo-router';
 
 interface HomeHeaderProps {
   primaryRegionName: string;
@@ -18,6 +19,7 @@ export default function HomeHeader({
   setActiveTab,
   onSearch
 }: HomeHeaderProps) {
+  const router = useRouter();
   return (
     <View style={styles.headerContainer}>
       <View style={styles.headerTop}>
@@ -30,7 +32,7 @@ export default function HomeHeader({
           <TouchableOpacity style={{ marginRight: 15 }}>
             <Ionicons name="notifications-outline" size={24} color="#333" />
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/cart')}>
             <Ionicons name="cart-outline" size={24} color="#333" />
           </TouchableOpacity>
         </View>

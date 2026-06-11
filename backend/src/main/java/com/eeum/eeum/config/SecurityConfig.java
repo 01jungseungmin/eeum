@@ -35,7 +35,11 @@ public class SecurityConfig {
     // ===================== 인증 없이 허용할 GET 경로 =====================
     private static final String[] PUBLIC_GET = {
             "/stores/**",
-            "/used-products/**"
+            "/used-products/**",
+            "/products/**",
+            "/regions/search",
+            "/regions/nearby",
+            "/event-products/**"
     };
 
     // ===================== 인증 없이 허용할 POST 경로 =====================
@@ -52,7 +56,8 @@ public class SecurityConfig {
             "/auth/password/verify",
             "/auth/password/reset",
             "/auth/business/verify",
-            "/admin/locations/sync"
+            "/admin/locations/sync",
+            "/payments/webhook"
     };
 
     private static final String[] SWAGGER_PATHS = {
@@ -97,6 +102,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
 
+
                         // PortOne Webhook은 JWT 인증 대신 서명 검증으로 처리
                         .requestMatchers(HttpMethod.POST, "/payments/webhook").permitAll()
 
@@ -106,7 +112,8 @@ public class SecurityConfig {
                                 "/owner/stores/me/business-info",
                                 "/owner/stores/me/settlement-account",
                                 "/owner/stores/me/apply",
-                                "/owner/stores/me/representative-menu"
+                                "/owner/stores/me/representative-menu",
+                                "/owner/stores/me/approval/business-hours"
                         ).hasAnyRole("USER", "OWNER")
 
                         // 관리자 전용

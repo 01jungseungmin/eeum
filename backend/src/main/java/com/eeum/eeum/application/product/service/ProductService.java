@@ -1,10 +1,15 @@
 package com.eeum.eeum.application.product.service;
 
-import com.eeum.eeum.application.product.dto.request.*;
+import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
+import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
+import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductCategory;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
-import com.eeum.eeum.domain.product.enums.ProductType;
+import com.eeum.eeum.domain.product.repository.ProductCategoryRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -14,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -24,24 +30,33 @@ public class ProductService {
 
     private final StoreRepository storeRepository;
     private final ProductRepository productRepository;
+    private final ProductCategoryRepository productCategoryRepository;
+    private final ProductMapper productMapper;
 
     @Transactional(readOnly = true)
     public List<ProductResponseDto> getMyProducts(Long accountId) {
         Store store = getStore(accountId);
         return productRepository.findByStore_StoreId(store.getStoreId())
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toProductResponseDto)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public ProductResponseDto getProduct(Long accountId, Long productId) {
-        return toDto(getProductWithOwnerCheck(accountId, productId));
+        return productMapper.toProductResponseDto(getProductWithOwnerCheck(accountId, productId));
     }
 
     @Transactional
     public void createProduct(Long accountId, ProductCreateRequestDto request) {
         Store store = getStore(accountId);
+
+        ProductCategory productCategory = productCategoryRepository
+                .findByProductCategoryIdAndStore_StoreId(
+                        request.getCategoryId(),
+                        store.getStoreId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
 
         BigDecimal price = request.getBasePrice() == null
                 ? BigDecimal.ZERO
@@ -51,7 +66,7 @@ public class ProductService {
                 ? "" : request.getDescription();
 
         Product product = Product.create(
-                store, request.getName(), description,
+                store, productCategory, request.getName(), description,
                 price, request.getStockQuantity(), request.getProductType()
         );
 
@@ -64,7 +79,15 @@ public class ProductService {
                                             ProductUpdateRequestDto request) {
         Product product = getProductWithOwnerCheck(accountId, productId);
 
+        ProductCategory productCategory = productCategoryRepository
+                .findByProductCategoryIdAndStore_StoreId(
+                        request.getCategoryId(),
+                        product.getStore().getStoreId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
+
         product.update(
+                productCategory,
                 request.getName(),
                 request.getDescription() == null ? "" : request.getDescription(),
                 BigDecimal.valueOf(request.getBasePrice()),
@@ -73,7 +96,7 @@ public class ProductService {
         );
 
         log.info("상품 수정: productId={}", productId);
-        return toDto(product);
+        return productMapper.toProductResponseDto(product);
     }
 
     @Transactional
@@ -121,19 +144,5 @@ public class ProductService {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
         }
         return product;
-    }
-
-    private ProductResponseDto toDto(Product product) {
-        return ProductResponseDto.builder()
-                .productId(product.getProductId())
-                .name(product.getName())
-                .description(product.getDescription())
-                .price(product.getPrice())
-                .stock(product.getStock())
-                .productType(product.getProductType().name())
-                .status(product.getStatus().name())
-                .viewCount(product.getViewCount())
-                .createdAt(product.getCreatedAt())
-                .build();
     }
 }

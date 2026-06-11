@@ -97,7 +97,6 @@ function MemberFilterBar({
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   const handleFilterSubmit = () => {
-    // 💡 부모 컴포넌트가 넘겨준 필터 적용 함수 호출
     if (onApplyFilter) {
       onApplyFilter(statusFilter);
     }
