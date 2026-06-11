@@ -41,19 +41,31 @@ export default function MapScreen() {
 
   // 3. 생명주기 (Effect)
   useEffect(() => {
-    if (!debouncedSearchText.trim()) {
+    if (!debouncedSearchText.trim() || !currentCenter) {
       setSearchResults([]);
       return;
     }
 
     const fetchSearchResults = async () => {
       try {
-        const currentRegionId = 223; // 테스트 고정
+        // 1. 현재 지도 좌표로 동네 찾기
+        const regionRes = await regionApi.getNearbyRegions(currentCenter.lat, currentCenter.lng);
+        const nearbyRegions = regionRes.data || regionRes || [];
+        
+        if (nearbyRegions.length === 0) {
+          setSearchResults([]);
+          return;
+        }
+
+        const currentRegionId = nearbyRegions[0].regionId;
+
+        // 2. 찾은 동네 ID로 상점 검색
         const shopRes = await shopApi.getShops({ 
           regionId: currentRegionId,
           keyword: debouncedSearchText.trim(),
           size: 15 
         });
+        
         const data = shopRes.content || shopRes.data?.content || shopRes.data || shopRes || [];
         setSearchResults(data);
       } catch (error) {
@@ -62,7 +74,7 @@ export default function MapScreen() {
     };
 
     fetchSearchResults();
-  }, [debouncedSearchText]);
+  }, [debouncedSearchText, currentCenter]);
 
   useEffect(() => {
     if (currentCenter && !isSearching) {
@@ -111,9 +123,21 @@ export default function MapScreen() {
 
   const fetchShopsInArea = async (lat: number, lng: number, catId: number) => {
     try {
-      const currentRegionId = 223; 
+      // 1단계: 지도가 멈춘 곳의 위경도로 주변 동네 ID 가져오기
+      const regionRes = await regionApi.getNearbyRegions(lat, lng);
+      const nearbyRegions = regionRes.data || regionRes || []; 
+      
+      // 만약 조회된 동네가 없으면(빈 배열), 마커를 지우고 함수 종료
+      if (nearbyRegions.length === 0) {
+        shopsRef.current = [];
+        webviewRef.current?.injectJavaScript(`window.renderShops('[]'); true;`);
+        return; 
+      }
+
+      const currentRegionId = nearbyRegions[0].regionId; 
       const apiCategoryId = catId === 0 ? undefined : catId;
 
+      // 2단계: 동네 ID와 카테고리를 넣어 실제 상점들 조회
       const shopRes = await shopApi.getShops({ 
         regionId: currentRegionId,
         categoryId: apiCategoryId,
@@ -123,9 +147,11 @@ export default function MapScreen() {
       const realShops = shopRes.content || shopRes.data?.content || shopRes.data || shopRes || [];
       shopsRef.current = realShops;
 
+      // 3단계: 조회된 상점을 지도 웹뷰로 주입하여 렌더링
       const safeJson = JSON.stringify(realShops).replace(/'/g, "\\'");
       const runJS = `window.renderShops('${safeJson}'); true;`;
       webviewRef.current?.injectJavaScript(runJS);
+      
     } catch (e) {
       console.error('지도 상점 로딩 실패:', e);
     }

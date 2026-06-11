@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '../CustomText'; // 경로가 다르면 맞게 수정해 주세요!
+import { Text } from '../CustomText';
 
 interface ShopBottomSheetProps {
   shop: any;
