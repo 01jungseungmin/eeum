@@ -80,7 +80,6 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     STORE_CATEGORY_REQUIRED( "STORE_006", "상점 업종을 선택해야 합니다.",HttpStatus.BAD_REQUEST),
     STORE_NOTICE_NOT_FOUND("STORE_007", "공지를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 
-
     // ===================== 상품 (PRODUCT) =====================
     PRODUCT_NOT_FOUND("PRODUCT_001", "존재하지 않는 상품입니다", HttpStatus.NOT_FOUND),
     PRODUCT_OUT_OF_STOCK("PRODUCT_002", "재고가 부족합니다", HttpStatus.BAD_REQUEST),
@@ -91,6 +90,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PRODUCT_OPTION_ITEM_NOT_FOUND("OPTION_007", "옵션 항목을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     PRODUCT_REQUIRED_OPTION_MISSING("PRODUCT_008", "필수 옵션을 선택해 주세요", HttpStatus.BAD_REQUEST),
     PRODUCT_NOT_PURCHASABLE("PRODUCT_009", "구매할 수 없는 상품입니다.", HttpStatus.BAD_REQUEST),
+    PRODUCT_IMAGE_NOT_FOUND("PRODUCT_010", "상품 이미지를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 
     // ===================== 이벤트 상품 (EVENT) =====================
     EVENT_NOT_FOUND("EVENT_001", "존재하지 않는 이벤트 상품입니다", HttpStatus.NOT_FOUND),

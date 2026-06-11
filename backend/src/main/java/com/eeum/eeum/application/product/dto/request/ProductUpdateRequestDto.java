@@ -30,14 +30,6 @@ public class ProductUpdateRequestDto {
     @PositiveOrZero(message = "기본 가격은 0원 이상이어야 합니다.")
     private Integer basePrice;
 
-    @Schema(description = "재고 수량", example = "15")
-    @PositiveOrZero(message = "재고 수량은 0 이상이어야 합니다.")
-    private Integer stockQuantity;
-
-    @Schema(description = "예약 가능 인원. 예약 상품에서 사용합니다.", example = "4")
-    @PositiveOrZero(message = "예약 가능 인원은 0 이상이어야 합니다.")
-    private Integer reservationCapacity;
-
     @Schema(description = "상품 카테고리 ID", example = "1")
     private Long categoryId;
 }

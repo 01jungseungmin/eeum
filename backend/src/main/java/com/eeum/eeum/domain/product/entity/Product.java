@@ -97,6 +97,20 @@ public class Product extends BaseEntity {
         this.productType = productType;
     }
 
+    public void update_info(
+            ProductCategory productCategory,
+            String name,
+            String description,
+            BigDecimal price,
+            ProductType productType
+    ) {
+        this.productCategory = productCategory;
+        this.name = name;
+        this.description = description;
+        this.price = price;
+        this.productType = productType;
+    }
+
     public void inactive() {
         this.status = ProductStatus.INACTIVE;
     }
