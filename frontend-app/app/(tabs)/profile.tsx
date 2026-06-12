@@ -31,7 +31,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // ✨ 클릭 이벤트를 받을 수 있도록 onPress 프롭스 추가
+  // 클릭 이벤트를 받을 수 있도록 onPress 프롭스 추가
   const MenuItem = ({ icon, title, onPress }: { icon?: string; title: string; onPress?: () => void }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuLeft}>
@@ -50,7 +50,7 @@ export default function ProfileScreen() {
           <Text style={styles.activeTabText}>동네생활</Text>
         </TouchableOpacity>
         
-        {/* ✨ 중고거래 탭 주석 처리 */}
+        {/* 중고거래 탭 주석 처리 */}
         {/* <TouchableOpacity style={styles.topTab}>
           <Text style={styles.inactiveTabText}>중고거래</Text>
         </TouchableOpacity> 
@@ -80,7 +80,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ✨ 메뉴 섹션 - 나의 중고 거래 (전체 주석 처리) */}
+        {/* 메뉴 섹션 - 나의 중고 거래 (전체 주석 처리) */}
         {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 중고 거래</Text>
           <MenuItem title="찜 목록" />
@@ -93,7 +93,7 @@ export default function ProfileScreen() {
         {/* 메뉴 섹션 - 나의 동네 상점 거래 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 동네 상점 거래</Text>
-          {/* ✨ 라우터 이동 기능 연결 (경로는 추후 생성할 파일 위치로 임시 지정) */}
+          {/* 라우터 이동 기능 연결 (경로는 추후 생성할 파일 위치로 임시 지정) */}
           <MenuItem 
             title="찜 목록" 
             onPress={() => router.push('/favorites' as any)} 
@@ -101,6 +101,10 @@ export default function ProfileScreen() {
           <MenuItem 
             title="동네 상점 거래 내역" 
             onPress={() => router.push('/history' as any)} 
+          />
+          <MenuItem 
+            title="동네 상점 예약 내역" 
+            onPress={() => router.push('/reservations' as any)} 
           />
           <MenuItem 
             title="작성한 리뷰" 
