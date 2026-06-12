@@ -67,6 +67,68 @@ export default function ReviewWriteScreen() {
     }
   };
 
+  // presigned로 할 때
+  // const handleSubmit = async () => {
+  //   if (!content.trim()) {
+  //     Alert.alert('알림', '리뷰 내용을 입력해주세요.');
+  //     return;
+  //   }
+
+  //   try {
+  //     setIsSubmitting(true);
+      
+  //     let uploadedImageUrl = ''; // 최종적으로 S3에 올라간 이미지 주소
+
+  //     // 📸 이미지가 있을 경우에만 Presigned URL 1~2단계 실행
+  //     if (image) {
+  //       // ✨ [1단계] 백엔드에 Presigned URL 발급 요청 (API 추가 필요)
+  //       // 확장자나 파일명을 보내야 할 수도 있습니다. 파트너와 상의가 필요해요!
+  //       const ext = image.uri.split('.').pop(); 
+  //       const urlRes = await reviewApi.getPresignedUrl({ extension: ext });
+        
+  //       // 백엔드가 내려준 S3 업로드용 임시 주소와, 나중에 쓰일 실제 이미지 주소
+  //       const presignedUrl = urlRes.presignedUrl; 
+  //       const finalImageUrl = urlRes.imageUrl;
+
+  //       // ✨ [2단계] S3(또는 클라우드)에 이미지 직접 업로드
+  //       // Expo에서는 로컬 uri를 Blob 형태로 변환해서 올려야 합니다.
+  //       const response = await fetch(image.uri);
+  //       const blob = await response.blob();
+
+  //       await fetch(presignedUrl, {
+  //         method: 'PUT',
+  //         body: blob,
+  //         headers: {
+  //           'Content-Type': `image/${ext}`, // 예: image/jpeg
+  //         },
+  //       });
+
+  //       // 업로드 성공 시 최종 이미지 주소 저장
+  //       uploadedImageUrl = finalImageUrl;
+  //     }
+
+  //     // ✨ [3단계] 리뷰 내용과 최종 이미지 주소를 묶어서 백엔드에 전송 (기존 코드와 유사)
+  //     const payload = {
+  //       orderId: orderIdNum, 
+  //       rating: rating,
+  //       content: content,
+  //       // 이미지가 없으면 빈 배열, 있으면 업로드된 주소를 배열에 담아 보냅니다.
+  //       imageUrls: uploadedImageUrl ? [uploadedImageUrl] : [] 
+  //     };
+
+  //     await reviewApi.createReview(storeIdNum, payload);
+
+  //     Alert.alert('성공', '리뷰가 소중하게 등록되었습니다!');
+  //     router.back(); 
+
+  //   } catch (error) {
+  //     console.error('리뷰 등록 에러:', error);
+  //     Alert.alert('오류', '리뷰 등록에 실패했습니다.');
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
