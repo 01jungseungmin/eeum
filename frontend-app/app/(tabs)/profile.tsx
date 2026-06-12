@@ -14,33 +14,26 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   // 로그아웃 함수
-const handleLogout = async () => {
+  const handleLogout = async () => {
     try {
-      // 1. 금고에서 리프레시 토큰 꺼내오기
       const refreshToken = await getRefreshToken();
-
-      // 2. 백엔드에 로그아웃 요청 (에러의 원인이었던 Body에 데이터 담기!)
       if (refreshToken) {
         await client.post('/auth/logout', {
           refreshToken: refreshToken
         });
       }
     } catch (error) {
-      // 서버에서 에러가 나더라도 당황하지 않고 로그만 남깁니다.
       console.error('서버 로그아웃 통신 에러:', error);
     } finally {
-      // 3. 서버 통신 성공 여부와 상관없이, 내 폰의 토큰은 무조건 싹 비웁니다.
       await clearTokens();
-
-      // 4. 사용자에게 알림을 주고 로그인 화면(또는 최상위 라우터)으로 쫓아냅니다.
       Alert.alert('알림', '성공적으로 로그아웃 되었습니다.');
       router.replace('/(auth)/login'); 
     }
   };
 
-  // 공통 리스트 아이템 컴포넌트
-  const MenuItem = ({ icon, title }: { icon?: string; title: string }) => (
-    <TouchableOpacity style={styles.menuItem}>
+  // ✨ 클릭 이벤트를 받을 수 있도록 onPress 프롭스 추가
+  const MenuItem = ({ icon, title, onPress }: { icon?: string; title: string; onPress?: () => void }) => (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuLeft}>
         {icon && <Ionicons name={icon as any} size={20} color="#555" style={{marginRight: 10}} />}
         <Text style={styles.menuText}>{title}</Text>
@@ -51,14 +44,18 @@ const handleLogout = async () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 상단 탭 버튼 (동네생활 / 중고거래) */}
+      {/* 상단 탭 버튼 */}
       <View style={styles.topTabContainer}>
         <TouchableOpacity style={[styles.topTab, styles.activeTab]}>
           <Text style={styles.activeTabText}>동네생활</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.topTab}>
+        
+        {/* ✨ 중고거래 탭 주석 처리 */}
+        {/* <TouchableOpacity style={styles.topTab}>
           <Text style={styles.inactiveTabText}>중고거래</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> 
+        */}
+        
         <View style={styles.topIcons}>
           <Ionicons name="notifications-outline" size={24} color="#333" style={{marginRight: 15}} />
           <Ionicons name="menu-outline" size={28} color="#333" />
@@ -83,21 +80,32 @@ const handleLogout = async () => {
           </View>
         </View>
 
-        {/* 메뉴 섹션 - 나의 중고 거래 */}
-        <View style={styles.section}>
+        {/* ✨ 메뉴 섹션 - 나의 중고 거래 (전체 주석 처리) */}
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 중고 거래</Text>
           <MenuItem title="찜 목록" />
           <MenuItem title="중고 거래 내역" />
           <MenuItem title="받은 리뷰" />
           <MenuItem title="보낸 리뷰" />
-        </View>
+        </View> 
+        */}
 
         {/* 메뉴 섹션 - 나의 동네 상점 거래 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 동네 상점 거래</Text>
-          <MenuItem title="찜 목록" />
-          <MenuItem title="동네 상점 거래 내역" />
-          <MenuItem title="작성한 리뷰" />
+          {/* ✨ 라우터 이동 기능 연결 (경로는 추후 생성할 파일 위치로 임시 지정) */}
+          <MenuItem 
+            title="찜 목록" 
+            onPress={() => router.push('/favorites' as any)} 
+          />
+          <MenuItem 
+            title="동네 상점 거래 내역" 
+            onPress={() => router.push('/history' as any)} 
+          />
+          <MenuItem 
+            title="작성한 리뷰" 
+            onPress={() => Alert.alert('알림', '준비 중인 기능입니다.')}
+          />
         </View>
 
         {/* 메뉴 섹션 - 설정 */}
