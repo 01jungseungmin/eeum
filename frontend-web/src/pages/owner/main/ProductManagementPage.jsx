@@ -1,8 +1,12 @@
+import { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import ProductHeader from '../../../components/owner/product/ProductHeader';
+import { productApi } from '../../../api/owner/productApi';
+
 import ProductStats from '../../../components/owner/product/ProductStats';
 import ProductFilterBar from '../../../components/owner/product/ProductFilterBar';
 import ProductTable from '../../../components/owner/product/ProductTable';
+import ProductFormModal from '../../../components/owner/product/ProductFormModal';
+import ProductDetailModal from '../../../components/owner/product/ProductDetailModal';
 
 const PageContainer = styled.div`
   flex: 1;
@@ -15,89 +19,129 @@ const PageContainer = styled.div`
 `;
 
 function ProductManagementPage() {
-  // 나중에 API로 받아올 모크 데이터 세팅해두기
-  const mockProducts = [
-    {
-      id: 'P001',
-      name: '김치찌개 반찬 세트 (300g)',
-      type: '판매 상품',
-      category: '국/찌개',
-      price: 9000,
-      pickup: '10:00~19:00',
-      stock: 15,
-      status: '판매중',
-      img: 'https://via.placeholder.com/40',
-    },
-    {
-      id: 'P002',
-      name: '된장찌개 반찬 (250g)',
-      type: '판매 상품',
-      category: '국/찌개',
-      price: 8000,
-      pickup: '11:00~18:00',
-      stock: 8,
-      status: '판매중',
-      img: 'https://via.placeholder.com/40',
-    },
-    {
-      id: 'P003',
-      name: '불고기 반찬 (300g)',
-      type: '판매 상품',
-      category: '반찬류',
-      price: 12000,
-      pickup: '—',
-      stock: 0,
-      status: '품절',
-      img: 'https://via.placeholder.com/40',
-    },
-    {
-      id: 'P004',
-      name: '방문 예약 - 반찬 세트',
-      type: '예약 상품',
-      category: '예약',
-      price: 0,
-      pickup: '09:00~17:00',
-      stock: 10,
-      status: '판매중',
-      img: 'https://via.placeholder.com/40',
-    },
-    {
-      id: 'P005',
-      name: '계란말이 (1팩)',
-      type: '판매 상품',
-      category: '반찬류',
-      price: 4500,
-      pickup: '—',
-      stock: 20,
-      status: '판매중',
-      img: 'https://via.placeholder.com/40',
-    },
-    {
-      id: 'P006',
-      name: '오늘의 메뉴판',
-      type: '메뉴 상품',
-      category: '메뉴',
-      price: '조회만',
-      pickup: '—',
-      stock: '미설정',
-      status: '판매중',
-      img: 'https://via.placeholder.com/40',
-    },
-  ];
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState(''); // 검색창 상태
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 전체/판매중(ACTIVE)/품절(INACTIVE)/비공개
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 전체유형/판매(SALE)/예약(PREORDER)/메뉴(MENU)
+
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [editingProductId, setEditingProductId] = useState(null);
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await productApi.getOwnerProducts();
+      if (response.data && response.data.success) {
+        setProducts(response.data.data);
+      }
+    } catch (error) {
+      console.error('목록 조회 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const handleDeleteProduct = async (productId) => {
+    const isConfirmed = window.confirm(
+      '정말 이 상품을 삭제하시겠습니까?\n삭제된 상품은 매장 목록 및 판매 대상에서 제외됩니다.',
+    );
+
+    if (!isConfirmed) return; // 취소 누르면 중단
+
+    try {
+      const response = await productApi.deleteOwnerProduct(productId);
+      if (response.data && response.data.success) {
+        alert('상품이 성공적으로 삭제되었습니다.');
+        fetchProducts();
+      }
+    } catch (error) {
+      console.error('상품 삭제 오류:', error);
+      alert('상품 삭제 중 오류가 발생했습니다. 다시 시도해 주세요.');
+    }
+  };
+
+  const filteredProducts = products.filter((product) => {
+    // 검색어 필터 (상품명 매칭)
+    const matchesSearch = product.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+
+    // 상태 필터 (전체 / ACTIVE / INACTIVE / HIDDEN)
+    let matchesStatus = true;
+    if (statusFilter !== 'ALL') {
+      matchesStatus = product.status === statusFilter;
+    }
+
+    // 유형 필터 (전체유형 / SALE / PREORDER / MENU)
+    let matchesType = true;
+    if (typeFilter !== 'ALL') {
+      matchesType = product.productType === typeFilter;
+    }
+
+    // 세 가지 필터 조건이 모두 참이어야 화면에 노출됨
+    return matchesSearch && matchesStatus && matchesType;
+  });
   return (
     <PageContainer>
-      {/* 1. 상단 헤더 영역 */}
-      <ProductHeader />
+      <ProductStats products={products} />
+      <ProductFilterBar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        typeFilter={typeFilter}
+        onTypeChange={setTypeFilter}
+        onOpenRegisterModal={() => setIsPostModalOpen(true)}
+      />
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+          데이터 로딩 중...
+        </div>
+      ) : (
+        <ProductTable
+          products={filteredProducts}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+          onView={(id) => setSelectedProductId(id)}
+          onEdit={(id) => setEditingProductId(id)}
+          onDelete={handleDeleteProduct}
+        />
+      )}
 
-      {/* 2. 대시보드 통계 및 배너 영역 */}
-      <ProductStats />
+      {/* 상품 등록 모달 */}
+      {isPostModalOpen && (
+        <ProductFormModal
+          mode="CREATE"
+          onClose={() => setIsPostModalOpen(false)}
+          onSuccess={fetchProducts}
+        />
+      )}
 
-      {/* 3. 검색 및 필터 컨트롤러 영역 */}
-      <ProductFilterBar />
+      {/* 상품 수정 모달 */}
+      {editingProductId !== null && (
+        <ProductFormModal
+          mode="EDIT"
+          productId={editingProductId}
+          onClose={() => setEditingProductId(null)}
+          onSuccess={fetchProducts}
+        />
+      )}
 
-      {/* 4. 상품 리스트 테이블 영역 */}
-      <ProductTable products={mockProducts} />
+      {/* 상품 상세 보기 모달 */}
+      {selectedProductId !== null && (
+        <ProductDetailModal
+          productId={selectedProductId}
+          onClose={() => setSelectedProductId(null)}
+        />
+      )}
     </PageContainer>
   );
 }

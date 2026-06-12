@@ -15,6 +15,7 @@ import CategoryPage from './pages/owner/main/CategoryPage';
 import EventPage from './pages/owner/main/EventPage';
 import OrderManagementPage from './pages/owner/main/OrderManagementPage';
 import ReservationPage from './pages/owner/main/ReservationPage';
+import ProductManagementPage from './pages/owner/main/ProductManagementPage';
 
 function App() {
   return (
@@ -31,11 +32,10 @@ function App() {
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/approval" element={<ApprovalPage />} />
         <Route path="/admin/approval/:id" element={<ApprovalDetailPage />} />
-
-        <Route path="/approval-status" element={<ApprovalStatus />} />
         <Route path="/admin/members" element={<MemberPage />} />
 
         {/* 나중에 추가될 다른 메뉴들 */}
+        <Route path="/approval-status" element={<ApprovalStatus />} />
         <Route path="/dashboard" element={<OwnerDashboardPage />} />
         <Route path="/store" element={<StorePage />} />
         <Route
@@ -46,6 +46,7 @@ function App() {
         <Route path="/reservation" element={<ReservationPage />} />
         <Route path="/categories" element={<CategoryPage />} />
         <Route path="/events" element={<EventPage />} />
+        <Route path="/products" element={<ProductManagementPage />} />
       </Route>
     </Routes>
   );
