@@ -8,7 +8,7 @@ import { reservationApi } from '../../api/reservation';
 
 export default function ReservationDetailScreen() {
   const router = useRouter();
-  const { reservationId } = useLocalSearchParams();
+  const { id } = useLocalSearchParams();
   
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +17,7 @@ export default function ReservationDetailScreen() {
     const fetchDetail = async () => {
       try {
         // 1. 백엔드에 예약 상세 정보 요청
-        const data = await reservationApi.getVisitReservationDetail(Number(reservationId));
+        const data = await reservationApi.getVisitReservationDetail(Number(id));
         setDetail(data);
       } catch (error) {
         Alert.alert('오류', '예약 정보를 불러오는데 실패했습니다.');
@@ -27,10 +27,12 @@ export default function ReservationDetailScreen() {
       }
     };
 
-    if (reservationId) {
+    if (id) {
       fetchDetail();
+    } else {
+      setLoading(false);
     }
-  }, [reservationId]);
+  }, [id]);
 
   // 백엔드에서 주는 영문 상태(PENDING 등)를 한글로 예쁘게 변환해주는 함수
   const getStatusDisplay = (status: string) => {
@@ -100,11 +102,11 @@ export default function ReservationDetailScreen() {
           <Text fontWeight="bold" style={styles.cardTitle}>예약 정보</Text>
           <View style={styles.row}>
             <Text style={styles.label}>예약 번호</Text>
-            <Text style={styles.value}>EX-{detail.visitDate.replace(/-/g, '')}-{String(detail.visitReservationId).padStart(4, '0')}</Text>
+            <Text style={styles.value}>EX-{detail.visitDate?.replace(/-/g, '')}-{String(detail.visitReservationId).padStart(4, '0')}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>방문 일정</Text>
-            <Text fontWeight="bold" style={styles.value}>{detail.visitDate}  {detail.visitTime.substring(0, 5)}</Text>
+            <Text fontWeight="bold" style={styles.value}>{detail.visitDate}  {detail.visitTime?.substring(0, 5)}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>방문 인원</Text>

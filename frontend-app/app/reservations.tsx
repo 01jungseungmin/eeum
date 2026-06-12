@@ -8,6 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Text } from '../components/CustomText';
 
+// ✨ API 임포트 (경로는 프로젝트 환경에 맞게 수정하세요)
+import { reservationApi } from '@/api/reservation'; 
+
 export default function ReservationsScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -21,28 +24,26 @@ export default function ReservationsScreen() {
     try {
       setIsLoading(true);
       
-      setTimeout(() => {
-        setReservationList([
-          {
-            orderId: 102, // 👈 이 ID를 파라미터로 넘겨줍니다.
-            shopId: 4,
-            shopName: '이음 김치찌개',
-            orderDate: '2026-06-15 18:30', 
-            status: 'RESERVED',
-            amount: 24000,
-            thumbnailUrl: 'https://via.placeholder.com/150/E8F5E9/00A859?text=Shop4'
-          }
-        ]);
-        setIsLoading(false);
-      }, 400);
+      // ✨ 1. 진짜 예약 내역 API 호출
+      const res = await reservationApi.getMyVisitReservations();
+      
+      // 서버 응답 구조에 맞게 배열 추출
+      const realData = res?.content || res?.data || res || [];
+      
+      // ✨ 2. 데이터 구조 파악을 위한 로그 (이름, 날짜 등의 Key값 확인용)
+      console.log("🔥 실제 예약 내역 데이터:", JSON.stringify(realData[0], null, 2));
+
+      setReservationList(realData);
 
     } catch (error) {
       console.error('예약 내역 로딩 실패:', error);
+    } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCancelReservation = (orderId: number) => {
+  // ✨ 3. 실제 예약 취소 API 연동
+  const handleCancelReservation = (reservationId: number) => {
     Alert.alert(
       '예약 취소',
       '정말로 이 예약을 취소하시겠습니까?',
@@ -50,50 +51,88 @@ export default function ReservationsScreen() {
         { text: '아니오', style: 'cancel' },
         { 
           text: '예', 
-          onPress: () => {
-            Alert.alert('알림', '예약이 취소되었습니다.');
-            setReservationList(prev => prev.filter(r => r.orderId !== orderId));
+          onPress: async () => {
+            try {
+              // 백엔드 취소 API 호출
+              await reservationApi.cancelVisitReservation(reservationId);
+              Alert.alert('알림', '예약이 정상적으로 취소되었습니다.');
+              
+              // 취소 후 목록을 다시 불러와서 화면을 갱신합니다.
+              fetchReservations(); 
+            } catch (error) {
+              Alert.alert('오류', '예약 취소에 실패했습니다.');
+            }
           } 
         }
       ]
     );
   };
 
-  const renderReservationItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={styles.cardContainer}
-      // ✨ 예약 완료 상세페이지(reservation-detail.tsx)로 이동하며 쿼리 스트링으로 예약 ID를 전달합니다.
-      onPress={() => router.push(`/reservation-detail?id=${item.orderId}` as any)}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.headerLeft}>
-          <Ionicons name="calendar-outline" size={14} color="#2196F3" style={{ marginRight: 4 }} />
-          <Text style={styles.dateText}>{item.orderDate} 방문 예정</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: '#E3F2FD' }]}>
-          <Text style={[styles.statusText, { color: '#2196F3' }]}>예약 완료</Text>
-        </View>
-      </View>
+  const renderReservationItem = ({ item }: { item: any }) => {
+    // ✨ 실제 데이터의 Key 이름으로 변경!
+    const rId = item.visitReservationId; 
+    const storeName = item.storeName;
+    
+    // 시간 뒤의 초(00) 자르기 (예: "11:30:00" -> "11:30")
+    const timeText = item.visitTime ? item.visitTime.substring(0, 5) : '';
+    const dateText = `${item.visitDate} ${timeText}`;
 
-      <View style={styles.cardBody}>
-        <Image 
-          source={{ uri: item.thumbnailUrl || 'https://via.placeholder.com/150' }} 
-          style={styles.cardImage} 
-        />
-        <View style={styles.cardInfo}>
-          <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.shopName}</Text>
-          <Text style={styles.amountText}>결제 금액: {item.amount.toLocaleString()}원</Text>
-        </View>
-      </View>
+    // ✨ 예약 상태(status)에 따른 뱃지 스타일 분기 처리
+    let statusText = '예약 대기';
+    let statusColor = '#FF9800'; // 주황색 (대기중)
+    let statusBg = '#FFF3E0';
 
+    if (item.status === 'APPROVED' || item.status === 'RESERVED' || item.status === 'CONFIRMED') {
+      statusText = '예약 확정';
+      statusColor = '#2196F3'; // 파란색 (확정)
+      statusBg = '#E3F2FD';
+    } else if (item.status === 'CANCELLED' || item.status === 'REJECTED') {
+      statusText = item.status === 'CANCELLED' ? '예약 취소' : '예약 거절';
+      statusColor = '#FF5252'; // 빨간색 (취소/거절)
+      statusBg = '#FFEBEE';
+    }
+
+    return (
       <TouchableOpacity 
-        style={styles.cancelButton}
-        onPress={() => handleCancelReservation(item.orderId)}
+        style={styles.cardContainer}
+        onPress={() => router.push(`/restaurant/reservation-detail?id=${rId}` as any)}
       >
-        <Text fontWeight="bold" style={styles.cancelButtonText}>예약 취소하기</Text>
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <Ionicons name="calendar-outline" size={14} color={statusColor} style={{ marginRight: 4 }} />
+            <Text style={[styles.dateText, { color: statusColor }]}>{dateText} 방문 예정</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardBody}>
+          {/* 예약 데이터에 이미지가 없으므로 기본 이미지 사용 */}
+          <Image 
+            source={{ uri: 'https://via.placeholder.com/150' }} 
+            style={styles.cardImage} 
+          />
+          <View style={styles.cardInfo}>
+            <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{storeName}</Text>
+            {item.visitorCount && (
+              <Text style={styles.amountText}>방문 인원: {item.visitorCount}명</Text>
+            )}
+          </View>
+        </View>
+
+        {/* 취소나 거절 상태가 아닐 때만 취소 버튼 노출 */}
+        {item.status !== 'CANCELLED' && item.status !== 'REJECTED' && (
+          <TouchableOpacity 
+            style={styles.cancelButton}
+            onPress={() => handleCancelReservation(rId)}
+          >
+            <Text fontWeight="bold" style={styles.cancelButtonText}>예약 취소하기</Text>
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -117,7 +156,7 @@ export default function ReservationsScreen() {
       ) : (
         <FlatList
           data={reservationList}
-          keyExtractor={(item) => item.orderId.toString()}
+          keyExtractor={(item) => item.visitReservationId?.toString()}
           renderItem={renderReservationItem}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
