@@ -11,6 +11,7 @@ import ApprovalPage from './pages/admin/main/ApprovalPage';
 import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
 import MemberPage from './pages/admin/main/MemberPage';
 import StorePage from './pages/owner/main/StorePage';
+import CategoryPage from './pages/owner/main/CategoryPage';
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
           path="/products"
           element={<div>상품 관리 페이지 (준비중)</div>}
         />
+        <Route path="/categories" element={<CategoryPage />} />
       </Route>
     </Routes>
   );
