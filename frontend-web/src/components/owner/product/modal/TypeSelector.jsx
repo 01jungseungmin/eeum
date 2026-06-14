@@ -66,23 +66,6 @@ function TypeSelector({ currentType, onChangeType }) {
       </TypeCard>
 
       <TypeCard
-        $active={currentType === 'PREORDER'}
-        $iconBg="#fff9db"
-        $iconColor="#f7a110"
-        onClick={() => onChangeType('PREORDER')}
-      >
-        <div className="icon-wrapper">
-          <Calendar size={18} strokeWidth={2.5} />
-        </div>
-        <div className="title">예약 상품</div>
-        <div className="desc">
-          결제 없이 예약만 가능,
-          <br />
-          방문 시간 설정 가능
-        </div>
-      </TypeCard>
-
-      <TypeCard
         $active={currentType === 'MENU'}
         $iconBg="#f1f3f5"
         $iconColor="#666"

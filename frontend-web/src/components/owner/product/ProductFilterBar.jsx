@@ -1,10 +1,7 @@
-// 📄 src/pages/owner/main/components/ProductFilterBar.jsx
-
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Search, Plus, ChevronDown } from 'lucide-react';
 
-// 시안 특유의 대형 라운드 박스 형태 유지
 const FilterBarContainer = styled.div`
   display: flex;
   align-items: center;
@@ -63,7 +60,6 @@ const PillButton = styled.button`
   transition: all 0.15s ease-in-out;
 `;
 
-// 🟢 1번 그룹 전용: 활성화 시 밝은 에메랄드 그린 (시안 '전체' 버튼 색상)
 const StatusButton = styled(PillButton)`
   ${(props) =>
     props.$active &&
@@ -74,7 +70,6 @@ const StatusButton = styled(PillButton)`
     `}
 `;
 
-// 🌲 2번 그룹 전용: 활성화 시 딥 다크 그린 (시안 '전체유형' 버튼 색상)
 const TypeButton = styled(PillButton)`
   ${(props) =>
     props.$active &&
@@ -83,6 +78,70 @@ const TypeButton = styled(PillButton)`
       color: #ffffff;
       border-color: #1e3d2f;
     `}
+`;
+
+const DropdownContainer = styled.div`
+  position: relative;
+  display: inline-block;
+`;
+
+const DropdownMenu = styled.div`
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  background: white;
+  min-width: 160px;
+  border-radius: 12px;
+  border: 1px solid #eef0f2;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 8px 0;
+  z-index: 100;
+  text-align: left;
+
+  .select-count {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: #8e94a0;
+    border-bottom: 1px solid #f1f3f5;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  button {
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 10px 16px;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+
+    &:hover {
+      background: #f8f9fa;
+    }
+
+    &.activate {
+      color: #00a651;
+      font-weight: 500;
+    }
+    &.soldout {
+      color: #e63946;
+      font-weight: 500;
+    }
+    &.delete {
+      color: #666666;
+    }
+    &.close {
+      color: #999;
+      border-top: 1px solid #f1f3f5;
+      margin-top: 4px;
+      font-size: 12px;
+    }
+  }
 `;
 
 // 일괄 관리 선택창
@@ -122,10 +181,13 @@ function ProductFilterBar({
   typeFilter,
   onTypeChange,
   onOpenRegisterModal,
+  selectedIds,
+  onBulkStatusChange,
+  onBulkDelete,
 }) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   return (
     <FilterBarContainer>
-      {/* 1. 상품명, 카테고리 검색창 */}
       <SearchWrapper>
         <Search className="search-icon" size={18} />
         <SearchInput
@@ -136,7 +198,6 @@ function ProductFilterBar({
         />
       </SearchWrapper>
 
-      {/* 2. 첫 번째 판매 상태 그룹 (Bright Green 계열 적용) */}
       <ButtonGroup>
         <StatusButton
           $active={statusFilter === 'ALL'}
@@ -151,20 +212,19 @@ function ProductFilterBar({
           판매중
         </StatusButton>
         <StatusButton
-          $active={statusFilter === 'INACTIVE'}
-          onClick={() => onStatusChange('INACTIVE')}
+          $active={statusFilter === 'SOLD_OUT'}
+          onClick={() => onStatusChange('SOLD_OUT')}
         >
           품절
         </StatusButton>
         <StatusButton
-          $active={statusFilter === 'HIDDEN'}
-          onClick={() => onStatusChange('HIDDEN')}
+          $active={statusFilter === 'INACTIVE'}
+          onClick={() => onStatusChange('INACTIVE')}
         >
           비공개
         </StatusButton>
       </ButtonGroup>
 
-      {/* 3. 두 번째 상품 유형 그룹 (Dark Green 계열 적용) */}
       <ButtonGroup>
         <TypeButton
           $active={typeFilter === 'ALL'}
@@ -179,12 +239,6 @@ function ProductFilterBar({
           판매
         </TypeButton>
         <TypeButton
-          $active={typeFilter === 'PREORDER'}
-          onClick={() => onTypeChange('PREORDER')}
-        >
-          예약
-        </TypeButton>
-        <TypeButton
           $active={typeFilter === 'MENU'}
           onClick={() => onTypeChange('MENU')}
         >
@@ -192,13 +246,60 @@ function ProductFilterBar({
         </TypeButton>
       </ButtonGroup>
 
-      {/* 4. 일괄 관리 옵션 드롭다운 */}
-      <DropdownButton onClick={() => alert('일괄 관리 기능 준비 중입니다.')}>
-        <span>일괄 관리</span>
-        <ChevronDown size={16} />
-      </DropdownButton>
+      <DropdownContainer>
+        <DropdownButton onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+          <span>일괄 관리</span>
+          <ChevronDown size={16} />
+        </DropdownButton>
 
-      {/* 5. 우측 상품 등록 버튼 */}
+        {isDropdownOpen && (
+          <DropdownMenu>
+            <div className="select-count">{selectedIds.length}개 선택됨</div>
+
+            <button
+              type="button"
+              className="activate"
+              onClick={() => {
+                onBulkStatusChange('ACTIVE');
+                setIsDropdownOpen(false); // 실행 후 드롭다운 닫기
+              }}
+            >
+              <span>✓ 일괄 판매 활성화</span>
+            </button>
+
+            <button
+              type="button"
+              className="soldout"
+              onClick={() => {
+                onBulkStatusChange('SOLD_OUT');
+                setIsDropdownOpen(false);
+              }}
+            >
+              <span>✕ 일괄 품절 처리</span>
+            </button>
+
+            <button
+              type="button"
+              className="delete"
+              onClick={() => {
+                onBulkDelete();
+                setIsDropdownOpen(false);
+              }}
+            >
+              <span>🗑️ 일괄 삭제</span>
+            </button>
+
+            <button
+              type="button"
+              className="close"
+              onClick={() => setIsDropdownOpen(false)}
+            >
+              닫기
+            </button>
+          </DropdownMenu>
+        )}
+      </DropdownContainer>
+
       <RegisterButton onClick={onOpenRegisterModal}>
         <Plus size={16} strokeWidth={2.5} />
         <span>상품 등록</span>

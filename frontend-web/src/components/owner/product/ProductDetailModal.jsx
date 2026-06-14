@@ -169,11 +169,24 @@ const OptionGroupCard = styled.div`
   padding: 16px;
   margin-bottom: 10px;
 
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
   .group-name {
     font-size: 12px;
     font-weight: bold;
     color: #495057;
-    margin-bottom: 10px;
+  }
+  .group-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: #eef2ff;
+    color: #4361ee;
+    border-radius: 4px;
+    font-weight: 600;
   }
   .chips {
     display: flex;
@@ -189,9 +202,18 @@ const OptionChip = styled.span`
   border-radius: 20px;
   font-size: 11px;
   color: #495057;
-  span {
+  display: inline-flex;
+  align-items: center;
+
+  .price {
+    color: #00a651;
+    margin-left: 4px;
+    font-weight: 600;
+  }
+  .default-tag {
     color: #8e94a0;
     margin-left: 4px;
+    font-size: 10px;
   }
 `;
 
@@ -215,6 +237,7 @@ const FooterButton = styled.button`
 function ProductDetailModal({ productId, onClose }) {
   const [data, setData] = useState(null);
   const [images, setImages] = useState([]);
+  const [productOptions, setProductOptions] = useState([]); // 🆕 옵션 상태값 추가
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -222,14 +245,17 @@ function ProductDetailModal({ productId, onClose }) {
       try {
         setLoading(true);
 
-        const [detailResponse, imageResponse] = await Promise.all([
-          productApi.getOwnerProductDetail(productId),
-          productApi.getProductImages(productId),
-        ]);
+        const [detailResponse, imageResponse, optionResponse] =
+          await Promise.all([
+            productApi.getOwnerProductDetail(productId),
+            productApi.getProductImages(productId),
+            productApi.getProductOptions
+              ? productApi.getProductOptions(productId)
+              : null,
+          ]);
 
         if (detailResponse.data && detailResponse.data.success) {
-          const resultData = detailResponse.data.data;
-          setData(resultData);
+          setData(detailResponse.data.data);
         } else {
           alert(
             detailResponse.data.message || '상세 정보를 불러오지 못했습니다.',
@@ -239,16 +265,22 @@ function ProductDetailModal({ productId, onClose }) {
         }
 
         if (imageResponse.data && imageResponse.data.success) {
-          const rawImages = imageResponse.data.data;
-
+          const rawImages = imageResponse.data.data || [];
           const sortedImages = [
             ...rawImages.filter((img) => img.thumbnail),
             ...rawImages
               .filter((img) => !img.thumbnail)
               .sort((a, b) => a.displayOrder - b.displayOrder),
           ];
-
           setImages(sortedImages);
+        }
+
+        if (
+          optionResponse &&
+          optionResponse.data &&
+          optionResponse.data.success
+        ) {
+          setProductOptions(optionResponse.data.data || []);
         }
       } catch (error) {
         console.error('상품 데이터 로드 실패:', error);
@@ -288,12 +320,6 @@ function ProductDetailModal({ productId, onClose }) {
       bg: '#eef2ff',
       color: '#4361ee',
       icon: <ShoppingCart size={13} strokeWidth={2.5} />,
-    },
-    PREORDER: {
-      text: '예약 상품',
-      bg: '#fff9db',
-      color: '#f7a110',
-      icon: <Calendar size={13} strokeWidth={2.5} />,
     },
     MENU: {
       text: '메뉴 상품',
@@ -371,13 +397,15 @@ function ProductDetailModal({ productId, onClose }) {
               <div className="value bold">
                 {data.productType === 'MENU'
                   ? '조회만 가능'
-                  : `${data.price.toLocaleString()}원`}
+                  : `${data.price?.toLocaleString() || 0}원`}
               </div>
             </InfoRow>
             <InfoRow>
               <div className="label">재고</div>
               <div className="value bold">
-                {data.productType === 'MENU' ? '미설정' : `${data.stock}개`}
+                {data.productType === 'MENU'
+                  ? '미설정'
+                  : `${data.stock || 0}개`}
               </div>
             </InfoRow>
             <InfoRow>
@@ -399,24 +427,43 @@ function ProductDetailModal({ productId, onClose }) {
             </InfoRow>
           </InfoGrid>
 
-          {data.options && data.options.length > 0 && (
-            <OptionSection>
-              <div className="title">상품 옵션 ({data.options.length}개)</div>
-              {data.options.map((group) => (
-                <OptionGroupCard key={group.id}>
-                  <div className="group-name">{group.name}</div>
-                  <div className="chips">
-                    {group.items.map((sub, sIdx) => (
-                      <OptionChip key={sIdx}>
-                        {sub.name}
-                        {sub.price && <span>{sub.price}</span>}
-                      </OptionChip>
-                    ))}
-                  </div>
-                </OptionGroupCard>
-              ))}
-            </OptionSection>
-          )}
+          {data.productType === 'SALE' &&
+            productOptions &&
+            productOptions.length > 0 && (
+              <OptionSection>
+                <div className="title">
+                  상품 옵션 ({productOptions.length}개)
+                </div>
+                {productOptions.map((group, gIdx) => (
+                  <OptionGroupCard key={group.optionGroupId || gIdx}>
+                    <div className="group-header">
+                      <div className="group-name">
+                        {group.groupName || group.name}
+                      </div>
+                      {group.isRequired && (
+                        <span className="group-badge">필수</span>
+                      )}
+                    </div>
+                    <div className="chips">
+                      {group.items &&
+                        group.items.map((sub, sIdx) => (
+                          <OptionChip key={sub.optionItemId || sIdx}>
+                            {sub.itemName || sub.name}
+                            {sub.additionalPrice > 0 && (
+                              <span className="price">
+                                +{sub.additionalPrice.toLocaleString()}원
+                              </span>
+                            )}
+                            {sub.default && (
+                              <span className="default-tag">(기본값)</span>
+                            )}
+                          </OptionChip>
+                        ))}
+                    </div>
+                  </OptionGroupCard>
+                ))}
+              </OptionSection>
+            )}
 
           <FooterButton onClick={onClose}>닫기</FooterButton>
         </ScrollContent>

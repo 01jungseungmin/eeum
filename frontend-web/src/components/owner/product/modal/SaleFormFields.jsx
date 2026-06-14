@@ -93,8 +93,9 @@ function SaleFormFields({
             onChange={(e) => setCategoryId(e.target.value)}
           >
             <option value="">선택</option>
-            <option value="1">국/찌개</option>
-            <option value="2">반찬류</option>
+            <option value="1">반찬류</option>
+            <option value="2">국/찌개</option>
+            <option value="3">밑반찬</option>
           </Select>
         </FormGroup>
         <FormGroup>
@@ -120,16 +121,6 @@ function SaleFormFields({
           onChange={(e) => setStockQuantity(e.target.value)}
         />
       </FormGroup>
-
-      <div>
-        <OptionHeader>
-          <Label style={{ margin: 0 }}>상품 옵션</Label>
-          <button type="button" className="add-btn">
-            ＋ 옵션 추가
-          </button>
-        </OptionHeader>
-        <EmptyOptionBox>옵션 없음 (단일 상품)</EmptyOptionBox>
-      </div>
     </>
   );
 }

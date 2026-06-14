@@ -1,4 +1,4 @@
-// 📄 src/pages/owner/product/components/ProductStats.jsx
+import React from 'react';
 import styled from 'styled-components';
 
 const StatsSection = styled.div`
@@ -9,8 +9,9 @@ const StatsSection = styled.div`
 
 const CardGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
 `;
 
 const StatCard = styled.div`
@@ -70,38 +71,34 @@ const InfoBanner = styled.div`
   }
 `;
 
-function ProductStats() {
+function ProductStats({ products = [] }) {
+  const totalCount = products.length;
+  const saleCount = products.filter((p) => p.productType === 'SALE').length;
+  const menuCount = products.filter((p) => p.productType === 'MENU').length;
+
   return (
     <StatsSection>
-      {/* 수치 요약 카드 라인 */}
       <CardGrid>
         <StatCard>
           <div className="label">전체 상품</div>
           <div className="count" style={{ color: '#00a651' }}>
-            6
+            {totalCount}개
           </div>
         </StatCard>
         <StatCard>
           <div className="label">판매 상품</div>
           <div className="count" style={{ color: '#4361ee' }}>
-            4
-          </div>
-        </StatCard>
-        <StatCard>
-          <div className="label">예약 상품</div>
-          <div className="count" style={{ color: '#f7a110' }}>
-            1
+            {saleCount}개
           </div>
         </StatCard>
         <StatCard>
           <div className="label">메뉴 상품</div>
           <div className="count" style={{ color: '#555' }}>
-            1
+            {menuCount}개
           </div>
         </StatCard>
       </CardGrid>
 
-      {/* 상품 안내 배너 라인 */}
       <BannerGrid>
         <InfoBanner
           $bgColor="#f4f7ff"

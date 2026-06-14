@@ -33,27 +33,51 @@ const Td = styled.td`
 const ProductInfo = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px; /* 피그마 비율에 맞춰 여백 살짝 조정 */
 
-  img {
-    width: 42px;
-    height: 42px;
-    border-radius: 8px;
-    object-fit: cover;
-    border: 1px solid #eee;
+  /* 🖼️ 이미지와 대체 아이콘을 감싸는 프레임 박스 */
+  .img-box {
+    width: 44px; /* 이미지 크기 조절 */
+    height: 44px;
+    border-radius: 12px; /* 피그마 스타일의 부드러운 곡률 */
+    background-color: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* 🛒 [image_bd97bf.png] 이미지가 없을 때 나타날 민트색 상점 템플릿 */
+    .fallback-store {
+      width: 100%;
+      height: 100%;
+      background-color: #e6f4ea; /* 연한 민트/그린 배경색 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
+
   .details {
     display: flex;
     flex-direction: column;
     text-align: left;
+
     .name {
       font-weight: bold;
-      color: #333;
+      color: #1a1f2c;
       margin-bottom: 2px;
+      font-size: 14px;
     }
     .code {
       font-size: 11px;
-      color: #999;
+      color: #8e94a0;
     }
   }
 `;
@@ -79,29 +103,24 @@ const TypeBadge = styled.span`
 `;
 
 const StatusBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 12px;
+  padding: 5px 10px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: bold;
 
-  ${(props) =>
-    props.$status === 'INACTIVE' &&
-    `
-      background-color: #fff0f0;
-      color: #ff4b4b;
-    `}
+  /* 💡 상태(프롭스)에 따른 배경색 및 글자색 동적 변경 */
+  background-color: ${(props) => {
+    if (props.$status === 'ACTIVE') return '#e6f4ea'; // 연한 초록
+    if (props.$status === 'SOLD_OUT') return '#fce8e6'; // 연한 빨강
+    return '#f1f3f5'; // INACTIVE (연한 회색)
+  }};
 
-  ${(props) =>
-    props.$status === 'ACTIVE' &&
-    `
-      background-color: #e6f6ed; 
-      color: #00a651;
-    `}
+  color: ${(props) => {
+    if (props.$status === 'ACTIVE') return '#10b981'; // 초록 글씨
+    if (props.$status === 'SOLD_OUT') return '#d93025'; // 빨강 글씨
+    return '#666666'; // INACTIVE (회색 글씨)
+  }};
 `;
-
 const ActionContainer = styled.div`
   display: flex;
   align-items: center;
@@ -146,18 +165,17 @@ const ActionButton = styled.button`
   }
 `;
 
-// 🎯 프롭스에 selectedIds와 setSelectedIds를 추가합니다.
 function ProductTable({
   products = [],
   selectedIds = [],
   setSelectedIds,
+  onToggleStatus,
   onView,
   onEdit,
   onDelete,
 }) {
   const TYPE_MAP = {
     SALE: { text: '판매 상품', color: '판매 상품' },
-    PREORDER: { text: '예약 상품', color: '예약 상품' },
     MENU: { text: '메뉴 상품', color: '메뉴 상품' },
   };
 
@@ -167,12 +185,11 @@ function ProductTable({
     INACTIVE: { text: '비공개', color: '비공개' },
   };
 
-  // 💡 [선택 로직] 현재 필터링되어 보여지는 상품들이 전부 선택되었는지 확인
+  // 현재 필터링되어 보여지는 상품들이 전부 선택되었는지 확인
   const isAllSelected =
     products.length > 0 &&
     products.every((item) => selectedIds.includes(item.productId));
 
-  // 💡 [전체 선택 헤더 체크박스 핸들러]
   const handleSelectAll = () => {
     if (isAllSelected) {
       // 현재 리스트에 보이는 상품 ID들을 선택 목록에서 일괄 제거
@@ -185,7 +202,6 @@ function ProductTable({
     }
   };
 
-  // 💡 [개별 행 체크박스 핸들러]
   const handleSelectRow = (productId) => {
     if (selectedIds.includes(productId)) {
       setSelectedIds((prev) => prev.filter((id) => id !== productId));
@@ -200,14 +216,13 @@ function ProductTable({
         <thead>
           <tr>
             <Th style={{ width: '40px' }}>
-              {/* 🎯 상단 마스터 체크박스 바인딩 */}
               <input
                 type="checkbox"
                 checked={isAllSelected}
                 onChange={handleSelectAll}
               />
             </Th>
-            <Th>상품</Th>
+            <Th>상품명</Th>
             <Th>유형</Th>
             <Th>카테고리</Th>
             <Th>가격</Th>
@@ -233,7 +248,6 @@ function ProductTable({
             return (
               <tr key={item.productId}>
                 <Td>
-                  {/* 🎯 개별 행 체크박스 바인딩 */}
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(item.productId)}
@@ -242,10 +256,44 @@ function ProductTable({
                 </Td>
                 <Td>
                   <ProductInfo>
-                    <img
-                      src={item.imageUrl || 'https://via.placeholder.com/40'}
-                      alt={item.name}
-                    />
+                    <div className="img-box">
+                      {item.imageUrl && item.imageUrl.trim() !== '' ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          onError={(e) => {
+                            // 무한 루프 방지 및 엑박 발생 시 즉시 상점 아이콘 프레임으로 교체
+                            e.target.onerror = null;
+                            const parent = e.target.parentNode;
+                            if (parent) {
+                              parent.innerHTML = `
+                <div style="width: 100%; height: 100%; background-color: #e6f4ea; display: flex; align-items: center; justify-content: center;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                </div>
+              `;
+                            }
+                          }}
+                        />
+                      ) : (
+                        /* 대표 이미지가 등록되지 않았을 때 뜨는 상점 아이콘 컴포넌트 */
+                        <div className="fallback-store">
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#10b981"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                            <polyline points="9 22 9 12 15 12 15 22" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="details">
                       <span className="name">{item.name}</span>
                       <span className="code">{id}</span>
@@ -257,11 +305,7 @@ function ProductTable({
                 </Td>
                 <Td style={{ color: '#666' }}>{item.categoryName}</Td>
                 <Td style={{ fontWeight: 'bold' }}>
-                  {item.productType === 'MENU'
-                    ? '조회만'
-                    : item.price === 0 && item.productType === 'PREORDER'
-                      ? '무료예약'
-                      : `${item.price.toLocaleString()}원`}
+                  {`${item.price.toLocaleString()}원`}
                 </Td>
                 <Td
                   style={{
@@ -284,11 +328,36 @@ function ProductTable({
                       : `${item.stock}개`}
                 </Td>
                 <Td>
-                  {item.status === 'INACTIVE' ? (
-                    <StatusBadge $status="INACTIVE">품절</StatusBadge>
-                  ) : (
-                    <StatusBadge $status="ACTIVE">판매중</StatusBadge>
-                  )}
+                  <div
+                    onClick={() => onToggleStatus(item.productId, item.status)}
+                    style={{
+                      cursor:
+                        item.status !== 'INACTIVE' ? 'pointer' : 'default',
+                    }}
+                  >
+                    {(() => {
+                      switch (item.status) {
+                        case 'ACTIVE':
+                          return (
+                            <StatusBadge $status="ACTIVE">판매중</StatusBadge>
+                          );
+                        case 'SOLD_OUT':
+                          return (
+                            <StatusBadge $status="SOLD_OUT">품절</StatusBadge>
+                          );
+                        case 'INACTIVE':
+                          return (
+                            <StatusBadge $status="INACTIVE">삭제됨</StatusBadge>
+                          );
+                        default:
+                          return (
+                            <StatusBadge $status="DEFAULT">
+                              {item.status}
+                            </StatusBadge>
+                          );
+                      }
+                    })()}
+                  </div>
                 </Td>
                 <Td>
                   <ActionContainer>
