@@ -1,5 +1,14 @@
 import { client } from './client'; 
 
+export interface RegionInfo {
+  accountRegionId: number;
+  regionId: number;
+  siDo: string;
+  gunGu: string;
+  dong: string;
+  isPrimary: boolean;
+}
+
 export interface MyInfoResponse {
   accountId: number;
   email: string;
@@ -7,7 +16,14 @@ export interface MyInfoResponse {
   nickname: string;
   phone?: string;
   profileImageUrl?: string;
+  regions?: RegionInfo[];
+  introduction?: string;         // 자기소개 문구
+  receivedReviewCount?: number;  // 받은 리뷰 수
+  sentReviewCount?: number;      // 보낸 리뷰 수
+  tradeCount?: number;           // 거래 횟수
 }
+
+
 
 export const userApi = {
   getMyInfo: async (): Promise<MyInfoResponse> => {
@@ -35,6 +51,16 @@ export const userApi = {
       return response.data?.data || response.data; 
     } catch (error) {
       console.error('재인증 토큰 발급 에러:', error);
+      throw error;
+    }
+  },
+
+  deleteAccount: async (data: { reAuthToken: string }) => {
+    try {
+      const response = await client.delete('/accounts/me', { data });
+      return response.data;
+    } catch (error) {
+      console.error('회원 탈퇴 에러:', error);
       throw error;
     }
   }

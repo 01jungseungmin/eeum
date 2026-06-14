@@ -14,7 +14,6 @@ import { userApi, MyInfoResponse } from '../api/user';
 export default function EditProfileScreen() {
   const router = useRouter();
   
-  // 상태 관리
   const [userInfo, setUserInfo] = useState<MyInfoResponse | null>(null);
   const [nickname, setNickname] = useState('');
   const [name, setName] = useState('');
@@ -24,7 +23,6 @@ export default function EditProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. 기존 내 정보 불러오기
   useEffect(() => {
     const fetchMyInfo = async () => {
       try {
@@ -44,7 +42,6 @@ export default function EditProfileScreen() {
     fetchMyInfo();
   }, []);
 
-  // 2. 갤러리에서 이미지 선택
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -64,7 +61,6 @@ export default function EditProfileScreen() {
     }
   };
 
-  // 3. 저장하기 (API 호출)
   const handleSave = async () => {
     if (!nickname.trim()) {
       Alert.alert('알림', '닉네임을 입력해주세요.');
@@ -73,7 +69,6 @@ export default function EditProfileScreen() {
 
     setIsSaving(true);
     try {
-      // API 명세에 따라 닉네임과 프로필 이미지만 PATCH 요청
       await userApi.updateProfile({
         nickname: nickname,
         profileImageUrl: profileImage || '' 
@@ -99,7 +94,6 @@ export default function EditProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={26} color="#000" />
@@ -109,7 +103,6 @@ export default function EditProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* 프로필 이미지 */}
         <View style={styles.profileSection}>
           <View style={styles.imageWrapper}>
             {profileImage ? (
@@ -125,10 +118,7 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* 폼 입력 영역 */}
         <View style={styles.formSection}>
-          
-          {/* 닉네임 */}
           <Text fontWeight="bold" style={styles.label}>닉네임</Text>
           <TextInput 
             style={styles.input}
@@ -137,7 +127,6 @@ export default function EditProfileScreen() {
             placeholder="닉네임을 입력하세요"
           />
 
-          {/* 이름 */}
           <Text fontWeight="bold" style={styles.label}>이름</Text>
           <TextInput 
             style={styles.input}
@@ -146,7 +135,6 @@ export default function EditProfileScreen() {
             placeholder="이름을 입력하세요"
           />
 
-          {/* 전화번호 */}
           <Text fontWeight="bold" style={styles.label}>전화번호</Text>
           <TextInput 
             style={styles.input}
@@ -156,7 +144,6 @@ export default function EditProfileScreen() {
             keyboardType="phone-pad"
           />
 
-          {/* 이메일 (수정 불가) */}
           <Text fontWeight="bold" style={styles.label}>이메일</Text>
           <TextInput 
             style={[styles.input, styles.disabledInput]}
@@ -164,27 +151,8 @@ export default function EditProfileScreen() {
             editable={false}
           />
           <Text style={styles.hintText}>이메일은 변경할 수 없습니다</Text>
-
-          {/* 주소 */}
-          <Text fontWeight="bold" style={styles.label}>주소</Text>
-          <View style={styles.addressRow}>
-            {/* 임시로 빈 주소 처리, 필요시 address 상태 추가 */}
-            <TextInput 
-              style={[styles.input, styles.addressInput]}
-              value="경기 수원시 권선구" 
-              editable={false}
-            />
-            <TouchableOpacity 
-              style={styles.addressButton}
-              onPress={() => Alert.alert('알림', '주소 변경 기능은 준비 중입니다.')}
-            >
-              <Text style={styles.addressButtonText}>주소 변경</Text>
-            </TouchableOpacity>
-          </View>
-
         </View>
 
-        {/* 저장 버튼 */}
         <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
           {isSaving ? (
             <ActivityIndicator color="#fff" />
@@ -202,14 +170,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 15, 
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0'
-  },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   backButton: { marginRight: 15 },
   headerTitle: { fontSize: 18, color: '#000' },
 
@@ -218,62 +179,15 @@ const styles = StyleSheet.create({
   profileSection: { alignItems: 'center', marginBottom: 30, marginTop: 10 },
   imageWrapper: { position: 'relative' },
   profileImage: { width: 100, height: 100, borderRadius: 50 },
-  placeholderImage: { 
-    width: 100, 
-    height: 100, 
-    borderRadius: 50, 
-    backgroundColor: '#F5F5F5', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0'
-  },
-  cameraBadge: { 
-    position: 'absolute', 
-    bottom: 0, 
-    right: 0, 
-    backgroundColor: '#1B854A', 
-    width: 30, 
-    height: 30, 
-    borderRadius: 15, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff'
-  },
+  placeholderImage: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E0E0E0' },
+  cameraBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#1B854A', width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
 
   formSection: { marginBottom: 30 },
   label: { fontSize: 14, color: '#333', marginBottom: 8, marginTop: 15 },
-  input: { 
-    borderWidth: 1, 
-    borderColor: '#E8E8E8', 
-    paddingHorizontal: 15, 
-    paddingVertical: 12, 
-    fontSize: 15, 
-    color: '#333',
-    borderRadius: 4
-  },
+  input: { borderWidth: 1, borderColor: '#E8E8E8', paddingHorizontal: 15, paddingVertical: 12, fontSize: 15, color: '#333', borderRadius: 4 },
   disabledInput: { backgroundColor: '#F9F9F9', color: '#888' },
   hintText: { fontSize: 12, color: '#888', marginTop: 6 },
 
-  addressRow: { flexDirection: 'row', alignItems: 'center' },
-  addressInput: { flex: 1, backgroundColor: '#F9F9F9' },
-  addressButton: { 
-    backgroundColor: '#F5F5F5', 
-    paddingVertical: 13, 
-    paddingHorizontal: 15, 
-    marginLeft: 10, 
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#E8E8E8'
-  },
-  addressButtonText: { fontSize: 14, color: '#333', fontWeight: '500' },
-
-  saveButton: { 
-    backgroundColor: '#1B854A', // 캡처 화면의 초록색과 유사한 색상
-    paddingVertical: 15, 
-    alignItems: 'center', 
-    borderRadius: 4 
-  },
+  saveButton: { backgroundColor: '#1B854A', paddingVertical: 15, alignItems: 'center', borderRadius: 4 },
   saveButtonText: { color: '#fff', fontSize: 16 }
 });

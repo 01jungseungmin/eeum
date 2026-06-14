@@ -16,7 +16,6 @@ export default function ProfileScreen() {
   const [userInfo, setUserInfo] = useState<MyInfoResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 화면 진입 시 정보 새로고침
   useFocusEffect(
     useCallback(() => {
       const fetchMyInfo = async () => {
@@ -33,7 +32,6 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // 아이콘이 포함된 메뉴 아이템 컴포넌트
   const MenuItem = ({ title, iconName, onPress }: { title: string; iconName: keyof typeof Ionicons.glyphMap; onPress: () => void }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuItemLeft}>
@@ -44,7 +42,6 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  // 섹션 제목 컴포넌트
   const SectionHeader = ({ title }: { title: string }) => (
     <View style={styles.sectionHeaderContainer}>
       <Text fontWeight="bold" style={styles.sectionHeaderText}>{title}</Text>
@@ -59,7 +56,7 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* 1. 프로필 정보 영역 */}
+        {/* 프로필 정보 요약 */}
         <View style={styles.profileSection}>
           {isLoading ? (
             <ActivityIndicator size="small" color="#1B854A" style={{ padding: 20 }} />
@@ -77,8 +74,8 @@ export default function ProfileScreen() {
                 <Text fontWeight="bold" style={styles.nicknameText}>
                   {userInfo?.nickname || '닉네임'}
                 </Text>
-                {/* 단순 프로필 조회 페이지로 이동 (추후 구현) */}
-                <TouchableOpacity onPress={() => Alert.alert('알림', '프로필 보기 페이지로 이동합니다.')}>
+                {/* ✨ 여기서 프로필 상세 화면으로 이동합니다! */}
+                <TouchableOpacity onPress={() => router.push('/profile-view' as any)}>
                   <Text style={styles.profileLinkText}>프로필 보기 {'>'}</Text>
                 </TouchableOpacity>
               </View>
@@ -88,7 +85,7 @@ export default function ProfileScreen() {
 
         <View style={styles.divider} />
 
-        {/* 2. 나의 중고 거래 */}
+        {/* 나의 메뉴 리스트들 */}
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 중고 거래" />
           <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
@@ -99,7 +96,6 @@ export default function ProfileScreen() {
 
         <View style={styles.divider} />
 
-        {/* 3. 나의 동네 상점 거래 */}
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 동네 상점 거래" />
           <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => router.push('/favorites' as any)} />
@@ -110,7 +106,6 @@ export default function ProfileScreen() {
 
         <View style={styles.divider} />
 
-        {/* 4. 나의 커뮤니티 활동 */}
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 커뮤니티 활동" />
           <MenuItem title="작성한 게시글" iconName="document-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
@@ -119,28 +114,22 @@ export default function ProfileScreen() {
         
         <View style={styles.divider} />
 
-        {/* 5. 설정 */}
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="설정" />
-          {/* 드디어 회원정보 수정 페이지(/edit) 연결! */}
           <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/edit' as any)} />
           <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/change-password' as any)} />
-          <MenuItem title="동네 설정" iconName="settings-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="알림 설정" iconName="settings-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="차단 목록 관리" iconName="settings-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="문의하기" iconName="settings-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/withdraw' as any)} />
         </View>
 
         <View style={styles.divider} />
 
-        {/* 6. 고객 지원 */}
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="고객 지원" />
           <MenuItem title="고객센터" iconName="help-circle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
           <MenuItem title="공지사항" iconName="document-text-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
         </View>
 
-        {/* 7. 로그아웃 (캡처 화면처럼 하단 중앙 붉은색) */}
         <TouchableOpacity style={styles.logoutButton} onPress={() => Alert.alert('로그아웃', '정말로 로그아웃 하시겠습니까?')}>
           <Ionicons name="log-out-outline" size={20} color="#E74C3C" style={{ marginRight: 6 }} />
           <Text style={styles.logoutText}>로그아웃</Text>
@@ -155,30 +144,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: { paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
   headerTitle: { fontSize: 18, color: '#333' },
-  
   scrollContent: { paddingBottom: 40 },
-
   profileSection: { paddingHorizontal: 20, paddingVertical: 25, backgroundColor: '#fff' },
   profileInfoRow: { flexDirection: 'row', alignItems: 'center' },
-  
   profileImage: { width: 60, height: 60, borderRadius: 30, marginRight: 15 },
   placeholderImage: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', marginRight: 15, borderWidth: 1, borderColor: '#EEE' },
-  
   profileTextContainer: { flex: 1, justifyContent: 'center' },
   nicknameText: { fontSize: 18, color: '#333', marginBottom: 6 },
   profileLinkText: { fontSize: 14, color: '#666' },
-  
   divider: { height: 8, backgroundColor: '#F8F9FA' },
-  
   menuSectionContainer: { paddingVertical: 10 },
   sectionHeaderContainer: { paddingHorizontal: 20, paddingVertical: 12 },
   sectionHeaderText: { fontSize: 14, color: '#333' },
-  
   menuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20 },
   menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
   menuIcon: { marginRight: 12 },
   menuText: { fontSize: 15, color: '#333' },
-
   logoutButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 30, marginBottom: 20 },
   logoutText: { fontSize: 15, color: '#E74C3C' }
 });
