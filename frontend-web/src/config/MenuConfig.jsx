@@ -63,7 +63,7 @@ export const OWNER_MENU_CONFIG = [
         name: '이벤트 관리',
         path: '/events',
         icon: <Tag {...iconProps} />,
-        subtitle: '진행 중인 이벤트를 확인하세요',
+        subtitle: '특가 및 시간 제한 이벤트 상품을 관리하세요',
       },
       {
         id: 'coupons',
@@ -285,7 +285,7 @@ export const ADMIN_MENU_CONFIG = [
 
 export const findMenuByPath = (path, role) => {
   const targetConfig =
-    role === 'ROLE_USER' ? OWNER_MENU_CONFIG : ADMIN_MENU_CONFIG;
+    role === 'ROLE_OWNER' ? OWNER_MENU_CONFIG : ADMIN_MENU_CONFIG;
   for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;

@@ -17,21 +17,6 @@ const PageContainer = styled.div`
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 `;
 
-const SubHeader = styled.div`
-  margin-bottom: 24px;
-  h1 {
-    font-size: 22px;
-    font-weight: bold;
-    color: #1a1f2c;
-    margin: 0 0 6px 0;
-  }
-  p {
-    font-size: 13px;
-    color: #8e94a0;
-    margin: 0;
-  }
-`;
-
 const MainCard = styled.div`
   background: white;
   border-radius: 16px;
@@ -305,14 +290,6 @@ function CategoryPage() {
 
   return (
     <PageContainer>
-      <SubHeader>
-        <h1>카테고리 관리</h1>
-        <p>
-          2026년 6월 14일 일요일 · 상품 카테고리를 생성하고 순서를 지정하세요
-        </p>
-      </SubHeader>
-
-      {/* [컴포넌트 1] 대시보드 통계 카드 */}
       <CategoryStats
         totalCount={totalCount}
         activeCount={activeCount}
@@ -383,7 +360,6 @@ function CategoryPage() {
 
       <CategoryInfo />
 
-      {/* [컴포넌트 3] 새 카테고리 추가 모달 */}
       <AddCategoryModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
