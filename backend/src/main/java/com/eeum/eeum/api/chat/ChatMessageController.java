@@ -12,14 +12,15 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
+import org.springframework.data.domain.Slice;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "16. Chat Message", description = "채팅 메시지 API (REST — WebSocket 도입 전)")
+import java.time.LocalDateTime;
+
+@Tag(name = "16. Chat Message", description = "채팅 메시지 API (텍스트/이미지 발송은 WebSocket 권장, REST는 폴백 경로)")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/chat")
@@ -29,15 +30,18 @@ public class ChatMessageController {
 
     private final ChatMessageService chatMessageService;
 
-    @Operation(summary = "메시지 목록 조회", description = "최신순으로 메시지를 페이징 조회합니다. 삭제된 메시지는 '삭제된 메시지입니다'로 표시됩니다.")
+    @Operation(summary = "메시지 목록 조회",
+               description = "최신순 커서 페이징. cursor(sentAt)가 없으면 첫 페이지. 삭제된 메시지는 '삭제된 메시지입니다'로 표시됩니다.")
     @GetMapping("/rooms/{roomId}/messages")
-    public ResponseEntity<ApiResponse<Page<ChatMessageResponseDto>>> getMessages(
+    public ResponseEntity<ApiResponse<Slice<ChatMessageResponseDto>>> getMessages(
             @PathVariable Long roomId,
-            @PageableDefault(size = 30) Pageable pageable
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursor,
+            @RequestParam(defaultValue = "30") int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                chatMessageService.getMessages(accountId, roomId, pageable)));
+                chatMessageService.getMessages(accountId, roomId, cursor, size)));
     }
 
     @Operation(summary = "텍스트 메시지 발송", description = "REST 폴백 경로로 텍스트 메시지를 발송합니다.")

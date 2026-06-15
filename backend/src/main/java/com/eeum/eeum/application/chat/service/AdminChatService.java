@@ -3,6 +3,7 @@ package com.eeum.eeum.application.chat.service;
 import com.eeum.eeum.application.chat.dto.request.ChatRoomAdminSearchDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
+import com.eeum.eeum.application.chat.helper.ChatMessagePreview;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
@@ -18,6 +19,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 /**
  * 관리자 채팅 모니터링/모더레이션 (REST). 신고 연동은 신고 도메인 구현 시 확장.
  */
@@ -30,19 +36,37 @@ public class AdminChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatParticipantRepository chatParticipantRepository;
 
-    // 전체 채팅방 조회 (타입/활성/기간 필터)
+    // 전체 채팅방 조회 (타입/활성/기간 필터) — 배치 쿼리로 N+1 제거
     @Transactional(readOnly = true)
     public Page<ChatRoomResponseDto> getAllRooms(ChatRoomAdminSearchDto condition, Pageable pageable) {
-        return chatRoomRepository.searchRoomsByAdmin(condition, pageable)
-                .map(room -> {
-                    long participantCount = chatParticipantRepository
-                            .countByChatRoom_ChatroomIdAndStatus(room.getChatroomId(), ParticipantStatus.ACTIVE);
-                    String preview = chatMessageRepository
-                            .findFirstByChatRoom_ChatroomIdOrderBySentAtDesc(room.getChatroomId())
-                            .map(ChatMessage::getContent)
-                            .orElse(null);
-                    return ChatRoomResponseDto.of(room, preview, 0L, participantCount);
-                });
+        Page<ChatRoom> rooms = chatRoomRepository.searchRoomsByAdmin(condition, pageable);
+        if (rooms.isEmpty()) {
+            return rooms.map(room -> ChatRoomResponseDto.of(room, null, 0L, 0L));
+        }
+
+        List<Long> roomIds = rooms.stream().map(ChatRoom::getChatroomId).toList();
+
+        Map<Long, Long> participantCounts = chatParticipantRepository
+                .countGroupedByRoomIdsAndStatus(roomIds, ParticipantStatus.ACTIVE)
+                .stream()
+                .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
+
+        Map<Long, ChatMessage> latestMessages = chatMessageRepository
+                .findLatestMessagesForRooms(roomIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        msg -> msg.getChatRoom().getChatroomId(),
+                        msg -> msg,
+                        (a, b) -> a.getSentAt().isAfter(b.getSentAt()) ? a : b
+                ));
+
+        return rooms.map(room -> {
+            long participantCount = participantCounts.getOrDefault(room.getChatroomId(), 0L);
+            String preview = Optional.ofNullable(latestMessages.get(room.getChatroomId()))
+                    .map(ChatMessagePreview::of)
+                    .orElse(null);
+            return ChatRoomResponseDto.of(room, preview, 0L, participantCount);
+        });
     }
 
     // 채팅방 메시지 조회 (신고 처리용)

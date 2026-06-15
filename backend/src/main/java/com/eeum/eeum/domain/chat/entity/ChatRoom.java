@@ -82,10 +82,6 @@ public class ChatRoom extends BaseEntity {
         this.isActive = false;
     }
 
-    public boolean isPrivate() {
-        return this.type == ChatRoomType.PRIVATE;
-    }
-
     public boolean isGroup() {
         return this.type == ChatRoomType.GROUP || this.type == ChatRoomType.GROUP_STREET;
     }

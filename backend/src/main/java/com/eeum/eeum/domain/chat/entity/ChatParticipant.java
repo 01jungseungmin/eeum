@@ -78,4 +78,8 @@ public class ChatParticipant extends BaseEntity {
     public boolean isActive() {
         return this.status == ParticipantStatus.ACTIVE;
     }
+
+    public LocalDateTime unreadSince() {
+        return lastReadTime != null ? lastReadTime : joinedAt;
+    }
 }

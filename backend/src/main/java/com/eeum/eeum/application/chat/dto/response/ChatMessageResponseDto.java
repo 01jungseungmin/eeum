@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Schema(description = "채팅 메시지")
 public class ChatMessageResponseDto {
 
-    private static final String DELETED_PLACEHOLDER = "삭제된 메시지입니다";
+    private static final String DELETED_PLACEHOLDER = "삭제된 메시지입니다.";
 
     private final Long messageId;
     private final Long roomId;

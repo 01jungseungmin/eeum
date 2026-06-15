@@ -11,6 +11,7 @@ import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
+import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
@@ -21,14 +22,16 @@ import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -47,7 +50,7 @@ public class ChatMessageService {
 
     // ===================== 메시지 발송 =====================
 
-    // 텍스트 메시지 발송 (REST 폴백 — WebSocket 도입 전 기본 경로)
+    // 텍스트 메시지 발송
     @Transactional
     public ChatMessageResponseDto sendMessage(
             Long accountId, Long roomId, ChatMessageSendRequestDto request) {
@@ -62,11 +65,19 @@ public class ChatMessageService {
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
+        ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
+
+        eventPublisher.publishEvent(
+                new ChatMessageBroadcastEvent(room.getChatroomId(), dto)
+        );
+
         publishSentEvent(room, sender, message, request.getContent());
-        return ChatMessageResponseDto.from(message);
+
+        return dto;
     }
 
     // 이미지 메시지 발송 (클라이언트가 S3 업로드 후 URL 전달)
+    // WS/REST 구분 없이 이 이벤트로 브로드캐스트 — WS 핸들러는 직접 broadcast 하지 않음
     @Transactional
     public ChatMessageResponseDto sendImageMessage(
             Long accountId, Long roomId, ChatImageMessageSendRequestDto request) {
@@ -81,19 +92,30 @@ public class ChatMessageService {
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
+        ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
+        eventPublisher.publishEvent(new ChatMessageBroadcastEvent(room.getChatroomId(), dto));
         publishSentEvent(room, sender, message, "사진을 보냈습니다");
-        return ChatMessageResponseDto.from(message);
+        return dto;
     }
 
     // ===================== 조회 =====================
 
-    // 메시지 목록 (최신→과거). isDeleted=true는 "삭제된 메시지"로 표시
+    // 메시지 목록 (최신→과거) — 커서 기반 무한 스크롤
+    // cursor: 이전 페이지의 마지막 메시지 sentAt (null이면 첫 페이지)
     @Transactional(readOnly = true)
-    public Page<ChatMessageResponseDto> getMessages(Long accountId, Long roomId, Pageable pageable) {
+    public Slice<ChatMessageResponseDto> getMessages(
+            Long accountId, Long roomId, LocalDateTime cursor, int size) {
         chatAccessHelper.verifyParticipant(accountId, roomId);
-        return chatMessageRepository
-                .findAllByChatRoom_ChatroomIdOrderBySentAtDesc(roomId, pageable)
-                .map(ChatMessageResponseDto::from);
+        PageRequest pageable = PageRequest.of(0, size + 1);
+        List<ChatMessage> raw = (cursor == null)
+                ? chatMessageRepository.findAllByChatRoom_ChatroomIdOrderBySentAtDesc(roomId, pageable).getContent()
+                : chatMessageRepository.findAllByChatRoom_ChatroomIdAndSentAtBeforeOrderBySentAtDesc(roomId, cursor, pageable);
+        boolean hasNext = raw.size() > size;
+        List<ChatMessageResponseDto> content = raw.stream()
+                .limit(size)
+                .map(ChatMessageResponseDto::from)
+                .toList();
+        return new SliceImpl<>(content, pageable, hasNext);
     }
 
     // 전체 안 읽은 메시지 수 (Redis 우선, 캐시 미스 시 DB 합산)
@@ -105,7 +127,7 @@ public class ChatMessageService {
 
     // ===================== 삭제 =====================
 
-    // 본인 메시지 Soft Delete
+    // 본인 메시지 Soft Delete — 삭제 후 같은 방 참여자에게 "삭제된 메시지" 상태 브로드캐스트
     @Transactional
     public void deleteMessage(Long accountId, Long messageId) {
         ChatMessage message = chatAccessHelper.verifyMessageOwnership(accountId, messageId);
@@ -113,6 +135,8 @@ public class ChatMessageService {
             throw new BadRequestException(ErrorCode.CHAT_MESSAGE_NOT_DELETABLE);
         }
         message.markDeleted();
+        Long roomId = message.getChatRoom().getChatroomId();
+        eventPublisher.publishEvent(new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message)));
         log.info("채팅 메시지 삭제: messageId={}, accountId={}", messageId, accountId);
     }
 
@@ -145,13 +169,8 @@ public class ChatMessageService {
         return chatParticipantRepository
                 .findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE)
                 .stream()
-                .mapToLong(p -> {
-                    LocalDateTime since = p.getLastReadTime() != null
-                            ? p.getLastReadTime()
-                            : p.getJoinedAt();
-                    return chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfter(
-                            p.getChatRoom().getChatroomId(), since);
-                })
+                .mapToLong(p -> chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
+                        p.getChatRoom().getChatroomId(), p.unreadSince(), accountId))
                 .sum();
     }
 

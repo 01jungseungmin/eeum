@@ -14,10 +14,6 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
     // 본인 참여 여부 검증 (상태 무관 — 재입장 처리용)
     Optional<ChatParticipant> findByChatRoom_ChatroomIdAndAccount_AccountId(Long roomId, Long accountId);
 
-    // ACTIVE 참여자 검증 (Helper용)
-    boolean existsByChatRoom_ChatroomIdAndAccount_AccountIdAndStatus(
-            Long roomId, Long accountId, ParticipantStatus status);
-
     // 채팅방 참여자 목록 (상태 무관)
     List<ChatParticipant> findAllByChatRoom_ChatroomId(Long roomId);
 
@@ -42,6 +38,4 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
     List<Object[]> countGroupedByRoomIdsAndStatus(
             @Param("roomIds") List<Long> roomIds, @Param("status") ParticipantStatus status);
 
-    // 채팅방 강제 삭제 시 CASCADE
-    void deleteAllByChatRoom_ChatroomId(Long roomId);
 }

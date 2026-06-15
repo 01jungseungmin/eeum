@@ -2,9 +2,12 @@ package com.eeum.eeum.application.chat.service;
 
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatParticipantResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatReadResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomDetailResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
+import com.eeum.eeum.application.chat.helper.ChatMessagePreview;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -14,13 +17,13 @@ import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
-import com.eeum.eeum.domain.chat.enums.MessageType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
+import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.event.ChatRoomReadEvent;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -43,14 +46,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatRoomService {
-
-    private static final int PREVIEW_MAX_LENGTH = 50;
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
@@ -81,60 +83,40 @@ public class ChatRoomService {
                 ? LockKeys.chatRoomStore(request.getRefId())
                 : LockKeys.chatRoom(accountId);
 
-        return redisLockService.executeWithLock(lockKey, Duration.ofSeconds(5), () ->
-                transactionTemplate.execute(status -> {
-                    // STORE 단톡방: 소유권 검증 → 멱등성 확인 순으로 처리
-                    Store store = null;
-                    if (isStoreRoom) {
-                        store = storeRepository.findById(request.getRefId())
-                                .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
-                        if (!store.isOwnedBy(accountId)) {
-                            throw new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED);
-                        }
+        return withLockAndTx(lockKey, () -> {
+            Store store = null;
+            if (isStoreRoom) {
+                store = storeRepository.findById(request.getRefId())
+                        .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
+                if (!store.isOwnedBy(accountId)) {
+                    throw new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED);
+                }
+                Optional<ChatRoom> existing = chatRoomRepository
+                        .findByRefTypeAndRefIdAndType(ChatRoomRefType.STORE, request.getRefId(), type);
+                if (existing.isPresent()) {
+                    log.info("가게 단톡방 이미 존재 → 기존 방 반환: roomId={}, storeId={}",
+                            existing.get().getChatroomId(), request.getRefId());
+                    return toResponseDto(existing.get(), accountId);
+                }
+            }
 
-                        Optional<ChatRoom> existing = chatRoomRepository
-                                .findByRefTypeAndRefIdAndType(ChatRoomRefType.STORE, request.getRefId(), type);
-                        if (existing.isPresent()) {
-                            log.info("가게 단톡방 이미 존재 → 기존 방 반환: roomId={}, storeId={}",
-                                    existing.get().getChatroomId(), request.getRefId());
-                            return toResponseDto(existing.get(), accountId);
-                        }
-                    }
+            Account creator = getAccount(accountId);
+            ChatRoom room = ChatRoom.createGroup(creator, type,
+                    resolveRoomName(request.getName(), isStoreRoom, store), refType, request.getRefId());
+            chatRoomRepository.save(room);
+            chatParticipantRepository.save(ChatParticipant.create(room, creator));
 
-                    Account creator = getAccount(accountId);
+            List<Account> invitees = loadInvitees(request.getParticipantAccountIds(), accountId);
+            for (Account invitee : invitees) {
+                chatParticipantRepository.save(ChatParticipant.create(room, invitee));
+            }
 
-                    // STORE 타입이고 name 미전달 → '가게명 단톡방' 자동 설정
-                    final String roomName;
-                    String rawName = request.getName();
-                    if ((rawName == null || rawName.isBlank()) && isStoreRoom) {
-                        roomName = store.getName() + " 단톡방";
-                    } else if (rawName == null || rawName.isBlank()) {
-                        throw new BadRequestException(ErrorCode.CHAT_NAME_REQUIRED);
-                    } else {
-                        roomName = rawName;
-                    }
-
-                    ChatRoom room = ChatRoom.createGroup(creator, type, roomName, refType, request.getRefId());
-                    chatRoomRepository.save(room);
-
-                    chatParticipantRepository.save(ChatParticipant.create(room, creator));
-
-                    List<Account> invitees = loadInvitees(request.getParticipantAccountIds(), accountId);
-                    for (Account invitee : invitees) {
-                        chatParticipantRepository.save(ChatParticipant.create(room, invitee));
-                    }
-
-                    ChatMessage system = ChatMessage.system(room, creator,
-                            String.format("%s님이 채팅방을 개설했습니다.", creator.getName()));
-                    chatMessageRepository.save(system);
-                    room.updateLastMessageAt(system.getSentAt());
-
-                    log.info("그룹 채팅방 생성: roomId={}, creator={}, 초대={}명",
-                            room.getChatroomId(), accountId, invitees.size());
-
-                    return toResponseDto(room, accountId);
-                })
-        );
+            saveAndBroadcastSystemMessage(room, creator,
+                    String.format("%s님이 채팅방을 개설했습니다.", creator.getName()));
+            log.info("그룹 채팅방 생성: roomId={}, creator={}, 초대={}명",
+                    room.getChatroomId(), accountId, invitees.size());
+            return toResponseDto(room, accountId);
+        });
     }
 
     // ===================== 조회 =====================
@@ -168,7 +150,7 @@ public class ChatRoomService {
             long participantCount = participantCounts.getOrDefault(room.getChatroomId(), 0L);
             long unread = resolveRoomUnread(room.getChatroomId(), accountId);
             String preview = Optional.ofNullable(latestMessages.get(room.getChatroomId()))
-                    .map(this::previewText)
+                    .map(ChatMessagePreview::of)
                     .orElse(null);
             return ChatRoomResponseDto.of(room, preview, unread, participantCount);
         });
@@ -194,132 +176,171 @@ public class ChatRoomService {
     // 직접 입장 — 초대 없이 GROUP 채팅방에 스스로 참여
     // 락 획득 후 트랜잭션 시작 → 커밋 완료 후 락 해제 (중복 INSERT 방지)
     public void joinRoom(Long accountId, Long roomId) {
-        redisLockService.executeWithLock(LockKeys.chatRoomInvite(roomId), Duration.ofSeconds(5), () ->
-                transactionTemplate.execute(status -> {
-                    // 락 내부에서 최신 상태 재조회
-                    ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
-                    chatAccessHelper.verifyRoomActive(room);
-                    chatAccessHelper.verifyGroupRoom(room);
+        withLockAndTx(LockKeys.chatRoomInvite(roomId), () -> {
+            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            chatAccessHelper.verifyRoomActive(room);
+            chatAccessHelper.verifyGroupRoom(room);
 
-                    ChatParticipant existing = chatParticipantRepository
-                            .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId)
-                            .orElse(null);
+            ChatParticipant existing = chatParticipantRepository
+                    .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId)
+                    .orElse(null);
 
-                    if (existing != null && existing.isActive()) {
-                        // DB 쓰기 없음 — AFTER_COMMIT 이벤트 대신 직접 리셋
-                        chatUnreadService.resetRoom(accountId, roomId);
-                        return null;
-                    }
+            if (existing != null && existing.isActive()) {
+                // DB 쓰기 없음 — AFTER_COMMIT 이벤트 대신 직접 리셋
+                chatUnreadService.resetRoom(accountId, roomId);
+                return;
+            }
 
-                    Account account = getAccount(accountId);
-                    if (existing != null) {
-                        existing.rejoin();
-                    } else {
-                        chatParticipantRepository.save(ChatParticipant.create(room, account));
-                    }
+            Account account = getAccount(accountId);
+            if (existing != null) {
+                existing.rejoin();
+            } else {
+                chatParticipantRepository.save(ChatParticipant.create(room, account));
+            }
 
-                    ChatMessage system = ChatMessage.system(room, account,
-                            String.format("%s님이 입장했습니다.", account.getName()));
-                    chatMessageRepository.save(system);
-                    room.updateLastMessageAt(system.getSentAt());
-                    eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
-
-                    log.info("채팅방 직접 입장: roomId={}, accountId={}", roomId, accountId);
-                    return null;
-                })
-        );
+            saveAndBroadcastSystemMessage(room, account,
+                    String.format("%s님이 입장했습니다.", account.getName()));
+            eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
+            log.info("채팅방 직접 입장: roomId={}, accountId={}", roomId, accountId);
+        });
     }
 
     // GROUP 채팅방 참여자 초대 + 입장 SYSTEM 메시지
     // 락 획득 후 트랜잭션 시작 → 커밋 완료 후 락 해제 (동시 초대 시 중복 참여자 방지)
     public void inviteParticipants(Long accountId, Long roomId, List<Long> accountIds) {
-        redisLockService.executeWithLock(
-                LockKeys.chatRoomInvite(roomId),
-                Duration.ofSeconds(5),
-                () -> transactionTemplate.execute(status -> {
-                    ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
-                    chatAccessHelper.verifyRoomActive(room);
-                    chatAccessHelper.verifyParticipant(accountId, roomId);
-                    chatAccessHelper.verifyGroupRoom(room);
+        withLockAndTx(LockKeys.chatRoomInvite(roomId), () -> {
+            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            chatAccessHelper.verifyRoomActive(room);
+            chatAccessHelper.verifyParticipant(accountId, roomId);
+            chatAccessHelper.verifyGroupRoom(room);
 
-                    // STORE 단톡방 초대는 가게 소유자만 가능
-                    if (room.getRefType() == ChatRoomRefType.STORE) {
-                        Store store = storeRepository.findById(room.getRefId())
-                                .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
-                        if (!store.isOwnedBy(accountId)) {
-                            throw new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED);
-                        }
-                    }
+            // STORE 단톡방 초대는 가게 소유자만 가능
+            if (room.getRefType() == ChatRoomRefType.STORE) {
+                Store store = storeRepository.findById(room.getRefId())
+                        .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
+                if (!store.isOwnedBy(accountId)) {
+                    throw new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED);
+                }
+            }
 
-                    List<Account> invitees = loadInvitees(accountIds, null);
-                    List<String> joinedNames = new ArrayList<>();
+            List<Account> invitees = loadInvitees(accountIds, null);
+            List<String> joinedNames = new ArrayList<>();
 
-                    for (Account invitee : invitees) {
-                        ChatParticipant existing = chatParticipantRepository
-                                .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, invitee.getAccountId())
-                                .orElse(null);
+            for (Account invitee : invitees) {
+                ChatParticipant existing = chatParticipantRepository
+                        .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, invitee.getAccountId())
+                        .orElse(null);
+                if (existing == null) {
+                    chatParticipantRepository.save(ChatParticipant.create(room, invitee));
+                    joinedNames.add(invitee.getName());
+                } else if (!existing.isActive()) {
+                    existing.rejoin();
+                    joinedNames.add(invitee.getName());
+                }
+            }
 
-                        if (existing == null) {
-                            chatParticipantRepository.save(ChatParticipant.create(room, invitee));
-                            joinedNames.add(invitee.getName());
-                        } else if (!existing.isActive()) {
-                            existing.rejoin();
-                            joinedNames.add(invitee.getName());
-                        }
-                    }
-
-                    if (!joinedNames.isEmpty()) {
-                        ChatMessage system = ChatMessage.system(room, getAccount(accountId),
-                                String.format("%s님이 입장했습니다.", String.join(", ", joinedNames)));
-                        chatMessageRepository.save(system);
-                        room.updateLastMessageAt(system.getSentAt());
-                    }
-
-                    log.info("채팅방 참여자 초대: roomId={}, 신규={}명", roomId, joinedNames.size());
-                    return null;
-                })
-        );
+            if (!joinedNames.isEmpty()) {
+                saveAndBroadcastSystemMessage(room, getAccount(accountId),
+                        String.format("%s님이 입장했습니다.", String.join(", ", joinedNames)));
+            }
+            log.info("채팅방 참여자 초대: roomId={}, 신규={}명", roomId, joinedNames.size());
+        });
     }
 
     // 채팅방 나가기 (status=LEFT, leftAt 기록). GROUP 전체 퇴장 시 isActive=false
     // 락 획득 후 트랜잭션 시작 → 커밋 완료 후 락 해제 (동시 퇴장 시 비활성화 중복 처리 방지)
     public void leaveRoom(Long accountId, Long roomId) {
-        redisLockService.executeWithLock(LockKeys.chatRoomLeave(roomId), Duration.ofSeconds(5), () ->
-                transactionTemplate.execute(status -> {
-                    ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
-                    ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
+        withLockAndTx(LockKeys.chatRoomLeave(roomId), () -> {
+            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
+            participant.leave();
+            eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
 
-                    participant.leave();
-                    eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
+            Account actor = participant.getAccount();
+            saveAndBroadcastSystemMessage(room, actor,
+                    String.format("%s님이 나갔습니다.", actor.getName()));
 
-                    Account actor = participant.getAccount();
-                    ChatMessage system = ChatMessage.system(room, actor,
-                            String.format("%s님이 나갔습니다.", actor.getName()));
-                    chatMessageRepository.save(system);
-                    room.updateLastMessageAt(system.getSentAt());
-
-                    long activeCount = chatParticipantRepository
-                            .countByChatRoom_ChatroomIdAndStatus(roomId, ParticipantStatus.ACTIVE);
-                    if (activeCount == 0) {
-                        room.deactivate();
-                        log.info("채팅방 전체 퇴장 → 비활성화: roomId={}", roomId);
-                    }
-                    return null;
-                })
-        );
+            long activeCount = chatParticipantRepository
+                    .countByChatRoom_ChatroomIdAndStatus(roomId, ParticipantStatus.ACTIVE);
+            if (activeCount == 0) {
+                room.deactivate();
+                log.info("채팅방 전체 퇴장 → 비활성화: roomId={}", roomId);
+            }
+        });
     }
 
     // ===================== 읽음 처리 =====================
 
-    // lastReadTime 갱신 → AFTER_COMMIT 후 unread 캐시 리셋
+    // lastReadTime 갱신 → AFTER_COMMIT 후 unread 캐시 리셋 (REST 엔드포인트용)
     @Transactional
     public void markRoomAsRead(Long accountId, Long roomId) {
+        doMarkRoomAsRead(accountId, roomId);
+    }
+
+    // WebSocket 읽음 처리 — 단일 트랜잭션 안에서 lastReadTime 갱신 + 최신 messageId 조회
+    // 두 트랜잭션으로 분리 시 그 사이 신규 메시지 유입으로 lastReadMessageId가 부정확해지는 문제 방지
+    @Transactional
+    public ChatReadResponseDto markRoomAsReadWithResult(Long accountId, Long roomId) {
+        LocalDateTime readAt = doMarkRoomAsRead(accountId, roomId);
+        Long lastReadMessageId = chatMessageRepository
+                .findFirstByChatRoom_ChatroomIdOrderBySentAtDesc(roomId)
+                .map(ChatMessage::getChatmessageId)
+                .orElse(null);
+        return ChatReadResponseDto.builder()
+                .roomId(roomId)
+                .accountId(accountId)
+                .lastReadMessageId(lastReadMessageId)
+                .readAt(readAt)
+                .build();
+    }
+
+    // 참여자 lastReadTime 갱신 + unread 리셋 이벤트 발행 공통 로직
+    private LocalDateTime doMarkRoomAsRead(Long accountId, Long roomId) {
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
-        participant.updateLastReadTime(LocalDateTime.now());
+        LocalDateTime readAt = LocalDateTime.now();
+        participant.updateLastReadTime(readAt);
         eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
+        return readAt;
+    }
+
+    // WebSocket 타이핑 인디케이터용 — 참여자 검증 후 nickname 반환 (Account LAZY → 트랜잭션 내 처리)
+    @Transactional(readOnly = true)
+    public String verifyParticipantAndGetNickname(Long accountId, Long roomId) {
+        ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
+        return participant.getAccount().getNickname();
     }
 
     // ===================== 내부 헬퍼 =====================
+
+    // 락 획득 + 트랜잭션 실행 (반환값 있음)
+    private <T> T withLockAndTx(String lockKey, Supplier<T> action) {
+        return redisLockService.executeWithLock(lockKey, Duration.ofSeconds(5),
+                () -> transactionTemplate.execute(status -> action.get()));
+    }
+
+    // 락 획득 + 트랜잭션 실행 (반환값 없음)
+    private void withLockAndTx(String lockKey, Runnable action) {
+        redisLockService.executeWithLock(lockKey, Duration.ofSeconds(5),
+                () -> transactionTemplate.execute(status -> { action.run(); return null; }));
+    }
+
+    // SYSTEM 메시지 저장 + lastMessageAt 갱신 + WS 브로드캐스트 이벤트 발행
+    private void saveAndBroadcastSystemMessage(ChatRoom room, Account actor, String content) {
+        ChatMessage system = ChatMessage.system(room, actor, content);
+        chatMessageRepository.save(system);
+        room.updateLastMessageAt(system.getSentAt());
+        eventPublisher.publishEvent(
+                new ChatMessageBroadcastEvent(room.getChatroomId(), ChatMessageResponseDto.from(system)));
+    }
+
+    // STORE 단톡방 자동 이름 / 일반 그룹 이름 결정
+    private String resolveRoomName(String rawName, boolean isStoreRoom, Store store) {
+        if (rawName == null || rawName.isBlank()) {
+            if (isStoreRoom) return store.getName() + " 단톡방";
+            throw new BadRequestException(ErrorCode.CHAT_NAME_REQUIRED);
+        }
+        return rawName;
+    }
 
     private Account getAccount(Long accountId) {
         return accountRepository.findById(accountId)
@@ -344,10 +365,8 @@ public class ChatRoomService {
     private ChatRoomResponseDto toResponseDto(ChatRoom room, Long accountId) {
         long participantCount = chatParticipantRepository
                 .countByChatRoom_ChatroomIdAndStatus(room.getChatroomId(), ParticipantStatus.ACTIVE);
-
         long unread = resolveRoomUnread(room.getChatroomId(), accountId);
         String preview = buildPreview(room.getChatroomId());
-
         return ChatRoomResponseDto.of(room, preview, unread, participantCount);
     }
 
@@ -356,35 +375,15 @@ public class ChatRoomService {
             ChatParticipant participant = chatParticipantRepository
                     .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId)
                     .orElse(null);
-            if (participant == null) {
-                return 0L;
-            }
-            LocalDateTime since = participant.getLastReadTime() != null
-                    ? participant.getLastReadTime()
-                    : participant.getJoinedAt();
-            return chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfter(roomId, since);
+            if (participant == null) return 0L;
+            return chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
+                    roomId, participant.unreadSince(), accountId);
         });
     }
 
     private String buildPreview(Long roomId) {
         return chatMessageRepository.findFirstByChatRoom_ChatroomIdOrderBySentAtDesc(roomId)
-                .map(this::previewText)
+                .map(ChatMessagePreview::of)
                 .orElse(null);
-    }
-
-    private String previewText(ChatMessage message) {
-        if (message.isDeleted()) {
-            return "삭제된 메시지입니다";
-        }
-        if (message.getMessageType() == MessageType.IMAGE) {
-            return "사진을 보냈습니다";
-        }
-        String content = message.getContent();
-        if (content == null) {
-            return null;
-        }
-        return content.length() > PREVIEW_MAX_LENGTH
-                ? content.substring(0, PREVIEW_MAX_LENGTH) + "…"
-                : content;
     }
 }
