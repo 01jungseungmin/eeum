@@ -170,6 +170,12 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CHAT_MESSAGE_NOT_FOUND("CHAT_003", "존재하지 않는 메시지입니다", HttpStatus.NOT_FOUND),
     CHAT_MESSAGE_ACCESS_DENIED("CHAT_004", "메시지 삭제 권한이 없습니다", HttpStatus.FORBIDDEN),
     CHAT_ROOM_INACTIVE("CHAT_005", "비활성화된 채팅방입니다", HttpStatus.BAD_REQUEST),
+    CHAT_NOT_PARTICIPANT("CHAT_006", "채팅방 참여자가 아닙니다", HttpStatus.FORBIDDEN),
+    CHAT_NOT_GROUP_ROOM("CHAT_007", "그룹 채팅방이 아닙니다", HttpStatus.BAD_REQUEST),
+    CHAT_MESSAGE_NOT_DELETABLE("CHAT_008", "삭제할 수 없는 메시지입니다", HttpStatus.BAD_REQUEST),
+    CHAT_INVALID_ROOM_TYPE("CHAT_009", "지원하지 않는 채팅방 타입입니다", HttpStatus.BAD_REQUEST),
+    CHAT_MESSAGE_DUPLICATE("CHAT_010", "이미 처리된 메시지 요청입니다", HttpStatus.CONFLICT),
+    CHAT_NAME_REQUIRED("CHAT_011", "채팅방 이름은 필수입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 리뷰 (REVIEW) =====================
     STORE_REVIEW_NOT_FOUND("REVIEW_001", "존재하지 않는 상점 리뷰입니다", HttpStatus.NOT_FOUND),
