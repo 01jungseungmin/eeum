@@ -4,6 +4,7 @@ import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
+import com.eeum.eeum.application.product.dto.response.ProductCreateResponseDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
 import com.eeum.eeum.application.product.service.ProductImageService;
 import com.eeum.eeum.application.product.service.ProductService;
@@ -48,12 +49,12 @@ public class ProductController {
             description = "현재 로그인한 사장의 상점에 상품을 등록합니다. 상품 유형은 SALE(판매 상품), RESERVATION(예약 상품), MENU(메뉴 상품) 중 하나를 선택합니다. 사장 입점 심사 단계에서는 MENU 상품 1개 이상 등록 여부가 대표 메뉴 등록 완료 기준으로 사용됩니다."
     )
     @PostMapping
-    public ResponseEntity<ApiResponse<Void>> createProduct(
+    public ResponseEntity<ApiResponse<ProductCreateResponseDto>> createProduct(
             @Valid @RequestBody ProductCreateRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
-        productService.createProduct(accountId, request);
-        return ResponseEntity.ok(ApiResponse.success());
+        ProductCreateResponseDto response = productService.createProduct(accountId, request);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @Operation(

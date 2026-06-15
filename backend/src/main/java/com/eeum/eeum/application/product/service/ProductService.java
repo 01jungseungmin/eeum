@@ -4,6 +4,7 @@ import com.eeum.eeum.application.product.dto.request.ProductCreateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductStatusUpdateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductUpdateRequestDto;
 import com.eeum.eeum.application.product.dto.request.ProductUpdateStockRequestDto;
+import com.eeum.eeum.application.product.dto.response.ProductCreateResponseDto;
 import com.eeum.eeum.application.product.dto.response.ProductResponseDto;
 import com.eeum.eeum.application.product.mapper.ProductMapper;
 import com.eeum.eeum.domain.product.entity.Product;
@@ -48,7 +49,7 @@ public class ProductService {
     }
 
     @Transactional
-    public void createProduct(Long accountId, ProductCreateRequestDto request) {
+    public ProductCreateResponseDto createProduct(Long accountId, ProductCreateRequestDto request) {
         Store store = getStore(accountId);
 
         ProductCategory productCategory = productCategoryRepository
@@ -71,7 +72,11 @@ public class ProductService {
         );
 
         productRepository.save(product);
-        log.info("상품 등록: accountId={}, productType={}", accountId, request.getProductType());
+        log.info("상품 등록: accountId={}, productType={}, ", accountId, request.getProductType());
+
+        return ProductCreateResponseDto.builder()
+                .productId(product.getProductId())
+                .build();
     }
 
     @Transactional
