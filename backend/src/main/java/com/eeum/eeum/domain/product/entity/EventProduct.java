@@ -85,8 +85,12 @@ public class EventProduct extends BaseEntity {
         this.endAt = endAt;
     }
 
-    public void deactivate() {
+    public void end() {
         this.status = EventProductStatus.ENDED;
+    }
+
+    public void delete() {
+        this.status = EventProductStatus.DELETED;
     }
 
     public EventProductDisplayStatus resolveDisplayStatus() {

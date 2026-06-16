@@ -53,11 +53,12 @@ public class EventProductService {
 
         validateProductOwner(product, store);
         validateEventTargetProduct(product);
-        validateEventPeriod(request.getStartAt(), request.getEndAt());
+        validateEventPeriodForCreate(request.getStartAt(), request.getEndAt());
 
-        if (eventProductRepository.existsByProduct_ProductIdAndStatus(
+        if (eventProductRepository.existsByProduct_ProductIdAndStatusAndEndAtAfter(
                 product.getProductId(),
-                EventProductStatus.ACTIVE
+                EventProductStatus.ACTIVE,
+                LocalDateTime.now()
         )) {
             throw new BusinessException(ErrorCode.EVENT_ALREADY_ACTIVE);
         }
@@ -95,7 +96,7 @@ public class EventProductService {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
 
-        validateEventPeriod(request.getStartAt(), request.getEndAt());
+        validateEventPeriodForUpdate(request.getStartAt(), request.getEndAt());
 
         BigDecimal eventPrice = BigDecimal.valueOf(request.getEventPrice());
         validateEventPrice(product, eventPrice);
@@ -113,10 +114,17 @@ public class EventProductService {
         return productMapper.toEventProductResponseDto(eventProduct);
     }
 
+    // 스케줄러 전용 — endAt이 지난 ACTIVE 이벤트 상품을 ENDED로 일괄 처리
+    @Transactional
+    public int endExpiredEventProducts() {
+        return eventProductRepository.bulkEndExpiredEvents(
+                EventProductStatus.ACTIVE, EventProductStatus.ENDED, LocalDateTime.now());
+    }
+
     @Transactional
     public void deleteEventProduct(Long accountId, Long eventProductId) {
         EventProduct eventProduct = getEventProductWithOwnerCheck(accountId, eventProductId);
-        eventProduct.deactivate();
+        eventProduct.delete();
 
         log.info("이벤트 상품 비활성화: eventProductId={}", eventProductId);
     }
@@ -130,7 +138,7 @@ public class EventProductService {
         Store store = getStore(accountId);
 
         EventProduct eventProduct = eventProductRepository.findById(eventProductId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_ALREADY_ACTIVE));
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
         validateProductOwner(eventProduct.getProduct(), store);
 
@@ -170,8 +178,14 @@ public class EventProductService {
     }
 
 
-    private void validateEventPeriod(LocalDateTime startAt, LocalDateTime endAt) {
+    private void validateEventPeriodForCreate(LocalDateTime startAt, LocalDateTime endAt) {
         if (startAt == null || endAt == null || !startAt.isBefore(endAt) || startAt.isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+    }
+
+    private void validateEventPeriodForUpdate(LocalDateTime startAt, LocalDateTime endAt) {
+        if (startAt == null || endAt == null || !startAt.isBefore(endAt) || !endAt.isAfter(LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
     }
