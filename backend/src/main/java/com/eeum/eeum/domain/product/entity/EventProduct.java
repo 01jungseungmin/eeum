@@ -96,7 +96,9 @@ public class EventProduct extends BaseEntity {
     public EventProductDisplayStatus resolveDisplayStatus() {
         LocalDateTime now = LocalDateTime.now();
 
-        if (this.status == EventProductStatus.ENDED || now.isAfter(this.endAt)) {
+        if (this.status == EventProductStatus.ENDED
+                || this.status == EventProductStatus.DELETED
+                || now.isAfter(this.endAt)) {
             return EventProductDisplayStatus.ENDED;
         }
 

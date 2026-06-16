@@ -122,6 +122,23 @@ public class EventProductService {
     }
 
     @Transactional
+    public void endEventProduct(Long accountId, Long eventProductId) {
+        EventProduct eventProduct = eventProductRepository
+                .findByIdWithPessimisticLock(eventProductId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+        validateProductOwner(eventProduct.getProduct(), getStore(accountId));
+
+        if (eventProduct.getStatus() != EventProductStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        eventProduct.end();
+
+        log.info("이벤트 상품 수동 종료: eventProductId={}", eventProductId);
+    }
+
+    @Transactional
     public void deleteEventProduct(Long accountId, Long eventProductId) {
         EventProduct eventProduct = getEventProductWithOwnerCheck(accountId, eventProductId);
         eventProduct.delete();

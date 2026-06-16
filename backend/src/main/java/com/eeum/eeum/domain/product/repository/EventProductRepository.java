@@ -88,7 +88,7 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ep from EventProduct ep where ep.eventProductId = :eventProductId")
-    Optional<EventProduct> findByIdWithPessimisticLock(Long eventProductId);
+    Optional<EventProduct> findByIdWithPessimisticLock(@Param("eventProductId") Long eventProductId);
 
     // 만료 시각이 지난 ACTIVE 이벤트 상품을 일괄 ENDED 처리 (스케줄러 전용)
     @Modifying(clearAutomatically = true)
