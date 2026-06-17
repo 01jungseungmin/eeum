@@ -19,6 +19,7 @@ import { Text } from '../../components/CustomText';
 import { saveTokens } from '../../utils/secureStore';
 import * as KakaoLogin from '@react-native-seoul/kakao-login';
 import NaverLogin from '@react-native-seoul/naver-login';
+import { registerForPushNotificationsAsync } from '../../utils/notification';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -63,6 +64,7 @@ export default function LoginScreen() {
           // 안전하게 저장
           await saveTokens(accessToken, refreshToken);
           console.log('로그인 성공! Access & Refresh 토큰 저장 완료');
+          await registerForPushNotificationsAsync();
           router.replace('/(tabs)'); 
         } else {
           Alert.alert('오류', '로그인은 성공했지만 토큰 정보를 불러올 수 없습니다.');
@@ -111,6 +113,7 @@ export default function LoginScreen() {
         console.log('기존 유저 로그인 성공! 진짜 토큰:', accessToken);
         
         await saveTokens(accessToken, refreshToken);
+        await registerForPushNotificationsAsync();
         router.replace('/(tabs)');
       }
     }
@@ -163,7 +166,8 @@ export default function LoginScreen() {
           // 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기
           console.log('우리 서버 토큰 발급 성공!', accessToken);
           
-          await saveTokens(accessToken, refreshToken); 
+          await saveTokens(accessToken, refreshToken);
+          await registerForPushNotificationsAsync();
           router.replace('/(tabs)');
         }
       }
