@@ -64,6 +64,16 @@ public class EventProductController {
                 eventProductService.updateEventProduct(accountId, eventProductId, request)));
     }
 
+    @Operation(summary = "이벤트 상품 종료", description = "사장이 진행 중인 이벤트 상품을 조기 종료합니다.")
+    @PatchMapping("/{eventProductId}/end")
+    public ResponseEntity<ApiResponse<Void>> endEventProduct(
+            @PathVariable Long eventProductId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        eventProductService.endEventProduct(accountId, eventProductId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
     @Operation(
             summary = "이벤트 상품 삭제",
             description = "이벤트 상품을 실제 삭제하지 않고 비활성화 처리합니다. 비활성화된 이벤트 상품은 사용자 앱 이벤트 목록에서 제외됩니다."

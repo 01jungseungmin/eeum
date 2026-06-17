@@ -71,6 +71,12 @@ public class SecurityConfig {
             "/actuator/health"
     };
 
+    // SockJS 핸드셰이크 경로 — JWT 필터 없이 통과 (STOMP CONNECT 단계에서 인증 처리)
+    private static final String[] WEBSOCKET_PATHS = {
+            "/ws/**",
+            "/ws"
+    };
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -99,6 +105,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(SWAGGER_PATHS).permitAll()
                         .requestMatchers(ACTUATOR_PATHS).permitAll()
+                        .requestMatchers(WEBSOCKET_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
 
@@ -144,9 +151,7 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
                 "http://localhost:8081",
-                "http://localhost:5173",
-                "https://eeum.com",
-                "https://www.eeum.com"
+                "http://localhost:5173"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

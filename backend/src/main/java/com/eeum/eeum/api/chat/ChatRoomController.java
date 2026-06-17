@@ -1,0 +1,101 @@
+package com.eeum.eeum.api.chat;
+
+import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
+import com.eeum.eeum.application.chat.dto.request.ParticipantInviteRequestDto;
+import com.eeum.eeum.application.chat.dto.response.ChatRoomDetailResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
+import com.eeum.eeum.application.chat.service.ChatRoomService;
+import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.util.SecurityUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@Tag(name = "15. Chat Room", description = "채팅방 API (그룹/단톡방)")
+@SecurityRequirement(name = "bearerAuth")
+@RestController
+@RequestMapping("/chat/rooms")
+@RequiredArgsConstructor
+@PreAuthorize("isAuthenticated()")
+public class ChatRoomController {
+
+    private final ChatRoomService chatRoomService;
+
+    @Operation(summary = "그룹(단톡방) 채팅방 생성", description = "GROUP/GROUP_STREET 채팅방을 생성하고 참여자를 일괄 초대합니다.")
+    @PostMapping("/group")
+    public ResponseEntity<ApiResponse<ChatRoomResponseDto>> createGroupRoom(
+            @RequestBody @Valid GroupChatRoomCreateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                chatRoomService.createGroupRoom(accountId, request)));
+    }
+
+    @Operation(summary = "내 채팅방 목록", description = "마지막 메시지 시각 내림차순으로 정렬되며 안 읽은 메시지 수를 포함합니다. 무한 스크롤 지원.")
+    @GetMapping
+    public ResponseEntity<ApiResponse<Slice<ChatRoomResponseDto>>> getMyRooms(
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                chatRoomService.getMyRooms(accountId, pageable)));
+    }
+
+    @Operation(summary = "채팅방 상세", description = "참여자(ACTIVE) 목록을 포함한 채팅방 상세를 조회합니다.")
+    @GetMapping("/{roomId}")
+    public ResponseEntity<ApiResponse<ChatRoomDetailResponseDto>> getRoomDetail(
+            @PathVariable Long roomId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                chatRoomService.getRoomDetail(accountId, roomId)));
+    }
+
+    @Operation(
+            summary = "채팅방 직접 입장",
+            description = "초대 없이 GROUP 채팅방에 스스로 참여합니다. " +
+                    "이미 ACTIVE 참여자인 경우 읽음 처리만 수행하며 200을 반환합니다. " +
+                    "신규 참여 / 재입장 모두 동일하게 200을 반환합니다."
+    )
+    @PostMapping("/{roomId}/participants/me")
+    public ResponseEntity<ApiResponse<Void>> joinRoom(@PathVariable Long roomId) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        chatRoomService.joinRoom(accountId, roomId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "채팅방 참여자 초대", description = "GROUP 채팅방에 참여자를 초대하고 입장 시스템 메시지를 남깁니다.")
+    @PostMapping("/{roomId}/participants")
+    public ResponseEntity<ApiResponse<Void>> inviteParticipants(
+            @PathVariable Long roomId,
+            @RequestBody @Valid ParticipantInviteRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        chatRoomService.inviteParticipants(accountId, roomId, request.getAccountIds());
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "채팅방 나가기", description = "참여 상태를 LEFT로 변경합니다. GROUP 전체 퇴장 시 채팅방이 비활성화됩니다.")
+    @PatchMapping("/{roomId}/leave")
+    public ResponseEntity<ApiResponse<Void>> leaveRoom(@PathVariable Long roomId) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        chatRoomService.leaveRoom(accountId, roomId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "읽음 처리", description = "lastReadTime을 갱신하고 해당 방의 안 읽음 카운트를 0으로 리셋합니다.")
+    @PatchMapping("/{roomId}/read")
+    public ResponseEntity<ApiResponse<Void>> markRoomAsRead(@PathVariable Long roomId) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        chatRoomService.markRoomAsRead(accountId, roomId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+}

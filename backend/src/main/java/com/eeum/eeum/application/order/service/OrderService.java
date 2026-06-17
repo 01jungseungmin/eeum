@@ -334,7 +334,7 @@ public class OrderService {
         for (OrderItem item : orderItems) {
             if (item.getEventProductId() != null) {
                 EventProduct eventProduct = eventProductRepository
-                        .findById(item.getEventProductId())
+                        .findByIdWithPessimisticLock(item.getEventProductId())
                         .orElse(null);
 
                 if (eventProduct != null) {
