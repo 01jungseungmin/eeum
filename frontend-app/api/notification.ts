@@ -66,5 +66,10 @@ export const notificationApi = {
   updateSettings: async (settingsData: any) => {
     const response = await client.patch('/notifications/settings', settingsData);
     return response.data;
+  },
+
+  updateFcmToken: async (fcmToken: string) => {
+    const response = await client.put('/account/fcm-token', { fcmToken });
+    return response.data;
   }
 };

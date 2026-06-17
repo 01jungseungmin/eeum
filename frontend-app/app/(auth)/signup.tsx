@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { client } from '../../api/client';
 import { Text } from '../../components/CustomText';
 import { saveTokens } from '../../utils/secureStore';
+import { registerForPushNotificationsAsync } from '../../utils/notification';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -135,6 +136,8 @@ export default function SignupScreen() {
             const { accessToken, refreshToken } = response.data.data;
             await saveTokens(accessToken, refreshToken); 
             
+            await registerForPushNotificationsAsync();
+
             Alert.alert('환영합니다!', '이음 회원이 되신 것을 환영합니다.', [
               { text: '확인', onPress: () => router.replace('/(tabs)') } // 바로 메인 홈 화면으로 이동
             ]);

@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { client } from '../../api/client';
 import { clearTokens, getRefreshToken } from '../../utils/secureStore';
 import { Text } from '../../components/CustomText';
+import { notificationApi } from '../../api/notification';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -25,6 +26,8 @@ const handleLogout = async () => {
           refreshToken: refreshToken
         });
       }
+      await notificationApi.updateFcmToken(''); 
+      console.log('FCM 기기 토큰 서버 등록 해제 완료');
     } catch (error) {
       // 서버에서 에러가 나더라도 당황하지 않고 로그만 남깁니다.
       console.error('서버 로그아웃 통신 에러:', error);
