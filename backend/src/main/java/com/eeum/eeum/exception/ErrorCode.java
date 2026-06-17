@@ -27,6 +27,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMON_DUPLICATE_RESOURCE("COMMON_008","이미 존재하는 리소스입니다.",HttpStatus.CONFLICT ),
     COMMON_NOT_FOUND("COMMON_009","존재하지 않는 리소스입니다.",HttpStatus.NOT_FOUND),
     COMMON_CONFLICT("COMMON_010", "요청 처리 중 충돌이 발생했습니다.", HttpStatus.CONFLICT),
+
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
     AUTH_EXPIRED_TOKEN("AUTH_002", "만료된 토큰입니다", HttpStatus.UNAUTHORIZED),
@@ -39,6 +40,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     AUTH_INVALID_RESET_TOKEN("AUTH_009", "유효하지 않은 비밀번호 재설정 토큰입니다", HttpStatus.BAD_REQUEST),
     AUTH_RATE_LIMITED("AUTH_010", "요청 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요", HttpStatus.TOO_MANY_REQUESTS),
     AUTH_OAUTH_FAILED("AUTH_011", "소셜 로그인 처리 중 오류가 발생했습니다", HttpStatus.BAD_REQUEST),
+
     // ===================== 회원 (ACCOUNT) =====================
     ACCOUNT_NOT_FOUND("ACCOUNT_001", "존재하지 않는 회원입니다", HttpStatus.NOT_FOUND),
     ACCOUNT_DUPLICATE_EMAIL("ACCOUNT_002", "이미 사용 중인 이메일입니다", HttpStatus.CONFLICT),
@@ -49,19 +51,22 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_OWNER_ALREADY_EXISTS("ACCOUNT_007", "이미 사업자 정보가 등록되어 있습니다", HttpStatus.CONFLICT),
     ACCOUNT_OWNER_NOT_FOUND("ACCOUNT_008", "사업자 정보를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     ACCOUNT_OWNER_NOT_APPROVED("ACCOUNT_009", "사장 회원 승인이 완료되지 않았습니다", HttpStatus.FORBIDDEN),
-
     ACCOUNT_DUPLICATE_BUSINESS_NUMBER("ACCOUNT_010", "이미 등록된 사업자번호입니다", HttpStatus.CONFLICT),
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
+    ACCOUNT_PRIMARY_REGION_NOT_FOUND("ACCOUNT_013","대표 지역이 없습니다.",HttpStatus.NOT_FOUND),
+
     // ===================== 사장 추가정보 기입 =====================
     OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),
     OWNER_REVIEW_ALREADY_REQUESTED("OWNER_002","이미 입점 심사 요청이 접수되었습니다.",HttpStatus.CONFLICT),
     OWNER_CHECKLIST_NOT_COMPLETED( "OWNER_003","입점 심사 필수 항목을 모두 완료해야 합니다.",HttpStatus.BAD_REQUEST),
     OWNER_INFO_NOT_FOUND( "OWNER_004","사장 신청 정보를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
+
     // ===================== 사업자 인증 (BUSINESST) =====================
     BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
     BUSINESS_API_FAILED("BUSINESS_002", "사업자등록정보 API 호출에 실패했습니다.", HttpStatus.BAD_GATEWAY),
     BUSINESS_INVALID_OPENING_DATE("BUSINESS_003", "개업일자 형식이 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
+
     // ===================== 활동 지역 (REGION) =====================
     REGION_NOT_FOUND("REGION_001", "존재하지 않는 지역입니다", HttpStatus.NOT_FOUND),
     REGION_ALREADY_REGISTERED("REGION_002", "이미 등록된 활동 지역입니다", HttpStatus.CONFLICT),
@@ -99,7 +104,6 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     EVENT_ALREADY_ACTIVE("EVENT_004", "이미 활성화된 이벤트가 존재합니다", HttpStatus.CONFLICT),
     EVENT_PRODUCT_INVALID_PERIOD( "EVENT_005", "이벤트 시작 시간은 종료 시간보다 빨라야 합니다.",HttpStatus.BAD_REQUEST),
     EVENT_PRODUCT_INVALID_PRICE( "EVENT_006", "이벤트 가격은 원래 가격보다 낮아야 합니다.",HttpStatus.BAD_REQUEST),
-
 
     // ===================== 장바구니 (CART) =====================
     CART_DIFFERENT_STORE("CART_001", "동일한 상점의 상품만 담을 수 있습니다", HttpStatus.BAD_REQUEST),
@@ -163,6 +167,11 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMUNITY_COMMENT_ACCESS_DENIED("COMMUNITY_004", "댓글 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     COMMUNITY_REPLY_NOT_FOUND("COMMUNITY_005", "존재하지 않는 대댓글입니다", HttpStatus.NOT_FOUND),
     COMMUNITY_REPLY_ACCESS_DENIED("COMMUNITY_006", "대댓글 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
+    COMMUNITY_POST_LIKE_ALREADY_EXISTS("COMMUNITY_007", "이미 좋아요한 게시글입니다", HttpStatus.CONFLICT),
+    COMMUNITY_COMMENT_LIKE_ALREADY_EXISTS("COMMUNITY_008", "이미 좋아요한 댓글입니다", HttpStatus.CONFLICT),
+    COMMUNITY_REPLY_DEPTH_EXCEEDED("COMMUNITY_009", "대댓글에는 대댓글을 달 수 없습니다", HttpStatus.BAD_REQUEST),
+    COMMUNITY_POST_LIKE_NOT_FOUND("COMMUNITY_010", "좋아요하지 않은 게시글입니다", HttpStatus.NOT_FOUND),
+    COMMUNITY_COMMENT_LIKE_NOT_FOUND("COMMUNITY_011", "좋아요하지 않은 댓글입니다", HttpStatus.NOT_FOUND),
 
     // ===================== 채팅 (CHAT) =====================
     CHAT_ROOM_NOT_FOUND("CHAT_001", "존재하지 않는 채팅방입니다", HttpStatus.NOT_FOUND),
