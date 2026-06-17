@@ -74,8 +74,7 @@ export default function ProfileScreen() {
                 <Text fontWeight="bold" style={styles.nicknameText}>
                   {userInfo?.nickname || '닉네임'}
                 </Text>
-                {/* ✨ 여기서 프로필 상세 화면으로 이동합니다! */}
-                <TouchableOpacity onPress={() => router.push('/profile-view' as any)}>
+                <TouchableOpacity onPress={() => router.push('/mypage/profile-view' as any)}>
                   <Text style={styles.profileLinkText}>프로필 보기 {'>'}</Text>
                 </TouchableOpacity>
               </View>
@@ -98,10 +97,10 @@ export default function ProfileScreen() {
 
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 동네 상점 거래" />
-          <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => router.push('/favorites' as any)} />
-          <MenuItem title="동네 상점 구매 내역" iconName="bag-check-outline" onPress={() => router.push('/history' as any)} />
-          <MenuItem title="동네 상점 예약 내역" iconName="calendar-outline" onPress={() => router.push('/reservations' as any)} />
-          <MenuItem title="작성한 리뷰" iconName="document-text-outline" onPress={() => router.push('/my-reviews' as any)} />
+          <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => router.push('/mypage/favorites' as any)} />
+          <MenuItem title="동네 상점 구매 내역" iconName="bag-check-outline" onPress={() => router.push('/mypage/history' as any)} />
+          <MenuItem title="동네 상점 예약 내역" iconName="calendar-outline" onPress={() => router.push('/mypage/reservations' as any)} />
+          <MenuItem title="작성한 리뷰" iconName="document-text-outline" onPress={() => router.push('/mypage/my-reviews' as any)} />
         </View>
 
         <View style={styles.divider} />
@@ -116,10 +115,10 @@ export default function ProfileScreen() {
 
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="설정" />
-          <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/edit' as any)} />
-          <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/change-password' as any)} />
+          <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/mypage/edit' as any)} />
+          <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/mypage/change-password' as any)} />
           <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/withdraw' as any)} />
+          <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/mypage/withdraw' as any)} />
         </View>
 
         <View style={styles.divider} />

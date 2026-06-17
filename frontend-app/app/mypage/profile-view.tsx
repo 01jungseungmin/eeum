@@ -8,8 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 // ✨ 경로를 ../ 로 통일했습니다! (app 폴더 바로 아래에 있기 때문)
-import { Text } from '../components/CustomText'; 
-import { userApi, MyInfoResponse, RegionInfo } from '../api/user';
+import { Text } from '../../components/CustomText'; 
+import { userApi, MyInfoResponse, RegionInfo } from '../../api/user';
 
 export default function ProfileViewScreen() {
   const router = useRouter();

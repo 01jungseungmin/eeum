@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Text } from '../components/CustomText';
+import { Text } from '../../components/CustomText';
 
 // ✨ API 임포트 (경로는 프로젝트 환경에 맞게 수정하세요)
 import { reservationApi } from '@/api/reservation'; 

@@ -6,11 +6,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Text } from '../components/CustomText';
+import { Text } from '../../components/CustomText';
 
 import { shopApi } from '@/api/shop';
-import { favoriteApi } from '../api/favorite'; 
-import { SHOP_CATEGORIES } from '../constants/shopDummyData';
+import { favoriteApi } from '../../api/favorite'; 
+import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 
 export default function FavoritesScreen() {
   const router = useRouter();

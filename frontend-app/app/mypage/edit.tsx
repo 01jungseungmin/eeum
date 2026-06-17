@@ -8,8 +8,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { Text } from '../components/CustomText'; 
-import { userApi, MyInfoResponse } from '../api/user';
+import { Text } from '../../components/CustomText'; 
+import { userApi, MyInfoResponse } from '../../api/user';
 
 export default function EditProfileScreen() {
   const router = useRouter();

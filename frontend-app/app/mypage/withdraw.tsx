@@ -7,9 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { Text } from '../components/CustomText'; 
-import { userApi } from '../api/user';
-import { clearTokens } from '../utils/secureStore'; // 로그아웃 처리를 위한 토큰 삭제 함수
+import { Text } from '../../components/CustomText'; 
+import { userApi } from '../../api/user';
+import { clearTokens } from '../../utils/secureStore'; // 로그아웃 처리를 위한 토큰 삭제 함수
 
 export default function WithdrawScreen() {
   const router = useRouter();

@@ -7,8 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { Text } from '../components/CustomText'; 
-import { userApi } from '../api/user';
+import { Text } from '../../components/CustomText'; 
+import { userApi } from '../../api/user';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
