@@ -69,7 +69,7 @@ export const notificationApi = {
   },
 
   updateFcmToken: async (fcmToken: string) => {
-    const response = await client.put('/account/fcm-token', { fcmToken });
+    const response = await client.put('/accounts/me/fcm-token', { fcmToken });
     return response.data;
   }
 };
