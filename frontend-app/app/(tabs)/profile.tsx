@@ -9,6 +9,10 @@ import { useRouter, useFocusEffect } from 'expo-router';
 
 import { Text } from '../../components/CustomText';
 import { userApi, MyInfoResponse } from '../../api/user';
+import { notificationApi } from '../../api/notification';
+
+import { client } from '../../api/client';
+import { getRefreshToken, clearTokens } from '../../utils/secureStore'; 
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -31,6 +35,25 @@ export default function ProfileScreen() {
       fetchMyInfo();
     }, [])
   );
+
+  const handleLogout = async () => {
+    try {
+      const refreshToken = await getRefreshToken();
+      if (refreshToken) {
+        await client.post('/auth/logout', {
+          refreshToken: refreshToken
+        });
+      }
+      await notificationApi.updateFcmToken(''); 
+      console.log('FCM 기기 토큰 서버 등록 해제 완료');
+    } catch (error) {
+      console.error('서버 로그아웃 통신 에러:', error);
+    } finally {
+      await clearTokens();
+      Alert.alert('알림', '성공적으로 로그아웃 되었습니다.');
+      router.replace('/(auth)/login'); 
+    }
+  };
 
   const MenuItem = ({ title, iconName, onPress }: { title: string; iconName: keyof typeof Ionicons.glyphMap; onPress: () => void }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
@@ -129,7 +152,17 @@ export default function ProfileScreen() {
           <MenuItem title="공지사항" iconName="document-text-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={() => Alert.alert('로그아웃', '정말로 로그아웃 하시겠습니까?')}>
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={() => Alert.alert(
+            '로그아웃', 
+            '정말로 로그아웃 하시겠습니까?',
+            [
+              { text: '취소', style: 'cancel' },
+              { text: '확인', style: 'destructive', onPress: handleLogout }
+            ]
+          )}
+        >
           <Ionicons name="log-out-outline" size={20} color="#E74C3C" style={{ marginRight: 6 }} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>

@@ -2,6 +2,7 @@ package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.enums.EventProductStatus;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -43,9 +44,10 @@ public class OwnerStoreWithdrawalService {
         List<Product> products = productRepository.findByStore_StoreId(storeId);
         products.forEach(Product::deactivate);
 
-        // 진행 중 이벤트 상품 종료
-        List<EventProduct> eventProducts = eventProductRepository.findByProduct_Store_StoreId(storeId);
-        eventProducts.forEach(EventProduct::deactivate);
+        // ACTIVE 이벤트 상품만 종료 (이미 ENDED/DELETED인 것은 제외)
+        List<EventProduct> eventProducts = eventProductRepository
+                .findByProduct_Store_StoreIdAndStatusOrderByCreatedAtDesc(storeId, EventProductStatus.ACTIVE);
+        eventProducts.forEach(EventProduct::delete);
 
         log.info(
                 "사장 탈퇴에 따른 상점 비활성화 완료: accountId={}, storeId={}, productCount={}, eventProductCount={}",
