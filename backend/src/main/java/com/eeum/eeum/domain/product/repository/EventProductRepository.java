@@ -5,6 +5,7 @@ import com.eeum.eeum.domain.product.enums.EventProductStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,10 +17,8 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     List<EventProduct> findByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
 
-    boolean existsByProduct_ProductIdAndStatus(
-            Long productId,
-            EventProductStatus status
-    );
+    boolean existsByProduct_ProductIdAndStatusAndEndAtAfter(Long productId, EventProductStatus eventProductStatus, LocalDateTime now);
+
 
 
     List<EventProduct> findByProduct_Store_StoreIdAndStatusOrderByCreatedAtDesc(
@@ -89,5 +88,15 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ep from EventProduct ep where ep.eventProductId = :eventProductId")
-    Optional<EventProduct> findByIdWithPessimisticLock(Long eventProductId);
+    Optional<EventProduct> findByIdWithPessimisticLock(@Param("eventProductId") Long eventProductId);
+
+    // 만료 시각이 지난 ACTIVE 이벤트 상품을 일괄 ENDED 처리 (스케줄러 전용)
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE EventProduct ep SET ep.status = :ended WHERE ep.status = :active AND ep.endAt <= :now")
+    int bulkEndExpiredEvents(
+            @Param("active") EventProductStatus active,
+            @Param("ended") EventProductStatus ended,
+            @Param("now") LocalDateTime now
+    );
+
 }

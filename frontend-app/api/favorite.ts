@@ -15,4 +15,8 @@ export const favoriteApi = {
   // 3. 찜 등록/해제 토글 (하트 버튼 눌렀을 때)
   toggleFavorite: (refType: RefType, refId: number) =>
     client.post('/favorites', { refType, refId }),
+  
+  // 4. 내 찜 목록 전체 조회 (추가된 코드!)
+  getMyFavorites: (refType: RefType) =>
+    client.get(`/favorites/me/${refType}`),
 };

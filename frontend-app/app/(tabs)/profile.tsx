@@ -1,156 +1,197 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
-  StyleSheet, View, Image, ScrollView, 
-  TouchableOpacity, Alert 
+  StyleSheet, View, TouchableOpacity, Image, 
+  ScrollView, ActivityIndicator, Alert 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { client } from '../../api/client';
-import { clearTokens, getRefreshToken } from '../../utils/secureStore';
+import { useRouter, useFocusEffect } from 'expo-router';
+
 import { Text } from '../../components/CustomText';
+import { userApi, MyInfoResponse } from '../../api/user';
+import { notificationApi } from '../../api/notification';
+
+import { client } from '../../api/client';
+import { getRefreshToken, clearTokens } from '../../utils/secureStore'; 
 
 export default function ProfileScreen() {
   const router = useRouter();
+  
+  const [userInfo, setUserInfo] = useState<MyInfoResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 로그아웃 함수
-const handleLogout = async () => {
+  useFocusEffect(
+    useCallback(() => {
+      const fetchMyInfo = async () => {
+        try {
+          const data = await userApi.getMyInfo();
+          setUserInfo(data);
+        } catch (error) {
+          console.error('내 정보 로딩 에러:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchMyInfo();
+    }, [])
+  );
+
+  const handleLogout = async () => {
     try {
-      // 1. 금고에서 리프레시 토큰 꺼내오기
       const refreshToken = await getRefreshToken();
-
-      // 2. 백엔드에 로그아웃 요청 (에러의 원인이었던 Body에 데이터 담기!)
       if (refreshToken) {
         await client.post('/auth/logout', {
           refreshToken: refreshToken
         });
       }
+      await notificationApi.updateFcmToken(''); 
+      console.log('FCM 기기 토큰 서버 등록 해제 완료');
     } catch (error) {
-      // 서버에서 에러가 나더라도 당황하지 않고 로그만 남깁니다.
       console.error('서버 로그아웃 통신 에러:', error);
     } finally {
-      // 3. 서버 통신 성공 여부와 상관없이, 내 폰의 토큰은 무조건 싹 비웁니다.
       await clearTokens();
-
-      // 4. 사용자에게 알림을 주고 로그인 화면(또는 최상위 라우터)으로 쫓아냅니다.
       Alert.alert('알림', '성공적으로 로그아웃 되었습니다.');
       router.replace('/(auth)/login'); 
     }
   };
 
-  // 공통 리스트 아이템 컴포넌트
-  const MenuItem = ({ icon, title }: { icon?: string; title: string }) => (
-    <TouchableOpacity style={styles.menuItem}>
-      <View style={styles.menuLeft}>
-        {icon && <Ionicons name={icon as any} size={20} color="#555" style={{marginRight: 10}} />}
+  const MenuItem = ({ title, iconName, onPress }: { title: string; iconName: keyof typeof Ionicons.glyphMap; onPress: () => void }) => (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+      <View style={styles.menuItemLeft}>
+        <Ionicons name={iconName} size={20} color="#555" style={styles.menuIcon} />
         <Text style={styles.menuText}>{title}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color="#CCC" />
     </TouchableOpacity>
   );
 
+  const SectionHeader = ({ title }: { title: string }) => (
+    <View style={styles.sectionHeaderContainer}>
+      <Text fontWeight="bold" style={styles.sectionHeaderText}>{title}</Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 상단 탭 버튼 (동네생활 / 중고거래) */}
-      <View style={styles.topTabContainer}>
-        <TouchableOpacity style={[styles.topTab, styles.activeTab]}>
-          <Text style={styles.activeTabText}>동네생활</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.topTab}>
-          <Text style={styles.inactiveTabText}>중고거래</Text>
-        </TouchableOpacity>
-        <View style={styles.topIcons}>
-          <Ionicons name="notifications-outline" size={24} color="#333" style={{marginRight: 15}} />
-          <Ionicons name="menu-outline" size={28} color="#333" />
-        </View>
+      <View style={styles.header}>
+        <Text fontWeight="bold" style={styles.headerTitle}>마이페이지</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 프로필 카드 */}
-        <View style={styles.profileCard}>
-          <View style={styles.profileImagePlaceholder}>
-            <Ionicons name="person" size={40} color="#EEE" />
-          </View>
-          <View style={styles.profileInfo}>
-            <View style={styles.nameRow}>
-              <Text style={styles.userName}>착한사용자</Text>
-              <Ionicons name="chevron-forward" size={18} color="#333" />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        {/* 프로필 정보 요약 */}
+        <View style={styles.profileSection}>
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#1B854A" style={{ padding: 20 }} />
+          ) : (
+            <View style={styles.profileInfoRow}>
+              {userInfo?.profileImageUrl ? (
+                <Image source={{ uri: userInfo.profileImageUrl }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.placeholderImage}>
+                  <Ionicons name="image-outline" size={30} color="#CCC" />
+                </View>
+              )}
+              
+              <View style={styles.profileTextContainer}>
+                <Text fontWeight="bold" style={styles.nicknameText}>
+                  {userInfo?.nickname || '닉네임'}
+                </Text>
+                <TouchableOpacity onPress={() => router.push('/mypage/profile-view' as any)}>
+                  <Text style={styles.profileLinkText}>프로필 보기 {'>'}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.locationRow}>
-              <Ionicons name="location" size={14} color="#00A859" />
-              <Text style={styles.locationText}>부평1동</Text>
-            </View>
-          </View>
+          )}
         </View>
 
-        {/* 메뉴 섹션 - 나의 중고 거래 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>나의 중고 거래</Text>
-          <MenuItem title="찜 목록" />
-          <MenuItem title="중고 거래 내역" />
-          <MenuItem title="받은 리뷰" />
-          <MenuItem title="보낸 리뷰" />
+        <View style={styles.divider} />
+
+        {/* 나의 메뉴 리스트들 */}
+        <View style={styles.menuSectionContainer}>
+          <SectionHeader title="나의 중고 거래" />
+          <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="중고 거래 내역" iconName="bag-handle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="받은 리뷰" iconName="star-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="보낸 리뷰" iconName="star-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
         </View>
 
-        {/* 메뉴 섹션 - 나의 동네 상점 거래 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>나의 동네 상점 거래</Text>
-          <MenuItem title="찜 목록" />
-          <MenuItem title="동네 상점 거래 내역" />
-          <MenuItem title="작성한 리뷰" />
+        <View style={styles.divider} />
+
+        <View style={styles.menuSectionContainer}>
+          <SectionHeader title="나의 동네 상점 거래" />
+          <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => router.push('/mypage/favorites' as any)} />
+          <MenuItem title="동네 상점 구매 내역" iconName="bag-check-outline" onPress={() => router.push('/mypage/history' as any)} />
+          <MenuItem title="동네 상점 예약 내역" iconName="calendar-outline" onPress={() => router.push('/mypage/reservations' as any)} />
+          <MenuItem title="작성한 리뷰" iconName="document-text-outline" onPress={() => router.push('/mypage/my-reviews' as any)} />
         </View>
 
-        {/* 메뉴 섹션 - 설정 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>설정</Text>
-          <MenuItem title="회원정보 수정" />
-          <MenuItem title="결제 수단 관리" />
-          <MenuItem title="개인정보 처리방침" />
+        <View style={styles.divider} />
+
+        <View style={styles.menuSectionContainer}>
+          <SectionHeader title="나의 커뮤니티 활동" />
+          <MenuItem title="작성한 게시글" iconName="document-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="작성한 댓글" iconName="chatbubble-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+        </View>
+        
+        <View style={styles.divider} />
+
+        <View style={styles.menuSectionContainer}>
+          <SectionHeader title="설정" />
+          <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/mypage/edit' as any)} />
+          <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/mypage/change-password' as any)} />
+          <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => router.push('/mypage/notification-setting' as any)} />
+          <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/mypage/withdraw' as any)} />
         </View>
 
-        {/* 메뉴 섹션 - 고객지원 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>고객 지원</Text>
-          <MenuItem title="고객센터" />
-          <MenuItem title="공지사항" />
+        <View style={styles.divider} />
+
+        <View style={styles.menuSectionContainer}>
+          <SectionHeader title="고객 지원" />
+          <MenuItem title="고객센터" iconName="help-circle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="공지사항" iconName="document-text-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
         </View>
 
-        {/* 로그아웃 버튼 */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color="#FF5252" style={{marginRight: 8}} />
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={() => Alert.alert(
+            '로그아웃', 
+            '정말로 로그아웃 하시겠습니까?',
+            [
+              { text: '취소', style: 'cancel' },
+              { text: '확인', style: 'destructive', onPress: handleLogout }
+            ]
+          )}
+        >
+          <Ionicons name="log-out-outline" size={20} color="#E74C3C" style={{ marginRight: 6 }} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
 
-        <Text style={styles.versionText}>버전 v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  topTabContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#fff' },
-  topTab: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 15, marginRight: 8 },
-  activeTab: { backgroundColor: '#00A859' },
-  activeTabText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  inactiveTabText: { color: '#888', fontSize: 13 },
-  topIcons: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end' },
-
-  profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 20, marginBottom: 10 },
-  profileImagePlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
-  profileInfo: { marginLeft: 15 },
-  nameRow: { flexDirection: 'row', alignItems: 'center' },
-  userName: { fontSize: 18, fontWeight: 'bold', marginRight: 5 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  locationText: { fontSize: 13, color: '#666', marginLeft: 3 },
-
-  section: { backgroundColor: '#fff', paddingHorizontal: 20, paddingVertical: 15, marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 10 },
-  menuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  menuLeft: { flexDirection: 'row', alignItems: 'center' },
-  menuText: { fontSize: 14, color: '#555' },
-
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
-  logoutText: { color: '#FF5252', fontSize: 15, fontWeight: '600' },
-  versionText: { textAlign: 'center', color: '#CCC', fontSize: 12, marginBottom: 30 }
+  container: { flex: 1, backgroundColor: '#fff' },
+  header: { paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  headerTitle: { fontSize: 18, color: '#333' },
+  scrollContent: { paddingBottom: 40 },
+  profileSection: { paddingHorizontal: 20, paddingVertical: 25, backgroundColor: '#fff' },
+  profileInfoRow: { flexDirection: 'row', alignItems: 'center' },
+  profileImage: { width: 60, height: 60, borderRadius: 30, marginRight: 15 },
+  placeholderImage: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', marginRight: 15, borderWidth: 1, borderColor: '#EEE' },
+  profileTextContainer: { flex: 1, justifyContent: 'center' },
+  nicknameText: { fontSize: 18, color: '#333', marginBottom: 6 },
+  profileLinkText: { fontSize: 14, color: '#666' },
+  divider: { height: 8, backgroundColor: '#F8F9FA' },
+  menuSectionContainer: { paddingVertical: 10 },
+  sectionHeaderContainer: { paddingHorizontal: 20, paddingVertical: 12 },
+  sectionHeaderText: { fontSize: 14, color: '#333' },
+  menuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20 },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
+  menuIcon: { marginRight: 12 },
+  menuText: { fontSize: 15, color: '#333' },
+  logoutButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 30, marginBottom: 20 },
+  logoutText: { fontSize: 15, color: '#E74C3C' }
 });

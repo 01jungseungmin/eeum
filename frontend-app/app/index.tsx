@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import * as SplashScreen from 'expo-splash-screen';
 
+import { registerForPushNotificationsAsync } from '../utils/notification';
+
 SplashScreen.preventAutoHideAsync();
 
 export default function IndexScreen() {
@@ -18,6 +20,7 @@ export default function IndexScreen() {
         const token = await SecureStore.getItemAsync('accessToken');
 
         if (token) {
+          registerForPushNotificationsAsync();
           // 2. 토큰이 있다면? 이미 로그인한 유저이므로 홈 화면(탭)으로 보냅니다.
           router.replace('/(tabs)');
         } else {

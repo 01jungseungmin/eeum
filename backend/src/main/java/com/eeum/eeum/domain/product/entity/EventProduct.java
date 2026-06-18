@@ -85,14 +85,20 @@ public class EventProduct extends BaseEntity {
         this.endAt = endAt;
     }
 
-    public void deactivate() {
+    public void end() {
         this.status = EventProductStatus.ENDED;
+    }
+
+    public void delete() {
+        this.status = EventProductStatus.DELETED;
     }
 
     public EventProductDisplayStatus resolveDisplayStatus() {
         LocalDateTime now = LocalDateTime.now();
 
-        if (this.status == EventProductStatus.ENDED || now.isAfter(this.endAt)) {
+        if (this.status == EventProductStatus.ENDED
+                || this.status == EventProductStatus.DELETED
+                || now.isAfter(this.endAt)) {
             return EventProductDisplayStatus.ENDED;
         }
 

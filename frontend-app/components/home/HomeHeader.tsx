@@ -1,8 +1,14 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { 
+  View, StyleSheet, TouchableOpacity, Modal, 
+  FlatList, ActivityIndicator 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+
+// ✨ 앞서 만든 알림 API 모듈을 불러옵니다. (경로는 프로젝트에 맞게 수정하세요)
+import { notificationApi, NotificationItem } from '../../api/notification'; 
 
 interface HomeHeaderProps {
   primaryRegionName: string;
@@ -20,6 +26,87 @@ export default function HomeHeader({
   onSearch
 }: HomeHeaderProps) {
   const router = useRouter();
+
+  // ✨ 알림 관련 상태 관리
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isDropdownVisible, setIsDropdownVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ✨ 화면에 들어올 때마다 안 읽은 알림 숫자와 최근 알림 목록을 갱신합니다.
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotificationData();
+    }, [])
+  );
+
+  const fetchNotificationData = async () => {
+    try {
+      // 1. 안 읽은 알림 갯수 가져오기
+      const countRes = await notificationApi.getUnreadCount();
+      
+      const unreadCountValue = countRes?.data?.unreadCount ?? 0;
+      setUnreadCount(unreadCountValue);
+
+      // 2. 알림 목록 최신화
+      const notiRes = await notificationApi.getNotifications();
+      const notiList = notiRes?.data?.content || notiRes?.data || notiRes || [];
+      setNotifications(notiList);
+    } catch (error) {
+      console.error('헤더 알림 데이터 로딩 에러:', error);
+    }
+  };
+
+  const handleOpenDropdown = () => {
+    setIsDropdownVisible(true);
+  };
+
+  const handleCloseDropdown = () => {
+    setIsDropdownVisible(false);
+  };
+
+  // ✨ 드롭다운 안에서 개별 알림을 클릭했을 때의 동작
+  const handlePressNotification = async (item: NotificationItem) => {
+    handleCloseDropdown(); // 모달 닫기
+    
+    // 안 읽은 알림이라면 읽음 처리 후 이동
+    if (!item.Read && item.Read !== 1 && item.Read !== '1') {
+      try {
+        await notificationApi.markAsRead(item.notificationId);
+        // UI 즉각 반영을 위해 로컬 카운트 차감
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      } catch (error) {
+        console.log('읽음 처리 실패', error);
+      }
+    }
+
+    if (item.linkUrl) {
+      router.push(item.linkUrl as any);
+    }
+  };
+
+  // 개별 알림 렌더링
+  const renderNotificationItem = ({ item }: { item: NotificationItem }) => {
+    const isUnread = item.Read === false || item.Read === 0 || item.Read === '0';
+    return (
+      <TouchableOpacity 
+        style={[styles.dropdownItem, isUnread && styles.dropdownItemUnread]} 
+        onPress={() => handlePressNotification(item)}
+      >
+        <View style={styles.dropdownItemHeader}>
+          {isUnread && <View style={styles.unreadDot} />}
+          <Text fontWeight={isUnread ? "bold" : "normal"} style={styles.dropdownItemTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+        </View>
+        <Text style={styles.dropdownItemContent} numberOfLines={1}>{item.content}</Text>
+        <Text style={styles.dropdownItemTime}>
+          {item.createdAt.replace('T', ' ').substring(0, 16)}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.headerContainer}>
       <View style={styles.headerTop}>
@@ -28,15 +115,63 @@ export default function HomeHeader({
           <Text style={styles.headerLocationText}>{primaryRegionName}</Text>
           <Ionicons name="chevron-down" size={16} color="#333" />
         </TouchableOpacity>
+        
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={{ marginRight: 15 }}>
+          {/* ✨ 1. 알림 종 아이콘 및 빨간 뱃지 UI */}
+          <TouchableOpacity style={styles.iconWrapper} onPress={handleOpenDropdown}>
             <Ionicons name="notifications-outline" size={24} color="#333" />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text fontWeight="bold" style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
+          
           <TouchableOpacity onPress={() => router.push('/cart')}>
             <Ionicons name="cart-outline" size={24} color="#333" />
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ✨ 2. 투명 배경 모달을 활용한 알림 드롭다운 */}
+      <Modal 
+        visible={isDropdownVisible} 
+        transparent={true} 
+        animationType="fade"
+        onRequestClose={handleCloseDropdown}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={handleCloseDropdown}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownContainer}>
+            <View style={styles.dropdownHeader}>
+              <Text fontWeight="bold" style={styles.dropdownHeaderText}>최근 알림</Text>
+              <TouchableOpacity onPress={() => { handleCloseDropdown(); router.push('/notification' as any); }}>
+                <Text style={styles.seeAllText}>전체보기</Text>
+              </TouchableOpacity>
+            </View>
+
+            {isLoading ? (
+              <ActivityIndicator style={{ padding: 20 }} color="#00A859" />
+            ) : notifications.length === 0 ? (
+              <Text style={styles.emptyText}>최근 알림이 없습니다.</Text>
+            ) : (
+              // ✨ 최대 3개 높이(maxHeight) 지정 및 스크롤 지원
+              <FlatList
+                data={notifications}
+                keyExtractor={(item) => item.notificationId.toString()}
+                renderItem={renderNotificationItem}
+                style={{ maxHeight: 220 }} 
+                showsVerticalScrollIndicator={true}
+              />
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <View style={styles.toggleContainer}>
         <TouchableOpacity 
@@ -62,11 +197,12 @@ export default function HomeHeader({
 }
 
 const styles = StyleSheet.create({
-  headerContainer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15, backgroundColor: '#fff' },
+  // 기존 스타일 유지
+  headerContainer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15, backgroundColor: '#fff', zIndex: 1 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   locationSelector: { flexDirection: 'row', alignItems: 'center' },
   headerLocationText: { fontSize: 16, fontWeight: 'bold', color: '#333', marginHorizontal: 5 },
-  headerIcons: { flexDirection: 'row' },
+  headerIcons: { flexDirection: 'row', alignItems: 'center' },
   toggleContainer: { flexDirection: 'row', backgroundColor: '#F5F5F5', borderRadius: 25, padding: 4, marginBottom: 15, width: 200 },
   toggleBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 20 },
   toggleBtnActive: { backgroundColor: '#00A859' },
@@ -74,4 +210,38 @@ const styles = StyleSheet.create({
   toggleTextActive: { color: '#fff' },
   searchBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 8 },
   searchText: { color: '#999', fontSize: 14 },
+
+  // ✨ 알림 뱃지 스타일
+  iconWrapper: { marginRight: 15, position: 'relative' },
+  badge: { 
+    position: 'absolute', top: -4, right: -4, 
+    backgroundColor: '#FF5252', borderRadius: 10, minWidth: 18, height: 18, 
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: '#fff' 
+  },
+  badgeText: { color: '#fff', fontSize: 10 },
+
+  // ✨ 알림 모달(드롭다운) 스타일
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)' },
+  dropdownContainer: {
+    position: 'absolute', top: 55, right: 20, // 헤더 아이콘들 바로 아래쪽에 오도록 위치 조정
+    width: 280, backgroundColor: '#fff', borderRadius: 12, 
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 10,
+    overflow: 'hidden'
+  },
+  dropdownHeader: { 
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', 
+    padding: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' 
+  },
+  dropdownHeaderText: { fontSize: 15, color: '#333' },
+  seeAllText: { fontSize: 13, color: '#00A859' },
+  emptyText: { padding: 20, textAlign: 'center', color: '#999', fontSize: 14 },
+  
+  // 개별 알림 아이템 스타일
+  dropdownItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#F8F9FA' },
+  dropdownItemUnread: { backgroundColor: '#F9FCFA' }, // 안 읽은 알림은 연한 초록빛
+  dropdownItemHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  unreadDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FF5252', marginRight: 6 },
+  dropdownItemTitle: { flex: 1, fontSize: 14, color: '#333' },
+  dropdownItemContent: { fontSize: 12, color: '#666', marginBottom: 4 },
+  dropdownItemTime: { fontSize: 11, color: '#AAA' }
 });
