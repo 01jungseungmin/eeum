@@ -140,7 +140,7 @@ export default function ProfileScreen() {
           <SectionHeader title="설정" />
           <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/mypage/edit' as any)} />
           <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/mypage/change-password' as any)} />
-          <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => router.push('/mypage/notification-setting' as any)} />
           <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/mypage/withdraw' as any)} />
         </View>
 

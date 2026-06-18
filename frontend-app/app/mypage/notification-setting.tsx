@@ -3,8 +3,8 @@ import { View, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert, S
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Text } from '../components/CustomText';
-import { notificationApi } from '../api/notification';
+import { Text } from '../../components/CustomText';
+import { notificationApi } from '../../api/notification';
 
 export default function NotificationSettingsScreen() {
   const router = useRouter();
