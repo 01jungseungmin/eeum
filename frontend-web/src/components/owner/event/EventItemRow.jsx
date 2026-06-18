@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { Edit2, Trash2 } from 'lucide-react';
+import { Edit2, Trash2, CalendarOff } from 'lucide-react';
 
 const EventItemCard = styled.div`
   border: 1px solid #eef0f2;
@@ -148,7 +148,22 @@ const RightActionGroup = styled.div`
   }
 `;
 
-function EventItemRow({ evt, onEdit, onDelete }) {
+const EndActionButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #f59e0b; /* 경고 느낌의 노란/주황색 계열 */
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: #d97706;
+  }
+`;
+
+function EventItemRow({ evt, onEdit, onDelete, onEnd }) {
   const soldCount = evt?.soldCount || 0;
   const eventStock = evt?.eventStock || 0;
   const remainingStock = evt?.remainingStock || 0;
@@ -165,24 +180,21 @@ function EventItemRow({ evt, onEdit, onDelete }) {
   let currentStatus = 'DONE'; // 기본값 종료
   let statusText = '종료';
 
-  if (isOut) {
-    // 매진이면 무조건 종료 상태
+  if (evt?.eventStatus === 'ENDED' || isOut) {
     currentStatus = 'DONE';
     statusText = '종료';
-  } else if (startAt && endAt) {
-    if (now < startAt) {
-      // 현재 시간이 시작 시간 전이면 진행 예정
-      currentStatus = 'READY';
-      statusText = '진행 예정';
-    } else if (now >= startAt && now <= endAt) {
-      // 현재 시간이 이벤트 기간 사이면 진행중
-      currentStatus = 'LIVE';
-      statusText = '진행중';
-    } else {
-      // 기간이 지났으면 종료
-      currentStatus = 'DONE';
-      statusText = '종료';
-    }
+  } else if (evt?.eventStatus === 'SCHEDULED' || (startAt && now < startAt)) {
+    currentStatus = 'READY';
+    statusText = '진행 예정';
+  } else if (
+    evt?.eventStatus === 'ONGOING' ||
+    (startAt && endAt && now >= startAt && now <= endAt)
+  ) {
+    currentStatus = 'LIVE';
+    statusText = '진행중';
+  } else {
+    currentStatus = 'DONE';
+    statusText = '종료';
   }
 
   const currentId = evt?.eventProductId || evt?.id;
@@ -224,6 +236,15 @@ function EventItemRow({ evt, onEdit, onDelete }) {
       </EventInfoContent>
 
       <RightActionGroup>
+        {currentStatus === 'LIVE' && (
+          <button
+            onClick={() => onEnd(currentId, evt?.productName)}
+            title="조기 종료"
+            style={{ color: '#f59e0b' }} // 호버 스타일 외 기본 포인트 컬러 부여
+          >
+            <CalendarOff size={16} />
+          </button>
+        )}
         <button onClick={() => onEdit(evt)} title="수정">
           <Edit2 size={16} />
         </button>

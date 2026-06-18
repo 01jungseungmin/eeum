@@ -61,11 +61,35 @@ const EventList = styled.div`
   gap: 16px;
 `;
 
+const FilterTabGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+`;
+
+const FilterButton = styled.button`
+  background: ${(props) => (props.$active ? '#1a1f2c' : '#ffffff')};
+  color: ${(props) => (props.$active ? '#ffffff' : '#8e94a0')};
+  border: 1px solid ${(props) => (props.$active ? '#1a1f2c' : '#eef0f2')};
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: ${(props) => (props.$active ? '#1a1f2c' : '#f8f9fa')};
+  }
+`;
+
 function EventPage() {
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+
+  const [filterStatus, setFilterStatus] = useState('ALL');
 
   const loadEventList = async () => {
     setIsLoading(true);
@@ -91,6 +115,28 @@ function EventPage() {
   const liveCount = events.filter((e) => e.eventStatus === 'ONGOING').length;
   const readyCount = events.filter((e) => e.eventStatus === 'SCHEDULED').length;
   const totalCount = events.length;
+
+  const getFilteredEvents = () => {
+    return events.filter((evt) => {
+      if (filterStatus === 'ALL') return true;
+
+      const remainingStock = evt?.remainingStock || 0;
+      const isOut = remainingStock <= 0;
+
+      if (filterStatus === 'LIVE') {
+        return evt.eventStatus === 'ONGOING' && !isOut;
+      }
+      if (filterStatus === 'READY') {
+        return evt.eventStatus === 'SCHEDULED';
+      }
+      if (filterStatus === 'DONE') {
+        return evt.eventStatus === 'ENDED' || isOut;
+      }
+      return true;
+    });
+  };
+
+  const filteredEvents = getFilteredEvents();
 
   const handleCreateButtonClick = () => {
     setSelectedEvent(null);
@@ -197,6 +243,7 @@ function EventPage() {
     }
   };
 
+  // 이벤트 삭제
   const handleDeleteEvent = async (eventProductId) => {
     if (
       !window.confirm(
@@ -222,6 +269,29 @@ function EventPage() {
     }
   };
 
+  // 조기 종료 핸들러 함수 추가
+  const handleEndEvent = async (eventProductId, name) => {
+    if (
+      !window.confirm(
+        `[${name}] 이벤트를 지금 바로 조기 종료하시겠습니까?\n종료된 이벤트는 즉시 소비자 화면에서 내려갑니다.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const response = await eventApi.endOwnerEventProduct(eventProductId);
+      if (response.data?.success) {
+        alert('이벤트가 성공적으로 조기 종료되었습니다.');
+        loadEventList(); // 목록 새로고침
+      }
+    } catch (error) {
+      console.error('이벤트 조기 종료 중 에러 발생:', error);
+      // 이전에 세팅한 백엔드 에러 코드 분기 처리 로직이 있다면 동일하게 활용 가능합니다.
+      const serverError = error.response?.data?.error;
+      alert(serverError?.message || '조기 종료 처리 중 에러가 발생했습니다.');
+    }
+  };
+
   return (
     <PageContainer>
       <EventStats
@@ -240,15 +310,56 @@ function EventPage() {
           </AddButton>
         </CardHeader>
 
+        <FilterTabGroup>
+          <FilterButton
+            $active={filterStatus === 'ALL'}
+            onClick={() => setFilterStatus('ALL')}
+          >
+            전체보기
+          </FilterButton>
+          <FilterButton
+            $active={filterStatus === 'LIVE'}
+            onClick={() => setFilterStatus('LIVE')}
+          >
+            진행중 ({liveCount})
+          </FilterButton>
+          <FilterButton
+            $active={filterStatus === 'READY'}
+            onClick={() => setFilterStatus('READY')}
+          >
+            진행 예정 ({readyCount})
+          </FilterButton>
+          <FilterButton
+            $active={filterStatus === 'DONE'}
+            onClick={() => setFilterStatus('DONE')}
+          >
+            종료/매진
+          </FilterButton>
+        </FilterTabGroup>
+
         <EventList>
-          {events.map((evt, index) => (
-            <EventItemRow
-              key={evt.eventProductId || evt.id || `event-${index}`}
-              evt={evt}
-              onEdit={handleOpenEditModal}
-              onDelete={handleDeleteEvent}
-            />
-          ))}
+          {filteredEvents.length > 0 ? (
+            filteredEvents.map((evt, index) => (
+              <EventItemRow
+                key={evt.eventProductId || evt.id || `event-${index}`}
+                evt={evt}
+                onEdit={handleOpenEditModal}
+                onDelete={handleDeleteEvent}
+                onEnd={handleEndEvent}
+              />
+            ))
+          ) : (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px 0',
+                color: '#8e94a0',
+                fontSize: '14px',
+              }}
+            >
+              해당 조건에 맞는 이벤트 상품이 존재하지 않습니다.
+            </div>
+          )}
         </EventList>
       </MainCard>
 
