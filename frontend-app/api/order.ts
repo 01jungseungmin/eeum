@@ -19,5 +19,16 @@ export const orderApi = {
   getOrderDetail: async (orderId: string | number) => {
     const response = await client.get(`/orders/${orderId}`); 
     return response.data; // 백엔드가 준 응답 데이터 반환
+  },
+
+  // 내 거래 내역 조회 API
+  getMyHistory: async (params?: { page?: number; size?: number; status?: string }) => {
+    try {
+      const response = await client.get('/orders', { params });
+      return response.data;
+    } catch (error) {
+      console.error('내 거래 내역 조회 에러:', error);
+      throw error;
+    }
   }
 };
