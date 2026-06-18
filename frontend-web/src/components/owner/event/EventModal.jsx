@@ -335,7 +335,7 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
         setDiscountRate(calculatedRate);
       }
     } else {
-      // 등록 모드일 때 전체 초기화 (기존 코드 유지)
+      // 등록 모드일 때 전체 초기화
       setProductId('');
       setBaseOriginalPrice(0);
       setDiscountRate(0);
@@ -346,7 +346,7 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
     }
   }, [editingEvent, isOpen]);
 
-  // 💡 [추가] 2. 드롭다운 선택 시 해당 상품의 원가를 찾아 자동으로 상태 주입하는 핸들러
+  // 드롭다운 선택 시 해당 상품의 원가를 찾아 자동으로 상태 주입하는 핸들러
   const handleProductChange = (e) => {
     const selectedId = Number(e.target.value);
     setProductId(selectedId);
@@ -362,10 +362,6 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
       setDiscountRate(0);
     }
   };
-
-  /* ==========================================================================
-     원래 구현해 두신 양방향 가격 상호 계산식 (유지)
-     ========================================================================== */
 
   const handleDiscountRateChange = (e) => {
     let value = Number(e.target.value);
@@ -421,21 +417,40 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
       return;
     }
 
-    // 💡 백엔드가 원하는 초 단위 포맷(YYYY-MM-DDTHH:mm:00) 조립
-    const formattedStartAt = startTime ? `${startTime}:00` : '';
-    const formattedEndAt = endTime ? `${endTime}:00` : '';
+    if (startTime && endTime) {
+      const startObj = new Date(startTime);
+      const endObj = new Date(endTime);
 
-    // 백엔드 API 명세서 규격에 맞게 1:1 매핑 후 부모에게 전달
+      // 새 등록 모드일 때만 시작 시간이 현재 시간보다 과거인지 검사
+      if (!editingEvent) {
+        const now = new Date();
+        if (startObj < now) {
+          alert('시작 시간은 현재 시간보다 이후여야 합니다.');
+          return;
+        }
+      }
+
+      // 종료 시간이 시작 시간보다 빠른지 검사
+      if (endObj <= startObj) {
+        alert('종료 시간은 시작 시간보다 이후로 설정해야 합니다.');
+        return;
+      }
+    }
+
+    const formattedStartAt = startTime ? `${startTime}` : '';
+    const formattedEndAt = endTime ? `${endTime}` : '';
+
     onSave({
-      productId: Number(productId), // 숫자형 보장
-      eventPrice: Number(discountedPrice), // 숫자형 보장
-      eventStock: Number(quantity), // 숫자형 보장
+      productId: Number(productId),
+      eventPrice: Number(discountedPrice),
+      eventStock: Number(quantity),
       startAt: formattedStartAt,
       endAt: formattedEndAt,
     });
 
     onClose();
   };
+
   if (!isOpen) return null;
 
   return (
@@ -451,7 +466,6 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
         <form onSubmit={handleSubmit}>
           <FormGroup>
             <label>상품 선택 *</label>
-            {/* 💡 정적 셀렉트 박스를 동적 productList 데이터로 교체 */}
             <select
               value={productId}
               onChange={handleProductChange}

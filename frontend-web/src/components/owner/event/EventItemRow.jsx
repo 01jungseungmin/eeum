@@ -1,7 +1,6 @@
-// src/components/owner/event/EventItemRow.jsx
 import React from 'react';
 import styled from 'styled-components';
-import { Edit2, Trash2, Clock } from 'lucide-react';
+import { Edit2, Trash2 } from 'lucide-react';
 
 const EventItemCard = styled.div`
   border: 1px solid #eef0f2;
@@ -65,18 +64,9 @@ const EventInfoContent = styled.div`
       padding: 1px 5px;
       border-radius: 4px;
     }
-    .time {
-      font-size: 12px;
-      color: #8e94a0;
-      margin-left: 8px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
   }
 `;
 
-// 💡 [추가] 판매 현황과 잔여 개수를 한 줄에 배치하기 위한 Flex 컨테이너
 const StatusTextRow = styled.div`
   display: flex;
   justify-content: space-between;
@@ -91,6 +81,7 @@ const StatusTextRow = styled.div`
   }
 `;
 
+// 💡 [수정] image_bdf743.png 테마 색상에 완벽하게 일치하도록 변경
 const StatusBadge = styled.span`
   font-size: 11px;
   font-weight: bold;
@@ -138,7 +129,6 @@ const ProgressFill = styled.div`
   background: ${(props) => (props.$isFull ? '#e52e59' : '#f59e0b')};
 `;
 
-// 💡 [수정] 잔여 개수가 빠져서 상단 수정/삭제 버튼만 우측 상단에 정렬하도록 가볍게 변경
 const RightActionGroup = styled.div`
   position: absolute;
   right: 20px;
@@ -159,7 +149,6 @@ const RightActionGroup = styled.div`
 `;
 
 function EventItemRow({ evt, onEdit, onDelete }) {
-  // 💡 데이터 방어 처리: 백엔드 값이 없을 경우를 대비해 0이나 기본값 처리
   const soldCount = evt?.soldCount || 0;
   const eventStock = evt?.eventStock || 0;
   const remainingStock = evt?.remainingStock || 0;
@@ -167,9 +156,35 @@ function EventItemRow({ evt, onEdit, onDelete }) {
   const salePercent =
     eventStock > 0 ? Math.round((soldCount / eventStock) * 100) : 0;
   const isOut = remainingStock <= 0;
-  const isLive = evt?.eventStatus === 'ONGOING';
 
-  // 💡 혹시 모를 고유 ID 누락 방어 (key 또는 알림용)
+  // 현재 시간과 시작/종료 시간을 비교하여 동적으로 상태 판별
+  const now = new Date();
+  const startAt = evt?.startAt ? new Date(evt?.startAt) : null;
+  const endAt = evt?.endAt ? new Date(evt?.endAt) : null;
+
+  let currentStatus = 'DONE'; // 기본값 종료
+  let statusText = '종료';
+
+  if (isOut) {
+    // 매진이면 무조건 종료 상태
+    currentStatus = 'DONE';
+    statusText = '종료';
+  } else if (startAt && endAt) {
+    if (now < startAt) {
+      // 현재 시간이 시작 시간 전이면 진행 예정
+      currentStatus = 'READY';
+      statusText = '진행 예정';
+    } else if (now >= startAt && now <= endAt) {
+      // 현재 시간이 이벤트 기간 사이면 진행중
+      currentStatus = 'LIVE';
+      statusText = '진행중';
+    } else {
+      // 기간이 지났으면 종료
+      currentStatus = 'DONE';
+      statusText = '종료';
+    }
+  }
+
   const currentId = evt?.eventProductId || evt?.id;
 
   return (
@@ -178,20 +193,13 @@ function EventItemRow({ evt, onEdit, onDelete }) {
 
       <EventInfoContent>
         <div className="badge-row">
-          {isLive && (
-            <>
-              <StatusBadge type="LIVE">진행중</StatusBadge>
-              <LivePulseBadge>⚡ LIVE</LivePulseBadge>
-            </>
-          )}
-          {!isLive && <StatusBadge type="DONE">종료/비활성</StatusBadge>}
+          <StatusBadge type={currentStatus}>{statusText}</StatusBadge>
+          {currentStatus === 'LIVE' && <LivePulseBadge>⚡ LIVE</LivePulseBadge>}
         </div>
 
-        {/* 💡 이름이 비어있을 경우 대체 텍스트 */}
         <h3 className="title">{evt?.productName || '이름 없는 상품'}</h3>
 
         <div className="price-row">
-          {/* 💡 [에러 해결] ?를 붙여 undefined 일 때 .toLocaleString()이 실행되어 터지는 현상 전면 차단 */}
           <span className="original">
             {(evt?.originalPrice ?? 0).toLocaleString()}원
           </span>
@@ -219,11 +227,7 @@ function EventItemRow({ evt, onEdit, onDelete }) {
         <button onClick={() => onEdit(evt)} title="수정">
           <Edit2 size={16} />
         </button>
-        {/* 💡 안전하게 잡힌 ID 값 사용 */}
-        <button
-          onClick={() => onDelete(currentId, evt?.productName)}
-          title="삭제"
-        >
+        <button onClick={() => onDelete(currentId)} title="삭제">
           <Trash2 size={16} />
         </button>
       </RightActionGroup>

@@ -1,4 +1,3 @@
-// src/pages/owner/event/EventPage.jsx
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Plus } from 'lucide-react';
@@ -62,51 +61,6 @@ const EventList = styled.div`
   gap: 16px;
 `;
 
-const INITIAL_EVENTS = [
-  {
-    id: 1,
-    productId: 101,
-    name: '오늘의 특가! 불고기 반찬 (300g)',
-    emoji: '🥩',
-    originalPrice: 12000,
-    discountedPrice: 8900,
-    discountRate: 26,
-    status: 'LIVE',
-    startDate: '2026-06-11T12:00',
-    endDate: '2026-06-11T18:00',
-    currentSales: 18,
-    totalQuantity: 30,
-  },
-  {
-    id: 2,
-    productId: 103,
-    name: '한정수량! 잡채 세트 (400g)',
-    emoji: '🍲',
-    originalPrice: 10000,
-    discountedPrice: 7500,
-    discountRate: 25,
-    status: 'READY',
-    startDate: '2026-06-11T18:00',
-    endDate: '2026-06-11T21:00',
-    currentSales: 0,
-    totalQuantity: 20,
-  },
-  {
-    id: 3,
-    productId: 104,
-    name: '마감 세일! 시금치나물 (150g)',
-    emoji: '🥬',
-    originalPrice: 3500,
-    discountedPrice: 2000,
-    discountRate: 43,
-    status: 'DONE',
-    startDate: '2024-04-27T17:00',
-    endDate: '2024-04-27T20:00',
-    currentSales: 15,
-    totalQuantity: 15,
-  },
-];
-
 function EventPage() {
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -134,18 +88,12 @@ function EventPage() {
   }, []);
 
   // 대시보드 상태값 연산 핸들링
-  const liveCount = events.filter((e) => e.status === 'ONGOING').length;
-  const readyCount = events.filter((e) => e.status === 'READY').length;
+  const liveCount = events.filter((e) => e.eventStatus === 'ONGOING').length;
+  const readyCount = events.filter((e) => e.eventStatus === 'SCHEDULED').length;
   const totalCount = events.length;
 
   const handleCreateButtonClick = () => {
-    setSelectedEvent(null); // ✨ 중요: 수정 중이던 데이터 흔적을 지워줌 (등록 모드로 전환)
-    setIsModalOpen(true);
-  };
-
-  // ➕ [추가] 2. 목록에서 '연필 버튼'을 눌렀을 때 핸들러
-  const handleEditButtonClick = (eventItem) => {
-    setSelectedEvent(eventItem); // ✨ 중요: 클릭한 행의 이벤트 정보를 상태에 주입 (수정 모드로 전환)
+    setSelectedEvent(null);
     setIsModalOpen(true);
   };
 
@@ -157,8 +105,8 @@ function EventPage() {
   const handleModalSubmit = async (formData) => {
     try {
       if (selectedEvent) {
-        // [수정 모드]
         const eventProductId = selectedEvent.eventProductId;
+
         const response = await eventApi.updateOwnerEventProduct(
           eventProductId,
           formData,
@@ -168,29 +116,109 @@ function EventPage() {
           loadEventList();
         }
       } else {
-        // [등록 모드]
+        const now = new Date();
+
+        const isAlreadyExist = events.some((evt) => {
+          if (Number(evt.productId) !== Number(formData.productId))
+            return false;
+
+          const startAt = evt.startAt ? new Date(evt.startAt) : null;
+          const endAt = evt.endAt ? new Date(evt.endAt) : null;
+          const remainingStock = evt.remainingStock || 0;
+
+          // 이미 종료 날짜가 지나버린 당일 이벤트는 검사에서 제외
+          if (endAt && endAt < now) return false;
+          if (remainingStock <= 0) return false;
+
+          const isLive = startAt && endAt && now >= startAt && now <= endAt;
+          const isReady = startAt && now < startAt;
+
+          return isLive || isReady;
+        });
+
+        // 중복 방어
+        if (isAlreadyExist) {
+          alert(
+            '해당 상품은 이미 진행 중이거나 진행 예정인 이벤트가 존재합니다.\n동일 상품에 대한 중복 이벤트 등록은 불가능합니다.',
+          );
+          return;
+        }
+
+        // 이벤트 등록
         const response = await eventApi.createOwnerEventProduct(formData);
         if (response.data?.success) {
           alert('새 이벤트가 성공적으로 등록되었습니다.');
           loadEventList();
         }
       }
-    } catch (error) {
-      console.error(error);
-    } finally {
+
       setIsModalOpen(false);
-      setSelectedEvent(null); // 모달이 닫힐 때 상태 초기화
+      setSelectedEvent(null);
+    } catch (error) {
+      console.error('이벤트 처리 중 에러 발생:', error);
+
+      const serverError = error.response?.data?.error;
+      const errorCode = serverError?.code;
+      const serverMessage = serverError?.message;
+
+      if (errorCode) {
+        // 백엔드 에러 코드별 세부 분기 및 안내 문구 매핑
+        switch (errorCode) {
+          case 'EVENT_001':
+            alert('존재하지 않거나 이미 삭제된 이벤트 상품입니다.');
+            break;
+          case 'EVENT_002':
+            alert('현재 진행 중인 활성화 이벤트가 아닙니다.');
+            break;
+          case 'EVENT_003':
+            alert('준비된 이벤트 수량이 부족하거나 이미 마감되었습니다.');
+            break;
+          case 'EVENT_004':
+            alert(
+              '해당 상품은 이미 활성화된(진행중/진행예정) 이벤트가 존재합니다.\n중복 등록이 불가능합니다.',
+            );
+            break;
+          case 'EVENT_005':
+            alert(
+              '이벤트 기간 설정 오류:\n시작 시간은 종료 시간보다 빨라야 합니다.',
+            );
+            break;
+          case 'EVENT_006':
+            alert(
+              '이벤트 가격 설정 오류:\n이벤트 가격은 원래 상품의 기본 가격보다 낮아야 합니다.',
+            );
+            break;
+          default:
+            alert(serverMessage || '요청 처리 중 오류가 발생했습니다.');
+        }
+      } else {
+        alert('서버와의 통신이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.');
+      }
     }
   };
 
-  const handleDeleteEvent = async (id, name) => {
-    if (window.confirm(`[${name}] 이벤트를 취소/삭제하시겠습니까?`)) {
-      try {
-        // 나중에 eventApi.deleteOwnerEventProduct(id) 호출 영역
-        setEvents(events.filter((e) => e.eventProductId !== id)); // Swagger ID 기준 필터링
-      } catch (error) {
-        alert('삭제에 실패했습니다.');
+  const handleDeleteEvent = async (eventProductId) => {
+    if (
+      !window.confirm(
+        '정말로 이 이벤트를 삭제하시겠습니까?\n삭제된 이벤트 상품은 사용자 앱 이벤트 목록에서 제외됩니다.',
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const response = await eventApi.deleteOwnerEventProduct(eventProductId);
+
+      if (response.data?.success) {
+        alert('이벤트가 성공적으로 삭제(비활성화)되었습니다.');
+        console.log(response.data);
+        loadEventList();
+      } else {
+        alert(response.data?.message || '이벤트 삭제에 실패했습니다.');
       }
+    } catch (error) {
+      console.error('이벤트 삭제 중 오류 발생:', error);
+      alert('이벤트 삭제 처리 중 에러가 발생했습니다.');
     }
   };
 
@@ -228,7 +256,7 @@ function EventPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleModalSubmit}
-        editData={selectedEvent}
+        editingEvent={selectedEvent}
       />
     </PageContainer>
   );
