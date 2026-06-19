@@ -48,7 +48,7 @@ public class CommunityPostController {
             @PathVariable Long postId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountIdOrNull();
-        return ResponseEntity.ok(ApiResponse.success(postService.getPost(postId, accountId)));
+        return ResponseEntity.ok(ApiResponse.success(postService.getPost(accountId, postId)));
     }
 
     @PostMapping
