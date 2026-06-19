@@ -193,6 +193,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     STORE_REVIEW_ALREADY_EXISTS("REVIEW_003", "이미 리뷰를 작성했습니다", HttpStatus.CONFLICT),
     STORE_REVIEW_ORDER_REQUIRED("REVIEW_004", "구매 완료 후 리뷰를 작성할 수 있습니다", HttpStatus.BAD_REQUEST),
     STORE_REVIEW_REPLY_ALREADY_EXISTS("REVIEW_005", "이미 답글을 작성했습니다", HttpStatus.CONFLICT),
+    STORE_REVIEW_RESERVATION_REQUIRED("REVIEW_006", "방문 완료 후 리뷰를 작성할 수 있습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 카테고리 (CATEGORY) =====================
     CATEGORY_NOT_FOUND("CATEGORY_001", "존재하지 않는 카테고리입니다", HttpStatus.NOT_FOUND),
