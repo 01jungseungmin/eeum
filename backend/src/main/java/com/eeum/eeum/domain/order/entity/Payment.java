@@ -121,4 +121,8 @@ public class Payment extends BaseEntity {
         this.refundedAt = LocalDateTime.now();
         this.status = PaymentStatus.REFUNDED;
     }
+
+    public void rejectRefund() {
+        this.refundStatus = RefundStatus.REJECTED;
+    }
 }
