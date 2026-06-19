@@ -234,8 +234,8 @@ function ProductManagementPage() {
       );
 
       alert('선택한 상품들이 성공적으로 삭제(비공개) 되었습니다.');
-      setSelectedIds([]); // 체크박스 선택 초기화
-      fetchProductsWithImages(); // 🔄 목록 및 상단 통계 새로고침
+      setSelectedIds([]);
+      fetchProductsWithImages();
     } catch (error) {
       console.error('일괄 삭제 중 오류 발생:', error);
       alert('일괄 삭제 중 일부 상품에서 오류가 발생했습니다.');

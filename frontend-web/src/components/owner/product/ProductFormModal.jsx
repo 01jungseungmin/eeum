@@ -498,15 +498,16 @@ function ProductFormModal({
       return;
     }
 
+    // 상품 등록 시에는 options 필드를 아예 제외하여 400 에러 원천 차단
     let requestBody = {
       productType,
       name,
       categoryId: Number(categoryId),
       description,
       basePrice: Number(basePrice) || 0,
-      options: [], // 메인 상품 데이터 오염을 막기 위한 빈배열 유지
     };
 
+    // 등록 모드일 때만 재고 수량 포함
     if (mode !== 'EDIT') {
       requestBody.stockQuantity =
         stockQuantity === '' ? 0 : Number(stockQuantity);
@@ -516,46 +517,36 @@ function ProductFormModal({
       let response;
       let targetProductId = productId;
 
+      // 수정 모드 (EDIT)
       if (mode === 'EDIT') {
-        // 1️⃣ 단계: 메인 상품 기본 정보 및 재고 수정
-        console.log('🔄 [수정 모드 시작] 상품 ID:', productId);
+        console.log('🔄 [수정 모드] 상품 정보 업데이트:', productId);
         response = await productApi.updateOwnerProduct(productId, requestBody);
 
         if (response.data && response.data.success) {
-          // 재고 업데이트 (빈 값일 경우 0 처리)
           await productApi.updateProductStock(
             productId,
             stockQuantity === '' ? 0 : stockQuantity,
           );
-          console.log('✅ 상품 기본 정보 및 재고 수정 완료');
         }
 
-        // 2️⃣ 단계: SALE 타입일 때 옵션 차등 관리 (C·U·D 분기)
         if (response.data && response.data.success && productType === 'SALE') {
-          // 🔥 [DELETE] 유저가 X 버튼을 눌러 삭제 리스트(deletedOptionIds)에 넣은 기존 옵션들 삭제
           if (deletedOptionIds && deletedOptionIds.length > 0) {
-            console.log('🗑️ 삭제할 기존 옵션 ID 목록:', deletedOptionIds);
             await Promise.all(
               deletedOptionIds.map((id) =>
                 productApi.deleteProductOption(productId, id),
               ),
             );
-            console.log('✅ 옵션 삭제 처리 완료');
           }
 
-          // 화면에 입력된 옵션 중 이름이 있는 유효한 데이터만 필터링
           const validOptions = options.filter(
             (opt) => opt.groupName && opt.groupName.trim() !== '',
           );
-
-          // 🔥 [POST / PUT] 신규 추가된 그룹과 기존 그룹을 분기하여 동시 처리
           await Promise.all(
             validOptions.map((opt, optIndex) => {
-              // 백엔드 명세 규격에 맞게 바디 가공 (required 필드 유의)
               const optionPayload = {
                 groupName: opt.groupName,
                 selectionType: opt.selectionType || 'SINGLE',
-                isRequired: true, // ⚠️ 400 에러 발생 시 required: true 로 변경 테스트
+                isRequired: true,
                 displayOrder: optIndex,
                 items: opt.items
                   .filter(
@@ -565,20 +556,14 @@ function ProductFormModal({
                     itemName: item.itemName,
                     additionalPrice: Number(item.additionalPrice) || 0,
                     displayOrder: itemIndex,
+
                     default: itemIndex === 0,
                   })),
               };
 
-              // ID가 없거나 'temp-'로 시작하면 수정창에서 '새로 추가한 옵션' -> POST
               if (!opt.id || String(opt.id).startsWith('temp-')) {
-                console.log(`➕ [신규 옵션 등록] 그룹명: ${opt.groupName}`);
                 return productApi.createProductOption(productId, optionPayload);
-              }
-              // 기존에 ID를 가지고 있던 옵션이면 '수정' -> PUT
-              else {
-                console.log(
-                  `📝 [기존 옵션 수정] 옵션 ID: ${opt.id}, 그룹명: ${opt.groupName}`,
-                );
+              } else {
                 return productApi.updateProductOption(
                   productId,
                   opt.id,
@@ -587,66 +572,31 @@ function ProductFormModal({
               }
             }),
           );
-
-          console.log('✅ 모든 옵션 변경 사항(추가/수정) 반영 완료');
         }
+
+        // 등록 모드 (CREATE)
       } else {
-        // 🆕 [등록 모드] 1단계: 메인 상품 등록 시도
-        console.log('1️⃣ [메인 상품 등록 시작] 보낼 데이터:', requestBody);
         response = await productApi.createProduct(requestBody);
 
-        console.log('2️⃣ [메인 상품 서버 응답 전체]:', response);
+        if (response && response.data && response.data.success) {
+          targetProductId = response.data.data?.productId;
+          console.log('2️⃣ [동적 발급 완료] 발급된 상품 ID:', targetProductId);
 
-        // 🔍 백엔드가 보내준 실제 데이터 알맹이를 콘솔에서 직접 확인하기 위한 로그
-        if (response && response.data) {
-          console.log('🔍 백엔드 응답 바디(data) 내용:', response.data);
-          console.log(
-            '🔍 백엔드 응답 data 내부의 data 내용:',
-            response.data.data,
-          );
-        }
-
-        // 서버 응답이 성공일 때만 다음 단계 진입
-        if (
-          response &&
-          response.data &&
-          (response.data.success ||
-            response.data.status === 200 ||
-            response.status === 200)
-        ) {
-          // 🔥 [핵심 수정] 백엔드가 ID를 'id'로 보냈을 경우까지 완벽하게 방어 체계 구축
-          // 🔥 백엔드가 수정되어 응답 바디에 productId를 넣어줄 때를 대비한 3중 방어막
-          targetProductId =
-            response.data.data?.productId ||
-            response.data.data?.id ||
-            response.data.productId ||
-            response.data.id;
-
-          // ⚠️ [임시 디버깅용 가짜 ID 주입] 백엔드가 안 주면 테스트용으로 임시 1번 ID를 강제로 먹임
           if (!targetProductId) {
-            console.warn(
-              "⚠️ 백엔드 응답에 productId가 없어서 임시 ID '1'번으로 옵션 등록을 시도합니다. (백엔드 수정 후 제거 필요)",
-            );
-            targetProductId = 1; // 우선 프론트 옵션 API 동작을 보기 위해 가짜 ID 주입!
-          }
-
-          console.log('3️⃣ [추출된 신규 상품 ID]:', targetProductId);
-
-          if (!targetProductId || typeof targetProductId === 'object') {
             alert(
-              '상품은 생성되었으나, 코드가 ID 필드명(productId 또는 id)을 찾지 못했습니다. 콘솔 창의 🔍 로그를 확인해 주세요.',
+              '상품 등록은 성공했으나, 서버로부터 생성된 ID를 받지 못했습니다.',
             );
             return;
           }
 
-          // 2단계: 옵션 등록 (SALE 타입이고 유저가 입력한 옵션이 있을 때만)
+          // 옵션 등록 체인 실행 (image_fe6ea2 스펙 적용)
           if (options && options.length > 0 && productType === 'SALE') {
             const optionRequests = options
               .filter((opt) => opt.groupName && opt.groupName.trim() !== '')
               .map((opt, optIndex) => ({
                 groupName: opt.groupName,
                 selectionType: opt.selectionType || 'SINGLE',
-                isRequired: true, // ⚠️ 백엔드 스펙에 따라 required: true 일 수도 있음
+                isRequired: true,
                 displayOrder: optIndex,
                 items: opt.items
                   .filter(
@@ -656,40 +606,22 @@ function ProductFormModal({
                     itemName: item.itemName,
                     additionalPrice: Number(item.additionalPrice) || 0,
                     displayOrder: itemIndex,
-                    default: itemIndex === 0,
+                    default: itemIndex === 0, // 백엔드 스웨거 예시의 default 키 바인딩
                   })),
               }))
               .filter((opt) => opt.items.length > 0);
 
-            console.log(
-              '4️⃣ [옵션 API 전송 직전 Request Body]:',
-              optionRequests,
-            );
-
-            if (optionRequests.length > 0) {
-              // 여러 개의 옵션 그룹을 순차적으로 안전하게 등록
-              for (const optionData of optionRequests) {
-                console.log(
-                  `🚀 ID ${targetProductId}번에 옵션 그룹 [${optionData.groupName}] 등록 요청`,
-                );
-                const optionRes = await productApi.createProductOption(
-                  targetProductId,
-                  optionData,
-                );
-                console.log('옵션 개별 등록 서버 응답:', optionRes.data);
-              }
-              console.log('✅ 모든 상품 옵션 개별 등록 완료');
+            for (const optionData of optionRequests) {
+              await productApi.createProductOption(targetProductId, optionData);
             }
           }
         } else {
-          alert(
-            '메인 상품 등록 단계에서 실패하여 이후 옵션/이미지 등록이 중단되었습니다.',
-          );
+          alert('기본 상품 정보 등록 중 에러가 발생했습니다.');
           return;
         }
       }
 
-      // 3. 최종 이미지 등록 및 모달 닫기 공통 처리
+      // 이미지 처리 통합 피날레
       if (response && response.data && response.data.success) {
         const newImages = images.filter((img) =>
           String(img.id).startsWith('temp-'),
@@ -697,25 +629,33 @@ function ProductFormModal({
 
         if (newImages.length > 0) {
           const imagePayload = {
-            images: newImages.map((img) => ({
-              imageUrl: img.url,
+            images: newImages.map((img, idx) => ({
+              imageURL: img.url,
               thumbnail: img.isMain,
+              displayOrder: idx + 1,
             })),
           };
+
+          console.log(
+            `🚀 [이미지 등록 요청] 상품 ID: ${targetProductId}`,
+            imagePayload,
+          );
           await productApi.registerProductImages(targetProductId, imagePayload);
         }
 
         alert(
           mode === 'EDIT'
-            ? '상품 정보 및 옵션이 정상적으로 수정되었습니다.'
-            : '상품 정보 및 옵션이 정상적으로 등록되었습니다.',
+            ? '성공적으로 수정되었습니다.'
+            : '성공적으로 등록되었습니다.',
         );
         onSuccess();
         onClose();
       }
     } catch (error) {
-      console.error('🔴 상품/옵션 통합 처리 중 오류 발생:', error);
-      alert('처리 도중 오류가 발생했습니다. 입력 정보를 다시 확인해주세요.');
+      console.error('🔴 통합 트랜잭션 예외 발생:', error);
+      alert(
+        '요청 처리 중 서버 에러가 발생했습니다. 입력 포맷을 확인해 주세요.',
+      );
     }
   };
 
@@ -733,7 +673,14 @@ function ProductFormModal({
     );
   }
 
+  // 대표 이미지 설정 제어 함수 수정
   const handleSetMainImage = async (targetImg) => {
+    // 등록 모드
+    if (mode === 'CREATE' || !productId || productId === 'null') {
+      return true;
+    }
+
+    // 수정 모드
     if (!window.confirm('대표이미지로 변경하시겠습니까?')) return false;
     try {
       const response = await productApi.setProductMainImage(
@@ -746,30 +693,40 @@ function ProductFormModal({
       }
       return false;
     } catch (error) {
-      console.error(error);
+      console.error('대표 이미지 변경 에러:', error);
+      alert('서버 오류로 대표 지정에 실패했습니다.');
       return false;
     }
   };
 
+  // 이미지 삭제
   const handleDeleteImage = async (targetImg) => {
-    if (!String(targetImg.id).startsWith('temp-')) {
-      if (!window.confirm('이 이미지를 즉시 삭제하시겠습니까?')) return false;
-      try {
-        const response = await productApi.deleteOwnerProductImage(
-          productId,
-          targetImg.id,
-        );
-        if (response.data && response.data.success) {
-          alert('이미지가 삭제되었습니다.');
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.error(error);
-        return false;
-      }
+    // 🔥 새로 추가한 임시 이미지거나 [등록 모드]일 때는 서버 통신 없이 즉시 UI 삭제 허용
+    if (
+      String(targetImg.id).startsWith('temp-') ||
+      mode === 'CREATE' ||
+      !productId
+    ) {
+      return true;
     }
-    return true;
+
+    // 📝 [수정 모드]이면서 기존에 서버에 박혀있던 사진인 경우만 real-time 삭제 API 가동
+    if (!window.confirm('이 이미지를 즉시 삭제하시겠습니까?')) return false;
+    try {
+      const response = await productApi.deleteOwnerProductImage(
+        productId,
+        targetImg.id,
+      );
+      if (response.data && response.data.success) {
+        alert('이미지가 삭제되었습니다.');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('이미지 삭제 에러:', error);
+      alert('서버 오류로 이미지 삭제에 실패했습니다.');
+      return false;
+    }
   };
 
   return (
