@@ -1,6 +1,9 @@
 package com.eeum.eeum.application.community.service;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityCommentLike;
@@ -10,10 +13,7 @@ import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
-import com.eeum.eeum.exception.ConflictException;
-import com.eeum.eeum.exception.ErrorCode;
-import com.eeum.eeum.exception.ForbiddenException;
-import com.eeum.eeum.exception.NotFoundException;
+import com.eeum.eeum.exception.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,6 +30,7 @@ public class CommunityLikeService {
     private final CommunityCommentRepository commentRepository;
     private final CommunityCommentLikeRepository commentLikeRepository;
     private final AccountRepository accountRepository;
+    private final AccountRegionRepository accountRegionRepository;
 
     @Transactional
     public void likePost(Long accountId, Long postId) {
@@ -74,6 +75,10 @@ public class CommunityLikeService {
     public void likeComment(Long accountId, Long commentId) {
         Account account = getAccountOrThrow(accountId);
         CommunityComment comment = getCommentOrThrow(commentId);
+
+        if (comment.isDeleted()) {
+            throw new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        }
 
         validateSameRegion(comment.getPost(), account);
 
@@ -123,12 +128,29 @@ public class CommunityLikeService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
     }
 
-    private void validateSameRegion(CommunityPost post, Account account) {
-        if (account.getPrimaryRegionId() == null) {
-            throw new NotFoundException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+    private Region getPrimaryRegion(Account account) {
+        Long primaryAccountRegionId = account.getPrimaryRegionId();
+
+        if (primaryAccountRegionId == null) throw new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+
+        AccountRegion accountRegion = accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(
+                        primaryAccountRegionId,
+                        account.getAccountId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
+
+        if (!accountRegion.isVerified()) {
+            throw new BusinessException(ErrorCode.REGION_NOT_VERIFIED);
         }
 
-        if (!post.getRegion().getRegionId().equals(account.getPrimaryRegionId())) {
+        return accountRegion.getRegion();
+    }
+
+    private void validateSameRegion(CommunityPost post, Account account) {
+        Region myRegion = getPrimaryRegion(account);
+
+        if (!post.getRegion().getRegionId().equals(myRegion.getRegionId())) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
     }
