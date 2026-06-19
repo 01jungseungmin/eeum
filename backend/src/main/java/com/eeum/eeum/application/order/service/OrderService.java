@@ -218,6 +218,13 @@ public class OrderService {
         );
     }
 
+    // 사장 주문 거절 시 재고 복구용 — StoreOrderService에서 호출
+    @Transactional
+    public void restoreStockForOrder(Long orderId) {
+        List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(orderId);
+        restoreStock(orderItems);
+    }
+
     @Transactional
     public void requestOrderRefund(Long accountId, Long orderId, RefundRequestDto request) {
         Order order = orderRepository
