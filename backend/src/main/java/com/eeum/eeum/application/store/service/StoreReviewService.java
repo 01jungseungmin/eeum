@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.store.dto.request.StoreReservationReviewCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
@@ -7,12 +8,18 @@ import com.eeum.eeum.application.store.dto.response.*;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.order.entity.Order;
+import com.eeum.eeum.domain.order.entity.OrderItem;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.repository.OrderItemRepository;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
+import com.eeum.eeum.domain.reservation.entity.VisitReservation;
+import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
+import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.entity.StoreReviewImage;
 import com.eeum.eeum.domain.store.entity.StoreReviewReply;
+import com.eeum.eeum.domain.store.enums.StoreReviewType;
 import com.eeum.eeum.domain.store.event.StoreReviewCreatedEvent;
 import com.eeum.eeum.domain.store.event.StoreReviewReplyCreatedEvent;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -30,6 +37,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -44,6 +52,8 @@ public class StoreReviewService {
     private final StoreReviewImageRepository storeReviewImageRepository;
     private final StoreReviewReplyRepository storeReviewReplyRepository;
     private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final VisitReservationRepository visitReservationRepository;
     private final AccountRepository accountRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -65,7 +75,30 @@ public class StoreReviewService {
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
-        return StoreReviewDetailResponseDto.of(review, images, replyDto);
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+    }
+
+    // 내가 작성한 리뷰 목록 조회 (주문 리뷰 / 예약 리뷰 통합 또는 타입별)
+    @Transactional(readOnly = true)
+    public Page<MyReviewResponseDto> getMyReviews(
+            Long accountId, StoreReviewType reviewType, Pageable pageable
+    ) {
+        Page<StoreReview> reviews = reviewType == null
+                ? storeReviewRepository.findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable)
+                : storeReviewRepository.findByAccount_AccountIdAndReviewTypeOrderByCreatedAtDesc(
+                        accountId, reviewType, pageable);
+
+        return reviews.map(review -> {
+            List<StoreReviewImage> images = storeReviewImageRepository
+                    .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
+
+            if (review.getReviewType() == StoreReviewType.ORDER) {
+                List<OrderItem> orderItems = getOrderItemsForReview(review);
+                return MyReviewResponseDto.ofOrder(review, images, orderItems);
+            }
+            return MyReviewResponseDto.ofReservation(review, images);
+        });
     }
 
     // ===================== 리뷰 작성/수정/삭제 (일반 회원) =====================
@@ -99,7 +132,7 @@ public class StoreReviewService {
         }
 
         // 리뷰 저장
-        StoreReview review = StoreReview.create(store, account, order,
+        StoreReview review = StoreReview.createForOrder(store, account, order,
                 request.getRating(), request.getContent());
 
         try {
@@ -128,7 +161,98 @@ public class StoreReviewService {
 
         List<StoreReviewImage> savedImages = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
-        return StoreReviewResponseDto.of(review, savedImages, null);
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
+        return StoreReviewResponseDto.of(review, savedImages, null, orderItems);
+    }
+
+    // 방문 예약 리뷰 작성 — 방문 완료(COMPLETED) 예약만 허용, 1예약 1리뷰
+    // storeId는 클라이언트 입력을 받지 않고 예약 엔티티에서 직접 추적한다.
+    @Transactional
+    public StoreReviewResponseDto createReservationReview(
+            Long accountId,
+            Long reservationId,
+            StoreReservationReviewCreateRequestDto request
+    ) {
+        Account account = getAccountOrThrow(accountId);
+
+        // 예약 검증 — 해당 계정의 방문 완료된 예약이어야 함
+        VisitReservation reservation = visitReservationRepository
+                .findByVisitReservationIdAndAccount_AccountId(reservationId, accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_RESERVATION_REQUIRED));
+
+        if (reservation.getStatus() != VisitReservationStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.STORE_REVIEW_RESERVATION_REQUIRED);
+        }
+
+        // 해당 예약에 이미 리뷰가 있으면 중복 작성 방지
+        if (storeReviewRepository.existsByVisitReservation_VisitReservationId(reservationId)) {
+            throw new BusinessException(ErrorCode.STORE_REVIEW_ALREADY_EXISTS);
+        }
+
+        Store store = reservation.getStore();
+        StoreReview review = StoreReview.createForReservation(store, account, reservation,
+                request.getRating(), request.getContent());
+
+        try {
+            storeReviewRepository.saveAndFlush(review);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.STORE_REVIEW_ALREADY_EXISTS);
+        }
+
+        if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
+            saveReviewImages(review, request.getImageUrls(), 0);
+        }
+
+        recalculateStoreRating(store);
+
+        log.info("방문 예약 리뷰 작성: storeId={}, accountId={}, reservationId={}, reviewId={}",
+                store.getStoreId(), accountId, reservationId, review.getStorereviewId());
+
+        eventPublisher.publishEvent(new StoreReviewCreatedEvent(
+                store.getAccount().getAccountId(),
+                account.getName(),
+                store.getName(),
+                store.getStoreId(),
+                review.getStorereviewId()));
+
+        List<StoreReviewImage> savedImages = storeReviewImageRepository
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
+        return StoreReviewResponseDto.of(review, savedImages, null, Collections.emptyList());
+    }
+
+    // 방문 예약 리뷰 단건 조회 — 해당 예약의 작성자만 가능
+    @Transactional(readOnly = true)
+    public StoreReviewDetailResponseDto getReservationReview(Long accountId, Long reservationId) {
+        visitReservationRepository
+                .findByVisitReservationIdAndAccount_AccountId(reservationId, accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_RESERVATION_REQUIRED));
+
+        StoreReview review = storeReviewRepository
+                .findByVisitReservation_VisitReservationId(reservationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
+
+        List<StoreReviewImage> images = storeReviewImageRepository
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
+        StoreReviewReplyResponseDto replyDto = buildReplyDto(review.getStorereviewId());
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, Collections.emptyList());
+    }
+
+    // 주문 리뷰 단건 조회 — 해당 주문의 작성자만 가능
+    @Transactional(readOnly = true)
+    public StoreReviewDetailResponseDto getOrderReview(Long accountId, Long orderId) {
+        orderRepository
+                .findByOrderIdAndAccount_AccountId(orderId, accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        StoreReview review = storeReviewRepository
+                .findByOrder_OrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
+
+        List<StoreReviewImage> images = storeReviewImageRepository
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
+        StoreReviewReplyResponseDto replyDto = buildReplyDto(review.getStorereviewId());
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
     }
 
     // 리뷰 수정 — 본인만 가능
@@ -155,7 +279,8 @@ public class StoreReviewService {
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
-        return StoreReviewResponseDto.of(review, images, replyDto);
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
     }
 
     // 리뷰 삭제 — 본인만 가능
@@ -209,7 +334,8 @@ public class StoreReviewService {
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
-        return StoreReviewResponseDto.of(review, images, replyDto);
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
     }
 
     // 리뷰 이미지 삭제
@@ -362,7 +488,8 @@ public class StoreReviewService {
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
-        return OwnerStoreReviewDetailResponseDto.of(review, images, replyDto);
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
+        return OwnerStoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -426,8 +553,17 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
 
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
+        List<OrderItem> orderItems = getOrderItemsForReview(review);
 
-        return StoreReviewResponseDto.of(review, images, replyDto);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+    }
+
+    // 주문 기반 리뷰인 경우 OrderItem 스냅샷 목록 조회, 예약 기반이면 빈 목록
+    private List<OrderItem> getOrderItemsForReview(StoreReview review) {
+        if (review.getReviewType() == StoreReviewType.ORDER && review.getOrder() != null) {
+            return orderItemRepository.findByOrder_OrderId(review.getOrder().getOrderId());
+        }
+        return Collections.emptyList();
     }
 
     private Store getStoreOrThrow(Long storeId) {
