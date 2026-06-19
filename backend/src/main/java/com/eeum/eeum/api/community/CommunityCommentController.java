@@ -34,7 +34,7 @@ public class CommunityCommentController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         Long accountId = SecurityUtil.getCurrentAccountIdOrNull();
-        return ResponseEntity.ok(ApiResponse.success(commentService.getComments(postId, accountId, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(commentService.getComments(accountId, postId, pageable)));
     }
 
     @PostMapping("/posts/{postId}/comments")
@@ -50,13 +50,17 @@ public class CommunityCommentController {
     }
 
     @GetMapping("/comments/{commentId}/replies")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "대댓글 목록 조회")
     public ResponseEntity<ApiResponse<Page<CommunityCommentResponseDto>>> getReplies(
             @PathVariable Long commentId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
-        Long accountId = SecurityUtil.getCurrentAccountIdOrNull();
-        return ResponseEntity.ok(ApiResponse.success(commentService.getReplies(accountId, commentId, pageable)));
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                commentService.getReplies(accountId, commentId, pageable)
+        ));
     }
 
     @PostMapping("/comments/{commentId}/replies")

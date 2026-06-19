@@ -96,4 +96,6 @@ public interface VisitReservationRepository extends JpaRepository<VisitReservati
     );
 
     List<VisitReservation> findByStore_StoreIdAndVisitDateAndVisitTimeAndStatusIn(Long storeId, LocalDate date, LocalTime slotTime, List<VisitReservationStatus> pending);
+
+    java.util.Optional<VisitReservation> findByVisitReservationIdAndAccount_AccountId(Long visitReservationId, Long accountId);
 }
