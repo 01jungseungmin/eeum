@@ -143,7 +143,7 @@ export default function CommunityDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* 헤더 부분 */}
+      {/* 1. 상단 헤더 영역 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={28} color="#333" />
@@ -154,120 +154,123 @@ export default function CommunityDetailScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {/* 본문 영역 */}
-        <View style={styles.postSection}>
-          <View style={styles.authorRow}>
-            <View style={styles.authorAvatar}><Ionicons name="person" size={20} color="#CCC" /></View>
-            <View style={{ flex: 1 }}>
-              <Text fontWeight="bold" style={styles.authorName}>{post.authorNickname || post.authorName || post.nickname || '익명'}</Text>
-              <Text style={styles.postTime}>{post.createdAt ? new Date(post.createdAt).toLocaleString() : '방금 전'}</Text>
-            </View>
-            <Text style={styles.categoryBadge}>{post.categoryName || post.category || '동네소식'}</Text>
-          </View>
-
-          <Text fontWeight="bold" style={styles.title}>{post.title}</Text>
-          
-          {post.imageUrl && (
-            <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
-          )}
-
-          <Text style={styles.content}>{post.content}</Text>
-
-          <View style={styles.statsRow}>
-            <TouchableOpacity onPress={handleToggleLike} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name={isLiked ? "heart" : "heart-outline"} size={16} color={isLiked ? "#E25555" : "#888"} />
-              <Text style={[styles.statText, { color: isLiked ? "#E25555" : "#888", marginLeft: 4 }]}>{likeCount}</Text>
-            </TouchableOpacity>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 12 }}>
-              <Ionicons name="chatbubble-outline" size={16} color="#888" />
-              <Text style={[styles.statText, { marginLeft: 4 }]}>{post.commentCount || comments.length}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* 댓글 영역 */}
-        <View style={styles.commentSection}>
-          <Text fontWeight="bold" style={styles.commentHeader}>댓글 {comments.length}</Text>
-          
-          {comments.map((comment: any, index) => {
-            const currentCommentId = comment.commentId || comment.id; 
-            const authorName = comment.authorNickname || comment.authorName || comment.nickname || '익명';
-            
-            return (
-              <View key={currentCommentId || index}>
-                {/* 메인 댓글 */}
-                <View style={styles.commentItem}>
-                  <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.commentAuthorRow}>
-                      <Text fontWeight="bold" style={styles.commentAuthor}>{authorName}</Text>
-                      <Text style={styles.commentTime}>{comment.createdAt ? new Date(comment.createdAt).toLocaleTimeString() : '방금'}</Text>
-                    </View>
-                    <Text style={styles.commentText}>{comment.content}</Text>
-                    
-                    <View style={styles.commentActionRow}>
-                      <TouchableOpacity 
-                        style={styles.commentActionBtn}
-                        onPress={() => handleToggleCommentLike(currentCommentId, comment.likedByMe)}
-                      >
-                        <Ionicons name={comment.likedByMe ? "heart" : "heart-outline"} size={12} color={comment.likedByMe ? "#E25555" : "#888"} />
-                        <Text style={[styles.commentActionText, comment.likedByMe && { color: "#E25555" }]}>
-                          좋아요 {comment.likeCount > 0 ? comment.likeCount : ''}
-                        </Text>
-                      </TouchableOpacity>
-                      
-                      {/* ✨ 3. 답글 달기 버튼 */}
-                      <TouchableOpacity 
-                        style={styles.commentActionBtn}
-                        onPress={() => {
-                          setReplyTarget({ commentId: currentCommentId, authorName: authorName });
-                          // (선택) 여기에 TextInput으로 포커스를 이동시키는 로직을 넣을 수 있습니다.
-                        }}
-                      >
-                        <Ionicons name="chatbubble-outline" size={12} color="#888" />
-                        <Text style={styles.commentActionText}>답글 달기</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-
-                {/* ✨ 4. 대댓글(Replies) 렌더링 영역 (백엔드에서 replies 배열을 내려준다고 가정) */}
-                {comment.replies && comment.replies.length > 0 && (
-                  <View style={styles.repliesContainer}>
-                    {comment.replies.map((reply: any, rIndex: number) => {
-                      const replyId = reply.replyId || reply.commentId || reply.id;
-                      const replyAuthor = reply.authorNickname || reply.authorName || '익명';
-                      return (
-                        <View key={replyId || rIndex} style={styles.replyItem}>
-                          <Ionicons name="return-down-forward-outline" size={16} color="#BBB" style={styles.replyIcon} />
-                          <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
-                          <View style={{ flex: 1 }}>
-                            <View style={styles.commentAuthorRow}>
-                              <Text fontWeight="bold" style={styles.commentAuthor}>{replyAuthor}</Text>
-                              <Text style={styles.commentTime}>{reply.createdAt ? new Date(reply.createdAt).toLocaleTimeString() : '방금'}</Text>
-                            </View>
-                            <Text style={styles.commentText}>{reply.content}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
+      {/* 2. 키보드가 화면 전체를 밀어 올려주도록 감싸는 영역 */}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {/* 본문 영역 */}
+          <View style={styles.postSection}>
+            <View style={styles.authorRow}>
+              <View style={styles.authorAvatar}><Ionicons name="person" size={20} color="#CCC" /></View>
+              <View style={{ flex: 1 }}>
+                <Text fontWeight="bold" style={styles.authorName}>{post.authorNickname || post.authorName || post.nickname || '익명'}</Text>
+                <Text style={styles.postTime}>{post.createdAt ? new Date(post.createdAt).toLocaleString() : '방금 전'}</Text>
               </View>
-            );
-          })}
-        </View>
-      </ScrollView>
+              <Text style={styles.categoryBadge}>{post.categoryName || post.category || '동네소식'}</Text>
+            </View>
 
-      {/* 키보드 및 댓글 입력창 영역 */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* ✨ 5. 누구에게 답글을 다는지 알려주는 배너 */}
+            <Text fontWeight="bold" style={styles.title}>{post.title}</Text>
+            
+            {post.imageUrl && (
+              <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
+            )}
+
+            <Text style={styles.content}>{post.content}</Text>
+
+            <View style={styles.statsRow}>
+              <TouchableOpacity onPress={handleToggleLike} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name={isLiked ? "heart" : "heart-outline"} size={16} color={isLiked ? "#E25555" : "#888"} />
+                <Text style={[styles.statText, { color: isLiked ? "#E25555" : "#888", marginLeft: 4 }]}>{likeCount}</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 12 }}>
+                <Ionicons name="chatbubble-outline" size={16} color="#888" />
+                <Text style={[styles.statText, { marginLeft: 4 }]}>{post.commentCount || comments.length}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* 댓글 및 대댓글 영역 */}
+          <View style={styles.commentSection}>
+            <Text fontWeight="bold" style={styles.commentHeader}>댓글 {comments.length}</Text>
+            
+            {comments.map((comment: any, index) => {
+              const currentCommentId = comment.commentId || comment.id; 
+              const authorName = comment.authorNickname || comment.authorName || comment.nickname || '익명';
+              
+              return (
+                <View key={currentCommentId || index}>
+                  {/* 메인 댓글 */}
+                  <View style={styles.commentItem}>
+                    <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.commentAuthorRow}>
+                        <Text fontWeight="bold" style={styles.commentAuthor}>{authorName}</Text>
+                        <Text style={styles.commentTime}>{comment.createdAt ? new Date(comment.createdAt).toLocaleTimeString() : '방금'}</Text>
+                      </View>
+                      <Text style={styles.commentText}>{comment.content}</Text>
+                      
+                      <View style={styles.commentActionRow}>
+                        <TouchableOpacity 
+                          style={styles.commentActionBtn}
+                          onPress={() => handleToggleCommentLike(currentCommentId, comment.likedByMe)}
+                        >
+                          <Ionicons name={comment.likedByMe ? "heart" : "heart-outline"} size={12} color={comment.likedByMe ? "#E25555" : "#888"} />
+                          <Text style={[styles.commentActionText, comment.likedByMe && { color: "#E25555" }]}>
+                            좋아요 {comment.likeCount > 0 ? comment.likeCount : ''}
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={styles.commentActionBtn}
+                          onPress={() => {
+                            setReplyTarget({ commentId: currentCommentId, authorName: authorName });
+                          }}
+                        >
+                          <Ionicons name="chatbubble-outline" size={12} color="#888" />
+                          <Text style={styles.commentActionText}>답글 달기</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* 대댓글(Replies) 리스트 */}
+                  {comment.replies && comment.replies.length > 0 && (
+                    <View style={styles.repliesContainer}>
+                      {comment.replies.map((reply: any, rIndex: number) => {
+                        const replyId = reply.replyId || reply.commentId || reply.id;
+                        const replyAuthor = reply.authorNickname || reply.authorName || '익명';
+                        return (
+                          <View key={replyId || rIndex} style={styles.replyItem}>
+                            <Ionicons name="return-down-forward-outline" size={16} color="#BBB" style={styles.replyIcon} />
+                            <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
+                            <View style={{ flex: 1 }}>
+                              <View style={styles.commentAuthorRow}>
+                                <Text fontWeight="bold" style={styles.commentAuthor}>{replyAuthor}</Text>
+                                <Text style={styles.commentTime}>{reply.createdAt ? new Date(reply.createdAt).toLocaleTimeString() : '방금'}</Text>
+                              </View>
+                              <Text style={styles.commentText}>{reply.content}</Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+
+        {/* 3. 하단 고정 입력창 및 답글 배너 영역 */}
         {replyTarget && (
           <View style={styles.replyBanner}>
-            <Text style={styles.replyBannerText}><Text fontWeight="bold">{replyTarget.authorName}</Text>님에게 답글 남기는 중...</Text>
+            <Text style={styles.replyBannerText}>
+              <Text fontWeight="bold">{replyTarget.authorName}</Text>님에게 답글 남기는 중...
+            </Text>
             <TouchableOpacity onPress={() => setReplyTarget(null)}>
               <Ionicons name="close-circle" size={20} color="#999" />
             </TouchableOpacity>
