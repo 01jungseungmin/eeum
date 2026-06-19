@@ -1,144 +1,131 @@
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
-import { chatApi } from '../../api/chat';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export default function ChatListScreen() {
   const router = useRouter();
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  
-  const [activeCategory, setActiveCategory] = useState('동네상점'); 
-  const [activeType, setActiveType] = useState('전체'); 
 
-  // ✨ 화면에 포커스가 올 때마다(진입 시) 최신 채팅방 목록을 불러옵니다.
-  useFocusEffect(
-    useCallback(() => {
-      const fetchRooms = async () => {
-        try {
-          setIsLoading(true);
-          const res = await chatApi.getRooms();
-          // 백엔드 응답 구조(Data, Content 등)에 맞게 안전하게 추출
-          const realData = res?.data?.content || res?.data || res || [];
-          setRooms(realData);
-        } catch (error) {
-          console.error('채팅 목록 로딩 실패', error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchRooms();
-    }, [])
-  );
-
-  const FilterChip = ({ title, isActive, onPress }: any) => (
-    <TouchableOpacity 
-      style={[styles.chip, isActive ? styles.activeChip : styles.inactiveChip]} 
-      onPress={onPress}
-    >
-      <Text style={[styles.chipText, isActive ? styles.activeChipText : styles.inactiveChipText]}>{title}</Text>
-    </TouchableOpacity>
-  );
+  // (테스트용) 채팅방 더미 데이터
+  const [chatRooms, setChatRooms] = useState([
+    { id: '1', name: '동네 맛집 탐방방', lastMessage: '오늘 저녁은 치킨 어떠세요?', time: '오후 5:00', unread: 2 },
+    { id: '2', name: '주말 풋살 모임', lastMessage: '내일 비온다는데 어쩌죠?', time: '오후 3:30', unread: 0 },
+  ]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* 1. 헤더 & 방 만들기 버튼 영역 */}
       <View style={styles.header}>
-        <Text fontWeight="bold" style={styles.headerTitle}>이음톡</Text>
+        <Text style={styles.headerTitle}>채팅</Text>
+        
+        <TouchableOpacity 
+          style={styles.createBtn} 
+          // 💡 방 만들기 화면으로 이동하는 라우팅 (나중에 write 페이지를 만들면 연결해주세요)
+          onPress={() => router.push('/chat/create' as any)} 
+        >
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.createBtnText}>방 만들기</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
-          <TextInput 
-            style={styles.searchInput} 
-            placeholder="채팅 검색" 
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <Ionicons name="search" size={20} color="#999" />
-        </View>
-      </View>
-
-      <View style={styles.filterSection}>
-        <View style={styles.filterRow}>
-          <FilterChip title="동네상점" isActive={activeCategory === '동네상점'} onPress={() => setActiveCategory('동네상점')} />
-          <FilterChip title="중고거래" isActive={activeCategory === '중고거래'} onPress={() => setActiveCategory('중고거래')} />
-        </View>
-        <View style={styles.filterRow}>
-          <FilterChip title="전체" isActive={activeType === '전체'} onPress={() => setActiveType('전체')} />
-          <FilterChip title="단체채팅" isActive={activeType === '단체채팅'} onPress={() => setActiveType('단체채팅')} />
-          <FilterChip title="개인채팅" isActive={activeType === '개인채팅'} onPress={() => setActiveType('개인채팅')} />
-        </View>
-      </View>
-
-      {/* 로딩 스피너 추가 */}
-      {isLoading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#1B854A" />
-        </View>
-      ) : (
-        <FlatList
-          data={rooms}
-          // 백엔드 키값(roomId) 방어 코드 적용
-          keyExtractor={(item) => (item.roomId || item.id).toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity 
-              style={styles.roomItem}
-              onPress={() => router.push(`/chat/${item.roomId || item.id}` as any)}
-            >
-              <View style={styles.avatarContainer}>
-                <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="image-outline" size={24} color="#CCC" />
+      {/* 2. 단체 채팅방 목록 영역 */}
+      <FlatList
+        data={chatRooms}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.roomItem}
+            // 💡 채팅방 터치 시 STOMP가 연결될 상세 화면으로 이동
+            onPress={() => router.push(`/chat/${item.id}` as any)}
+          >
+            {/* 단체 채팅방 아이콘 */}
+            <View style={styles.avatar}>
+              <Ionicons name="people" size={24} color="#BBB" />
+            </View>
+            
+            <View style={styles.roomInfo}>
+              <Text style={styles.roomName} fontWeight="bold">{item.name}</Text>
+              <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
+            </View>
+            
+            <View style={styles.metaInfo}>
+              <Text style={styles.timeText}>{item.time}</Text>
+              {item.unread > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>{item.unread}</Text>
                 </View>
-                {item.unreadCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.unreadCount}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.roomInfo}>
-                <View style={styles.roomHeader}>
-                  {/* 방 이름 매핑 */}
-                  <Text fontWeight="bold" style={styles.roomTitle}>{item.roomName || item.title || '채팅방'}</Text>
-                  <Text style={styles.timeText}>{item.lastMessageTime || item.time || ''}</Text>
-                </View>
-                <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      )}
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>참여 중인 채팅방이 없습니다.</Text>
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
 
-// 스타일은 기존과 동일합니다.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { padding: 20 },
-  headerTitle: { fontSize: 24, color: '#333' },
-  searchContainer: { paddingHorizontal: 20, paddingBottom: 15 },
-  searchBox: { flexDirection: 'row', backgroundColor: '#F5F6F8', borderRadius: 8, paddingHorizontal: 15, paddingVertical: 10, alignItems: 'center' },
-  searchInput: { flex: 1, fontSize: 15 },
-  filterSection: { paddingHorizontal: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  filterRow: { flexDirection: 'row', marginBottom: 10, gap: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  activeChip: { backgroundColor: '#1B854A' },
-  inactiveChip: { backgroundColor: '#F5F6F8' },
-  chipText: { fontSize: 14, fontWeight: '600' },
-  activeChipText: { color: '#fff' },
-  inactiveChipText: { color: '#666' },
-  roomItem: { flexDirection: 'row', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F9F9F9' },
-  avatarContainer: { marginRight: 15 },
-  avatarPlaceholder: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#DDD' },
-  badge: { position: 'absolute', right: -5, top: -5, backgroundColor: '#1B854A', minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', paddingHorizontal: 4 },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  roomInfo: { flex: 1, justifyContent: 'center' },
-  roomHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  roomTitle: { fontSize: 16, color: '#333' },
-  timeText: { fontSize: 12, color: '#999' },
-  lastMessage: { fontSize: 14, color: '#666' }
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 15,
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F0F0F0' 
+  },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#333' },
+  
+  createBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#1B854A', 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 20 
+  },
+  createBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold', marginLeft: 4 },
+  
+  roomItem: { 
+    flexDirection: 'row', 
+    paddingVertical: 16, 
+    paddingHorizontal: 20, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F8F9FA', 
+    alignItems: 'center' 
+  },
+  avatar: { 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
+    backgroundColor: '#F5F6F8', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 15 
+  },
+  roomInfo: { flex: 1, marginRight: 10 },
+  roomName: { fontSize: 16, color: '#333', marginBottom: 4 },
+  lastMessage: { fontSize: 14, color: '#888' },
+  
+  metaInfo: { alignItems: 'flex-end' },
+  timeText: { fontSize: 12, color: '#AAA', marginBottom: 6 },
+  unreadBadge: { 
+    backgroundColor: '#E25555', 
+    borderRadius: 12, 
+    paddingHorizontal: 6, 
+    paddingVertical: 2, 
+    minWidth: 20, 
+    alignItems: 'center' 
+  },
+  unreadText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  
+  emptyContainer: { padding: 50, alignItems: 'center' },
+  emptyText: { color: '#999', fontSize: 15 }
 });
