@@ -80,7 +80,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'orders',
         name: '주문/예약 관리',
-        path: '/1',
+        path: '/order-management',
         icon: <ClipboardList {...iconProps} />,
         subtitle: '실시간 주문 및 예약 내역을 확인하세요',
         countKey: 'orders',

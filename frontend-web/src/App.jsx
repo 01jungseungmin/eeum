@@ -13,6 +13,7 @@ import MemberPage from './pages/admin/main/MemberPage';
 import StorePage from './pages/owner/main/StorePage';
 import CategoryPage from './pages/owner/main/CategoryPage';
 import EventPage from './pages/owner/main/EventPage';
+import OrderManagementPage from './pages/owner/main/OrderManagementPage';
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
           path="/products"
           element={<div>상품 관리 페이지 (준비중)</div>}
         />
+        <Route path="/order-management" element={<OrderManagementPage />} />
         <Route path="/categories" element={<CategoryPage />} />
         <Route path="/events" element={<EventPage />} />
       </Route>
