@@ -22,11 +22,11 @@ export default function HistoryScreen() {
     try {
       setIsLoading(true);
       
-      // ✨ 1. 진짜 백엔드 API를 호출합니다! (API 이름은 프로젝트에 맞게 수정하세요)
+      // 1. 진짜 백엔드 API를 호출합니다! (API 이름은 프로젝트에 맞게 수정하세요)
       // 거래 내역 리스트 조회 API 호출
       const res = await orderApi.getMyHistory(); 
       
-      // ✨ 2. 서버에서 준 진짜 데이터를 화면에 꽂아줍니다!
+      // 2. 서버에서 준 진짜 데이터를 화면에 꽂아줍니다!
       const realData = res.data?.content || res.data?.data || [];
       setHistoryList(realData);
 
@@ -51,13 +51,16 @@ export default function HistoryScreen() {
   const renderHistoryItem = ({ item }: { item: any }) => {
     const statusStyle = getStatusStyle(item.status);
 
-    // ✨ 서버 날짜 포맷 변경 ("2026-06-10T17:25:33" -> "2026-06-10 17:25")
+    // 서버 날짜 포맷 변경 ("2026-06-10T17:25:33" -> "2026-06-10 17:25")
     const formattedDate = item.paidAt 
       ? item.paidAt.replace('T', ' ').substring(0, 16) 
       : '결제일시 없음';
       
-    // ✨ 썸네일은 주문한 첫 번째 상품의 이미지를 가져옵니다.
-    const imageUrl = item.orderItems?.[0]?.thumbnailUrl || 'https://via.placeholder.com/150';
+    // 썸네일은 주문한 첫 번째 상품의 이미지를 가져옵니다.
+    const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://via.placeholder.com/150';
+
+    // 리뷰 작성 여부 판단
+    const isReviewCompleted = item.hasReview === true;
 
     return (
       <TouchableOpacity 
@@ -79,11 +82,9 @@ export default function HistoryScreen() {
             style={styles.cardImage} 
           />
           <View style={styles.cardInfo}>
-            {/* ✨ shopName -> storeName 으로 변경 */}
             <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>
               {item.storeName}
             </Text>
-            {/* ✨ amount -> totalPrice 로 변경 및 방어 코드 추가 */}
             <Text style={styles.amountText}>
               {item.totalPrice?.toLocaleString() || 0}원
             </Text>
@@ -91,9 +92,21 @@ export default function HistoryScreen() {
         </View>
 
         {item.status === 'COMPLETED' && (
-          <TouchableOpacity style={styles.reviewButton}>
-            <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
-          </TouchableOpacity>
+          isReviewCompleted ? (
+            <View style={[styles.reviewButton, { backgroundColor: '#F5F5F5', borderColor: '#EEE' }]}>
+              <Text fontWeight="bold" style={[styles.reviewButtonText, { color: '#999' }]}>리뷰 작성 완료</Text>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.reviewButton}
+              onPress={(e) => {
+                e.stopPropagation(); 
+                router.push(`/review/write?storeId=${item.storeId}&orderId=${item.orderId}`);
+              }}
+            >
+              <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
+            </TouchableOpacity>
+          )
         )}
       </TouchableOpacity>
     );
