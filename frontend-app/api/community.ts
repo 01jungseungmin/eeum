@@ -2,11 +2,15 @@ import { client } from './client';
 
 export const communityApi = {
   // 1. 커뮤니티 게시글 (Post) API
-  getPosts: async (page: number = 0, size: number = 20, categoryId?: number | null) => {
+  getPosts: async (page: number = 0, size: number = 20, categoryId?: number | null, keyword?: string) => {
     const params: any = { page, size };
     
     if (categoryId) {
       params.categoryId = categoryId; 
+    }
+
+    if (keyword) {
+      params.keyword = keyword;
     }
 
     const response = await client.get('/community/posts', { params });
@@ -95,5 +99,21 @@ export const communityApi = {
   unlikeComment: async (commentId: string | number) => {
     const response = await client.delete(`/community/comments/${commentId}/likes`);
     return response.data;
+  },
+
+  // 내가 작성한 게시글 조회
+  getMyPosts: async (page: number = 0, size: number = 20) => {
+    const response = await client.get('/community/posts/me', {
+      params: { page, size }
+    });
+    return response.data?.data?.content || response.data?.data || [];
+  },
+
+  // 내가 작성한 댓글 조회 API
+  getMyComments: async (page: number = 0, size: number = 20) => {
+    const response = await client.get('/community/comments/me', {
+      params: { page, size }
+    });
+    return response.data?.data?.content || response.data?.data || [];
   }
 };

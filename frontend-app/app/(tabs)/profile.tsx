@@ -130,8 +130,18 @@ export default function ProfileScreen() {
 
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 커뮤니티 활동" />
-          <MenuItem title="작성한 게시글" iconName="document-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="작성한 댓글" iconName="chatbubble-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+          <MenuItem 
+            title="작성한 게시글" 
+            iconName="document-outline" 
+            onPress={() => router.push('/community/my-posts')} 
+          />
+          
+          {/* 4. onPress 변경: 내가 쓴 댓글 화면으로 이동 */}
+          <MenuItem 
+            title="작성한 댓글" 
+            iconName="chatbubble-outline" 
+            onPress={() => router.push('/community/my-comments')} 
+          />
         </View>
         
         <View style={styles.divider} />
