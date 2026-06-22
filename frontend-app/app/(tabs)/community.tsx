@@ -6,7 +6,18 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { communityApi } from '../../api/community';
 
-const CATEGORIES = ['전체', '자유게시판', '동네소식', '분실물', '도움요청', '공동배달'];
+// ✨ 1. 이름과 백엔드 DB 번호를 짝지어주는 매핑 객체 생성
+const CATEGORY_MAP: Record<string, number | null> = {
+  '전체': null,       // 전체는 번호 없이 null 전송
+  '자유게시판': 8,
+  '동네소식': 9,
+  '분실물': 10,
+  '도움요청': 11,
+  '공동배달': 12,
+};
+
+// 맵에서 탭 이름('전체', '자유게시판' 등)만 뽑아서 배열로 만듭니다.
+const CATEGORIES = Object.keys(CATEGORY_MAP);
 
 export default function CommunityListScreen() {
   const router = useRouter();
@@ -14,19 +25,30 @@ export default function CommunityListScreen() {
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 탭이 포커스될 때마다 데이터 리로드
+  // ✨ 3. 화면이 보이거나, activeCategory(탭)가 바뀔 때마다 실행되도록 의존성 배열에 추가!
   useFocusEffect(
     useCallback(() => {
       fetchPosts();
-    }, [])
+    }, [activeCategory]) 
   );
 
   const fetchPosts = async () => {
     try {
       setIsLoading(true);
-      // 일단 1페이지(0) 20개 로드. 무한 스크롤 구현 시 page 번호 증가 필요
-      const data = await communityApi.getPosts(0, 20); 
+      
+      const targetCategoryId = CATEGORY_MAP[activeCategory]; 
+      
+      // 1. 백엔드에 데이터 요청 (현재 백엔드가 필터링을 못 하고 전체를 주는 상태)
+      let data = await communityApi.getPosts(0, 20, targetCategoryId); 
+
+      // ✨ [긴급 처방] 프론트엔드 강제 필터링 ✨
+      // 백엔드 버그가 고쳐지기 전까지, 폰에서 직접 '현재 탭 이름'과 일치하는 글만 걸러냅니다.
+      if (activeCategory !== '전체') {
+        data = data.filter((item: any) => item.categoryName === activeCategory);
+      }
+      
       setPosts(data);
+      
     } catch (error) {
       console.error('게시글 로딩 실패:', error);
     } finally {

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Image, Keyboard } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { communityApi } from '../../api/community';
+import { userApi } from '../../api/user';
 
 export default function CommunityDetailScreen() {
   const router = useRouter();
@@ -19,32 +20,80 @@ export default function CommunityDetailScreen() {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
 
-  // ✨ 1. 대댓글(답글) 대상을 기억하는 상태 추가
+  const insets = useSafeAreaInsets();
   const [replyTarget, setReplyTarget] = useState<{ commentId: number; authorName: string } | null>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [myAccountId, setMyAccountId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (id) fetchDetailAndComments();
-  }, [id]);
+    const fetchMyInfo = async () => {
+      try {
+        const myInfo = await userApi.getMyInfo();
+        setMyAccountId(myInfo.accountId);
+      } catch (error) {
+        console.error('내 정보 로딩 실패:', error);
+      }
+    };
+    fetchMyInfo();
+  }, []);
 
-  const fetchDetailAndComments = async () => {
+  // ✨ 1. 데이터를 불러오는 함수를 useCallback으로 감싸서 메모리 갇힘(Closure) 현상을 박살냅니다!
+  const fetchDetailAndComments = useCallback(async () => {
+    if (!id) return;
     try {
       setIsLoading(true);
       const [postData, commentsData] = await Promise.all([
         communityApi.getPostDetail(id as string),
         communityApi.getComments(id as string)
       ]);
+
+      const commentsWithReplies = await Promise.all(
+        commentsData.map(async (comment: any) => {
+          try {
+            const currentCommentId = comment.commentId || comment.id;
+            const replyData = await communityApi.getReplies(currentCommentId);
+            return { ...comment, replies: replyData };
+          } catch (e) {
+            return { ...comment, replies: [] };
+          }
+        })
+      );
+
       setPost(postData);
       setIsLiked(postData.likedByMe);
       setLikeCount(postData.likeCount);
-      setComments(commentsData);
+      setComments(commentsWithReplies);
     } catch (error) {
       console.error('상세 정보 로딩 실패:', error);
-      Alert.alert('오류', '게시글을 불러올 수 없습니다.');
-      router.back();
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
+
+  // ✨ 2. 이제 화면이 다시 보일 때마다 위에서 만든 '무조건 최신화' 함수가 실행됩니다!
+  useFocusEffect(
+    useCallback(() => {
+      fetchDetailAndComments();
+    }, [fetchDetailAndComments])
+  );
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   const handleToggleLike = async () => {
     setIsLiked(!isLiked);
@@ -102,7 +151,6 @@ export default function CommunityDetailScreen() {
     }
   };
 
-  // ✨ 2. 전송 로직 분기 (일반 댓글 vs 대댓글)
   const handleSubmitComment = async () => {
     if (!inputText.trim()) return;
     
@@ -110,27 +158,83 @@ export default function CommunityDetailScreen() {
       setIsSubmitting(true);
       
       if (replyTarget) {
-        // 답글 대상이 있으면 대댓글 API 호출
         await communityApi.createReply(replyTarget.commentId, inputText);
       } else {
-        // 없으면 일반 댓글 API 호출
         await communityApi.createComment(id as string, inputText);
       }
       
-      // 작성 성공 시 초기화 및 새로고침
       setInputText('');
-      setReplyTarget(null); // 답글 모드 해제
-      Keyboard.dismiss(); // 키보드 내리기
+      setReplyTarget(null);
+      Keyboard.dismiss(); 
       
-      const newComments = await communityApi.getComments(id as string);
-      setComments(newComments);
+      await fetchDetailAndComments(); 
       
     } catch (error: any) {
-      const serverMessage = error.response?.data?.message;
-      Alert.alert('작성 실패', serverMessage || '일시적인 오류가 발생했습니다.');
+      Alert.alert('작성 실패', '오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDeletePost = () => {
+    Alert.alert(
+      '게시글 삭제',
+      '정말 이 게시글을 삭제하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        { 
+          text: '삭제', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              await communityApi.deletePost(id as string);
+              Alert.alert('알림', '게시글이 삭제되었습니다.');
+              router.back(); 
+            } catch (error) {
+              console.error('게시글 삭제 실패:', error);
+              Alert.alert('오류', '게시글 삭제에 실패했습니다.');
+              setIsLoading(false);
+            }
+          } 
+        }
+      ]
+    );
+  };
+
+  const handleOpenPostOptions = () => {
+    Alert.alert(
+      '게시글 관리',
+      '무엇을 하시겠습니까?',
+      [
+        { text: '수정하기', onPress: () => router.push(`/community/write?editId=${id}`) },
+        { text: '삭제하기', onPress: handleDeletePost, style: 'destructive' },
+        { text: '취소', style: 'cancel' }
+      ]
+    );
+  };
+
+  const handleDeleteComment = (commentId: number | string) => {
+    Alert.alert(
+      '댓글 삭제',
+      '이 댓글을 삭제하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        { 
+          text: '삭제', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await communityApi.deleteComment(commentId);
+              await fetchDetailAndComments(); 
+            } catch (error) {
+              console.error('댓글 삭제 실패:', error);
+              Alert.alert('오류', '댓글 삭제에 실패했습니다.');
+            }
+          } 
+        }
+      ]
+    );
   };
 
   if (isLoading || !post) {
@@ -142,25 +246,28 @@ export default function CommunityDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* 1. 상단 헤더 영역 */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={{ marginRight: 15 }}><Ionicons name="share-social-outline" size={24} color="#333" /></TouchableOpacity>
-          <TouchableOpacity><Ionicons name="ellipsis-vertical" size={24} color="#333" /></TouchableOpacity>
+          {myAccountId && post?.authorId === myAccountId && (
+            <TouchableOpacity onPress={handleOpenPostOptions}>
+              <Ionicons name="ellipsis-vertical" size={24} color="#333" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* 2. 키보드가 화면 전체를 밀어 올려주도록 감싸는 영역 */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding" 
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0} 
+        enabled={Platform.OS === 'ios' ? true : isKeyboardVisible} 
       >
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {/* 본문 영역 */}
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.postSection}>
             <View style={styles.authorRow}>
               <View style={styles.authorAvatar}><Ionicons name="person" size={20} color="#CCC" /></View>
@@ -193,7 +300,6 @@ export default function CommunityDetailScreen() {
 
           <View style={styles.divider} />
 
-          {/* 댓글 및 대댓글 영역 */}
           <View style={styles.commentSection}>
             <Text fontWeight="bold" style={styles.commentHeader}>댓글 {comments.length}</Text>
             
@@ -203,7 +309,6 @@ export default function CommunityDetailScreen() {
               
               return (
                 <View key={currentCommentId || index}>
-                  {/* 메인 댓글 */}
                   <View style={styles.commentItem}>
                     <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
                     <View style={{ flex: 1 }}>
@@ -228,16 +333,27 @@ export default function CommunityDetailScreen() {
                           style={styles.commentActionBtn}
                           onPress={() => {
                             setReplyTarget({ commentId: currentCommentId, authorName: authorName });
+                            setTimeout(() => inputRef.current?.focus(), 100); 
                           }}
                         >
                           <Ionicons name="chatbubble-outline" size={12} color="#888" />
                           <Text style={styles.commentActionText}>답글 달기</Text>
                         </TouchableOpacity>
+
+                        {myAccountId && comment.authorId === myAccountId && (
+                          <TouchableOpacity 
+                            style={styles.commentActionBtn}
+                            onPress={() => handleDeleteComment(currentCommentId)}
+                          >
+                            <Ionicons name="trash-outline" size={12} color="#888" />
+                            <Text style={styles.commentActionText}>삭제</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
                   </View>
 
-                  {/* 대댓글(Replies) 리스트 */}
+                  {/* 대댓글 영역 */}
                   {comment.replies && comment.replies.length > 0 && (
                     <View style={styles.repliesContainer}>
                       {comment.replies.map((reply: any, rIndex: number) => {
@@ -253,6 +369,18 @@ export default function CommunityDetailScreen() {
                                 <Text style={styles.commentTime}>{reply.createdAt ? new Date(reply.createdAt).toLocaleTimeString() : '방금'}</Text>
                               </View>
                               <Text style={styles.commentText}>{reply.content}</Text>
+                              
+                              {myAccountId && reply.authorId === myAccountId && (
+                                <View style={styles.commentActionRow}>
+                                  <TouchableOpacity 
+                                    style={styles.commentActionBtn}
+                                    onPress={() => handleDeleteComment(replyId)}
+                                  >
+                                    <Ionicons name="trash-outline" size={12} color="#888" />
+                                    <Text style={styles.commentActionText}>삭제</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              )}
                             </View>
                           </View>
                         );
@@ -265,7 +393,6 @@ export default function CommunityDetailScreen() {
           </View>
         </ScrollView>
 
-        {/* 3. 하단 고정 입력창 및 답글 배너 영역 */}
         {replyTarget && (
           <View style={styles.replyBanner}>
             <Text style={styles.replyBannerText}>
@@ -277,8 +404,14 @@ export default function CommunityDetailScreen() {
           </View>
         )}
         
-        <View style={styles.inputContainer}>
+        <View 
+          style={[
+            styles.inputContainer, 
+            { paddingBottom: isKeyboardVisible ? 0 : (Platform.OS === 'ios' ? 20 : insets.bottom + 10) }
+          ]}
+        >
           <TextInput
+            ref={inputRef} 
             style={styles.input}
             placeholder={replyTarget ? "답글을 입력하세요" : "댓글을 입력하세요"}
             value={inputText}
@@ -328,7 +461,7 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 12, color: '#999' },
   commentText: { fontSize: 14, color: '#444', lineHeight: 20, marginBottom: 8 },
   
-  commentActionRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  commentActionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
   commentActionBtn: { flexDirection: 'row', alignItems: 'center' },
   commentActionText: { fontSize: 12, color: '#888', marginLeft: 4 },
 
@@ -339,7 +472,7 @@ const styles = StyleSheet.create({
   replyBanner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F5F6F8', paddingHorizontal: 15, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EEE' },
   replyBannerText: { fontSize: 13, color: '#555' },
 
-  inputContainer: { flexDirection: 'row', padding: 10, paddingBottom: Platform.OS === 'ios' ? 20 : 10, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', alignItems: 'center' },
+  inputContainer: { flexDirection: 'row', padding: 10, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', alignItems: 'center' },
   input: { flex: 1, minHeight: 40, maxHeight: 100, backgroundColor: '#F5F6F8', borderRadius: 20, paddingHorizontal: 15, paddingTop: 10, paddingBottom: 10, fontSize: 14, marginRight: 10 },
   submitBtn: { backgroundColor: '#1B854A', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20, justifyContent: 'center' },
   submitBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 }

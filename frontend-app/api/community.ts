@@ -2,13 +2,17 @@ import { client } from './client';
 
 export const communityApi = {
   // 1. 커뮤니티 게시글 (Post) API
-  getPosts: async (page: number = 0, size: number = 20) => {
-    const response = await client.get('/community/posts', {
-      params: { page, size }
-    });
+  getPosts: async (page: number = 0, size: number = 20, categoryId?: number | null) => {
+    const params: any = { page, size };
+    
+    if (categoryId) {
+      params.categoryId = categoryId; 
+    }
+
+    const response = await client.get('/community/posts', { params });
     return response.data?.data?.content || []; 
   },
-
+  
   getPostDetail: async (postId: string | number) => {
     const response = await client.get(`/community/posts/${postId}`);
     return response.data?.data || response.data;

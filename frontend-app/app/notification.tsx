@@ -89,7 +89,7 @@ export default function NotificationsScreen() {
     
     if (isUnread) {
       try {
-        // 단건 읽음 처리 API 호출 (PATCH /notifications/{id}/read)
+        // 단건 읽음 처리 API 호출
         await notificationApi.markAsRead(item.notificationId);
         setNotifications(prev => prev.map(n => 
           n.notificationId === item.notificationId ? { ...n, Read: 1 } : n
