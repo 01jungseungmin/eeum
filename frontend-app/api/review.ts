@@ -24,6 +24,21 @@ export const reviewApi = {
     }
   },
 
+  // ✨ 3. [신규 추가] 내 리뷰 목록 조회 (마이페이지용)
+  // type에 'ORDER'나 'RESERVATION'을 넘기면 필터링, 안 넘기면 전체 조회!
+  getMyReviews: async (type?: 'ORDER' | 'RESERVATION', page: number = 0, size: number = 20) => {
+    try {
+      const params: any = { page, size };
+      if (type) params.type = type; // 필터가 있을 때만 파라미터에 추가
+
+      const response = await client.get('/reviews/me', { params });
+      return response.data?.data?.content || [];
+    } catch (error) {
+      console.error('내 리뷰 목록 조회 에러:', error);
+      throw error;
+    }
+  },
+
   // (참고) 리뷰에 이미지 추가 API - 지금은 createReview에서 한 번에 보내므로 당장 안 써도 됩니다.
   addReviewImages: async (storeId: number, reviewId: number, imageUrls: string[]) => {
     try {
