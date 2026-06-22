@@ -5,9 +5,10 @@ import com.eeum.eeum.application.community.dto.request.CommunityPostUpdateReques
 import com.eeum.eeum.application.community.dto.response.CommunityPostDetailResponseDto;
 import com.eeum.eeum.application.community.dto.response.CommunityPostSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
-import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -18,6 +19,7 @@ import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
+import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
@@ -47,14 +49,17 @@ public class CommunityPostService {
     private final CommunityImageRepository imageRepository;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
-    private final RegionRepository regionRepository;
+    private final AccountRegionRepository accountRegionRepository;
 
     @Transactional(readOnly = true)
     public Page<CommunityPostSummaryResponseDto> getPosts(Long accountId, Pageable pageable) {
         Account account = getAccountOrThrow(accountId);
-        Long primaryRegionId = getPrimaryRegionIdOrThrow(account);
+        Region region = getPrimaryRegion(account);
 
-        Page<CommunityPost> posts = postRepository.findByRegion_RegionId(primaryRegionId, pageable);
+        Page<CommunityPost> posts = postRepository.findByRegion_RegionId(
+                region.getRegionId(),
+                pageable
+        );
 
         if (posts.isEmpty()) {
             return posts.map(post -> CommunityPostSummaryResponseDto.from(post, null, false));
@@ -102,7 +107,7 @@ public class CommunityPostService {
     public CommunityPostDetailResponseDto createPost(Long accountId, CommunityPostCreateRequestDto request) {
         Account account = getAccountOrThrow(accountId);
         Category category = getCategoryOrThrow(request.getCategoryId());
-        Region region = getPrimaryRegionOrThrow(account);
+        Region region = getPrimaryRegion(account);
 
         CommunityPost post = CommunityPost.create(
                 account,
@@ -192,19 +197,23 @@ public class CommunityPostService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
     }
 
-    private Long getPrimaryRegionIdOrThrow(Account account) {
-        if (account.getPrimaryRegionId() == null) {
-            throw new NotFoundException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+    private Region getPrimaryRegion(Account account) {
+        Long primaryAccountRegionId = account.getPrimaryRegionId();
+
+        if (primaryAccountRegionId == null) throw new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+
+        AccountRegion accountRegion = accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(
+                        primaryAccountRegionId,
+                        account.getAccountId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
+
+        if (!accountRegion.isVerified()) {
+            throw new BusinessException(ErrorCode.REGION_NOT_VERIFIED);
         }
 
-        return account.getPrimaryRegionId();
-    }
-
-    private Region getPrimaryRegionOrThrow(Account account) {
-        Long primaryRegionId = getPrimaryRegionIdOrThrow(account);
-
-        return regionRepository.findById(primaryRegionId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.REGION_NOT_FOUND));
+        return accountRegion.getRegion();
     }
 
     private void validateOwner(CommunityPost post, Long accountId) {
@@ -214,9 +223,9 @@ public class CommunityPostService {
     }
 
     private void validateSameRegion(CommunityPost post, Account account) {
-        Long primaryRegionId = getPrimaryRegionIdOrThrow(account);
+        Region myRegion = getPrimaryRegion(account);
 
-        if (!post.getRegion().getRegionId().equals(primaryRegionId)) {
+        if (!post.getRegion().getRegionId().equals(myRegion.getRegionId())) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
     }

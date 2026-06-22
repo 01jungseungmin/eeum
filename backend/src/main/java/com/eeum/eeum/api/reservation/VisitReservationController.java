@@ -3,6 +3,10 @@ package com.eeum.eeum.api.reservation;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationResponseDto;
 import com.eeum.eeum.application.reservation.service.VisitReservationService;
+import com.eeum.eeum.application.store.dto.request.StoreReservationReviewCreateRequestDto;
+import com.eeum.eeum.application.store.dto.response.StoreReviewDetailResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreReviewResponseDto;
+import com.eeum.eeum.application.store.service.StoreReviewService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 public class VisitReservationController {
 
     private final VisitReservationService visitReservationService;
+    private final StoreReviewService storeReviewService;
 
     @Operation(summary = "매장 방문 예약 생성")
     @PostMapping("/stores/{storeId}")
@@ -66,5 +72,28 @@ public class VisitReservationController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         visitReservationService.cancelMyReservation(accountId, reservationId);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "방문 예약 리뷰 작성", description = "방문 완료(COMPLETED) 예약 기준 리뷰를 작성합니다. 1예약 1리뷰.")
+    @PostMapping("/{reservationId}/review")
+    public ResponseEntity<ApiResponse<StoreReviewResponseDto>> createReservationReview(
+            @PathVariable Long reservationId,
+            @Valid @RequestBody StoreReservationReviewCreateRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                storeReviewService.createReservationReview(accountId, reservationId, request)
+        ));
+    }
+
+    @Operation(summary = "방문 예약 리뷰 조회", description = "내가 작성한 방문 예약 리뷰를 조회합니다.")
+    @GetMapping("/{reservationId}/review")
+    public ResponseEntity<ApiResponse<StoreReviewDetailResponseDto>> getReservationReview(
+            @PathVariable Long reservationId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                storeReviewService.getReservationReview(accountId, reservationId)
+        ));
     }
 }

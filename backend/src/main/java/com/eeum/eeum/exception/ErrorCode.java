@@ -133,6 +133,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_METHOD_NOT_SUPPORTED("PAYMENT_009", "지원하지 않는 결제 수단입니다", HttpStatus.BAD_REQUEST),
     PAYMENT_REFUND_ALREADY("PAYMENT_010", "이미 환불 처리 되었습니다.", HttpStatus.CONFLICT),
     PAYMENT_NOT_COMPLETED("PAYMENT_011", "결제가 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
+    PAYMENT_REFUND_NOT_REQUESTED("PAYMENT_012", "환불 요청 상태가 아닙니다.", HttpStatus.BAD_REQUEST),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
@@ -192,6 +193,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     STORE_REVIEW_ALREADY_EXISTS("REVIEW_003", "이미 리뷰를 작성했습니다", HttpStatus.CONFLICT),
     STORE_REVIEW_ORDER_REQUIRED("REVIEW_004", "구매 완료 후 리뷰를 작성할 수 있습니다", HttpStatus.BAD_REQUEST),
     STORE_REVIEW_REPLY_ALREADY_EXISTS("REVIEW_005", "이미 답글을 작성했습니다", HttpStatus.CONFLICT),
+    STORE_REVIEW_RESERVATION_REQUIRED("REVIEW_006", "방문 완료 후 리뷰를 작성할 수 있습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 카테고리 (CATEGORY) =====================
     CATEGORY_NOT_FOUND("CATEGORY_001", "존재하지 않는 카테고리입니다", HttpStatus.NOT_FOUND),

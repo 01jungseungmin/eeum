@@ -5,6 +5,8 @@ import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderPaymentReadyResponseDto;
 import com.eeum.eeum.application.order.dto.response.OrderResponseDto;
 import com.eeum.eeum.application.order.service.OrderService;
+import com.eeum.eeum.application.store.dto.response.StoreReviewDetailResponseDto;
+import com.eeum.eeum.application.store.service.StoreReviewService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
 
     private final OrderService orderService;
+    private final StoreReviewService storeReviewService;
 
     @Operation(
             summary = "주문 생성 및 결제 준비",
@@ -91,5 +94,16 @@ public class OrderController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         orderService.requestOrderRefund(accountId, orderId, request);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @Operation(summary = "주문 리뷰 조회", description = "내가 작성한 주문 리뷰를 조회합니다.")
+    @GetMapping("/{orderId}/review")
+    public ResponseEntity<ApiResponse<StoreReviewDetailResponseDto>> getOrderReview(
+            @PathVariable Long orderId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                storeReviewService.getOrderReview(accountId, orderId)
+        ));
     }
 }
