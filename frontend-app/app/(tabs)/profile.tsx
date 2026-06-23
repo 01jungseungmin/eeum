@@ -133,14 +133,14 @@ export default function ProfileScreen() {
           <MenuItem 
             title="작성한 게시글" 
             iconName="document-outline" 
-            onPress={() => router.push('/community/my-posts')} 
+            onPress={() => router.push('../community/my-posts')} 
           />
           
           {/* 4. onPress 변경: 내가 쓴 댓글 화면으로 이동 */}
           <MenuItem 
             title="작성한 댓글" 
             iconName="chatbubble-outline" 
-            onPress={() => router.push('/community/my-comments')} 
+            onPress={() => router.push('../community/my-comments')} 
           />
         </View>
         

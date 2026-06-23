@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { communityApi } from '../../api/community';
-import { useDebounce } from '../../hooks/useDebounce'; // ✨ 훅 불러오기
+import { useDebounce } from '../../hooks/useDebounce';
 
 // 1. 이름과 백엔드 DB 번호를 짝지어주는 매핑 객체 생성
 const CATEGORY_MAP: Record<string, number | null> = {
@@ -67,32 +67,51 @@ export default function CommunityListScreen() {
     setKeyword(''); // 검색어를 지우면 자동으로 전체 목록이 다시 불러와집니다.
   };
 
-  const renderPost = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.postItem} onPress={() => router.push(`/community/${item.postId}` as any)}>
-      <View style={styles.postContentSection}>
-        <View style={styles.postMeta}>
-          <Text style={styles.categoryBadge}>{item.categoryName || '동네소식'}</Text>
-          <Text style={styles.timeText}>
-            {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '방금 전'}
-          </Text>
-        </View>
-        <Text fontWeight="bold" style={styles.postTitle} numberOfLines={1}>{item.title}</Text>
-        
-        <View style={styles.postFooter}>
-          <Text style={styles.authorText}>{item.authorNickname || '익명'}</Text>
-          <View style={styles.statsRow}>
-            <Ionicons name="heart-outline" size={14} color="#888" /><Text style={styles.statText}>{item.likeCount}</Text>
-            <Ionicons name="chatbubble-outline" size={14} color="#888" /><Text style={styles.statText}>{item.commentCount}</Text>
-            <Ionicons name="eye-outline" size={14} color="#888" /><Text style={styles.statText}>{item.viewCount}</Text>
+  // 🚨 에러 원인 해결: 소괄호 ( ) 가 아니라 중괄호 { } 로 열고 닫아야 내부에 변수를 선언할 수 있습니다!
+  const renderPost = ({ item }: { item: any }) => {
+    // 백엔드 데이터에 맞춰서 좋아요 여부를 가져옵니다.
+    const isLiked = item.likedByMe || item.isLiked || false; 
+
+    return (
+      <TouchableOpacity style={styles.postItem} onPress={() => router.push(`/community/${item.postId}` as any)}>
+        <View style={styles.postContentSection}>
+          <View style={styles.postMeta}>
+            <Text style={styles.categoryBadge}>{item.categoryName || '동네소식'}</Text>
+            <Text style={styles.timeText}>
+              {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '방금 전'}
+            </Text>
+          </View>
+          <Text fontWeight="bold" style={styles.postTitle} numberOfLines={1}>{item.title}</Text>
+          
+          <View style={styles.postFooter}>
+            <Text style={styles.authorText}>{item.authorNickname || '익명'}</Text>
+            <View style={styles.statsRow}>
+              
+              {/* ✨ 좋아요 여부에 따라 하트 색상과 종류가 붉은색으로 바뀝니다! */}
+              <Ionicons 
+                name={isLiked ? "heart" : "heart-outline"} 
+                size={14} 
+                color={isLiked ? "#E25555" : "#888"} 
+              />
+              <Text style={[styles.statText, isLiked && { color: "#E25555" }]}>
+                {item.likeCount || 0}
+              </Text>
+              
+              <Ionicons name="chatbubble-outline" size={14} color="#888" />
+              <Text style={styles.statText}>{item.commentCount || 0}</Text>
+              
+              <Ionicons name="eye-outline" size={14} color="#888" />
+              <Text style={styles.statText}>{item.viewCount || 0}</Text>
+            </View>
           </View>
         </View>
-      </View>
-      
-      {item.thumbnailUrl && (
-        <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
-      )}
-    </TouchableOpacity>
-  );
+        
+        {item.thumbnailUrl && (
+          <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
