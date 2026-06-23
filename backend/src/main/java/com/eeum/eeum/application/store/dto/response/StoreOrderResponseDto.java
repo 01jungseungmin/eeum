@@ -20,7 +20,13 @@ public class StoreOrderResponseDto {
     private OrderStatus orderStatus;
     private BigDecimal totalPrice;
     private List<OrderItemResponseDto> items;
+    private LocalDateTime paidAt;
+    private LocalDateTime confirmedAt;
+    private LocalDateTime readyAt;
+    private LocalDateTime completedAt;
+    private LocalDateTime cancelledAt;
     private LocalDateTime createdAt;
+    private LocalDateTime modifiedAt;
 
     public static StoreOrderResponseDto of(Order order, List<OrderItem> orderItems) {
         return StoreOrderResponseDto.builder()
@@ -31,7 +37,13 @@ public class StoreOrderResponseDto {
                 .items(orderItems.stream()
                         .map(OrderItemResponseDto::from)
                         .toList())
+                .paidAt(order.getPaidAt())
+                .confirmedAt(order.getConfirmedAt())
+                .readyAt(order.getReadyAt())
+                .completedAt(order.getCompletedAt())
+                .cancelledAt(order.getCancelledAt())
                 .createdAt(order.getCreatedAt())
+                .modifiedAt(order.getModifiedAt())
                 .build();
     }
 }

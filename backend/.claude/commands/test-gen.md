@@ -30,6 +30,7 @@ $ARGUMENTS 클래스의 단위 테스트를 작성하세요.
 - 멱등성 처리 메서드는 중복 요청 케이스 포함
 - verify로 외부 의존성 호출 여부를 검증한다
 - 불필요한 interaction은 `verifyNoMoreInteractions(...)`로 검증한다
+- Repository/Service 메서드가 같은 타입(Long, Long 등) 파라미터를 2개 이상 받는 경우, `verify(...)`에서 `any()`로 뭉뚱그리지 않고 `eq(구체값)`으로 각 인자를 검증한다 — 인자 순서가 바뀌어도 `any()`는 통과하므로 매개변수 순서 오류를 못 잡는다
 
 ## 테스트 데이터 빌더 규칙
 - 테스트 객체는 private helper method로 생성한다
@@ -38,6 +39,18 @@ $ARGUMENTS 클래스의 단위 테스트를 작성하세요.
 ## 출력
 - 테스트 파일 경로: `src/test/java/...` (대상 클래스와 동일 패키지)
 - 마지막에 "생성한 케이스 목록 + 커버하지 못한 분기" 요약
+
+## integration-test 필요 여부 안내
+이 커맨드는 Repository를 전부 Mock 처리하므로 Hibernate flush/clear 시점, FK 제약,
+실제 쿼리 결과처럼 실제 DB 없이는 검증할 수 없는 버그는 잡지 못한다.
+대상 메서드에 아래 신호가 하나라도 있으면 출력 마지막에
+"`/integration-test $ARGUMENTS` 진행 권장 — 이유: ..."를 표시한다.
+- 같은 트랜잭션 안에서 엔티티 변경 + `@Modifying` bulk 쿼리가 섞여 있음
+- 자기참조 FK 또는 부모-자식 구조 엔티티의 bulk delete/hard delete
+- 여러 계정의 데이터가 함께 있어야 정상 동작하는 정책 (지역 매칭, 소유권 등)
+- LAZY 연관관계를 트랜잭션 경계 너머로 접근할 가능성
+- 분산 락/Pessimistic Lock/Unique 제약이 적용된 쓰기 연산
+신호가 없으면 "단위 테스트로 충분 — integration-test 불필요"라고 명시한다.
 
 ## 금지 사항
 - 기존 패키지 구조를 임의로 변경하지 않는다

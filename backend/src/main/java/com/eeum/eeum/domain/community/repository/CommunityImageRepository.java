@@ -17,7 +17,7 @@ public interface CommunityImageRepository extends JpaRepository<CommunityImage, 
     @Query("SELECT ci FROM CommunityImage ci WHERE ci.post.postId IN :postIds AND ci.thumbnail = true")
     List<CommunityImage> findThumbnailsByPostIds(@Param("postIds") List<Long> postIds);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM CommunityImage ci WHERE ci.post.postId = :postId")
     void deleteByPost_PostId(@Param("postId") Long postId);
 }

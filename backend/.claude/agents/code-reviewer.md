@@ -145,6 +145,7 @@ Bash는 아래 목적에만 사용한다.
 * 필요한 경우 `@EntityGraph`, fetch join, IN 쿼리, projection 사용을 권장한다.
 * `@Modifying` 쿼리는 `clearAutomatically`, `flushAutomatically` 필요 여부를 확인한다.
 * bulk update/delete 이후 같은 트랜잭션에서 같은 엔티티를 다시 사용할 경우 영속성 컨텍스트 불일치 가능성을 보고한다.
+* 자기참조 FK(예: `parentCommentId`, `parentCategoryId`)나 부모-자식 구조를 가진 엔티티를 단일 bulk delete로 함께 삭제하면, DB가 같은 문장 내 행 삭제 순서를 보장하지 않아 FK 제약 위반이 발생할 수 있다. 자식(대댓글/하위 항목)을 먼저 삭제하는 별도 쿼리로 분리되어 있는지 확인한다.
 * QueryDSL where 조건이 누락되어 권한/상태 필터가 빠지지 않았는지 확인한다.
 * public 목록 조회는 비활성/숨김/삭제/미승인 데이터가 노출되지 않는지 확인한다.
 ---

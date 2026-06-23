@@ -52,6 +52,21 @@ public class OrderResponseDto {
     @Schema(description = "결제 완료 시간")
     private LocalDateTime paidAt;
 
+    @Schema(description = "주문 확인(사장) 시간")
+    private LocalDateTime confirmedAt;
+
+    @Schema(description = "픽업 준비 완료 시간")
+    private LocalDateTime readyAt;
+
+    @Schema(description = "거래 완료 시간")
+    private LocalDateTime completedAt;
+
+    @Schema(description = "취소 시간")
+    private LocalDateTime cancelledAt;
+
     @Schema(description = "주문 생성 시간")
     private LocalDateTime createdAt;
+
+    @Schema(description = "리뷰 작성 여부", example = "false")
+    private boolean hasReview;
 }
