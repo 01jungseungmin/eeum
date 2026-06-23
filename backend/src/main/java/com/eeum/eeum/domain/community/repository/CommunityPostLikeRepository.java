@@ -27,7 +27,7 @@ public interface CommunityPostLikeRepository extends JpaRepository<CommunityPost
             @Param("postIds") List<Long> postIds
     );
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM CommunityPostLike pl WHERE pl.post.postId = :postId")
     void deleteByPost_PostId(@Param("postId") Long postId);
 }

@@ -53,7 +53,7 @@ public class CommunityLikeService {
             throw new ConflictException(ErrorCode.COMMUNITY_POST_LIKE_ALREADY_EXISTS);
         }
 
-        post.increaseLikeCount();
+        postRepository.increaseLikeCount(postId);
     }
 
     @Transactional
@@ -68,7 +68,7 @@ public class CommunityLikeService {
         validateSameRegion(post, account);
 
         postLikeRepository.delete(like);
-        post.decreaseLikeCount();
+        postRepository.decreaseLikeCount(postId);
     }
 
     @Transactional

@@ -57,6 +57,21 @@ public class CommunityCommentService {
     }
 
     @Transactional(readOnly = true)
+    public Page<CommunityCommentResponseDto> getMyComments(Long accountId, Pageable pageable) {
+        Page<CommunityComment> comments = commentRepository
+                .findByAccount_AccountIdAndDeletedFalseOrderByCreatedAtDesc(accountId, pageable);
+
+        Set<Long> likedIds = batchFetchLikedIds(accountId, comments.getContent());
+
+        return comments.map(comment ->
+                CommunityCommentResponseDto.of(
+                        comment,
+                        likedIds.contains(comment.getCommentId())
+                )
+        );
+    }
+
+    @Transactional(readOnly = true)
     public Page<CommunityCommentResponseDto> getReplies(Long accountId, Long commentId, Pageable pageable) {
         Account account = getAccountOrThrow(accountId);
         CommunityComment parent = getCommentOrThrow(commentId);
@@ -98,7 +113,7 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(comment);
-        post.increaseCommentCount();
+        postRepository.increaseCommentCount(postId);
 
         log.info("댓글 작성: accountId={}, postId={}, commentId={}",
                 accountId, postId, comment.getCommentId());
@@ -129,7 +144,7 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(reply);
-        parent.getPost().increaseCommentCount();
+        postRepository.increaseCommentCount(parent.getPost().getPostId());
 
         log.info("대댓글 작성: accountId={}, parentCommentId={}, replyId={}",
                 accountId, parentCommentId, reply.getCommentId());
@@ -159,16 +174,8 @@ public class CommunityCommentService {
         CommunityComment comment = getCommentOrThrow(commentId);
         validateOwner(comment, accountId);
 
-        CommunityPost post = comment.getPost();
-
-        if (!comment.isReply()) {
-            int deletedReplyCount = commentRepository.softDeleteRepliesByParentId(commentId);
-            post.decreaseCommentCount(1 + deletedReplyCount);
-        } else {
-            post.decreaseCommentCount();
-        }
-
         comment.softDelete();
+        postRepository.decreaseCommentCount(comment.getPost().getPostId());
 
         log.info("댓글/대댓글 soft-delete: accountId={}, commentId={}",
                 accountId, commentId);
