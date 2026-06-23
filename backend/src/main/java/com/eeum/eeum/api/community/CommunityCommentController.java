@@ -49,6 +49,19 @@ public class CommunityCommentController {
         return ResponseEntity.ok(ApiResponse.success(commentService.createComment(accountId, postId, request)));
     }
 
+    @GetMapping("/comments/me")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "내가 작성한 댓글/대댓글 목록 조회")
+    public ResponseEntity<ApiResponse<Page<CommunityCommentResponseDto>>> getMyComments(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                commentService.getMyComments(accountId, pageable)
+        ));
+    }
+
     @GetMapping("/comments/{commentId}/replies")
     @PreAuthorize("isAuthenticated()")
     @SecurityRequirement(name = "bearerAuth")

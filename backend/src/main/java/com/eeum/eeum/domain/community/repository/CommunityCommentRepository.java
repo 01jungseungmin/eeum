@@ -17,13 +17,17 @@ public interface CommunityCommentRepository extends JpaRepository<CommunityComme
     @EntityGraph(attributePaths = "account")
     Page<CommunityComment> findByParentComment_CommentId(Long parentCommentId, Pageable pageable);
 
-    // 댓글 soft-delete 시 대댓글 일괄 처리 — 반환값은 처리된 대댓글 수
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE CommunityComment c SET c.deleted = true, c.content = '삭제된 댓글입니다.' WHERE c.parentComment.commentId = :parentCommentId AND c.deleted = false")
-    int softDeleteRepliesByParentId(@Param("parentCommentId") Long parentCommentId);
+    // 내가 작성한 댓글/대댓글 목록 (마이페이지용) — 삭제된 댓글 제외
+    @EntityGraph(attributePaths = "account")
+    Page<CommunityComment> findByAccount_AccountIdAndDeletedFalseOrderByCreatedAtDesc(Long accountId, Pageable pageable);
 
-    // 게시글 hard-delete 시 소속 댓글 전체 삭제
-    @Modifying(clearAutomatically = true)
-    @Query("DELETE FROM CommunityComment c WHERE c.post.postId = :postId")
-    void deleteByPost_PostId(@Param("postId") Long postId);
+    // 게시글 hard-delete 시 대댓글 우선 삭제 — parent_comment_id 자기참조 FK 위반 방지
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM CommunityComment c WHERE c.post.postId = :postId AND c.parentComment IS NOT NULL")
+    void deleteRepliesByPost_PostId(@Param("postId") Long postId);
+
+    // 게시글 hard-delete 시 부모 댓글 삭제 — 대댓글 삭제 이후 호출해야 함
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM CommunityComment c WHERE c.post.postId = :postId AND c.parentComment IS NULL")
+    void deleteTopLevelCommentsByPost_PostId(@Param("postId") Long postId);
 }

@@ -120,6 +120,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ORDER_EXPIRED("ORDER_005", "만료된 주문입니다", HttpStatus.BAD_REQUEST),
     ORDER_TYPE_MISMATCH("ORDER_006", "서로 다른 주문 유형의 상품은 함께 주문할 수 없습니다", HttpStatus.BAD_REQUEST),
     ORDER_INVALID_STATUS("ORDER_007", "유효하지 않은 주문 상태 입니다.", HttpStatus.BAD_REQUEST),
+    ORDER_REFUND_NOT_ALLOWED("ORDER_008", "환불 요청할 수 없는 주문 상태입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),

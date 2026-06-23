@@ -71,7 +71,7 @@ public class SecurityConfig {
             "/actuator/health"
     };
 
-    // SockJS 핸드셰이크 경로 — JWT 필터 없이 통과 (STOMP CONNECT 단계에서 인증 처리)
+    //JWT 필터 없이 통과 (STOMP CONNECT 단계에서 인증 처리)
     private static final String[] WEBSOCKET_PATHS = {
             "/ws/**",
             "/ws"
@@ -151,7 +151,8 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
                 "http://localhost:8081",
-                "http://localhost:5173"
+                "http://localhost:5173",
+                "http://localhost:63342"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

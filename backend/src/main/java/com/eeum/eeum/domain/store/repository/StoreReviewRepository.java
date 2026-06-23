@@ -11,8 +11,13 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> {
+
+    //주문 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 orderId 집합
+    @Query("SELECT r.order.orderId FROM StoreReview r WHERE r.order.orderId IN :orderIds")
+    Set<Long> findOrderIdsWithReview(@Param("orderIds") List<Long> orderIds);
 
     //상점 리뷰 목록 조회 (최신순)
     Page<StoreReview> findByStore_StoreIdOrderByCreatedAtDesc(
