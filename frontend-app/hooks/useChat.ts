@@ -1,78 +1,117 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Client } from '@stomp/stompjs';
+import { getAccessToken } from '../utils/secureStore'; 
+import * as encoding from 'text-encoding';
 
-// API 호스트 주소 (실제 환경에 맞게 수정)
-const API_HOST = process.env.EXPO_PUBLIC_API_URL?.replace('http://', '').replace('https://', '') || 'localhost:8080';
+if (typeof global.TextEncoder === 'undefined') {
+  global.TextEncoder = encoding.TextEncoder;
+  global.TextDecoder = encoding.TextDecoder;
+}
 
-export const useChat = (roomId: string | number, token: string) => {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
+// ⚠️ 본인 테스트 환경에 맞게 IP 수정 (에뮬레이터: 10.0.2.2, 실제 폰: 컴퓨터의 와이파이 IP)
+const WEBSOCKET_URL = process.env.EXPO_PUBLIC_WS_URL || 'ws://192.168.50.40:8080/ws'; 
+
+export const useChatStomp = (roomId: number) => {
   const clientRef = useRef<Client | null>(null);
+  
+  const [messages, setMessages] = useState<any[]>([]); 
+  const [isConnected, setIsConnected] = useState(false);
+  const [isOpponentTyping, setIsOpponentTyping] = useState(false); // 상대방 타이핑 상태
 
   useEffect(() => {
-    if (!roomId || !token) return;
+    const connectStomp = async () => {
+      const token = await getAccessToken();
 
-    // 1. STOMP 클라이언트 생성
-    const client = new Client({
-      brokerURL: `ws://${API_HOST}/ws`, // 명세서의 Native WebSocket STOMP 연결
-      connectHeaders: {
-        Authorization: `Bearer ${token}`, // STOMP CONNECT Header에 토큰 전달
-      },
-      reconnectDelay: 5000, // 끊겼을 때 5초마다 재연결 시도
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
-      // debug: (str) => console.log('[STOMP Debug]:', str), // 필요시 주석 해제
-    });
+      const client = new Client({
+        brokerURL: WEBSOCKET_URL, 
+        connectHeaders: {
+          Authorization: `Bearer ${token}`, 
+        },
+        reconnectDelay: 5000, 
+        forceBinaryWSFrames: true,
+        appendMissingNULLonIncoming: true,
+        
+        onConnect: () => {
+          console.log('✅ STOMP 웹소켓 연결 성공!');
+          setIsConnected(true);
 
-    // 2. 연결 성공 시 실행되는 함수
-    client.onConnect = () => {
-      console.log('✅ STOMP 연결 성공! Room ID:', roomId);
-      setIsConnected(true);
+          // ✨ 1. 일반 메시지 구독
+          client.subscribe(`/sub/chat/rooms/${roomId}`, (message) => {
+            const received = JSON.parse(message.body);
+            console.log("💌 메시지 수신:", received);
+            setMessages((prev) => [...prev, received]);
+          });
 
-      // 3. 채팅방 구독 (서버 -> 클라이언트)
-      client.subscribe(`/sub/chat/rooms/${roomId}`, (message) => {
-        if (message.body) {
-          const newMessage = JSON.parse(message.body);
-          // 받은 메시지를 상태 배열에 추가
-          setMessages((prev) => [...prev, newMessage]);
-        }
+          // ✨ 2. 읽음 이벤트 구독
+          client.subscribe(`/sub/chat/rooms/${roomId}/read`, (message) => {
+            console.log("👀 읽음 이벤트 수신:", JSON.parse(message.body));
+            // 나중에 여기서 메시지 숫자 '1'을 지우는 로직을 추가할 수 있습니다.
+          });
+
+          // ✨ 3. 타이핑 이벤트 구독
+          client.subscribe(`/sub/chat/rooms/${roomId}/typing`, (message) => {
+            const typingData = JSON.parse(message.body);
+            console.log("⌨️ 타이핑 이벤트 수신:", typingData);
+            setIsOpponentTyping(typingData.typing);
+          });
+
+          // ✨ 4. 에러 구독
+          client.subscribe(`/user/sub/errors`, (message) => {
+            console.error("❌ 서버 에러 수신:", JSON.parse(message.body));
+          });
+        },
+
+        onStompError: (frame) => console.error('STOMP 에러:', frame.headers['message']),
+        onWebSocketError: (event) => console.error('웹소켓 통신 에러:', event),
+        onWebSocketClose: () => setIsConnected(false)
       });
+
+      client.activate();
+      clientRef.current = client;
     };
 
-    // 에러 핸들링
-    client.onStompError = (frame) => {
-      console.error('🚨 STOMP 에러:', frame.headers['message']);
-      console.error('상세 정보:', frame.body);
-    };
+    if (roomId) connectStomp();
 
-    client.onWebSocketError = (event) => {
-      console.error('🚨 WebSocket 에러:', event);
-    };
-
-    // 클라이언트 활성화 (연결 시작)
-    client.activate();
-    clientRef.current = client;
-
-    // 컴포넌트 언마운트 시 연결 해제 (정리)
     return () => {
-      if (clientRef.current) {
-        clientRef.current.deactivate();
-        setIsConnected(false);
-      }
+      if (clientRef.current) clientRef.current.deactivate();
     };
-  }, [roomId, token]);
-
-  // 4. 메시지 전송 함수 (클라이언트 -> 서버)
-  const sendMessage = useCallback((content: string) => {
-    if (clientRef.current && clientRef.current.connected) {
-      clientRef.current.publish({
-        destination: `/pub/chat/rooms/${roomId}/messages`,
-        body: JSON.stringify({ content }), // 백엔드 명세에 맞춰 JSON 구조 변경 가능
-      });
-    } else {
-      console.warn('❌ STOMP가 연결되어 있지 않습니다.');
-    }
   }, [roomId]);
 
-  return { messages, isConnected, sendMessage, setMessages };
+  // ✨ 5. 메시지 발행 (전송)
+  const sendMessage = useCallback((content: string) => {
+    if (clientRef.current && isConnected) {
+      clientRef.current.publish({
+        destination: `/pub/chat/rooms/${roomId}/messages`,
+        body: JSON.stringify({
+          content: content,
+          clientMessageId: `msg-${Date.now()}` // 명세서 요구사항 반영
+        }),
+      });
+    }
+  }, [roomId, isConnected]);
+
+  // ✨ 6. 읽음 처리 발행
+  const sendReadReceipt = useCallback(() => {
+    if (clientRef.current && isConnected) {
+      clientRef.current.publish({
+        destination: `/pub/chat/rooms/${roomId}/read`,
+        body: ""
+      });
+    }
+  }, [roomId, isConnected]);
+
+  // ✨ 7. 타이핑 이벤트 발행
+  const sendTyping = useCallback((isTyping: boolean) => {
+    if (clientRef.current && isConnected) {
+      clientRef.current.publish({
+        destination: `/pub/chat/rooms/${roomId}/typing`,
+        body: JSON.stringify({ typing: isTyping })
+      });
+    }
+  }, [roomId, isConnected]);
+
+  return { 
+    messages, setMessages, isConnected, isOpponentTyping,
+    sendMessage, sendReadReceipt, sendTyping
+  };
 };
