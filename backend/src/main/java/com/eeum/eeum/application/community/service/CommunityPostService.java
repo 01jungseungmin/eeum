@@ -53,14 +53,30 @@ public class CommunityPostService {
 
     @Transactional(readOnly = true)
     public Page<CommunityPostSummaryResponseDto> getPosts(Long accountId, Pageable pageable) {
+        return getPosts(accountId, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CommunityPostSummaryResponseDto> getPosts(Long accountId, String keyword, Pageable pageable) {
         Account account = getAccountOrThrow(accountId);
         Region region = getPrimaryRegion(account);
 
-        Page<CommunityPost> posts = postRepository.findByRegion_RegionId(
+        Page<CommunityPost> posts = postRepository.searchByRegionAndKeyword(
                 region.getRegionId(),
+                normalizeKeyword(keyword),
                 pageable
         );
 
+        return toSummaryPage(accountId, posts);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CommunityPostSummaryResponseDto> getMyPosts(Long accountId, Pageable pageable) {
+        Page<CommunityPost> posts = postRepository.findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable);
+        return toSummaryPage(accountId, posts);
+    }
+
+    private Page<CommunityPostSummaryResponseDto> toSummaryPage(Long accountId, Page<CommunityPost> posts) {
         if (posts.isEmpty()) {
             return posts.map(post -> CommunityPostSummaryResponseDto.from(post, null, false));
         }
@@ -86,6 +102,13 @@ public class CommunityPostService {
         ));
     }
 
+    private String normalizeKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        return keyword.trim();
+    }
+
     @Transactional
     public CommunityPostDetailResponseDto getPost(Long accountId, Long postId) {
         Account account = getAccountOrThrow(accountId);
@@ -93,7 +116,7 @@ public class CommunityPostService {
 
         validateSameRegion(post, account);
 
-        post.increaseViewCount();
+        postRepository.increaseViewCount(postId);
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
 
@@ -153,7 +176,8 @@ public class CommunityPostService {
         validateOwner(post, accountId);
 
         commentLikeRepository.deleteByComment_Post_PostId(postId);
-        commentRepository.deleteByPost_PostId(postId);
+        commentRepository.deleteRepliesByPost_PostId(postId);
+        commentRepository.deleteTopLevelCommentsByPost_PostId(postId);
         postLikeRepository.deleteByPost_PostId(postId);
         imageRepository.deleteByPost_PostId(postId);
         postRepository.delete(post);

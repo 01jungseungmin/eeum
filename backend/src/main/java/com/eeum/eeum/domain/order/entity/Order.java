@@ -55,6 +55,15 @@ public class Order extends BaseEntity {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
+
+    @Column(name = "ready_at")
+    private LocalDateTime readyAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
@@ -91,14 +100,19 @@ public class Order extends BaseEntity {
         this.paidAt = LocalDateTime.now();
     }
 
-    public void confirm() {this.status = OrderStatus.CONFIRMED;}
+    public void confirm() {
+        this.status = OrderStatus.CONFIRMED;
+        this.confirmedAt = LocalDateTime.now();
+    }
 
     public void ready() {
         this.status = OrderStatus.READY;
+        this.readyAt = LocalDateTime.now();
     }
 
     public void complete() {
         this.status = OrderStatus.COMPLETED;
+        this.completedAt = LocalDateTime.now();
     }
 
     public void cancel(String reason) {
