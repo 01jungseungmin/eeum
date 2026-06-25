@@ -1,6 +1,6 @@
 package com.eeum.eeum.domain.community.entity;
 
-import com.eeum.eeum.common.entity.BaseEntity;
+import com.eeum.eeum.common.entity.ImageBase;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "community_image")
-public class CommunityImage extends BaseEntity {
+public class CommunityImage extends ImageBase {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,34 +21,10 @@ public class CommunityImage extends BaseEntity {
     @JoinColumn(name = "community_post_id", nullable = false)
     private CommunityPost post;
 
-    @Column(name = "image_url", nullable = false, length = 500)
-    private String imageUrl;
-
-    @Column(name = "display_order", nullable = false)
-    private int displayOrder;
-
-    @Column(name = "is_thumbnail", nullable = false)
-    private boolean thumbnail = false;
-
-    public static CommunityImage create(
-            CommunityPost post,
-            String imageUrl,
-            int displayOrder,
-            boolean thumbnail
-    ) {
+    public static CommunityImage create(CommunityPost post, String imageUrl, int displayOrder) {
         CommunityImage image = new CommunityImage();
         image.post = post;
-        image.imageUrl = imageUrl;
-        image.displayOrder = displayOrder;
-        image.thumbnail = thumbnail;
+        image.initImage(imageUrl, displayOrder, false);
         return image;
-    }
-
-    public void changeThumbnail(boolean thumbnail) {
-        this.thumbnail = thumbnail;
-    }
-
-    public void changeDisplayOrder(int displayOrder) {
-        this.displayOrder = displayOrder;
     }
 }

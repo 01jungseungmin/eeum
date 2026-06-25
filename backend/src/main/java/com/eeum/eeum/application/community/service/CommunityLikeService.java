@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityCommentLike;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.entity.CommunityPostLike;
+import com.eeum.eeum.domain.community.event.CommunityPostLikedEvent;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
@@ -16,6 +17,7 @@ import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.exception.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class CommunityLikeService {
     private final CommunityCommentLikeRepository commentLikeRepository;
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void likePost(Long accountId, Long postId) {
@@ -54,6 +57,15 @@ public class CommunityLikeService {
         }
 
         postRepository.increaseLikeCount(postId);
+
+        if (!accountId.equals(post.getAccount().getAccountId())) {
+            eventPublisher.publishEvent(new CommunityPostLikedEvent(
+                    post.getAccount().getAccountId(),
+                    accountId,
+                    postId,
+                    post.getTitle()
+            ));
+        }
     }
 
     @Transactional

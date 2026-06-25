@@ -13,9 +13,7 @@ public interface CommunityImageRepository extends JpaRepository<CommunityImage, 
 
     List<CommunityImage> findByPost_PostIdOrderByDisplayOrder(Long postId);
 
-    @EntityGraph(attributePaths = "post")
-    @Query("SELECT ci FROM CommunityImage ci WHERE ci.post.postId IN :postIds AND ci.thumbnail = true")
-    List<CommunityImage> findThumbnailsByPostIds(@Param("postIds") List<Long> postIds);
+    int countByPost_PostId(Long postId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM CommunityImage ci WHERE ci.post.postId = :postId")
