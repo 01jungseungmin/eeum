@@ -130,17 +130,11 @@ export default function ProfileScreen() {
 
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 커뮤니티 활동" />
+          {/* ✨ 통합된 커뮤니티 활동 메뉴 하나만 배치합니다 */}
           <MenuItem 
-            title="작성한 게시글" 
-            iconName="document-outline" 
-            onPress={() => router.push('../community/my-posts')} 
-          />
-          
-          {/* 4. onPress 변경: 내가 쓴 댓글 화면으로 이동 */}
-          <MenuItem 
-            title="작성한 댓글" 
-            iconName="chatbubble-outline" 
-            onPress={() => router.push('../community/my-comments')} 
+            title="동네생활 활동" 
+            iconName="chatbubbles-outline" 
+            onPress={() => router.push('/mypage/my-community' as any)} 
           />
         </View>
         

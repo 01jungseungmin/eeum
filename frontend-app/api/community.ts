@@ -103,17 +103,28 @@ export const communityApi = {
 
   // 내가 작성한 게시글 조회
   getMyPosts: async (page: number = 0, size: number = 20) => {
-    const response = await client.get('/community/posts/me', {
-      params: { page, size }
-    });
-    return response.data?.data?.content || response.data?.data || [];
+    try {
+      const response = await client.get('/community/posts/me', {
+        params: { page, size }
+      });
+      // 스웨거 응답 구조(data.content) 반영
+      return response.data?.data?.content || [];
+    } catch (error) {
+      console.error('내 게시글 목록 조회 에러:', error);
+      throw error;
+    }
   },
 
   // 내가 작성한 댓글 조회 API
   getMyComments: async (page: number = 0, size: number = 20) => {
-    const response = await client.get('/community/comments/me', {
-      params: { page, size }
-    });
-    return response.data?.data?.content || response.data?.data || [];
-  }
+    try {
+      const response = await client.get('/community/comments/me', {
+        params: { page, size }
+      });
+      return response.data?.data?.content || [];
+    } catch (error) {
+      console.error('내 댓글 목록 조회 에러:', error);
+      throw error;
+    }
+  },
 };
