@@ -10,13 +10,27 @@ import { reviewApi } from '../../api/review';
 
 export default function ReviewWriteScreen() {
   const router = useRouter();
-  const { storeId, orderId } = useLocalSearchParams();
+  
+  // 파라미터 수신 (새로 추가된 initialImageId, initialImageUrl 포함)
+  const { storeId, orderId, reservationId, reviewId, initialRating, initialContent, initialImageId, initialImageUrl } = useLocalSearchParams();
+  
   const storeIdNum = typeof storeId === 'string' ? Number(storeId) : 0;
-  const orderIdNum = typeof orderId === 'string' ? Number(orderId) : 0
+  const orderIdNum = typeof orderId === 'string' ? Number(orderId) : undefined;
+  const reservationIdNum = typeof reservationId === 'string' ? Number(reservationId) : undefined;
+  const reviewIdNum = typeof reviewId === 'string' ? Number(reviewId) : undefined;
 
-  const [rating, setRating] = useState<number>(5);
-  const [content, setContent] = useState<string>('');
+  const isEditMode = !!reviewIdNum;
+
+  // 상태값 세팅
+  const [rating, setRating] = useState<number>(initialRating ? Number(initialRating) : 5);
+  const [content, setContent] = useState<string>(typeof initialContent === 'string' ? initialContent : '');
+  
+  // 기존 서버 이미지 상태와 새로 고른 로컬 이미지 상태 분리
+  const [existingImage, setExistingImage] = useState<{ id: number, url: string } | null>(
+    initialImageId && initialImageUrl ? { id: Number(initialImageId), url: String(initialImageUrl) } : null
+  );
   const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const pickImage = async () => {
@@ -32,7 +46,8 @@ export default function ReviewWriteScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
-      setImage(result.assets[0]);
+      setImage(result.assets[0]); // 새 이미지 세팅
+      setExistingImage(null);     // 새 이미지를 고르면 기존 이미지는 지워진 것으로 간주
     }
   };
 
@@ -45,89 +60,56 @@ export default function ReviewWriteScreen() {
     try {
       setIsSubmitting(true);
 
-      // ✨ 중요: 스웨거 명세에 맞춰서 페이로드 구성
-      // orderId는 실제 앱에서는 결제 내역에서 받아와야 하지만, 지금은 임시로 42를 넣습니다.
-      const payload = {
-        orderId: orderIdNum, 
-        rating: rating,
-        content: content,
-        imageUrls: image ? [image.uri] : [] // 폼데이터 대신 로컬 URI를 배열로 전송
-      };
+      if (isEditMode && reviewIdNum) {
+        // [수정 모드 로직] 
+        // 텍스트와 별점을 먼저 수정 (PATCH)
+        await reviewApi.updateReview(storeIdNum, reviewIdNum, {
+          rating: rating,
+          content: content,
+        });
 
-      await reviewApi.createReview(storeIdNum, payload);
+        // 2. 이미지가 지워졌다면 삭제 API 호출
+        if (initialImageId && !existingImage) {
+          await reviewApi.deleteReviewImage(storeIdNum, reviewIdNum, Number(initialImageId));
+        }
 
-      Alert.alert('성공', '리뷰가 소중하게 등록되었습니다!');
+        // 3. 새 이미지가 선택되었다면 추가 API 호출
+        if (image) {
+          await reviewApi.addReviewImages(storeIdNum, reviewIdNum, [image.uri]);
+        }
+
+        Alert.alert('성공', '리뷰가 성공적으로 수정되었습니다.');
+      } 
+      else {
+        // [작성 모드 로직]
+        const payload: any = {
+          rating: rating,
+          content: content,
+          imageUrls: image ? [image.uri] : [],
+          orderId: orderIdNum || 0, 
+        };
+
+        if (reservationIdNum) {
+          payload.reservationId = reservationIdNum; 
+          payload.visitReservationId = reservationIdNum; 
+        }
+
+        await reviewApi.createReview(storeIdNum, payload);
+        Alert.alert('성공', '리뷰가 소중하게 등록되었습니다!');
+      }
+
       router.back(); 
 
     } catch (error) {
       console.error(error);
-      Alert.alert('오류', '리뷰 등록에 실패했습니다.');
+      Alert.alert('오류', isEditMode ? '리뷰 수정에 실패했습니다.' : '리뷰 등록에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // presigned로 할 때
-  // const handleSubmit = async () => {
-  //   if (!content.trim()) {
-  //     Alert.alert('알림', '리뷰 내용을 입력해주세요.');
-  //     return;
-  //   }
-
-  //   try {
-  //     setIsSubmitting(true);
-      
-  //     let uploadedImageUrl = ''; // 최종적으로 S3에 올라간 이미지 주소
-
-  //     // 📸 이미지가 있을 경우에만 Presigned URL 1~2단계 실행
-  //     if (image) {
-  //       // ✨ [1단계] 백엔드에 Presigned URL 발급 요청 (API 추가 필요)
-  //       // 확장자나 파일명을 보내야 할 수도 있습니다. 파트너와 상의가 필요해요!
-  //       const ext = image.uri.split('.').pop(); 
-  //       const urlRes = await reviewApi.getPresignedUrl({ extension: ext });
-        
-  //       // 백엔드가 내려준 S3 업로드용 임시 주소와, 나중에 쓰일 실제 이미지 주소
-  //       const presignedUrl = urlRes.presignedUrl; 
-  //       const finalImageUrl = urlRes.imageUrl;
-
-  //       // ✨ [2단계] S3(또는 클라우드)에 이미지 직접 업로드
-  //       // Expo에서는 로컬 uri를 Blob 형태로 변환해서 올려야 합니다.
-  //       const response = await fetch(image.uri);
-  //       const blob = await response.blob();
-
-  //       await fetch(presignedUrl, {
-  //         method: 'PUT',
-  //         body: blob,
-  //         headers: {
-  //           'Content-Type': `image/${ext}`, // 예: image/jpeg
-  //         },
-  //       });
-
-  //       // 업로드 성공 시 최종 이미지 주소 저장
-  //       uploadedImageUrl = finalImageUrl;
-  //     }
-
-  //     // ✨ [3단계] 리뷰 내용과 최종 이미지 주소를 묶어서 백엔드에 전송 (기존 코드와 유사)
-  //     const payload = {
-  //       orderId: orderIdNum, 
-  //       rating: rating,
-  //       content: content,
-  //       // 이미지가 없으면 빈 배열, 있으면 업로드된 주소를 배열에 담아 보냅니다.
-  //       imageUrls: uploadedImageUrl ? [uploadedImageUrl] : [] 
-  //     };
-
-  //     await reviewApi.createReview(storeIdNum, payload);
-
-  //     Alert.alert('성공', '리뷰가 소중하게 등록되었습니다!');
-  //     router.back(); 
-
-  //   } catch (error) {
-  //     console.error('리뷰 등록 에러:', error);
-  //     Alert.alert('오류', '리뷰 등록에 실패했습니다.');
-  //   } finally {
-  //     setIsSubmitting(false);
-  //   }
-  // };
+  // 노출할 사진 결정 (새로 고른 사진이 1순위, 기존 서버 사진이 2순위)
+  const displayImageUrl = image ? image.uri : existingImage ? existingImage.url : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -135,11 +117,11 @@ export default function ReviewWriteScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="close" size={28} color="#333" />
         </TouchableOpacity>
-        <Text fontWeight="bold" style={styles.headerTitle}>리뷰 쓰기</Text>
+        <Text fontWeight="bold" style={styles.headerTitle}>{isEditMode ? '리뷰 수정' : '리뷰 쓰기'}</Text>
         <View style={{ width: 28 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.contentContainer}>
+      <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.ratingSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>이 상점 어떠셨나요?</Text>
           <View style={styles.starsRow}>
@@ -160,11 +142,18 @@ export default function ReviewWriteScreen() {
           onChangeText={setContent}
         />
 
+        {/* 수정/작성 모드 상관없이 사진 UI를 보여줍니다! */}
         <Text fontWeight="bold" style={styles.sectionTitle}>사진 첨부 (선택)</Text>
-        {image ? (
+        {displayImageUrl ? (
           <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: image.uri }} style={styles.imagePreview} />
-            <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImage(null)}>
+            <Image source={{ uri: displayImageUrl }} style={styles.imagePreview} />
+            <TouchableOpacity 
+              style={styles.removeImageBtn} 
+              onPress={() => {
+                setImage(null);
+                setExistingImage(null); // x버튼 누르면 사진 완전 날림
+              }}
+            >
               <Ionicons name="close-circle" size={24} color="#FF5252" />
             </TouchableOpacity>
           </View>
@@ -181,7 +170,7 @@ export default function ReviewWriteScreen() {
           {isSubmitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text fontWeight="bold" style={styles.submitBtnText}>등록하기</Text>
+            <Text fontWeight="bold" style={styles.submitBtnText}>{isEditMode ? '수정 완료' : '등록하기'}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -189,7 +178,6 @@ export default function ReviewWriteScreen() {
   );
 }
 
-// 스타일은 이전과 동일하게 유지합니다.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },

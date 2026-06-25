@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { reviewApi } from '../../api/review';
 
@@ -20,9 +20,11 @@ export default function MyReviewsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ReviewType>('ALL');
 
-  useEffect(() => {
-    fetchMyReviews(activeTab);
-  }, [activeTab]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchMyReviews(activeTab);
+    }, [activeTab])
+  );
 
   const fetchMyReviews = async (type: ReviewType) => {
     try {
@@ -35,6 +37,44 @@ export default function MyReviewsScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDeleteReview = (storeId: number, reviewId: number) => {
+    Alert.alert(
+      '리뷰 삭제',
+      '정말로 이 리뷰를 삭제하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        { 
+          text: '삭제', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await reviewApi.deleteReview(storeId, reviewId);
+              Alert.alert('알림', '리뷰가 삭제되었습니다.');
+              fetchMyReviews(activeTab); 
+            } catch (error) {
+              Alert.alert('오류', '리뷰 삭제에 실패했습니다.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // 수정 화면으로 이동하는 함수 추가
+  const handleEditReview = (item: any) => {
+    router.push({
+      pathname: '/review/write',
+      params: {
+        storeId: item.storeId,
+        reviewId: item.storereviewId, // 리뷰 ID를 넘기면 수정 모드로 인식합니다
+        initialRating: item.rating,
+        initialContent: item.content,
+        initialImageId: item.images && item.images.length > 0 ? item.images[0].imageId : '',
+        initialImageUrl: item.images && item.images.length > 0 ? item.images[0].imageUrl : '',
+      }
+    } as any);
   };
 
   const renderReview = ({ item }: { item: any }) => {
@@ -61,9 +101,34 @@ export default function MyReviewsScreen() {
             </Text>
             <Ionicons name="chevron-forward" size={14} color="#999" />
           </View>
-          <Text style={styles.dateText}>
-            {item.createdAt ? item.createdAt.substring(0, 10) : ''}
-          </Text>
+          
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.dateText}>
+              {item.createdAt ? item.createdAt.substring(0, 10) : ''}
+            </Text>
+
+            {/* ✨ 수정 버튼 추가 */}
+            <TouchableOpacity 
+              style={{ marginLeft: 12 }}
+              onPress={(e) => {
+                e.stopPropagation(); 
+                handleEditReview(item);
+              }}
+            >
+              <Ionicons name="pencil-outline" size={16} color="#666" />
+            </TouchableOpacity>
+
+            {/* 삭제 버튼 */}
+            <TouchableOpacity 
+              style={{ marginLeft: 12 }}
+              onPress={(e) => {
+                e.stopPropagation(); 
+                handleDeleteReview(item.storeId, item.storereviewId);
+              }}
+            >
+              <Ionicons name="trash-outline" size={16} color="#FF5252" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.ratingRow}>
@@ -75,7 +140,7 @@ export default function MyReviewsScreen() {
           {item.content}
         </Text>
 
-        {item.images && item.images.length > 0 && (
+        {item.images && item.images.length > 0 && item.images[0]?.imageUrl && (
           <Image source={{ uri: item.images[0].imageUrl }} style={styles.reviewImage} />
         )}
       </TouchableOpacity>
@@ -119,7 +184,7 @@ export default function MyReviewsScreen() {
       ) : (
         <FlatList
           data={reviews}
-          keyExtractor={(item) => item.storereviewId.toString()}
+          keyExtractor={(item) => item.storereviewId?.toString() || Math.random().toString()}
           renderItem={renderReview}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
@@ -129,23 +194,20 @@ export default function MyReviewsScreen() {
   );
 }
 
+// ... 스타일(styles)은 기존과 완전히 동일하게 유지 ...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText: { color: '#999', fontSize: 15 },
-  
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 15, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   backButton: { padding: 5 },
   headerTitle: { fontSize: 18, color: '#333' },
-
   tabContainer: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   tabItem: { flex: 1, alignItems: 'center', paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   activeTabItem: { borderBottomColor: '#1B854A' },
   tabText: { fontSize: 14, color: '#888' },
   activeTabText: { color: '#1B854A' },
-
   listContainer: { padding: 15 },
-  
   card: { backgroundColor: '#FFF', borderRadius: 8, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#EAEAEA', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 },
@@ -153,10 +215,8 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11 },
   storeName: { fontSize: 15, color: '#333', marginRight: 4, maxWidth: '70%' },
   dateText: { fontSize: 12, color: '#999' },
-  
   ratingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   ratingText: { fontSize: 13, color: '#333', marginLeft: 4 },
-  
   content: { fontSize: 14, color: '#444', lineHeight: 20 },
   reviewImage: { width: 80, height: 80, borderRadius: 8, marginTop: 12, backgroundColor: '#F5F5F5' }
 });

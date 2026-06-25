@@ -1,11 +1,16 @@
 import { client } from './client';
 
 export const reviewApi = {
-  // 1. 상점 리뷰 목록 조회
-  getReviews: async (storeId: number) => {
+  // ==========================================
+  // [1] 상점 리뷰 기본 CRUD
+  // ==========================================
+
+  // 1. 상점 리뷰 목록 조회 (GET /stores/{storeId}/reviews)
+  getReviews: async (storeId: number, page: number = 0, size: number = 20) => {
     try {
-      const response = await client.get(`/stores/${storeId}/reviews`);
-      // 데이터 구조: response.data.data.content
+      const response = await client.get(`/stores/${storeId}/reviews`, {
+        params: { page, size }
+      });
       return response.data?.data || response.data;
     } catch (error) {
       console.error('리뷰 목록 조회 에러:', error);
@@ -13,39 +18,103 @@ export const reviewApi = {
     }
   },
 
-  // 2. 리뷰 작성 (orderId와 imageUrls 포함)
-  createReview: async (storeId: number, data: { orderId: number; rating: number; content: string; imageUrls: string[] }) => {
+  // 2. 상점 리뷰 상세 조회 (GET /stores/{storeId}/reviews/{reviewId})
+  getReviewDetail: async (storeId: number, reviewId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}/reviews/${reviewId}`);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error('리뷰 상세 조회 에러:', error);
+      throw error;
+    }
+  },
+
+  // 3. 리뷰 작성 (POST /stores/{storeId}/reviews)
+  createReview: async (storeId: number, data: { orderId?: number; reservationId?: number; rating: number; content: string; imageUrls?: string[] }) => {
     try {
       const response = await client.post(`/stores/${storeId}/reviews`, data);
-      return response.data;
+      return response.data?.data || response.data;
     } catch (error) {
       console.error('리뷰 작성 에러:', error);
       throw error;
     }
   },
 
-  // ✨ 3. [신규 추가] 내 리뷰 목록 조회 (마이페이지용)
-  // type에 'ORDER'나 'RESERVATION'을 넘기면 필터링, 안 넘기면 전체 조회!
-  getMyReviews: async (type?: 'ORDER' | 'RESERVATION', page: number = 0, size: number = 20) => {
+  // 4. 리뷰 수정 (PATCH /stores/{storeId}/reviews/{reviewId})
+  updateReview: async (storeId: number, reviewId: number, data: { rating?: number; content?: string }) => {
     try {
-      const params: any = { page, size };
-      if (type) params.type = type; // 필터가 있을 때만 파라미터에 추가
-
-      const response = await client.get('/reviews/me', { params });
-      return response.data?.data?.content || [];
+      const response = await client.patch(`/stores/${storeId}/reviews/${reviewId}`, data);
+      return response.data?.data || response.data;
     } catch (error) {
-      console.error('내 리뷰 목록 조회 에러:', error);
+      console.error('리뷰 수정 에러:', error);
       throw error;
     }
   },
 
-  // (참고) 리뷰에 이미지 추가 API - 지금은 createReview에서 한 번에 보내므로 당장 안 써도 됩니다.
+  // 5. 리뷰 삭제 (DELETE /stores/{storeId}/reviews/{reviewId})
+  deleteReview: async (storeId: number, reviewId: number) => {
+    try {
+      const response = await client.delete(`/stores/${storeId}/reviews/${reviewId}`);
+      return response.data;
+    } catch (error) {
+      console.error('리뷰 삭제 에러:', error);
+      throw error;
+    }
+  },
+
+
+  // ==========================================
+  // [2] 리뷰 이미지 상세 관리
+  // ==========================================
+
+  // 6. 리뷰 이미지 추가 (POST /stores/{storeId}/reviews/{reviewId}/images)
   addReviewImages: async (storeId: number, reviewId: number, imageUrls: string[]) => {
     try {
       const response = await client.post(`/stores/${storeId}/reviews/${reviewId}/images`, { imageUrls });
-      return response.data;
+      return response.data?.data || response.data;
     } catch (error) {
       console.error('리뷰 이미지 추가 에러:', error);
+      throw error;
+    }
+  },
+
+  // 7. 리뷰 이미지 삭제 (DELETE /stores/{storeId}/reviews/{reviewId}/images/{imageId})
+  deleteReviewImage: async (storeId: number, reviewId: number, imageId: number) => {
+    try {
+      const response = await client.delete(`/stores/${storeId}/reviews/${reviewId}/images/${imageId}`);
+      return response.data;
+    } catch (error) {
+      console.error('리뷰 이미지 삭제 에러:', error);
+      throw error;
+    }
+  },
+
+  // 8. 리뷰 썸네일 이미지 설정 (PATCH /stores/{storeId}/reviews/{reviewId}/images/{imageId}/thumbnail)
+  setThumbnailImage: async (storeId: number, reviewId: number, imageId: number) => {
+    try {
+      const response = await client.patch(`/stores/${storeId}/reviews/${reviewId}/images/${imageId}/thumbnail`);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error('리뷰 썸네일 설정 에러:', error);
+      throw error;
+    }
+  },
+
+
+  // ==========================================
+  // [3] 마이페이지 기능
+  // ==========================================
+
+  // 9. 내 리뷰 목록 조회 (GET /reviews/me)
+  getMyReviews: async (type?: 'ORDER' | 'RESERVATION', page: number = 0, size: number = 20) => {
+    try {
+      const params: any = { page, size };
+      if (type) params.type = type;
+
+      const response = await client.get('/reviews/me', { params });
+      return response.data?.data?.content || response.data?.data || [];
+    } catch (error) {
+      console.error('내 리뷰 목록 조회 에러:', error);
       throw error;
     }
   }
