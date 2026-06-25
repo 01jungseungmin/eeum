@@ -148,7 +148,9 @@ public class TokenService {
         return resetToken; //재인증 토큰 반환
     }
 
-    // Password Reset Token 검증 후 즉시 삭제 검증 성공 시 토큰의 accountId를 반환
+    // Password Reset Token 검증
+    // 검증 성공 시 토큰의 accountId를 반환하며, Redis 삭제는 수행하지 않는다.
+    // 실제 삭제는 DB 커밋 성공 후 AccountTokenCleanupEventListener에서 처리한다.
     //비밀번호 재설정 토큰을 검증하는 메서드
     public Long validatePasswordResetToken(String resetToken) {
         if (!jwtProvider.isValid(resetToken)) { //resetToken 자체가 유효한 JWT인지 검사
@@ -170,7 +172,7 @@ public class TokenService {
         return accountId;
     }
 
-    public void deletePasswordResetToken(Long accountId) { //저장된 Refresh Token을 Redis에서 삭제
+    public void deletePasswordResetToken(Long accountId) { //저장된 Password Reset Token을 redis에서 삭제
         redisUtil.delete(passwordResetTokenKey(accountId)); //예를 들어 accountId = 1 delete passwordreset:1
     }
 

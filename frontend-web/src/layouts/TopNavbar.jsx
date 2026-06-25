@@ -33,6 +33,7 @@ const RightSection = styled.div`
   align-items: center;
   gap: 20px;
 `;
+
 const SearchBar = styled.div`
   position: relative;
   display: flex;
@@ -50,6 +51,7 @@ const SearchBar = styled.div`
     width: 100%;
   }
 `;
+
 const IconBadge = styled.div`
   position: relative;
   cursor: pointer;
@@ -65,6 +67,7 @@ const IconBadge = styled.div`
     border: 2px solid white;
   }
 `;
+
 const ProfileBox = styled.div`
   display: flex;
   align-items: center;
@@ -100,14 +103,24 @@ const ProfileBox = styled.div`
 function TopNavbar() {
   const { pathname } = useLocation();
 
-  const currentMenu = useMemo(() => findMenuByPath(pathname), [pathname]);
+  const userRole = useMemo(() => {
+    return localStorage.getItem('role') || 'ROLE_OWNER';
+  }, []);
 
-  const today = new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  }).format(new Date());
+  // 유저 권한과 라우터 경로를 기반으로 매칭되는 메뉴 객체 색인
+  const currentMenu = useMemo(() => {
+    return findMenuByPath(pathname, userRole);
+  }, [pathname, userRole]);
+
+  // 실시간 요일 포맷팅
+  const today = useMemo(() => {
+    return new Intl.DateTimeFormat('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long',
+    }).format(new Date());
+  }, []);
 
   const menuName = currentMenu?.name || '상세 정보';
   const menuSubtitle = currentMenu?.subtitle || '상세 내역을 확인합니다.';
@@ -136,7 +149,9 @@ function TopNavbar() {
           <div className="avatar">김</div>
           <div className="info">
             <div className="name">김사장</div>
-            <div className="role">사장 회원</div>
+            <div className="role">
+              {userRole === 'ROLE_USER' ? '사장 회원' : '플랫폼 관리자'}
+            </div>
           </div>
           <ChevronDown size={16} color="#bbb" />
         </ProfileBox>

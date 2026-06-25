@@ -235,7 +235,4 @@ public class Account extends BaseEntity {
     public boolean isOAuthAccount() {
         return this.provider != OAuthProvider.LOCAL;
     }
-    public void updatePrimaryRegion(Long regionId) {
-        this.primaryRegionId = regionId;
-    }
 }

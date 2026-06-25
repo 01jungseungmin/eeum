@@ -90,7 +90,7 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @Operation(summary = "사장 정보 수정", description = "전화번호 및 사업자번호를 수정합니다. 사업자번호 변경 시 재심사됩니다.")
+    @Operation(summary = "사장 정보 수정", description = "사업자번호를 수정합니다. 사업자번호 변경 시 재심사됩니다.")
     @PutMapping("/owner")
     public ResponseEntity<ApiResponse<Void>> updateOwnerInfo(
             @Valid @RequestBody OwnerInfoRequestDto request
