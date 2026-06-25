@@ -9,8 +9,8 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationListRespon
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
-import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
+import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
@@ -30,6 +30,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -47,7 +48,6 @@ public class AdminAccountService {
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final OwnerInfoRepository ownerInfoRepository;
-    private final TokenService tokenService;
     private final StoreRepository storeRepository;
     private final StoreLocationResolver storeLocationResolver;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
@@ -55,6 +55,7 @@ public class AdminAccountService {
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
 
@@ -74,7 +75,7 @@ public class AdminAccountService {
             String keyword
     ) {
 
-        return accountRepository.findAll(pageable)
+        return accountRepository.searchAccounts(status, role, keyword, pageable)
                 .map(accountMapper::toAccountResponseDto);
     }
 
@@ -93,7 +94,8 @@ public class AdminAccountService {
 
     @Transactional
     public void suspendAccount(Long adminId, Long targetAccountId) {
-        Account target = accountRepository.findById(targetAccountId)
+        // Pessimistic Write Lock — suspend와 forceDelete가 동시에 실행될 때 상태 충돌 방지
+        Account target = accountRepository.findByIdWithLock(targetAccountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
         if (target.isWithdrawn()) {
@@ -102,14 +104,15 @@ public class AdminAccountService {
 
         target.suspend();
 
-        tokenService.deleteRefreshToken(targetAccountId);
+        // DB 커밋 성공 후 Refresh Token 삭제
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
 
         log.info("회원 정지: adminId={}, targetId={}", adminId, targetAccountId);
     }
 
     @Transactional
     public void activateAccount(Long adminId, Long targetAccountId) {
-        Account target = accountRepository.findById(targetAccountId)
+        Account target = accountRepository.findByIdWithLock(targetAccountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
         if (target.isWithdrawn()) {
@@ -123,7 +126,7 @@ public class AdminAccountService {
 
     @Transactional
     public void cancelWithdrawal(Long adminId, Long targetAccountId) {
-        Account target = accountRepository.findById(targetAccountId)
+        Account target = accountRepository.findByIdWithLock(targetAccountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
         if (!target.isWithdrawn()) {
@@ -137,12 +140,18 @@ public class AdminAccountService {
 
     @Transactional
     public void forceDeleteAccount(Long adminId, Long targetAccountId) {
-        Account target = accountRepository.findById(targetAccountId)
+        // Pessimistic Write Lock — suspend와 forceDelete가 동시에 실행될 때 상태 충돌 방지
+        Account target = accountRepository.findByIdWithLock(targetAccountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (target.isWithdrawn()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
 
         target.withdraw();
 
-        tokenService.deleteRefreshToken(targetAccountId);
+        // DB 커밋 성공 후 Refresh Token 삭제
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
 
         log.info("회원 강제 탈퇴 처리: adminId={}, targetId={}", adminId, targetAccountId);
     }
@@ -154,11 +163,17 @@ public class AdminAccountService {
             OwnerInfoSearchDto condition,
             Pageable pageable
     ) {
+        OwnerInfoSearchDto effectiveCondition = condition;
         if (condition.getApprovalStatus() == null) {
-            condition.setApprovalStatus(ApprovalStatus.PENDING);
+            effectiveCondition = new OwnerInfoSearchDto();
+            effectiveCondition.setApprovalStatus(ApprovalStatus.PENDING);
+            effectiveCondition.setBusinessNumber(condition.getBusinessNumber());
+            effectiveCondition.setStoreName(condition.getStoreName());
+            effectiveCondition.setRequestedFrom(condition.getRequestedFrom());
+            effectiveCondition.setRequestedTo(condition.getRequestedTo());
         }
 
-        return ownerInfoRepository.searchOwnerApplications(condition, pageable);
+        return ownerInfoRepository.searchOwnerApplications(effectiveCondition, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -192,30 +207,33 @@ public class AdminAccountService {
             storeLocationResolver.resolveAndApplyLocation(store);
         }
 
-        account.updatePrimaryRegion(store.getRegion().getRegionId());
-
-        boolean exists = accountRegionRepository
-                .existsByAccount_AccountIdAndRegion_RegionId(
+        AccountRegion accountRegion = accountRegionRepository
+                .findByAccount_AccountIdAndRegion_RegionId(
                         account.getAccountId(),
                         store.getRegion().getRegionId()
-                );
+                )
+                .orElseGet(() -> accountRegionRepository.save(
+                        AccountRegion.builder()
+                                .account(account)
+                                .region(store.getRegion())
+                                .verified(true)
+                                .verifiedAt(LocalDateTime.now())
+                                .build()
+                ));
 
-        if (!exists) {
-            AccountRegion accountRegion = AccountRegion.builder()
-                    .account(account)
-                    .region(store.getRegion())
-                    .verified(true)
-                    .verifiedAt(LocalDateTime.now())
-                    .build();
-
-            accountRegionRepository.save(accountRegion);
+        if (!accountRegion.isVerified()) {
+            accountRegion.verify();
         }
+
+        account.setPrimaryRegion(accountRegion.getAccountRegionId());
 
         ownerInfo.approve();
 
         createDefaultVisitReservationSettingIfNotExists(store);
 
-        tokenService.deleteRefreshToken(account.getAccountId());
+        // DB 커밋 성공 후 Refresh Token 삭제 (강제 재로그인으로 승격된 ROLE_OWNER 토큰 발급)
+        // 롤백 시 ROLE_OWNER 미승격 상태이므로 토큰이 유지되어야 함
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(account.getAccountId()));
 
         log.info("사장 승인: adminId={}, ownerInfoId={}, accountId={}, storeId={}",
                 adminId, ownerInfoId, account.getAccountId(), store.getStoreId());
@@ -225,6 +243,10 @@ public class AdminAccountService {
     public void rejectOwner(Long adminId, Long ownerInfoId, RejectRequestDto request) {
         OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
+
+        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
 
         Account account = ownerInfo.getAccount();
 

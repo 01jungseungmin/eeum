@@ -24,4 +24,6 @@ public interface AccountRegionRepository extends JpaRepository<AccountRegion, Lo
     );
 
     void deleteByAccount_AccountId(Long accountId);
+
+    Optional<AccountRegion> findByAccount_AccountIdAndRegion_RegionId(Long accountId, Long regionId);
 }

@@ -49,9 +49,10 @@ if grep -qE '@Entity' "$FILE" && grep -nE '^\s*@Setter' "$FILE" >/dev/null; then
   add "엔티티에 @Setter 금지 — 정적 팩토리 + 도메인 메서드로 상태 변경"
 fi
 
-# 6. Service 클래스에 @Transactional 누락 의심
+# 6. Service 클래스에 @Transactional 누락 의심 (@Service 어노테이션이 있는 클래스만 검사)
+# @Component 기반 Redis 전용 클래스(RateLimitService 등)는 DB 트랜잭션 불필요 → 제외
 if [ "$IS_TEST" = false ] && echo "$FILE" | grep -qE 'Service\.java$'; then
-  if grep -qE 'public\s+\w+.*\(' "$FILE" && ! grep -q '@Transactional' "$FILE"; then
+  if grep -q '@Service' "$FILE" && grep -qE 'public\s+\w+.*\(' "$FILE" && ! grep -q '@Transactional' "$FILE"; then
     add "Service에 @Transactional 없음 — 읽기는 readOnly=true, 쓰기는 기본 @Transactional 명시"
   fi
 fi

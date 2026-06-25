@@ -83,7 +83,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(token));
     }
 
-    @Operation(summary = "OAuth 로그인", description = "카카오/네이버 인가 코드로 소셜 로그인합니다.")
+    @Operation(summary = "OAuth 로그인", description = "카카오 인가 코드로 소셜 로그인합니다.")
     @PostMapping("/login/oauth")
     public ResponseEntity<ApiResponse<OAuthLoginResponseDto>> oauthLogin(
             @Valid @RequestBody OAuthLoginRequestDto request
