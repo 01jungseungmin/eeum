@@ -4,7 +4,6 @@ import {
   Box,
   Layers,
   Tag,
-  Ticket,
   ClipboardList,
   Calendar,
   Users,
@@ -65,13 +64,6 @@ export const OWNER_MENU_CONFIG = [
         icon: <Tag {...iconProps} />,
         subtitle: '특가 및 시간 제한 이벤트 상품을 관리하세요',
       },
-      {
-        id: 'coupons',
-        name: '쿠폰 관리',
-        path: '/coupons',
-        icon: <Ticket {...iconProps} />,
-        subtitle: '할인 쿠폰을 발행하고 관리하세요',
-      },
     ],
   },
   {
@@ -80,7 +72,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'orders',
         name: '주문/예약 관리',
-        path: '/1',
+        path: '/order-management',
         icon: <ClipboardList {...iconProps} />,
         subtitle: '실시간 주문 및 예약 내역을 확인하세요',
         countKey: 'orders',
@@ -88,7 +80,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'calendar',
         name: '예약 캘린더',
-        path: '/2',
+        path: '/reservation',
         icon: <Calendar {...iconProps} />,
         subtitle: '일자별 예약 현황을 한눈에 보세요',
       },
