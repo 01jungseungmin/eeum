@@ -580,7 +580,6 @@ function ProductFormModal({
 
         if (response && response.data && response.data.success) {
           targetProductId = response.data.data?.productId;
-          console.log('2️⃣ [동적 발급 완료] 발급된 상품 ID:', targetProductId);
 
           if (!targetProductId) {
             alert(
@@ -589,7 +588,7 @@ function ProductFormModal({
             return;
           }
 
-          // 옵션 등록 체인 실행 (image_fe6ea2 스펙 적용)
+          // 옵션 등록 체인 실행
           if (options && options.length > 0 && productType === 'SALE') {
             const optionRequests = options
               .filter((opt) => opt.groupName && opt.groupName.trim() !== '')
@@ -626,20 +625,16 @@ function ProductFormModal({
         const newImages = images.filter((img) =>
           String(img.id).startsWith('temp-'),
         );
-
+        console.log();
         if (newImages.length > 0) {
           const imagePayload = {
             images: newImages.map((img, idx) => ({
-              imageURL: img.url,
+              imageUrl: img.url,
               thumbnail: img.isMain,
               displayOrder: idx + 1,
             })),
           };
 
-          console.log(
-            `🚀 [이미지 등록 요청] 상품 ID: ${targetProductId}`,
-            imagePayload,
-          );
           await productApi.registerProductImages(targetProductId, imagePayload);
         }
 

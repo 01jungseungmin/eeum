@@ -38,10 +38,7 @@ function App() {
         <Route path="/approval-status" element={<ApprovalStatus />} />
         <Route path="/dashboard" element={<OwnerDashboardPage />} />
         <Route path="/store" element={<StorePage />} />
-        <Route
-          path="/products"
-          element={<div>상품 관리 페이지 (준비중)</div>}
-        />
+        <Route path="/products" element={<ProductManagementPage />} />
         <Route path="/order-management" element={<OrderManagementPage />} />
         <Route path="/reservation" element={<ReservationPage />} />
         <Route path="/categories" element={<CategoryPage />} />
