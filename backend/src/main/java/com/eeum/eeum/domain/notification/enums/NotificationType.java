@@ -22,10 +22,11 @@ public enum NotificationType {
     // 채팅
     CHAT_MESSAGE,            // 새 채팅 메시지
 
-    // 커뮤니티 (댓글/대댓글/좋아요)
+    // 커뮤니티 (댓글/대댓글/좋아요/관리자 조치)
     COMMUNITY_COMMENT,       // 내 게시글에 댓글
     COMMUNITY_REPLY,         // 내 댓글에 대댓글
     COMMUNITY_LIKE,          // 내 게시글 좋아요
+    COMMUNITY_ADMIN_ACTION,  // 관리자 조치 (게시글/댓글 제재)
 
     // 상점/리뷰
     STORE_REVIEW,            // 새 리뷰 작성 (사장 수신)
@@ -68,8 +69,8 @@ public enum NotificationType {
                     -> NotificationCategory.RESERVATION;
             case CHAT_MESSAGE
                     -> NotificationCategory.CHAT;
-            case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE
-                    -> NotificationCategory.SYSTEM;
+            case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE, COMMUNITY_ADMIN_ACTION
+                    -> NotificationCategory.COMMUNITY;
             case STORE_REVIEW, STORE_REVIEW_REPLY
                     -> NotificationCategory.REVIEW;
             case STORE_PRODUCT_RESTOCK, STOCK_WARNING
