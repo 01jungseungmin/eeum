@@ -60,8 +60,9 @@ public class StoreOrderService {
         }
 
         List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(orderId);
+        Payment payment = paymentRepository.findByOrder_OrderId(orderId).orElse(null);
 
-        return StoreOrderResponseDto.of(order, orderItems);
+        return StoreOrderResponseDto.of(order, orderItems, payment);
     }
 
     @Transactional(readOnly = true)
@@ -75,7 +76,8 @@ public class StoreOrderService {
 
         return orders.map(order -> {
             List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(order.getOrderId());
-            return StoreOrderResponseDto.of(order, orderItems);
+            Payment payment = paymentRepository.findByOrder_OrderId(order.getOrderId()).orElse(null);
+            return StoreOrderResponseDto.of(order, orderItems, payment);
         });
     }
 
