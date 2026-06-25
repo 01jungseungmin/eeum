@@ -7,6 +7,7 @@ import com.eeum.eeum.application.account.service.AccountRegionService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @Tag(name = "03. AccountRegion", description = "활동 지역 API")
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/accounts/me/regions")
 @RequiredArgsConstructor

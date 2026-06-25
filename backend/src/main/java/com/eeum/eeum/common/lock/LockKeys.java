@@ -36,4 +36,12 @@ public final class LockKeys {
     public static String chatRoomLeave(Long roomId) {
         return "lock:chat-room:" + roomId + ":leave";
     }
+
+    public static String reissue(Long accountId) {
+        return "lock:reissue:" + accountId;
+    }
+
+    public static String accountStatus(Long accountId) {
+        return "lock:account-status:" + accountId;
+    }
 }

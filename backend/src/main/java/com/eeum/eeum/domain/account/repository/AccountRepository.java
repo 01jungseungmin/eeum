@@ -6,15 +6,18 @@ import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface AccountRepository extends JpaRepository<Account, Long> {
+public interface AccountRepository extends JpaRepository<Account, Long>, AccountRepositoryCustom {
 
     Optional<Account> findByEmail(String email);
 
@@ -35,19 +38,22 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             @Param("status") AccountStatus status,
             @Param("threshold") LocalDateTime threshold
     );
-    // 관리자 회원 목록 조회 (동적 필터링은 QueryDSL로 구현 예정)
-    Page<Account> findAll(Pageable pageable);
 
-    //무효/만료 FCM 토큰 감지 시 해당 토큰을 null로 초기화.
+    // 무효/만료 FCM 토큰 감지 시 해당 토큰을 null로 초기화
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Account a SET a.fcmToken = null WHERE a.fcmToken = :fcmToken")
     int clearFcmTokenByFcmToken(@Param("fcmToken") String fcmToken);
 
-    //ID만 조회
+    // ID만 조회
     @Query("SELECT a.accountId FROM Account a WHERE a.status = 'ACTIVE'")
     List<Long> findAllActiveAccountIds();
 
-    //관리자 계정 ID 조회 (관리자 알림 수신 대상)
+    // 관리자 계정 ID 조회 (관리자 알림 수신 대상)
     @Query("SELECT a.accountId FROM Account a WHERE a.role = 'ROLE_ADMIN' AND a.status = 'ACTIVE'")
     List<Long> findAdminAccountIds();
+
+    // 관리자 상태 변경용 비관적 쓰기 잠금 (동시 suspend/forceDelete 경쟁 방지)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Account a WHERE a.accountId = :accountId")
+    Optional<Account> findByIdWithLock(@Param("accountId") Long accountId);
 }

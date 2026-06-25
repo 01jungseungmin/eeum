@@ -41,7 +41,7 @@ public class AdminAccountController {
 
     private final AdminAccountService adminAccountService;
 
-    @Operation(summary = "[관리자] 회원 목록 조회", description = "전체 회원 목록을 페이징으로 조회합니다.")
+    @Operation(summary = "[관리자] 회원 목록 조회", description = "이메일, 닉네임, 이름 검색 키워드")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AccountResponseDto>>> getAccounts(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,

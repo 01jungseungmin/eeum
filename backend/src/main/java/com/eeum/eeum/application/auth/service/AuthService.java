@@ -6,9 +6,14 @@ import com.eeum.eeum.application.auth.dto.response.OAuthUserInfo;
 import com.eeum.eeum.application.auth.dto.response.ReAuthResponseDto;
 import com.eeum.eeum.application.auth.dto.response.TokenResponseDto;
 import com.eeum.eeum.application.product.service.ProductCategoryService;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.lock.RateLimitKeys;
+import com.eeum.eeum.common.service.RateLimitService;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
+import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -19,12 +24,14 @@ import com.eeum.eeum.security.jwt.JwtProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -36,6 +43,11 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static final Duration EMAIL_VERIFICATION_COOLDOWN = Duration.ofSeconds(60);
+    private static final Duration PASSWORD_RESET_COOLDOWN = Duration.ofMinutes(5);
+    private static final int LOGIN_FAIL_MAX_ATTEMPTS = 5;
+    private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(5);
 
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
@@ -49,6 +61,9 @@ public class AuthService {
     private final ObjectMapper objectMapper;
     private final BusinessVerificationService businessVerificationService;
     private final ProductCategoryService productCategoryService;
+    private final RateLimitService rateLimitService;
+    private final RedisLockService redisLockService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 이메일 인증 =====================
 
@@ -58,6 +73,12 @@ public class AuthService {
         if (accountRepository.existsByEmail(request.getEmail())) { //이메일이 이미 회원 DB에 존재하는지 확인
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_EMAIL);
         }
+
+        rateLimitService.checkCooldown( //같은 이메일로 60초에 1회만 발송 허용
+                RateLimitKeys.emailVerification(request.getEmail()),
+                EMAIL_VERIFICATION_COOLDOWN,
+                ErrorCode.AUTH_RATE_LIMITED
+        );
 
         emailService.sendVerificationCode(request.getEmail()); //이메일 인증 코드 발송
     }
@@ -97,7 +118,7 @@ public class AuthService {
         validateSignupEmail(request.getEmail(), request.getEmailVerificationToken());
 
         // 3. 사업자번호 정규화
-        String businessNumber = request.getBusinessNumber().replace("-", "");
+        String businessNumber = normalizeBusinessNumber(request.getBusinessNumber());
 
         // 4. 중복 확인
 
@@ -159,13 +180,22 @@ public class AuthService {
 
     // ===================== 로그인 =====================
 
-    @Transactional
     public TokenResponseDto login(LoginRequestDto request) {
-        Account account = accountRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD));
+        String loginFailKey = RateLimitKeys.loginFail(request.getEmail());
+
+        // 5분 동안 5회 이상 실패한 이메일은 비밀번호 확인 없이 바로 차단
+        rateLimitService.checkNotBlocked(loginFailKey, LOGIN_FAIL_MAX_ATTEMPTS, ErrorCode.AUTH_RATE_LIMITED);
+
+        Account account = accountRepository.findByEmail(request.getEmail()).orElse(null);
+
+        if (account == null) {
+            rateLimitService.recordFailure(loginFailKey, LOGIN_FAIL_WINDOW);
+            throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
+        }
 
         // OAuth 계정은 로컬 비밀번호 로그인을 허용하지 않음
         if (account.isOAuthAccount()) {
+            rateLimitService.recordFailure(loginFailKey, LOGIN_FAIL_WINDOW);
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
 
@@ -173,8 +203,11 @@ public class AuthService {
 
         //사용자가 입력한 비밀번호와 DB에 저장된 암호화된 비밀번호가 일치하는지 확인
         if (!passwordEncoder.matches(request.getPassword(), account.getPassword())) {
+            rateLimitService.recordFailure(loginFailKey, LOGIN_FAIL_WINDOW);
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
+
+        rateLimitService.resetFailure(loginFailKey); //로그인 성공 시 실패 카운트 초기화
 
         return issueTokens(account);
     }
@@ -216,6 +249,8 @@ public class AuthService {
     // ===================== Oauth 신규회원 추가 정보 입력 가입 완료 =====================
     @Transactional
     public TokenResponseDto oauthComplete(OAuthCompleteRequestDto request) {
+        // oauth:temp 삭제는 DB 커밋 성공 후 AFTER_COMMIT 이벤트로 처리
+        // → 토큰 발급 실패나 DB 롤백 시 tempToken이 남아 재시도 가능
         String userInfoJson = (String) redisTemplate.opsForValue()
                 .get("oauth:temp:" + request.getTempToken());
 
@@ -266,7 +301,7 @@ public class AuthService {
 
         accountRepository.save(account);
 
-        redisTemplate.delete("oauth:temp:" + request.getTempToken());
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.oauthTemp(request.getTempToken()));
 
         return issueTokens(account);
     }
@@ -280,29 +315,32 @@ public class AuthService {
 
     // ===================== 토큰 재발급 =====================
 
-    @Transactional
+    // DB 쓰기 없음. Redis lock으로 logout과의 경쟁 조건(validate → save 사이 logout 개입) 방지
     public TokenResponseDto reissue(ReissueRequestDto request) {
-        // 1. Refresh Token 검증
-        // - JWT 유효성
-        // - type == REFRESH
-        // - Redis 저장값과 일치 여부 확인
-        Long accountId = tokenService.validateRefreshToken(request.getRefreshToken());
+        // JWT 기본 형식/타입만 lock 밖에서 먼저 검증 (빠른 실패)
+        if (!jwtProvider.isValid(request.getRefreshToken()) || !jwtProvider.isRefreshToken(request.getRefreshToken())) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+        }
 
-        // 2. 회원 조회
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        Long accountId = jwtProvider.getAccountId(request.getRefreshToken());
 
-        // 3. 계정 상태 검증
-        validateAccountStatus(account);
-
-        // 4. Access Token + Refresh Token 재발급
-        // issueTokens 내부에서 새 Refresh Token을 Redis에 저장하므로 Refresh Token Rotation이 적용됨
-        return issueTokens(account);
+        // Redis 저장값 일치 확인 + 새 토큰 저장을 원자적으로 처리
+        return redisLockService.executeWithLock(
+                LockKeys.reissue(accountId),
+                Duration.ofSeconds(5),
+                () -> {
+                    Long validatedId = tokenService.validateRefreshToken(request.getRefreshToken());
+                    Account account = accountRepository.findById(validatedId)
+                            .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+                    validateAccountStatus(account);
+                    return issueTokens(account);
+                }
+        );
     }
 
     // ===================== 로그아웃 =====================
 
-    @Transactional
+    // DB 변경 없음 — Redis 전용 처리이므로 @Transactional 불필요
     public void logout(ReissueRequestDto request, String authorizationHeader) {
         // 1. Authorization Header에서 Access Token 추출 및 검증
         String accessToken = jwtProvider.resolveAccessToken(authorizationHeader);
@@ -318,8 +356,16 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
 
-        // 5. Access Token 블랙리스트 등록 + Refresh Token 삭제
-        tokenService.logout(refreshAccountId, accessToken);
+        // 5. reissue와 동일 lock 키로 직렬화 — logout 이후 reissue가 새 토큰을 덮어쓰는 경쟁 방지
+        final Long accountId = refreshAccountId;
+        redisLockService.executeWithLock(
+                LockKeys.reissue(accountId),
+                Duration.ofSeconds(5),
+                () -> {
+                    tokenService.logout(accountId, accessToken);
+                    return null;
+                }
+        );
 
         log.info("로그아웃 완료: accountId={}", refreshAccountId);
     }
@@ -335,6 +381,12 @@ public class AuthService {
         if (account.isOAuthAccount()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
+
+        rateLimitService.checkCooldown( //같은 이메일로 5분에 1회만 발송 허용
+                RateLimitKeys.passwordReset(account.getEmail()),
+                PASSWORD_RESET_COOLDOWN,
+                ErrorCode.AUTH_RATE_LIMITED
+        );
 
         // 비밀번호 재설정 이메일 발송
         emailService.sendPasswordResetEmail(account.getEmail());
@@ -367,12 +419,9 @@ public class AuthService {
         // 5. 비밀번호 변경
         account.changePassword(passwordEncoder.encode(request.getNewPassword()));
 
-        // 6. 기존 Refresh Token 삭제
-        // 비밀번호 변경 후 기존 로그인 유지 차단
-        tokenService.deleteRefreshToken(accountId);
-
-        // 7. Password Reset Token 삭제
-        tokenService.deletePasswordResetToken(accountId);
+        // 6. DB 커밋 성공 후 Refresh Token + Password Reset Token 삭제
+        // DB 롤백 시 password-reset token이 유지되어 재시도 가능
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.passwordResetAndRefresh(accountId));
 
         log.info("비밀번호 재설정 완료: accountId={}", accountId);
     }
@@ -474,6 +523,14 @@ public class AuthService {
         if (!account.isActive()) {
             throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
         }
+    }
+
+    private String normalizeBusinessNumber(String businessNumber) {
+        if (businessNumber == null || businessNumber.isBlank()) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        return businessNumber.replaceAll("[^0-9]", "");
     }
 
     private TokenResponseDto issueTokens(Account account) {

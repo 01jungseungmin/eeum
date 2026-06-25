@@ -70,6 +70,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     String.valueOf(accountId)
                             );
 
+                    if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+                        log.debug("비활성화 또는 잠긴 계정: accountId={}", accountId);
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,
