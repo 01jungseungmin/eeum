@@ -10,12 +10,15 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
+import com.eeum.eeum.domain.community.event.CommunityCommentCreatedEvent;
+import com.eeum.eeum.domain.community.event.CommunityReplyCreatedEvent;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.exception.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,7 @@ public class CommunityCommentService {
     private final CommunityPostRepository postRepository;
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public Page<CommunityCommentResponseDto> getComments(Long accountId, Long postId, Pageable pageable) {
@@ -118,6 +122,17 @@ public class CommunityCommentService {
         log.info("댓글 작성: accountId={}, postId={}, commentId={}",
                 accountId, postId, comment.getCommentId());
 
+        if (!accountId.equals(post.getAccount().getAccountId())) {
+            eventPublisher.publishEvent(new CommunityCommentCreatedEvent(
+                    post.getAccount().getAccountId(),
+                    accountId,
+                    postId,
+                    comment.getCommentId(),
+                    account.getNickname(),
+                    post.getTitle()
+            ));
+        }
+
         return CommunityCommentResponseDto.of(comment, false);
     }
 
@@ -148,6 +163,17 @@ public class CommunityCommentService {
 
         log.info("대댓글 작성: accountId={}, parentCommentId={}, replyId={}",
                 accountId, parentCommentId, reply.getCommentId());
+
+        if (!accountId.equals(parent.getAccount().getAccountId())) {
+            eventPublisher.publishEvent(new CommunityReplyCreatedEvent(
+                    parent.getAccount().getAccountId(),
+                    accountId,
+                    parent.getPost().getPostId(),
+                    parentCommentId,
+                    reply.getCommentId(),
+                    account.getNickname()
+            ));
+        }
 
         return CommunityCommentResponseDto.of(reply, false);
     }

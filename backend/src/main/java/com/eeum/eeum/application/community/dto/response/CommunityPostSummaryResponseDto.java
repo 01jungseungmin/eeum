@@ -45,16 +45,13 @@ public class CommunityPostSummaryResponseDto {
     @Schema(description = "댓글 수")
     private int commentCount;
 
-    @Schema(description = "썸네일 이미지 URL")
-    private String thumbnailUrl;
-
     @Schema(description = "작성일시")
     private LocalDateTime createdAt;
 
     @Schema(description = "현재 로그인 사용자의 좋아요 여부")
     private boolean likedByMe;
 
-    public static CommunityPostSummaryResponseDto from(CommunityPost post, String thumbnailUrl,boolean likedByMe) {
+    public static CommunityPostSummaryResponseDto from(CommunityPost post, boolean likedByMe) {
         return CommunityPostSummaryResponseDto.builder()
                 .postId(post.getPostId())
                 .authorId(post.getAccount().getAccountId())
@@ -68,7 +65,6 @@ public class CommunityPostSummaryResponseDto {
                 .likeCount(post.getLikeCount())
                 .commentCount(post.getCommentCount())
                 .likedByMe(likedByMe)
-                .thumbnailUrl(thumbnailUrl)
                 .createdAt(post.getCreatedAt())
                 .build();
     }

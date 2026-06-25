@@ -19,15 +19,11 @@ public class CommunityImageResponseDto {
     @Schema(description = "노출 순서")
     private int displayOrder;
 
-    @Schema(description = "썸네일 여부")
-    private boolean thumbnail;
-
     public static CommunityImageResponseDto from(CommunityImage image) {
         return CommunityImageResponseDto.builder()
                 .imageId(image.getImageId())
                 .imageUrl(image.getImageUrl())
                 .displayOrder(image.getDisplayOrder())
-                .thumbnail(image.isThumbnail())
                 .build();
     }
 }

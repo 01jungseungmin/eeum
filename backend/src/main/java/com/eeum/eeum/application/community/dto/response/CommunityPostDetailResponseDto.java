@@ -56,11 +56,8 @@ public class CommunityPostDetailResponseDto {
     @Schema(description = "현재 로그인 사용자의 좋아요 여부")
     private boolean likedByMe;
 
-    @Schema(description = "썸네일 URL")
-    private String thumbnailUrl;
-
     @Schema(description = "이미지 목록")
-    private List<CommunityImageResponseDto> imageUrls;
+    private List<CommunityImageResponseDto> images;
 
     @Schema(description = "작성일시")
     private LocalDateTime createdAt;
@@ -69,16 +66,6 @@ public class CommunityPostDetailResponseDto {
     private LocalDateTime modifiedAt;
 
     public static CommunityPostDetailResponseDto of(CommunityPost post, boolean likedByMe, List<CommunityImage> images) {
-        List<CommunityImageResponseDto> imageDtos = images.stream()
-                .map(CommunityImageResponseDto::from)
-                .toList();
-
-        String thumbnailUrl = images.stream()
-                .filter(CommunityImage::isThumbnail)
-                .map(CommunityImage::getImageUrl)
-                .findFirst()
-                .orElse(images.isEmpty() ? null : images.get(0).getImageUrl());
-
         return CommunityPostDetailResponseDto.builder()
                 .postId(post.getPostId())
                 .authorId(post.getAccount().getAccountId())
@@ -94,8 +81,7 @@ public class CommunityPostDetailResponseDto {
                 .likeCount(post.getLikeCount())
                 .commentCount(post.getCommentCount())
                 .likedByMe(likedByMe)
-                .thumbnailUrl(thumbnailUrl)
-                .imageUrls(imageDtos)
+                .images(images.stream().map(CommunityImageResponseDto::from).toList())
                 .createdAt(post.getCreatedAt())
                 .modifiedAt(post.getModifiedAt())
                 .build();
