@@ -19,10 +19,28 @@ function OrderList({ orders, onRefresh }) {
   const handleStatusUpdate = async (orderId, actionType) => {
     try {
       // 주문 확인 승인 API
-      if (actionType === 'CONFIRMED') {
+      if (actionType === 'PENDING') {
         const response = await orderApi.confirmOrder(orderId);
         if (response.data?.success) {
           alert('주문을 승인하였습니다.');
+          onRefresh?.();
+        }
+      }
+
+      // 픽업 준비 완료 API
+      else if (actionType === 'CONFIRMED') {
+        const response = await orderApi.readyOrder(orderId);
+        if (response.data?.success) {
+          alert('구매 주문 상품의 준비 완료 처리가 완료되었습니다.');
+          onRefresh?.();
+        }
+      }
+
+      // 거래 완료 API
+      else if (actionType === 'READY') {
+        const response = await orderApi.completeOrder(orderId);
+        if (response.data?.success) {
+          alert('방문 예약 건에 대한 거래 완료 처리가 완료되었습니다.');
           onRefresh?.();
         }
       }
@@ -38,24 +56,6 @@ function OrderList({ orders, onRefresh }) {
         const response = await orderApi.rejectOrder(orderId, rejectReason);
         if (response.data?.success) {
           alert('주문이 거절(취소) 처리되었습니다.');
-          onRefresh?.();
-        }
-      }
-
-      // 구매 주문 완료 액션 -> 픽업 준비 완료 API
-      else if (actionType === 'READY') {
-        const response = await orderApi.readyOrder(orderId);
-        if (response.data?.success) {
-          alert('구매 주문 상품의 준비 완료 처리가 완료되었습니다.');
-          onRefresh?.();
-        }
-      }
-
-      // 방문 예약 완료 액션 -> 거래 완료 API
-      else if (actionType === 'COMPLETE') {
-        const response = await orderApi.completeOrder(orderId);
-        if (response.data?.success) {
-          alert('방문 예약 건에 대한 거래 완료 처리가 완료되었습니다.');
           onRefresh?.();
         }
       }

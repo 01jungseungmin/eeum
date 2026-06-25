@@ -80,7 +80,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'calendar',
         name: '예약 캘린더',
-        path: '/booking',
+        path: '/reservation',
         icon: <Calendar {...iconProps} />,
         subtitle: '일자별 예약 현황을 한눈에 보세요',
       },

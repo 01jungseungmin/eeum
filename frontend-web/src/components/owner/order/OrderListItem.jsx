@@ -20,7 +20,7 @@ const ItemWrapper = styled.div`
 `;
 
 const HeaderRow = styled.div`
-  padding: 14px 20px; /* ✂️ 상하 패딩 축소 */
+  padding: 14px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -38,7 +38,7 @@ const LeftArea = styled.div`
 `;
 
 const IconBox = styled.div`
-  width: 36px; /* ✂️ 크기 축소 */
+  width: 36px;
   height: 36px;
   border-radius: 8px;
   background-color: ${(props) =>
@@ -114,7 +114,7 @@ const StatusBadge = styled.span`
 const DetailPanel = styled.div`
   border-top: 1px solid #f1f5f9;
   background: #fafafa;
-  padding: 16px 20px; /* ✂️ 내부 여백 압축 */
+  padding: 16px 20px;
   display: grid;
   grid-template-columns: 1.1fr 1fr 0.9fr;
   gap: 20px;
@@ -129,7 +129,7 @@ const SubTitle = styled.h4`
   font-size: 11px;
   color: #94a3b8;
   font-weight: 700;
-  margin: 0 0 8px 0; /* ✂️ 마진 축소 */
+  margin: 0 0 8px 0;
 `;
 
 const ProductList = styled.div`
@@ -170,14 +170,13 @@ const CustomerInfo = styled.div`
   }
 `;
 
-/* ✂️ 두 번째 사진 디자인처럼 컴팩트하게 축소하는 핵심 타임라인 스타일 */
 const Timeline = styled.div`
   border-left: 2px solid #e2e8f0;
   margin-left: 8px;
   padding-left: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px; /* ✂️ 아이템 간 간격 대폭 축소 */
+  gap: 12px;
 `;
 
 const TimelineItem = styled.div`
@@ -237,7 +236,7 @@ const ActionSection = styled.div`
 
 const Button = styled.button`
   width: 100%;
-  padding: 8px 10px; /* ✂️ 버튼 위아래 크기 슬림화 */
+  padding: 8px 10px;
   font-size: 12px;
   font-weight: 700;
   border-radius: 6px;
@@ -312,6 +311,24 @@ const RequestText = styled.p`
   }
 `;
 
+// 💡 환불 사유 가시성을 대폭 높인 경고 안내 박스
+const RefundReasonBox = styled.div`
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff1f2;
+  border: 1px dashed #f43f5e;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #e11d48;
+  .title {
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .content {
+    color: #334155;
+  }
+`;
+
 const formatTime = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -353,9 +370,14 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
       color: '#dc2626',
       border: '#fee2e2',
     },
+    EXPIRED: {
+      text: '주문만료',
+      bg: '#f3f4f6',
+      color: '#4b5563',
+      border: '#e5e7eb',
+    },
   };
 
-  // 상세 내역 불러오기 함수 패키징
   const fetchDetail = async () => {
     try {
       setIsLoading(true);
@@ -376,18 +398,48 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
     }
   }, [isExpanded, order.orderId]);
 
-  // 상위 상태 변경 함수 래핑 (API 응답 에러 핸들링 보완 전용)
+  // 공통 상위 상태 업데이트 핸들러
   const handleAction = async (orderId, actionType) => {
     try {
-      // 부모 컴포넌트(OrderList 등)의 비동기 처리 함수 호출 및 await 수행
       if (onStatusUpdate) {
         await onStatusUpdate(orderId, actionType);
-        // 정상 처리 시 데이터 다시 호출하여 시간 동기화
         fetchDetail();
       }
     } catch (err) {
       alert(
         `요청 처리 중 오류가 발생했습니다: ${err.response?.data?.message || err.message}`,
+      );
+    }
+  };
+
+  // 💡 환불 전용 핸들러 기능 정의 (Swagger 명세 적용)
+  const handleRefundAction = async (orderId, isApprove) => {
+    try {
+      if (isApprove) {
+        if (
+          window.confirm(
+            '환불 요청을 승인하시겠습니까? 토스 페이먼츠 결제 취소가 함께 처리됩니다.',
+          )
+        ) {
+          // 승인 Swagger 엔드포인트 연동
+          await orderApi.approveRefund(orderId);
+          alert('환불 승인이 완료되었습니다.');
+          fetchDetail();
+        }
+      } else {
+        const reasonInput = window.prompt('환불 거절 사유를 입력해주세요:');
+        if (reasonInput === null) return; // 취소 누를 시 종료
+        if (!reasonInput.trim())
+          return alert('거절 사유는 필수 입력 사항입니다.');
+
+        // 거절 Swagger 바디 구조 { rejectReason: string } 연동
+        await orderApi.rejectRefund(orderId, { rejectReason: reasonInput });
+        alert('환불 요청이 거절되었습니다.');
+        fetchDetail();
+      }
+    } catch (err) {
+      alert(
+        `환불 처리 중 오류가 발생했습니다: ${err.response?.data?.message || err.message}`,
       );
     }
   };
@@ -404,6 +456,11 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
     order.items?.[0]?.productType || detailData?.items?.[0]?.productType;
   const isReservation =
     order.orderType === 'PREORDER' || productType === 'RESERVATION';
+
+  // 💡 조건 판별: 주문 상태가 CANCELLED(취소됨)이고, 동시에 환불 상태가 REQUESTED(요청됨)인지 판단
+  const isRefundRequested =
+    detailData?.orderStatus === 'CANCELLED' &&
+    detailData?.refundStatus === 'REQUESTED';
 
   return (
     <ItemWrapper>
@@ -514,6 +571,17 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                     요청사항: <span>{detailData.requestMessage || '없음'}</span>
                   </RequestText>
                 </CustomerInfo>
+
+                {/* 💡 환불 대기 상태일 때 고객 사유 노출 피드백 추가 */}
+                {isRefundRequested && (
+                  <RefundReasonBox>
+                    <p className="title">⚠️ 고객 환불 요청 접수</p>
+                    <p className="content">
+                      {detailData.refundReason ||
+                        '입력된 환불 사유가 없습니다.'}
+                    </p>
+                  </RefundReasonBox>
+                )}
               </Section>
 
               {/* 컬럼 2: 주문 처리 이력 */}
@@ -552,7 +620,7 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                         <p className="state">
                           확인됨{' '}
                           <span className="time">
-                            {formatTime(detailData.modifiedAt)}
+                            {formatTime(detailData.confirmedAt)}
                           </span>
                         </p>
                         <p className="desc">사장님 확인 완료</p>
@@ -568,7 +636,7 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                         <p className="state">
                           준비완료{' '}
                           <span className="time">
-                            {formatTime(detailData.modifiedAt)}
+                            {formatTime(detailData.readyAt)}
                           </span>
                         </p>
                         <p className="desc">상품 준비 완료</p>
@@ -592,18 +660,37 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                     </TimelineItem>
                   )}
 
-                  {/* 취소됨 */}
-                  {detailData.orderStatus === 'CANCELLED' && (
+                  {/* 취소됨 (순수 취소 이거나 환불 완료/거절 등 이력 마감 시) */}
+                  {detailData.orderStatus === 'CANCELLED' &&
+                    !isRefundRequested && (
+                      <TimelineItem>
+                        <Dot $color="#dc2626" />
+                        <div>
+                          <p className="state">
+                            취소됨{' '}
+                            <span className="time">
+                              {formatTime(
+                                detailData.cancelledAt || detailData.modifiedAt,
+                              )}
+                            </span>
+                          </p>
+                          <p className="desc">주문 취소 처리 완료</p>
+                        </div>
+                      </TimelineItem>
+                    )}
+
+                  {/* 💡 환불 대기 진행중 타임라인 노출 */}
+                  {isRefundRequested && (
                     <TimelineItem>
-                      <Dot $color="#dc2626" />
+                      <Dot $color="#f43f5e" />
                       <div>
                         <p className="state">
-                          취소됨{' '}
+                          환불 요청됨{' '}
                           <span className="time">
-                            {formatTime(detailData.cancelledAt)}
+                            {formatTime(detailData.modifiedAt)}
                           </span>
                         </p>
-                        <p className="desc">주문 취소 처리</p>
+                        <p className="desc">고객 요청으로 인한 환불 심사중</p>
                       </div>
                     </TimelineItem>
                   )}
@@ -614,69 +701,103 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
               <ActionSection>
                 <SubTitle>주문 처리</SubTitle>
 
-                {detailData.orderStatus === 'PENDING' && (
+                {/* 💡 최우선순위 분기: 취소 상태이면서 환불 신청 상태인 경우 전용 버튼 렌더링 */}
+                {isRefundRequested ? (
                   <>
                     <Button
                       $variant="confirm"
                       onClick={() =>
-                        handleAction(detailData.orderId, 'CONFIRMED')
+                        handleRefundAction(detailData.orderId, true)
                       }
                     >
-                      ✓ 주문 확인
+                      ✓ 환불 승인
                     </Button>
                     <Button
                       $variant="cancel"
-                      onClick={() => handleAction(detailData.orderId, 'REJECT')}
+                      onClick={() =>
+                        handleRefundAction(detailData.orderId, false)
+                      }
                     >
-                      주문 취소
+                      환불 거절
                     </Button>
                   </>
-                )}
-
-                {detailData.orderStatus === 'CONFIRMED' && (
+                ) : (
                   <>
-                    {!isReservation ? (
+                    {/* 일반 표준 프로세스 버튼 */}
+                    {detailData.orderStatus === 'PENDING' && (
+                      <>
+                        <Button
+                          $variant="confirm"
+                          onClick={() =>
+                            handleAction(detailData.orderId, 'PENDING')
+                          }
+                        >
+                          ✓ 주문 확인
+                        </Button>
+                        <Button
+                          $variant="cancel"
+                          onClick={() =>
+                            handleAction(detailData.orderId, 'REJECT')
+                          }
+                        >
+                          주문 취소
+                        </Button>
+                      </>
+                    )}
+
+                    {detailData.orderStatus === 'CONFIRMED' && (
+                      <>
+                        <Button
+                          $variant="primary"
+                          onClick={() =>
+                            handleAction(detailData.orderId, 'CONFIRMED')
+                          }
+                        >
+                          준비 완료
+                        </Button>
+                        <Button
+                          $variant="secondary"
+                          onClick={() =>
+                            handleAction(detailData.orderId, 'REJECT')
+                          }
+                        >
+                          주문 취소
+                        </Button>
+                      </>
+                    )}
+
+                    {detailData.orderStatus === 'READY' && (
                       <Button
                         $variant="primary"
                         onClick={() =>
-                          handleAction(detailData.orderId, 'READY_SALE')
+                          handleAction(detailData.orderId, 'READY')
                         }
                       >
-                        준비 완료
-                      </Button>
-                    ) : (
-                      <Button
-                        $variant="primary"
-                        onClick={() =>
-                          handleAction(detailData.orderId, 'READY_RESERVATION')
-                        }
-                      >
-                        준비 완료
+                        수령 완료
                       </Button>
                     )}
-                    <Button
-                      $variant="secondary"
-                      onClick={() => handleAction(detailData.orderId, 'REJECT')}
-                    >
-                      주문 취소
-                    </Button>
+
+                    {/* 💡 일반 취소 완료 상태 문구 제어 */}
+                    {detailData.orderStatus === 'CANCELLED' && (
+                      <CompletedText>취소 처리 완료된 주문입니다</CompletedText>
+                    )}
+
+                    {detailData.orderStatus === 'COMPLETED' && (
+                      <CompletedText>처리 완료된 주문입니다</CompletedText>
+                    )}
+
+                    {detailData.orderStatus === 'EXPIRED' && (
+                      <CompletedText
+                        style={{
+                          background: '#f8fafc',
+                          borderColor: '#e2e8f0',
+                        }}
+                      >
+                        시간이 만료된 주문입니다
+                      </CompletedText>
+                    )}
                   </>
                 )}
-
-                {detailData.orderStatus === 'READY' && (
-                  <Button
-                    $variant="primary"
-                    onClick={() =>
-                      handleAction(detailData.orderId, 'COMPLETED')
-                    }
-                  >
-                    수령 완료
-                  </Button>
-                )}
-
-                {['COMPLETED', 'CANCELLED'].includes(
-                  detailData.orderStatus,
-                ) && <CompletedText>처리 완료된 주문입니다</CompletedText>}
               </ActionSection>
             </>
           ) : (

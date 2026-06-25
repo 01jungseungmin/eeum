@@ -21,4 +21,15 @@ export const orderApi = {
   readyOrder: (orderId) => apiClient.patch(`/owner/orders/${orderId}/ready`),
   completeOrder: (orderId) =>
     apiClient.patch(`/owner/orders/${orderId}/complete`),
+
+  // 환불 승인 / 거절
+  approveRefund: (orderId) => {
+    return apiClient.patch(`/api/v1/owner/orders/${orderId}/refund/approve`);
+  },
+  rejectRefund: (orderId, data) => {
+    return apiClient.patch(
+      `/api/v1/owner/orders/${orderId}/refund/reject`,
+      data,
+    );
+  },
 };
