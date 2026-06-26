@@ -207,7 +207,13 @@ export default function CommunityDetailScreen() {
       '게시글 관리',
       '무엇을 하시겠습니까?',
       [
-        { text: '수정하기', onPress: () => router.push(`/community/write?editId=${id}`) },
+        { 
+          text: '수정하기', 
+          onPress: () => router.push({
+            pathname: '/community/write' as any,
+            params: { editId: id }
+          }) 
+        },
         { text: '삭제하기', onPress: handleDeletePost, style: 'destructive' },
         { text: '취소', style: 'cancel' }
       ]
