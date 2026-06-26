@@ -7,6 +7,8 @@ interface RegionModalProps {
   visible: boolean;
   onClose: () => void;
   regions: any[];
+  viewingRegionId?: number | null;
+  onSelectView: (region: any) => void;
   onSetPrimary: (id: number) => void;
   onAddRegion: () => void;
   onDeleteRegion: (id: number) => void;
@@ -17,6 +19,8 @@ export default function RegionModal({
   visible,
   onClose,
   regions,
+  viewingRegionId,
+  onSelectView,
   onSetPrimary,
   onAddRegion,
   onDeleteRegion,
@@ -33,42 +37,42 @@ export default function RegionModal({
             if (!item) return null; 
             
             const targetId = item?.accountRegionId;
-            const isVerified = item?.verified; // 인증 여부 변수
+            const isVerified = item?.verified; 
+            const isViewing = viewingRegionId === targetId; // ✨ 현재 보고 있는 지역인지 확인
             
             return (
               <View key={targetId || Math.random().toString()} style={styles.regionItem}>
-                {/* 동네 선택 영역: 인증된 동네만 클릭 시 대표지역 설정 기능 작동 */}
+                
+                {/* 왼쪽 영역: 누르면 화면(View)만 부드럽게 변경 */}
                 <TouchableOpacity 
                   style={styles.regionLeft} 
-                  onPress={() => {
-                    if (isVerified) {
-                      targetId && onSetPrimary(targetId);
-                    } else {
-                      Alert.alert("인증 필요", "먼저 현재 위치 GPS 인증을 완료해 주세요!");
-                    }
-                  }}
+                  onPress={() => targetId && onSelectView(item)}
                 >
                   <View style={[
                     styles.radio, 
-                    item?.isPrimary && styles.radioActive,
-                    !isVerified && styles.radioDisabled // 인증 안 된 곳은 라디오 버튼 흐리게
+                    isViewing && styles.radioActive, // 보고 있는 동네에 불 켜기
                   ]} />
-                  <Text style={item?.isPrimary ? styles.regionNameActive : styles.regionName}>
+                  <Text style={isViewing ? styles.regionNameActive : styles.regionName}>
                     {item?.dong || item?.fullName || '동네 정보 없음'}
                   </Text>
-                  {isVerified && <Ionicons name="checkmark-circle" size={14} color="#00A859" style={{marginLeft: 5}} />}
+                  
+                  {/* 대표 동네일 경우 뱃지 표시 */}
+                  {item?.isPrimary && (
+                    <Text style={styles.primaryBadge}>대표</Text>
+                  )}
                 </TouchableOpacity>
                 
-                {/* 오른쪽 컨트롤 영역: 인증 안 됐으면 [인증하기] 버튼 표시, 옆에는 삭제(X) 버튼 */}
+                {/* 오른쪽 영역: 인증 안 됐으면 [인증하기], 됐는데 대표 아니면 [대표 설정] */}
                 <View style={styles.regionRight}>
-                  {!isVerified && (
-                    <TouchableOpacity 
-                      style={styles.verifyBtn} 
-                      onPress={() => targetId && onVerifyRegion(targetId)}
-                    >
+                  {!isVerified ? (
+                    <TouchableOpacity style={styles.verifyBtn} onPress={() => targetId && onVerifyRegion(targetId)}>
                       <Text style={styles.verifyBtnText}>인증하기</Text>
                     </TouchableOpacity>
-                  )}
+                  ) : !item?.isPrimary ? (
+                    <TouchableOpacity style={[styles.verifyBtn, { backgroundColor: '#E0F2F1' }]} onPress={() => targetId && onSetPrimary(targetId)}>
+                      <Text style={[styles.verifyBtnText, { color: '#00897B' }]}>대표 설정</Text>
+                    </TouchableOpacity>
+                  ) : null}
                   
                   <TouchableOpacity onPress={() => targetId && onDeleteRegion(targetId)} style={{ marginLeft: 12 }}>
                     <Ionicons name="close" size={20} color="#999" />
@@ -98,9 +102,9 @@ const styles = StyleSheet.create({
   regionRight: { flexDirection: 'row', alignItems: 'center' },
   radio: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#E0E0E0', marginRight: 10 },
   radioActive: { backgroundColor: '#00A859' },
-  radioDisabled: { backgroundColor: '#F0F0F0', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CCC' },
   regionName: { fontSize: 15, color: '#666' },
   regionNameActive: { fontSize: 15, color: '#333', fontWeight: 'bold' },
+  primaryBadge: { fontSize: 10, color: '#00A859', borderWidth: 1, borderColor: '#00A859', paddingHorizontal: 4, borderRadius: 4, marginLeft: 6 },
   addButton: { backgroundColor: '#00A859', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15, borderRadius: 8, marginTop: 20 },
   addButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 5 },
   verifyBtn: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },

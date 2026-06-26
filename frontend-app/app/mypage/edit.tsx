@@ -30,8 +30,9 @@ export default function EditProfileScreen() {
         setUserInfo(data);
         setNickname(data.nickname || '');
         setName(data.name || '');
-        setPhone(data.phone || '');
+        setPhone(data.phone || ''); 
         setProfileImage(data.profileImageUrl || null);
+        
       } catch (error) {
         console.error('내 정보 로딩 에러:', error);
         Alert.alert('오류', '내 정보를 불러오는데 실패했습니다.');
@@ -69,6 +70,7 @@ export default function EditProfileScreen() {
 
     setIsSaving(true);
     try {
+      // 정보 수정 API 스펙에 맞춰 닉네임과 프로필 이미지만 전송합니다.
       await userApi.updateProfile({
         nickname: nickname,
         profileImageUrl: profileImage || '' 
@@ -129,19 +131,16 @@ export default function EditProfileScreen() {
 
           <Text fontWeight="bold" style={styles.label}>이름</Text>
           <TextInput 
-            style={styles.input}
+            style={[styles.input, styles.disabledInput]}
             value={name}
-            onChangeText={setName}
-            placeholder="이름을 입력하세요"
+            editable={false}
           />
 
           <Text fontWeight="bold" style={styles.label}>전화번호</Text>
           <TextInput 
-            style={styles.input}
+            style={[styles.input, styles.disabledInput]}
             value={phone}
-            onChangeText={setPhone}
-            placeholder="010-0000-0000"
-            keyboardType="phone-pad"
+            editable={false}
           />
 
           <Text fontWeight="bold" style={styles.label}>이메일</Text>
@@ -150,7 +149,7 @@ export default function EditProfileScreen() {
             value={userInfo?.email}
             editable={false}
           />
-          <Text style={styles.hintText}>이메일은 변경할 수 없습니다</Text>
+          <Text style={styles.hintText}>이름, 전화번호, 이메일은 변경할 수 없습니다</Text>
         </View>
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
