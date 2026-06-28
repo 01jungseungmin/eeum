@@ -5,7 +5,6 @@ import AuthStatusBanner from '../../../components/owner/approval/AuthStatusBanne
 import BusinessInfoBox from '../../../components/owner/approval/BusinessInfoBox';
 import RejectReasonBox from '../../../components/owner/approval/RejectReasonBox';
 import InspectionChecklist from '../../../components/owner/approval/InspectionChecklist';
-import InspectionTimeline from '../../../components/owner/approval/Inspectiontimeline';
 
 import BusinessHoursModal from '../../../components/owner/approval/modals/BusinessHoursModal';
 import BusinessInfoModal from '../../../components/owner/approval/modals/BusinessInfoModal';
@@ -41,20 +40,6 @@ const FilterBadge = styled.div`
   border: 1px solid ${(props) => (props.$active ? 'transparent' : '#eee')};
 `;
 
-const ChecklistHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-
-  h3 {
-    font-size: 18px;
-    font-weight: 700;
-    color: #262626;
-    margin: 0;
-  }
-`;
-
 const ApplySubmitButton = styled.button`
   display: flex;
   align-items: center;
@@ -67,7 +52,7 @@ const ApplySubmitButton = styled.button`
   cursor: pointer;
   transition: all 0.2s ease;
 
-  // 기본 활성화 (초록색)
+  // 조건 충족 시 빛나는 이음의 시그니처 그린 컬러
   background-color: #00a651;
   color: white;
 
@@ -75,7 +60,7 @@ const ApplySubmitButton = styled.button`
     background-color: #008c43;
   }
 
-  // 비활성화 상태 스타일 수정
+  // 비활성화(조건 미달 혹은 심사 중) 시 정갈한 그레이톤 처리
   &:disabled {
     background-color: #f5f5f5;
     color: #bfbfbf;
@@ -87,7 +72,7 @@ const ApplySubmitButton = styled.button`
 function ApprovalStatusPage() {
   const [checklist, setChecklist] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('REJECTED');
+  const [status, setStatus] = useState('PENDING');
   const [activeModal, setActiveModal] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -112,16 +97,45 @@ function ApprovalStatusPage() {
     fetchChecklistData();
   }, []);
 
+  const currentChecklist = checklist || {
+    businessVerified: false,
+    storeInfoCompleted: false,
+    menuRegistered: false,
+    businessHoursSet: false,
+    settlementAccountRegistered: false,
+    allCompleted: false,
+    approvalStatus: 'PENDING',
+    rejectionReason: null,
+    reviewRequestedAt: null, // 기본값 방어
+  };
+
+  // 6개가 다 차고, 백엔드에 진짜 심사 신청 접수 일시(reviewRequestedAt)가 등록되어 있다면
+  // 사장님이 '진짜로 신청을 완료한 상태'로 판단합니다.
+  const isAlreadySubmitted =
+    currentChecklist.allCompleted &&
+    currentChecklist.reviewRequestedAt !== null;
+
+  // 버튼 비활성화 규칙 수정
+  const isButtonDisabled =
+    !currentChecklist.allCompleted || // 1) 6개 항목 중 미완성된 게 있거나
+    isAlreadySubmitted || // 2) ✨ 이미 신청 완료해서 심사 대기 중이거나
+    status === 'APPROVED' || // 3) 최종 승인 완료되었거나
+    submitting; // 4) 현재 누르는 중일 때 잠금
+
+  // 상황별 버튼 텍스트 정밀 매칭
+  const getButtonText = () => {
+    if (submitting) return '신청 중...';
+    if (status === 'APPROVED') return '승인 완료';
+    if (isAlreadySubmitted) return '심사 대기 중'; // ✨ 진짜 신청 완료된 경우 대기 중으로 변환!
+    return '입점 심사 신청하기'; // 항목은 다 채웠으나 아직 버튼을 안 눌렀거나 반려(REJECTED)당해 날짜가 날아갔을 때
+  };
+
   const handleApplyApproval = async () => {
     if (!currentChecklist.allCompleted) {
       return alert('아직 완료되지 않은 필수 심사 항목이 있습니다.');
     }
 
-    if (
-      !window.confirm(
-        '입점 심사를 요청하시겠습니까? 서류 검토에는 수일이 소요될 수 있습니다.',
-      )
-    ) {
+    if (!window.confirm('입점 심사를 요청하시겠습니까?')) {
       return;
     }
 
@@ -130,26 +144,27 @@ function ApprovalStatusPage() {
       const response = await approvalApi.applyOwnerStoreApproval();
 
       if (response.data.success) {
-        alert('입점 심사 요청이 관리자에게 성공적으로 전달되었습니다!');
+        alert('입점 심사 요청이 성공적으로 완료되었습니다! 🎉');
+
         fetchChecklistData();
       } else {
         alert(`요청 실패: ${response.data.message || '오류가 발생했습니다.'}`);
       }
     } catch (error) {
       console.error('입점 심사 요청 에러:', error);
-      const serverMessage = error.response?.data?.message;
-      alert(
-        serverMessage
-          ? `E러: ${serverMessage}`
-          : '서버와 통신 중 에러가 발생했습니다.',
-      );
+      alert('서버 통신 중 에러가 발생했습니다.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleStatusChange = (newStatus) => {
-    setStatus(newStatus);
+  const handleItemClick = (modalType) => {
+    if (modalType === 'LICENSE' || modalType === 'BUSINESS_PROOF') {
+      alert('사업자 등록증 인증은 본인인증 완료 시 자동으로 처리됩니다. 📋');
+      return;
+    }
+
+    setActiveModal(modalType);
   };
 
   if (loading)
@@ -159,61 +174,12 @@ function ApprovalStatusPage() {
       </Container>
     );
 
-  const currentChecklist = checklist || {
-    businessVerified: false,
-    storeInfoCompleted: false,
-    menuRegistered: false,
-    businessHoursSet: false,
-    settlementAccountRegistered: false,
-    allCompleted: false,
-    approvalStatus: status,
-    rejectionReason: '제출 서류 및 상점 정보를 확인해 주세요.',
-  };
-
-  // 💡 버튼 비활성화 규칙 정교화:
-  // 1) 필수 항목이 미완료(allCompleted === false)이거나
-  // 2) 이미 심사 중(PENDING)이거나 승인 완료(APPROVED)인 상태이거나
-  // 3) 통신 중일 때 비활성화 처리합니다.
-  const isButtonDisabled =
-    !currentChecklist.allCompleted ||
-    status === 'PENDING' ||
-    status === 'APPROVED' ||
-    submitting;
-
-  // 💡 상태별 버튼 텍스트 동적 정의
-  const getButtonText = () => {
-    if (submitting) return '신청 중...';
-    if (status === 'PENDING') return '심사 대기 중';
-    if (status === 'APPROVED') return '승인 완료';
-    return '입점 심사 신청하기';
-  };
-
   return (
     <Container>
-      <FilterSection>
-        <span>미리보기:</span>
-        <FilterBadge
-          $active={status === 'PENDING'}
-          onClick={() => handleStatusChange('PENDING')}
-        >
-          심사중
-        </FilterBadge>
-        <FilterBadge
-          $active={status === 'APPROVED'}
-          onClick={() => handleStatusChange('APPROVED')}
-        >
-          승인완료
-        </FilterBadge>
-        <FilterBadge
-          $active={status === 'REJECTED'}
-          $color="#ff4d4f"
-          onClick={() => handleStatusChange('REJECTED')}
-        >
-          반려
-        </FilterBadge>
-      </FilterSection>
-
+      {/* 사장 인증 상태 */}
       <AuthStatusBanner status={status} />
+
+      {/* 사장 기본 정보 */}
       <BusinessInfoBox />
 
       {status === 'REJECTED' && (
@@ -221,10 +187,10 @@ function ApprovalStatusPage() {
       )}
 
       <div style={{ marginTop: '32px' }}>
-        <ChecklistHeader>
-          <h3>입점 심사 체크리스트</h3>
-
-          {/* 💡 무조건 렌더링하되, 상황에 따라 자물쇠(disabled)를 채웁니다. */}
+        <InspectionChecklist
+          checklist={currentChecklist}
+          onItemClick={handleItemClick}
+        >
           <ApplySubmitButton
             disabled={isButtonDisabled}
             onClick={handleApplyApproval}
@@ -232,17 +198,10 @@ function ApprovalStatusPage() {
             <Send size={16} />
             {getButtonText()}
           </ApplySubmitButton>
-        </ChecklistHeader>
-
-        <InspectionChecklist
-          checklist={currentChecklist}
-          onItemClick={(modalType) => setActiveModal(modalType)}
-        />
+        </InspectionChecklist>
       </div>
 
-      <InspectionTimeline status={status} />
-
-      {activeModal === 'INFO' && (
+      {activeModal === 'STORE_INFO' && (
         <BusinessInfoModal
           onClose={() => setActiveModal(null)}
           onSuccess={() => {
