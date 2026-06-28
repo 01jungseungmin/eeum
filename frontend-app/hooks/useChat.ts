@@ -8,8 +8,8 @@ if (typeof global.TextEncoder === 'undefined') {
   global.TextDecoder = encoding.TextDecoder;
 }
 
-// ⚠️ 본인 테스트 환경에 맞게 IP 수정 (에뮬레이터: 10.0.2.2, 실제 폰: 컴퓨터의 와이파이 IP)
-const WEBSOCKET_URL = process.env.EXPO_PUBLIC_WS_URL || 'ws://192.168.50.40:8080/ws'; 
+// 본인 테스트 환경에 맞게 IP 수정 (에뮬레이터: 10.0.2.2, 실제 폰: 컴퓨터의 와이파이 IP)
+const WEBSOCKET_URL = process.env.EXPO_PUBLIC_WS_URL || 'ws://192.168.0.17:8080/ws'; 
 
 export const useChatStomp = (roomId: number) => {
   const clientRef = useRef<Client | null>(null);
