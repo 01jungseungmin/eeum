@@ -2,19 +2,20 @@ import { client } from './client';
 
 export const communityApi = {
   // 1. 커뮤니티 게시글 (Post) API
-  getPosts: async (page: number = 0, size: number = 20, categoryId?: number | null, keyword?: string) => {
-    const params: any = { page, size };
-    
-    if (categoryId) {
-      params.categoryId = categoryId; 
+  getPosts: async (page: number = 0, size: number = 20, keyword?: string) => {
+    try {
+      const response = await client.get('/community/posts', {
+        params: { 
+          page, 
+          size, 
+          keyword: keyword || undefined 
+        }
+      });
+      return response.data?.data?.content || [];
+    } catch (error) {
+      console.error('게시글 목록 조회 에러:', error);
+      throw error;
     }
-
-    if (keyword) {
-      params.keyword = keyword;
-    }
-
-    const response = await client.get('/community/posts', { params });
-    return response.data?.data?.content || []; 
   },
   
   getPostDetail: async (postId: string | number) => {
@@ -22,12 +23,13 @@ export const communityApi = {
     return response.data?.data || response.data;
   },
 
-  createPost: async (data: { categoryId: number; title: string; content: string; imageUrls?: string[] }) => {
+  // ✨ imageUrls 제거 (이제 텍스트 데이터만 먼저 보냅니다)
+  createPost: async (data: { categoryId: number; title: string; content: string }) => {
     const response = await client.post('/community/posts', data);
     return response.data;
   },
 
-  updatePost: async (postId: string | number, data: { categoryId: number; title: string; content: string; imageUrls?: string[] }) => {
+  updatePost: async (postId: string | number, data: { categoryId: number; title: string; content: string }) => {
     const response = await client.patch(`/community/posts/${postId}`, data);
     return response.data;
   },
@@ -37,77 +39,77 @@ export const communityApi = {
     return response.data;
   },
 
+  uploadPostImages: async (postId: string | number, images: { imageUrl: string; thumbnail: boolean }[]) => {
+    const response = await client.post(`/community/posts/${postId}/images`, { images });
+    return response.data;
+  },
+
+  deletePostImage: async (postId: string | number, imageId: string | number) => {
+    const response = await client.delete(`/community/posts/${postId}/images/${imageId}`);
+    return response.data;
+  },
+
+  // =========================================================
   // 2. 커뮤니티 댓글 및 대댓글 (Comment/Reply) API
-  
-  // 특정 게시글의 댓글 목록 조회
+  // =========================================================
   getComments: async (postId: string | number) => {
     const response = await client.get(`/community/posts/${postId}/comments`);
     return response.data?.data?.content || response.data?.data || [];
   },
 
-  // 댓글 작성
   createComment: async (postId: string | number, content: string) => {
     const response = await client.post(`/community/posts/${postId}/comments`, { content });
     return response.data;
   },
 
-  // 특정 댓글의 대댓글 목록 조회
   getReplies: async (commentId: string | number) => {
     const response = await client.get(`/community/comments/${commentId}/replies`);
     return response.data?.data?.content || response.data?.data || [];
   },
 
-  // 대댓글 작성
   createReply: async (commentId: string | number, content: string) => {
     const response = await client.post(`/community/comments/${commentId}/replies`, { content });
     return response.data;
   },
 
-  // 댓글/대댓글 수정
   updateComment: async (commentId: string | number, content: string) => {
     const response = await client.patch(`/community/comments/${commentId}`, { content });
     return response.data;
   },
 
-  // 댓글/대댓글 삭제
   deleteComment: async (commentId: string | number) => {
     const response = await client.delete(`/community/comments/${commentId}`);
     return response.data;
   },
 
+  // =========================================================
   // 3. 커뮤니티 좋아요 (Like) API
-  
-  // 게시글 좋아요
+  // =========================================================
   likePost: async (postId: string | number) => {
     const response = await client.post(`/community/posts/${postId}/likes`);
     return response.data;
   },
 
-  // 게시글 좋아요 취소
   unlikePost: async (postId: string | number) => {
     const response = await client.delete(`/community/posts/${postId}/likes`);
     return response.data;
   },
 
-  // 댓글/대댓글 좋아요
   likeComment: async (commentId: string | number) => {
     const response = await client.post(`/community/comments/${commentId}/likes`);
     return response.data;
   },
 
-  // 댓글/대댓글 좋아요 취소
   unlikeComment: async (commentId: string | number) => {
     const response = await client.delete(`/community/comments/${commentId}/likes`);
     return response.data;
   },
 
-  // 내가 작성한 게시글 조회
   getMyPosts: async (page: number = 0, size: number = 20) => {
     try {
       const response = await client.get('/community/posts/me', {
         params: { page, size }
       });
-      // 스웨거 응답 구조(data.content) 반영
       return response.data?.data?.content || [];
     } catch (error) {
       console.error('내 게시글 목록 조회 에러:', error);
@@ -115,7 +117,6 @@ export const communityApi = {
     }
   },
 
-  // 내가 작성한 댓글 조회 API
   getMyComments: async (page: number = 0, size: number = 20) => {
     try {
       const response = await client.get('/community/comments/me', {

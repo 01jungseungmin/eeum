@@ -17,6 +17,7 @@ const NOTI_TABS = [
   { id: 'RESERVATION', name: '예약' },
   { id: 'REVIEW', name: '리뷰' },
   { id: 'CHAT', name: '채팅' },
+  { id: 'COMMUNITY', name: '커뮤니티' },
   // { id: 'PRODUCT', name: '상품' }, // 필요 시 주석 해제하여 추가
   // { id: 'SYSTEM', name: '시스템' }
 ];

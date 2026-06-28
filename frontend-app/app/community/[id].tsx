@@ -286,8 +286,21 @@ export default function CommunityDetailScreen() {
 
             <Text fontWeight="bold" style={styles.title}>{post.title}</Text>
             
-            {post.imageUrl && (
-              <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
+            {post.images && post.images.length > 0 && (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                style={{ marginBottom: 15 }}
+              >
+                {post.images.map((img: any, index: number) => (
+                  <Image 
+                    key={img.imageId || index}
+                    source={{ uri: img.imageUrl }} 
+                    style={[styles.postImage, { width: 300, marginRight: 10 }]} 
+                    resizeMode="cover" 
+                  />
+                ))}
+              </ScrollView>
             )}
 
             <Text style={styles.content}>{post.content}</Text>
