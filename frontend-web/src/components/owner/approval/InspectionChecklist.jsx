@@ -2,35 +2,59 @@ import React from 'react';
 import styled from 'styled-components';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
-const InspectionChecklist = ({ status }) => {
-  const isRejected = status === 'REJECTED';
-
+const InspectionChecklist = ({ checklist, onItemClick }) => {
   const checklistData = [
     {
       id: 1,
       title: '사업자 등록증 제출 및 인증',
-      desc: isRejected ? '서류 내용 불일치 — 재제출 필요' : '인증 완료',
-      isDone: !isRejected, // 반려 상태가 아니면 완료로 간주
+      desc: checklist.businessVerified
+        ? '인증 완료'
+        : '서류 내용 불일치 — 재제출 필요',
+      isDone: checklist.businessVerified,
+      modalType: 'INFO', // 클릭 시 부모에게 던져줄 고유 키값
     },
-    { id: 2, title: '대표자 신원 확인', desc: '본인 인증 완료', isDone: true },
+    {
+      id: 2,
+      title: '대표자 신원 확인',
+      desc: '본인 인증 완료',
+      isDone: true,
+      modalType: null,
+    },
     {
       id: 3,
       title: '상점 기본 정보 입력',
-      desc: '맛있는 반찬가게 · 서울 마포구',
-      isDone: true,
+      desc: checklist.storeInfoCompleted
+        ? '등록 완료'
+        : '상점 정보를 입력해 주세요.',
+      isDone: checklist.storeInfoCompleted,
+      modalType: 'INFO',
     },
     {
       id: 4,
       title: '대표 메뉴 1개 이상 등록',
-      desc: '7개 상품 등록',
-      isDone: true,
+      desc: checklist.menuRegistered
+        ? '등록 완료'
+        : '대표 메뉴를 등록해 주세요.',
+      isDone: checklist.menuRegistered,
+      modalType: 'MENU',
     },
-    { id: 5, title: '영업시간 설정', desc: '월~토 09:00~19:00', isDone: true },
+    {
+      id: 5,
+      title: '영업시간 설정',
+      desc: checklist.businessHoursSet
+        ? '설정 완료'
+        : '영업시간을 등록해 주세요.',
+      isDone: checklist.businessHoursSet,
+      modalType: 'HOURS', // 👈 영업시간 모달 매핑
+    },
     {
       id: 6,
       title: '정산 계좌 등록',
-      desc: '국민은행 ****789012',
-      isDone: true,
+      desc: checklist.settlementAccountRegistered
+        ? '등록 완료'
+        : '정산 계좌를 등록해 주세요.',
+      isDone: checklist.settlementAccountRegistered,
+      modalType: 'ACCOUNT',
     },
   ];
 
@@ -43,7 +67,11 @@ const InspectionChecklist = ({ status }) => {
 
       <List>
         {checklistData.map((item) => (
-          <Item key={item.id}>
+          <Item
+            key={item.id}
+            onClick={() => item.modalType && onItemClick(item.modalType)}
+            style={{ cursor: item.modalType ? 'pointer' : 'default' }}
+          >
             <LeftSection>
               <IconWrapper $isDone={item.isDone}>
                 {item.isDone ? (
