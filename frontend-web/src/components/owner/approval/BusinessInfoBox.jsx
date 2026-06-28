@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import {
   Building2,
@@ -9,6 +9,7 @@ import {
   Package,
   Calendar,
 } from 'lucide-react';
+import { accountApi } from '../../../api/owner/accountApi';
 
 const Container = styled.div`
   background: white;
@@ -37,11 +38,11 @@ const Title = styled.h3`
 
 const InfoGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, 1fr); // 2열 구조
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px 40px;
 
   @media (max-width: 768px) {
-    grid-template-columns: 1fr; // 모바일에서는 1열
+    grid-template-columns: 1fr;
   }
 `;
 
@@ -54,12 +55,12 @@ const InfoItem = styled.div`
 const IconWrapper = styled.div`
   width: 40px;
   height: 40px;
-  background-color: #f6ffed; // 연한 녹색 배경
+  background-color: #f6ffed;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #52c41a; // 아이콘 색상
+  color: #52c41a;
 `;
 
 const TextContent = styled.div`
@@ -79,37 +80,105 @@ const Value = styled.span`
   color: #262626;
 `;
 
+const LoadingText = styled.div`
+  padding: 24px;
+  text-align: center;
+  color: #8c8c8c;
+  font-size: 14px;
+`;
+
+const maskName = (name) => {
+  if (!name) return '-';
+  if (name.length <= 2) return name.charAt(0) + '*';
+  return (
+    name.charAt(0) + '*'.repeat(name.length - 2) + name.charAt(name.length - 1)
+  );
+};
+
+const formatBusinessNumber = (num) => {
+  if (!num) return '-';
+  const clean = num.replace(/[^0-9]/g, '');
+  if (clean.length === 10) {
+    return `${clean.slice(0, 3)}-${clean.slice(3, 5)}-${clean.slice(5)}`;
+  }
+  return num;
+};
+
+const formatDate = (dateTimeStr) => {
+  if (!dateTimeStr) return '-';
+  return dateTimeStr.split('T')[0];
+};
+
 const BusinessInfoBox = () => {
+  const [ownerData, setOwnerData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchOwnerBusinessInfo = async () => {
+    try {
+      setLoading(true);
+
+      const response = await accountApi.getOwnerAccountInfo();
+
+      if (response.data.success) {
+        console.log(response.data.data);
+        setOwnerData(response.data.data);
+      }
+    } catch (error) {
+      console.error('사업자 정보 로드 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOwnerBusinessInfo();
+  }, []);
+
+  if (loading) {
+    return (
+      <Container>
+        <LoadingText>사업자 정보를 안전하게 불러오는 중입니다...</LoadingText>
+      </Container>
+    );
+  }
+
+  const data = ownerData || {};
+
   const infoData = [
     {
       id: 1,
       label: '사업자 번호',
-      value: '123-45-67890',
+      value: formatBusinessNumber(data.businessNumber),
       icon: <FileText size={18} />,
     },
     {
       id: 2,
       label: '상호명',
-      value: '맛있는 반찬가게',
+      value: data.storeName || '-',
       icon: <Store size={18} />,
     },
-    { id: 3, label: '대표자', value: '김*영', icon: <User size={18} /> },
+    {
+      id: 3,
+      label: '대표자',
+      value: maskName(data.ownerName),
+      icon: <User size={18} />,
+    },
     {
       id: 4,
       label: '업종',
-      value: '음식업 / 반찬가게',
+      value: data.storeCategoryName ? `${data.storeCategoryName}업` : '-',
       icon: <Package size={18} />,
     },
     {
       id: 5,
       label: '사업장 주소',
-      value: '서울 마포구 서교동 123-4',
+      value: data.storeAddress || '-',
       icon: <MapPin size={18} />,
     },
     {
       id: 6,
       label: '서류 제출일',
-      value: '2024-04-25',
+      value: formatDate(data.createdAt),
       icon: <Calendar size={18} />,
     },
   ];
