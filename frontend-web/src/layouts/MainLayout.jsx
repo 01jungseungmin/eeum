@@ -90,7 +90,7 @@ function MainLayout() {
         <TopNavbar />
         {/* 우측 하단 내용 변경 영역 */}
         <PageContainer>
-          <Outlet />
+          <Outlet context={{ approvalStatus }} />
         </PageContainer>
       </MainContent>
     </LayoutWrapper>
