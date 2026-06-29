@@ -2,6 +2,7 @@ package com.eeum.eeum.domain.chat.entity;
 
 import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import jakarta.persistence.*;
@@ -51,6 +52,11 @@ public class ChatRoom extends BaseEntity {
     @Column(name = "last_message_at")
     private LocalDateTime lastMessageAt;
 
+    // 지역 기반 공개 방 목록 필터링용 (GROUP/GROUP_STREET — nullable)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id")
+    private Region region;
+
     // ===================== 정적 팩토리 메서드 =====================
 
     public static ChatRoom createGroup(
@@ -58,7 +64,8 @@ public class ChatRoom extends BaseEntity {
             ChatRoomType type,
             String name,
             ChatRoomRefType refType,
-            Long refId
+            Long refId,
+            Region region
     ) {
         ChatRoom room = new ChatRoom();
         room.creator = creator;
@@ -66,6 +73,7 @@ public class ChatRoom extends BaseEntity {
         room.name = name;
         room.refType = refType;
         room.refId = refId;
+        room.region = region;
         room.isActive = true;
         return room;
     }
