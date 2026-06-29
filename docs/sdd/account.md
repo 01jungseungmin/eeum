@@ -102,7 +102,7 @@ longitude | Double | NOT NULL | 경도
 메서드명 | 반환타입 | 설명
 ---|---|---
 createUser(email, encodedPassword, name, nickname, phone) | Account | 일반 회원 생성 (ROLE_USER, ACTIVE)
-createOAuthPendingUser(email, nickname, profileImageUrl, provider, providerId) | Account | OAuth 신규 회원 임시 생성 (ROLE_USER, PENDING — 추가 정보 미입력 상태)
+createOAuthPendingUser(email, nickname, profileImageUrl, provider, providerId) | Account | | OAuth 회원 생성 준비용 팩토리 메서드. 현재 가입 완료 트랜잭션 내에서 completeOAuthProfile()과 함께 호출되어 최종적으로 ACTIVE 계정으로 저장
 createOwner(email, encodedPassword, name, phone) | Account | 사장 회원가입 신청 (ROLE_USER, ACTIVE — 관리자 승인 후 ROLE_OWNER로 변경)
 completeOAuthProfile(name, phone, nickname) | void | OAuth 추가 정보 입력 완료 후 상태를 ACTIVE로 전환
 approveOwner() | void | 역할을 ROLE_OWNER로 변경 (OwnerInfo.approve() 내부에서 호출)
