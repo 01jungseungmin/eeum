@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import LoginPage from './pages/owner/login/LoginPage';
 import SignUpPage from './pages/owner/login/SignUpPage';
 import FindPasswordPage from './pages/owner/login/FindPasswordPage';
@@ -12,6 +13,48 @@ import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
 import MemberPage from './pages/admin/main/MemberPage';
 import StorePage from './pages/owner/main/StorePage';
 import CategoryPage from './pages/owner/main/CategoryPage';
+import EventPage from './pages/owner/main/EventPage';
+import OrderManagementPage from './pages/owner/main/OrderManagementPage';
+import ReservationPage from './pages/owner/main/ReservationPage';
+import ProductManagementPage from './pages/owner/main/ProductManagementPage';
+
+import ApprovalGuard from './components/owner/ApprovalGuard';
+import { approvalApi } from './api/owner/ApprovalApi';
+
+// 루트 경로("/")에서 유저 상태에 맞춰 대시보드 또는 심사창으로 스위칭해주는 지능형 컴포넌트
+function InitialRedirect() {
+  const [targetPath, setTargetPath] = useState(null);
+  const role = localStorage.getItem('role');
+
+  useEffect(() => {
+    if (role === 'ROLE_ADMIN') {
+      setTargetPath('/admin/dashboard');
+      return;
+    }
+
+    const checkApproval = async () => {
+      try {
+        const response = await approvalApi.getOwnerStoreChecklist();
+        if (
+          response.data.success &&
+          response.data.data.approvalStatus === 'APPROVED'
+        ) {
+          setTargetPath('/dashboard');
+        } else {
+          setTargetPath('/approval-status');
+        }
+      } catch (error) {
+        setTargetPath('/approval-status');
+      }
+    };
+
+    checkApproval();
+  }, [role]);
+
+  if (!targetPath) return null; // 불필요한 로딩 메시지 깜빡임 제거
+
+  return <Navigate to={targetPath} replace />;
+}
 
 function App() {
   return (
@@ -22,24 +65,28 @@ function App() {
       <Route path="/admin/login" element={<AdminLoginPage />} />
 
       <Route element={<MainLayout />}>
-        {/* 로그인 시 처음에 갈 곳 */}
-        <Route path="/" element={<Navigate to="/approval-status" replace />} />
+        {/* 로그인 후 최초 메인 주소 진입 시 승인 여부에 따라 동적 이동 분기 처리 */}
+        <Route path="/" element={<InitialRedirect />} />
 
+        {/* 어드민 메뉴 */}
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/approval" element={<ApprovalPage />} />
         <Route path="/admin/approval/:id" element={<ApprovalDetailPage />} />
-
-        <Route path="/approval-status" element={<ApprovalStatus />} />
         <Route path="/admin/members" element={<MemberPage />} />
 
-        {/* 나중에 추가될 다른 메뉴들 */}
-        <Route path="/dashboard" element={<OwnerDashboardPage />} />
-        <Route path="/store" element={<StorePage />} />
-        <Route
-          path="/products"
-          element={<div>상품 관리 페이지 (준비중)</div>}
-        />
-        <Route path="/categories" element={<CategoryPage />} />
+        {/* 심사 중에도 접근 허용을 위해 보호막 외부에 배치 */}
+        <Route path="/approval-status" element={<ApprovalStatus />} />
+
+        {/* 최종 입점 승인(APPROVED)이 완료된 사장님만 탐색 허용 */}
+        <Route element={<ApprovalGuard />}>
+          <Route path="/dashboard" element={<OwnerDashboardPage />} />
+          <Route path="/store" element={<StorePage />} />
+          <Route path="/products" element={<ProductManagementPage />} />
+          <Route path="/order-management" element={<OrderManagementPage />} />
+          <Route path="/reservation" element={<ReservationPage />} />
+          <Route path="/categories" element={<CategoryPage />} />
+          <Route path="/events" element={<EventPage />} />
+        </Route>
       </Route>
     </Routes>
   );

@@ -1,9 +1,13 @@
 package com.eeum.eeum.application.store.dto.response;
 
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
+import com.eeum.eeum.application.order.dto.response.RefundInfoResponseDto;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.OrderItem;
+import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.enums.RefundStatus;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -13,6 +17,7 @@ import java.util.List;
 
 @Getter
 @Builder
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class StoreOrderResponseDto {
 
     private Long orderId;
@@ -20,9 +25,17 @@ public class StoreOrderResponseDto {
     private OrderStatus orderStatus;
     private BigDecimal totalPrice;
     private List<OrderItemResponseDto> items;
+    private LocalDateTime paidAt;
+    private LocalDateTime confirmedAt;
+    private LocalDateTime readyAt;
+    private LocalDateTime completedAt;
+    private LocalDateTime cancelledAt;
     private LocalDateTime createdAt;
+    private LocalDateTime modifiedAt;
+    private RefundInfoResponseDto refundInfo;
 
-    public static StoreOrderResponseDto of(Order order, List<OrderItem> orderItems) {
+
+    public static StoreOrderResponseDto of(Order order, List<OrderItem> orderItems, Payment payment) {
         return StoreOrderResponseDto.builder()
                 .orderId(order.getOrderId())
                 .customerNickname(order.getAccount().getNickname())
@@ -31,7 +44,14 @@ public class StoreOrderResponseDto {
                 .items(orderItems.stream()
                         .map(OrderItemResponseDto::from)
                         .toList())
+                .paidAt(order.getPaidAt())
+                .confirmedAt(order.getConfirmedAt())
+                .readyAt(order.getReadyAt())
+                .completedAt(order.getCompletedAt())
+                .cancelledAt(order.getCancelledAt())
                 .createdAt(order.getCreatedAt())
+                .modifiedAt(order.getModifiedAt())
+                .refundInfo(RefundInfoResponseDto.from(payment))
                 .build();
     }
 }

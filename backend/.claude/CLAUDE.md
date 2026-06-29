@@ -134,7 +134,11 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `blacklist:access:{token}` — 로그아웃된 access token
 - `reauth:{accountId}` / `password-reset:{accountId}` — 일회용 토큰
 - `unread:account:{accountId}` — 알림 unread 카운트 캐시
+- `rate-limit:email-verification:{email}` — 이메일 인증 코드 발송 쿨다운 (60초)
+- `rate-limit:password-reset:{email}` — 비밀번호 재설정 메일 발송 쿨다운 (5분)
+- `rate-limit:login-fail:{email}` — 로그인 실패 카운터 (5분 내 5회 초과 시 차단)
 - 분산 락 키는 `common/lock/LockKeys`에 상수로 정의 후 사용
+- Rate Limit 키는 `common/lock/RateLimitKeys`에 상수로 정의 후 사용 (`common/service/RateLimitService`로 체크)
 
 ### 도메인 이벤트 사용 시점
 외부 연동(FCM 푸시, SSE)은 직접 호출하지 말고 도메인 이벤트로 처리:

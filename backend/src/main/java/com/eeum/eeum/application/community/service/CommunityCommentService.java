@@ -4,18 +4,21 @@ import com.eeum.eeum.application.community.dto.request.CommunityCommentCreateReq
 import com.eeum.eeum.application.community.dto.request.CommunityCommentUpdateRequestDto;
 import com.eeum.eeum.application.community.dto.response.CommunityCommentResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
+import com.eeum.eeum.domain.community.event.CommunityCommentCreatedEvent;
+import com.eeum.eeum.domain.community.event.CommunityReplyCreatedEvent;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
-import com.eeum.eeum.exception.BadRequestException;
-import com.eeum.eeum.exception.ErrorCode;
-import com.eeum.eeum.exception.ForbiddenException;
-import com.eeum.eeum.exception.NotFoundException;
+import com.eeum.eeum.exception.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -34,6 +37,8 @@ public class CommunityCommentService {
     private final CommunityCommentLikeRepository commentLikeRepository;
     private final CommunityPostRepository postRepository;
     private final AccountRepository accountRepository;
+    private final AccountRegionRepository accountRegionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public Page<CommunityCommentResponseDto> getComments(Long accountId, Long postId, Pageable pageable) {
@@ -44,6 +49,21 @@ public class CommunityCommentService {
 
         Page<CommunityComment> comments = commentRepository
                 .findByPost_PostIdAndParentCommentIsNull(postId, pageable);
+
+        Set<Long> likedIds = batchFetchLikedIds(accountId, comments.getContent());
+
+        return comments.map(comment ->
+                CommunityCommentResponseDto.of(
+                        comment,
+                        likedIds.contains(comment.getCommentId())
+                )
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CommunityCommentResponseDto> getMyComments(Long accountId, Pageable pageable) {
+        Page<CommunityComment> comments = commentRepository
+                .findByAccount_AccountIdAndDeletedFalseOrderByCreatedAtDesc(accountId, pageable);
 
         Set<Long> likedIds = batchFetchLikedIds(accountId, comments.getContent());
 
@@ -97,10 +117,21 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(comment);
-        post.increaseCommentCount();
+        postRepository.increaseCommentCount(postId);
 
         log.info("댓글 작성: accountId={}, postId={}, commentId={}",
                 accountId, postId, comment.getCommentId());
+
+        if (!accountId.equals(post.getAccount().getAccountId())) {
+            eventPublisher.publishEvent(new CommunityCommentCreatedEvent(
+                    post.getAccount().getAccountId(),
+                    accountId,
+                    postId,
+                    comment.getCommentId(),
+                    account.getNickname(),
+                    post.getTitle()
+            ));
+        }
 
         return CommunityCommentResponseDto.of(comment, false);
     }
@@ -128,10 +159,21 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(reply);
-        parent.getPost().increaseCommentCount();
+        postRepository.increaseCommentCount(parent.getPost().getPostId());
 
         log.info("대댓글 작성: accountId={}, parentCommentId={}, replyId={}",
                 accountId, parentCommentId, reply.getCommentId());
+
+        if (!accountId.equals(parent.getAccount().getAccountId())) {
+            eventPublisher.publishEvent(new CommunityReplyCreatedEvent(
+                    parent.getAccount().getAccountId(),
+                    accountId,
+                    parent.getPost().getPostId(),
+                    parentCommentId,
+                    reply.getCommentId(),
+                    account.getNickname()
+            ));
+        }
 
         return CommunityCommentResponseDto.of(reply, false);
     }
@@ -158,16 +200,8 @@ public class CommunityCommentService {
         CommunityComment comment = getCommentOrThrow(commentId);
         validateOwner(comment, accountId);
 
-        CommunityPost post = comment.getPost();
-
-        if (!comment.isReply()) {
-            int deletedReplyCount = commentRepository.softDeleteRepliesByParentId(commentId);
-            post.decreaseCommentCount(1 + deletedReplyCount);
-        } else {
-            post.decreaseCommentCount();
-        }
-
         comment.softDelete();
+        postRepository.decreaseCommentCount(comment.getPost().getPostId());
 
         log.info("댓글/대댓글 soft-delete: accountId={}, commentId={}",
                 accountId, commentId);
@@ -200,6 +234,27 @@ public class CommunityCommentService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
     }
 
+    private Region getPrimaryRegion(Account account) {
+        Long primaryAccountRegionId = account.getPrimaryRegionId();
+
+        if (primaryAccountRegionId == null) {
+            throw new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+        }
+
+        AccountRegion accountRegion = accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(
+                        primaryAccountRegionId,
+                        account.getAccountId()
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
+
+        if (!accountRegion.isVerified()) {
+            throw new BusinessException(ErrorCode.REGION_NOT_VERIFIED);
+        }
+
+        return accountRegion.getRegion();
+    }
+
     private void validateOwner(CommunityComment comment, Long accountId) {
         if (!comment.isOwnedBy(accountId)) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_COMMENT_ACCESS_DENIED);
@@ -207,11 +262,9 @@ public class CommunityCommentService {
     }
 
     private void validateSameRegion(CommunityPost post, Account account) {
-        if (account.getPrimaryRegionId() == null) {
-            throw new NotFoundException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
-        }
+        Region myRegion = getPrimaryRegion(account);
 
-        if (!post.getRegion().getRegionId().equals(account.getPrimaryRegionId())) {
+        if (!post.getRegion().getRegionId().equals(myRegion.getRegionId())) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
     }

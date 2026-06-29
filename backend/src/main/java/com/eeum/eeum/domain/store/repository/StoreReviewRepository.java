@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.store.repository;
 
 import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.enums.StoreReviewType;
 import com.eeum.eeum.domain.store.repository.CustomerReviewStatProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -10,8 +11,13 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> {
+
+    //주문 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 orderId 집합
+    @Query("SELECT r.order.orderId FROM StoreReview r WHERE r.order.orderId IN :orderIds")
+    Set<Long> findOrderIdsWithReview(@Param("orderIds") List<Long> orderIds);
 
     //상점 리뷰 목록 조회 (최신순)
     Page<StoreReview> findByStore_StoreIdOrderByCreatedAtDesc(
@@ -31,9 +37,25 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
     //특정 주문에 대한 리뷰 존재 여부 — 1주문 1리뷰 보장용
     boolean existsByOrder_OrderId(Long orderId);
 
+    //주문 기준 리뷰 단건 조회
+    Optional<StoreReview> findByOrder_OrderId(Long orderId);
+
+    //특정 방문 예약에 대한 리뷰 존재 여부 — 1예약 1리뷰 보장용
+    boolean existsByVisitReservation_VisitReservationId(Long visitReservationId);
+
+    //방문 예약 기준 리뷰 단건 조회
+    Optional<StoreReview> findByVisitReservation_VisitReservationId(Long visitReservationId);
+
     //사용자가 작성한 리뷰 목록 (마이페이지용)
     Page<StoreReview> findByAccount_AccountIdOrderByCreatedAtDesc(
             Long accountId,
+            Pageable pageable
+    );
+
+    //사용자가 작성한 리뷰 목록 — 타입별 조회 (마이페이지용)
+    Page<StoreReview> findByAccount_AccountIdAndReviewTypeOrderByCreatedAtDesc(
+            Long accountId,
+            StoreReviewType reviewType,
             Pageable pageable
     );
 

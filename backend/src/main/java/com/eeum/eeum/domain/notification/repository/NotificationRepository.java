@@ -61,6 +61,10 @@ public interface NotificationRepository
     // 대상 도메인 삭제 시 연관 알림 CASCADE
     void deleteAllByRefTypeAndRefId(NotificationRefType refType, Long refId);
 
+    // 좋아요 알림 중복 방지 — 동일 (수신자, 타입, 참조) 알림이 이미 존재하면 skip
+    boolean existsByAccount_AccountIdAndTypeAndRefTypeAndRefId(
+            Long accountId, NotificationType type, NotificationRefType refType, Long refId);
+
     // 오래된 알림 정리 배치 (6개월 이전)
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Notification n WHERE n.createdAt < :threshold")

@@ -15,6 +15,9 @@ public class CommunityCommentResponseDto {
     @Schema(description = "댓글 ID")
     private Long commentId;
 
+    @Schema(description = "게시글 ID")
+    private Long postId;
+
     @Schema(description = "작성자 ID")
     private Long authorId;
 
@@ -51,6 +54,7 @@ public class CommunityCommentResponseDto {
     public static CommunityCommentResponseDto of(CommunityComment comment, boolean likedByMe) {
         return CommunityCommentResponseDto.builder()
                 .commentId(comment.getCommentId())
+                .postId(comment.getPost().getPostId())
                 .authorId(comment.getAccount().getAccountId())
                 .authorNickname(comment.getAccount().getNickname())
                 .authorProfileImageUrl(comment.getAccount().getProfileImageUrl())

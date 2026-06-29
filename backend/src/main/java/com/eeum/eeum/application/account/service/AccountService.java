@@ -14,6 +14,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.AccountRole;
+import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
@@ -21,6 +22,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class AccountService {
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 내 정보 조회 =====================
 
@@ -97,12 +100,9 @@ public class AccountService {
         // 4. 새 비밀번호 저장
         account.changePassword(passwordEncoder.encode(request.getNewPassword()));
 
-        // 5. ReAuthToken 삭제
-        tokenService.consumeReAuthToken(accountId);
-
-        // 6. 기존 Refresh Token 삭제
-        // 비밀번호 변경 후 기존 로그인 유지 차단
-        tokenService.deleteRefreshToken(accountId);
+        // 5. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
+        // DB 롤백 시 reauth/refresh 토큰이 유지되어 사용자가 재시도 가능
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
 
         log.info("비밀번호 변경 완료: accountId={}", accountId);
     }
@@ -125,12 +125,9 @@ public class AccountService {
         // 4. 탈퇴 처리
         account.withdraw();
 
-        // 5. ReAuthToken 삭제
-        tokenService.consumeReAuthToken(accountId);
-
-        // 6. Refresh Token 삭제
-        tokenService.deleteRefreshToken(accountId);
-
+        // 5. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
+        // DB 롤백 시 계정은 ACTIVE 상태이고 토큰도 유지
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
 
         log.info("회원 탈퇴 처리 완료: accountId={}", accountId);
     }
@@ -162,13 +159,15 @@ public class AccountService {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        if (request.getBusinessNumber() != null
-                && !request.getBusinessNumber().equals(ownerInfo.getBusinessNumber())
-                && ownerInfoRepository.existsByBusinessNumber(request.getBusinessNumber())) {
+        String normalizedBusinessNumber = normalizeBusinessNumber(request.getBusinessNumber());
+
+        if (normalizedBusinessNumber != null
+                && !normalizedBusinessNumber.equals(ownerInfo.getBusinessNumber())
+                && ownerInfoRepository.existsByBusinessNumber(normalizedBusinessNumber)) {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
         }
 
-        ownerInfo.updateInfo(request.getBusinessNumber());
+        ownerInfo.updateInfo(normalizedBusinessNumber);
 
         log.info("사장 정보 수정 완료: accountId={}", accountId);
     }
@@ -193,5 +192,13 @@ public class AccountService {
     private boolean isEmptyUpdateRequest(UpdateInfoRequestDto request) {
         return request.getNickname() == null
                 && request.getProfileImageUrl() == null;
+    }
+
+    private String normalizeBusinessNumber(String businessNumber) {
+        if (businessNumber == null || businessNumber.isBlank()) {
+            return null;
+        }
+
+        return businessNumber.replaceAll("[^0-9]", "");
     }
 }

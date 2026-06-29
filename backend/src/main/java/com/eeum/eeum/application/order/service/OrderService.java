@@ -24,6 +24,7 @@ import com.eeum.eeum.domain.product.event.ProductStockWarningEvent;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductImageRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
+import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
@@ -40,6 +41,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -56,6 +58,7 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final EventProductRepository eventProductRepository;
     private final ProductImageRepository productImageRepository;
+    private final StoreReviewRepository storeReviewRepository;
     private final RedisLockService redisLockService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -166,18 +169,25 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Page<OrderResponseDto> getMyOrders(Long accountId, Pageable pageable) {
-        return orderRepository
-                .findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable)
-                .map(order -> {
-                    List<OrderItem> items = orderItemRepository
-                            .findByOrder_OrderId(order.getOrderId());
+        Page<Order> orders = orderRepository.findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable);
 
-                    Payment payment = paymentRepository
-                            .findByOrder_OrderId(order.getOrderId())
-                            .orElse(null);
+        List<Long> orderIds = orders.getContent().stream().map(Order::getOrderId).toList();
+        Set<Long> reviewedOrderIds = orderIds.isEmpty()
+                ? Set.of()
+                : storeReviewRepository.findOrderIdsWithReview(orderIds);
 
-                    return toOrderDto(order, items, payment);
-                });
+        return orders.map(order -> {
+            List<OrderItem> items = orderItemRepository
+                    .findByOrder_OrderId(order.getOrderId());
+
+            Payment payment = paymentRepository
+                    .findByOrder_OrderId(order.getOrderId())
+                    .orElse(null);
+
+            boolean hasReview = reviewedOrderIds.contains(order.getOrderId());
+
+            return toOrderDto(order, items, payment, hasReview);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -195,7 +205,9 @@ public class OrderService {
                 .findByOrder_OrderId(orderId)
                 .orElse(null);
 
-        return toOrderDto(order, items, payment);
+        boolean hasReview = storeReviewRepository.existsByOrder_OrderId(orderId);
+
+        return toOrderDto(order, items, payment, hasReview);
     }
 
     @Transactional
@@ -218,6 +230,13 @@ public class OrderService {
         );
     }
 
+    // 사장 주문 거절 시 재고 복구용 — StoreOrderService에서 호출
+    @Transactional
+    public void restoreStockForOrder(Long orderId) {
+        List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(orderId);
+        restoreStock(orderItems);
+    }
+
     @Transactional
     public void requestOrderRefund(Long accountId, Long orderId, RefundRequestDto request) {
         Order order = orderRepository
@@ -225,9 +244,8 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_NOT_FOUND));
 
         if (order.getStatus()!=OrderStatus.PAID
-                &&order.getStatus()!=OrderStatus.CONFIRMED
-                &&order.getStatus()!=OrderStatus.READY) {
-            throw new BusinessException(ErrorCode.ORDER_CANCEL_NOT_ALLOWED);
+                &&order.getStatus()!=OrderStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.ORDER_REFUND_NOT_ALLOWED);
         }
 
         Payment payment = paymentRepository.findByOrder_OrderId(orderId)
@@ -476,7 +494,8 @@ public class OrderService {
     private OrderResponseDto toOrderDto(
             Order order,
             List<OrderItem> items,
-            Payment payment
+            Payment payment,
+            boolean hasReview
     ) {
         return OrderResponseDto.builder()
                 .orderId(order.getOrderId())
@@ -492,7 +511,12 @@ public class OrderService {
                 .pickupScheduledAt(order.getPickupScheduledAt())
                 .requestMessage(order.getRequestMessage())
                 .paidAt(order.getPaidAt())
+                .confirmedAt(order.getConfirmedAt())
+                .readyAt(order.getReadyAt())
+                .completedAt(order.getCompletedAt())
+                .cancelledAt(order.getCancelledAt())
                 .createdAt(order.getCreatedAt())
+                .hasReview(hasReview)
                 .build();
     }
 
