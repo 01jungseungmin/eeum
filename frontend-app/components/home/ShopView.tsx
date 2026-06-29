@@ -5,7 +5,6 @@ import { Text } from '../CustomText';
 
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
-import { regionApi } from '../../api/region';
 
 interface ShopViewProps {
   router: any;
@@ -15,38 +14,35 @@ interface ShopViewProps {
 export default function ShopView({ router, regionId }: ShopViewProps) {
   const [shopList, setShopList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasNoRegion, setHasNoRegion] = useState(false);
 
   useEffect(() => {
     const fetchHomeData = async () => {
+      if (!regionId) {
+        setHasNoRegion(true);
+        setShopList([]);
+        return;
+      }
+
       setIsLoading(true);
+      setHasNoRegion(false);
       try {
-        const res = await regionApi.getMyRegions();
-        const regions = res.data || [];
-        const primary = regions.find((r: any) => r.isPrimary === true);
+        const shopRes = await shopApi.getShops({ 
+          size: 5, 
+          regionId: regionId 
+        }); 
         
-        // ✨ 핵심 수정: primary가 없어도 API를 호출하거나 전체를 불러오도록 변경
-        // primary가 있다면 해당 동네 id로, 없다면 전체 조회(파라미터 없음)
-        const params: any = { size: 5 };
-        if (primary) {
-          params.regionId = primary.regionId;
-        }
-        
-        const shopRes = await shopApi.getShops(params); 
-        setShopList(shopRes.data?.content || []); 
+        setShopList(shopRes.data?.content || shopRes.data || []); 
       } catch (e) {
         console.error('홈 화면 상점 로딩 실패:', e);
-        // 에러가 나도 전체 조회를 시도할 수 있도록 추가 조치
-        try {
-          const fallbackRes = await shopApi.getShops({ size: 5 });
-          setShopList(fallbackRes.data?.content || []);
-        } catch (fallbackError) {}
+        setShopList([]);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchHomeData();
-  }, []);
+  }, [regionId]);
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
@@ -72,6 +68,10 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
 
         {isLoading ? (
           <ActivityIndicator size="small" color="#00A859" style={{ marginTop: 20 }} />
+        ) : hasNoRegion ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>먼저 상단에서 동네를 설정해주세요!</Text>
+          </View>
         ) : shopList.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>우리 동네에는 아직 등록된 상점이 없어요.</Text>

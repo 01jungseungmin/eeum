@@ -218,7 +218,6 @@ export default function LoginScreen() {
             />
 
             <View style={styles.optionsContainer}>
-              <Text style={styles.optionText}>☐ 자동 로그인</Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/find-password')}>
                 <Text style={styles.optionText}>비밀번호 찾기</Text>
               </TouchableOpacity>
@@ -275,7 +274,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 15, paddingVertical: 12, fontSize: 14, marginBottom: 15 },
   inputError: { borderColor: '#FF5252' },
   errorText: { color: '#FF5252', fontSize: 12, marginTop: -10, marginBottom: 10, marginLeft: 5 },
-  optionsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+  optionsContainer: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 25 },
   optionText: { fontSize: 12, color: '#888' },
   loginButton: { backgroundColor: '#00A859', paddingVertical: 15, borderRadius: 8, alignItems: 'center', marginBottom: 15 },
   disabledBtn: { backgroundColor: '#E0E0E0' },

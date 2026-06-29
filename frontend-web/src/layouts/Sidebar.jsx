@@ -1,3 +1,4 @@
+import React from 'react';
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
@@ -58,20 +59,33 @@ const MenuItem = styled.div`
   align-items: center;
   padding: 12px 15px;
   border-radius: 12px;
-  cursor: pointer;
+  cursor: ${(props) =>
+    props.$disabled
+      ? 'not-allowed'
+      : 'pointer'}; /* 💡 권한 제한 시 금지 커서 */
   font-size: 15px;
   margin-bottom: 4px;
   position: relative;
   transition: all 0.2s ease;
+
+  /* 💡 접근 권한이 없는 메뉴는 흐리게 처리 (opacity) */
+  opacity: ${(props) => (props.$disabled ? 0.35 : 1)};
 
   background-color: ${(props) =>
     props.$active ? (props.$isAdmin ? '#0f4229' : '#2d5a43') : 'transparent'};
   color: ${(props) => (props.$active ? '#fff' : '#adb5bd')};
 
   &:hover {
+    /* 💡 권한이 없는 메뉴는 호버 효과 제거 */
     background-color: ${(props) =>
-      props.$active ? '' : props.$isAdmin ? '#0a3621' : '#264d39'};
-    color: #fff;
+      props.$disabled
+        ? ''
+        : props.$active
+          ? ''
+          : props.$isAdmin
+            ? '#0a3621'
+            : '#264d39'};
+    color: ${(props) => (props.$disabled ? '#adb5bd' : '#fff')};
   }
 `;
 
@@ -103,14 +117,17 @@ const StatusBadge = styled.span`
   font-weight: bold;
 `;
 
-function Sidebar() {
+function Sidebar({ approvalStatus }) {
+  // MainLayout에서 던져준 승인 상태 props로 받기
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
 
-  // 로컬스토리지에 있는 role에 따라 관리자용 메뉴, 사장님용 메뉴를 구분해서 보여줌
   const role = localStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
+
+  // 사장님이면서 최종 입점 승인이 'APPROVED' 상태가 아니라면 제한 대상자가 됩니다.
+  const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
 
   const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 
@@ -124,7 +141,13 @@ function Sidebar() {
     adminReports: 5,
   };
 
-  const handleMenuClick = async (item) => {
+  const handleMenuClick = async (item, isItemDisabled) => {
+    // 접근 차단 대상인 메뉴인 경우 라우팅 및 액션을 차단
+    if (isItemDisabled) {
+      alert('입점 심사 승인이 완료된 후 사용하실 수 있습니다. 📋');
+      return;
+    }
+
     if (item.action === 'LOGOUT') {
       const refreshToken = localStorage.getItem('refreshToken');
       const currentRole = localStorage.getItem('role');
@@ -143,7 +166,6 @@ function Sidebar() {
         );
       } finally {
         logout();
-
         console.log('로컬 상태 정리 완료, 이동 경로:', targetPath);
         navigate(targetPath);
       }
@@ -166,12 +188,20 @@ function Sidebar() {
 
             {group.items.map((item) => {
               const isActive = location.pathname === item.path;
+
+              // 사장님 차단 대상 기간이더라도, '승인 상태' 메뉴와 '로그아웃' 버튼은 언제나 작동 가능해야 함
+              const isItemDisabled =
+                isOwnerRestricted &&
+                item.id !== 'approval' &&
+                item.id !== 'logout';
+
               return (
                 <MenuItem
                   key={item.id}
-                  onClick={() => handleMenuClick(item)}
+                  onClick={() => handleMenuClick(item, isItemDisabled)} // 비활성화 여부 핸들러로 전달
                   $active={isActive}
                   $isAdmin={isAdmin}
+                  $disabled={isItemDisabled}
                 >
                   <IconWrapper $active={isActive}>{item.icon}</IconWrapper>
                   {item.name}

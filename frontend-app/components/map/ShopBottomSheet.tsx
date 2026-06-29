@@ -52,7 +52,14 @@ const styles = StyleSheet.create({
     padding: 24, paddingBottom: 40,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 20,
   },
-  closeBtn: { position: 'absolute', top: 16, right: 16, padding: 8 },
+  closeBtn: { 
+    position: 'absolute', 
+    top: 16, 
+    right: 16, 
+    padding: 8,
+    zIndex: 999, 
+    elevation: 999 
+  },
   sheetContent: { flexDirection: 'row', marginBottom: 20 },
   sheetInfo: { flex: 1, justifyContent: 'center' },
   sheetCategory: { fontSize: 12, color: '#00A859', marginBottom: 4, fontWeight: 'bold' },
