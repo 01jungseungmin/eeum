@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router'; 
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { Text } from '../../components/CustomText';
 
 import { regionApi } from '../../api/region';
@@ -13,6 +13,8 @@ import { reviewApi } from '../../api/review';
 
 export default function ShopListScreen() {
   const router = useRouter();
+  
+  const { regionId } = useLocalSearchParams();
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
   const [shopList, setShopList] = useState<any[]>([]);
@@ -37,7 +39,6 @@ export default function ShopListScreen() {
     }, 50); 
   };
 
-  // ✨ [HEAD + develop 병합] 카테고리 필터링과 찜/리뷰 데이터 동시 조회 로직
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -45,24 +46,27 @@ export default function ShopListScreen() {
       const fetchShops = async () => {
         if (shopList.length === 0) setIsLoading(true);
         try {
-          // 1. 내 동네 찾기
-          const res = await regionApi.getMyRegions();
-          const primary = (res.data || []).find((r: any) => r.isPrimary === true);
+          let targetRegionId = regionId ? Number(regionId) : null;
 
-          if (primary) {
+          if (!targetRegionId) {
+            const res = await regionApi.getMyRegions();
+            const primary = (res.data || []).find((r: any) => r.isPrimary === true);
+            if (primary) targetRegionId = primary.regionId;
+          }
+
+          if (targetRegionId) {
             if (isActive) setHasRegion(true);
 
-            // 2. 카테고리 필터링 적용 (0이면 전체)
             const categoryParam = selectedCategoryId === 0 ? undefined : selectedCategoryId;
             const shopRes = await shopApi.getShops({ 
-              regionId: primary.regionId, 
+              regionId: targetRegionId, 
               categoryId: categoryParam,
               size: 20 
             });
             
+            // 데이터 방어 코드 적용
             let shops = shopRes.data?.content || shopRes.data || [];
 
-            // ✨ [중요] 백엔드 목록 API에 없는 찜, 리뷰 데이터를 프론트에서 강제로 덧씌웁니다.
             const updatedShops = await Promise.all(
               shops.map(async (shop: any) => {
                 try {
@@ -101,14 +105,13 @@ export default function ShopListScreen() {
       fetchShops();
 
       return () => { isActive = false; };
-    }, [selectedCategoryId])
+    }, [selectedCategoryId, regionId]) // ✨ regionId 의존성 추가
   );
 
   const getCategoryName = (id: number) => {
     return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
   };
 
-  // ✨ 리스트 내 찜 토글 로직 (develop 유지)
   const handleListToggleFavorite = async (storeId: number, currentStatus: boolean) => {
     try {
       const res = await favoriteApi.toggleFavorite('STORE', storeId);
@@ -126,11 +129,9 @@ export default function ShopListScreen() {
     }
   };
 
-  // ✨ 상점 카드 렌더링 (HEAD의 리뷰 방어코드 + develop의 하트 토글 병합)
   const renderShopCard = ({ item }: any) => {
     const thumbnailUrl = item.thumbnailUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
     
-    // 데이터 방어 코드
     const rating = item.rating || 0;
     const reviewCount = item.reviewCount || 0;
     const favoriteCount = item.favoriteCount || 0;
@@ -143,7 +144,6 @@ export default function ShopListScreen() {
         <View style={styles.cardTitleRow}>
           <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{item.name}</Text>
           
-          {/* 하트 아이콘 영역 유지 */}
           <TouchableOpacity onPress={() => handleListToggleFavorite(item.storeId, isFavorited)}>
             <Ionicons 
               name={isFavorited ? "heart" : "heart-outline"} 
@@ -154,7 +154,6 @@ export default function ShopListScreen() {
         </View>
 
         <View style={styles.ratingRow}>
-          {/* 리뷰가 0개면 회색 별, 1개 이상이면 노란 별 */}
           <Ionicons name="star" size={14} color={reviewCount > 0 ? "#FFD700" : "#E0E0E0"} />
           
           {reviewCount > 0 ? (
@@ -171,7 +170,6 @@ export default function ShopListScreen() {
 
         <View style={styles.footerRow}>
           <View style={styles.footerItem}>
-            {/* 찜이 0개면 빈 하트, 1개 이상이면 꽉 찬 하트 */}
             <Ionicons name={favoriteCount > 0 ? "heart" : "heart-outline"} size={12} color={favoriteCount > 0 ? "#FF5252" : "#999"} />
             <Text style={styles.footerText}>{favoriteCount}</Text>
           </View>
@@ -182,7 +180,6 @@ export default function ShopListScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 1. 상단 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 10 }}>
           <Ionicons name="chevron-back" size={24} color="#333" />
@@ -190,7 +187,6 @@ export default function ShopListScreen() {
         <Text fontWeight="bold" style={styles.headerTitle}>우리 동네 상점</Text>
       </View>
 
-      {/* 2. 카테고리 탭 (develop 유지) */}
       <View style={styles.categoryWrapper}>
         <FlatList
           ref={categoryListRef}
@@ -220,12 +216,10 @@ export default function ShopListScreen() {
         />
       </View>
 
-      {/* 3. 리스트 상단 (총 N개) */}
       <View style={styles.listHeader}>
         <Text style={styles.totalText}>총 {(shopList || []).length}개</Text>
       </View>
 
-      {/* 4. 메인 상점 리스트 (조건부 렌더링) */}
       {isLoading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#00A859" />
@@ -274,7 +268,6 @@ const styles = StyleSheet.create({
   ratingText: { fontSize: 13, color: '#333', marginLeft: 4, marginRight: 4 },
   reviewText: { fontSize: 12, color: '#888' },
   locationText: { fontSize: 12, color: '#888', marginBottom: 6 },
-  // HEAD 브랜치에서 추가되었던 하단 찜 개수 UI 스타일 방어 코드
   footerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   footerItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   footerText: { fontSize: 11, color: '#666', marginLeft: 4 }

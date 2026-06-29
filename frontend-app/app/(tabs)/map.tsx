@@ -43,12 +43,14 @@ export default function MapScreen() {
   useEffect(() => {
     if (!debouncedSearchText.trim() || !currentCenter) {
       setSearchResults([]);
+      if (currentCenter) {
+        fetchShopsInArea(currentCenter.lat, currentCenter.lng, activeCategoryId);
+      }
       return;
     }
 
     const fetchSearchResults = async () => {
       try {
-        // 1. 현재 지도 좌표로 동네 찾기
         const regionRes = await regionApi.getNearbyRegions(currentCenter.lat, currentCenter.lng);
         const nearbyRegions = regionRes.data || regionRes || [];
         
@@ -58,16 +60,34 @@ export default function MapScreen() {
         }
 
         const currentRegionId = nearbyRegions[0].regionId;
+        const searchKeyword = debouncedSearchText.trim();
 
-        // 2. 찾은 동네 ID로 상점 검색
+        // 1. "카페", "식당" 등 카테고리 이름과 일치하는지 영리하게 검사
+        const matchedCategory = SHOP_CATEGORIES.find(cat => 
+          cat.id !== 0 && cat.name.includes(searchKeyword)
+        );
+
+        // 2. 일치하면 카테고리로 검색, 아니면 키워드(상점이름)로 검색
         const shopRes = await shopApi.getShops({ 
           regionId: currentRegionId,
-          keyword: debouncedSearchText.trim(),
-          size: 15 
+          categoryId: matchedCategory ? matchedCategory.id : undefined,
+          keyword: matchedCategory ? undefined : searchKeyword,
+          size: 50
         });
         
-        const data = shopRes.content || shopRes.data?.content || shopRes.data || shopRes || [];
+        let data = shopRes.content || shopRes.data?.content || shopRes.data || shopRes || [];
+
+        if (matchedCategory) {
+          data = data.filter((shop: any) => shop.categoryId === matchedCategory.id);
+        }
+
         setSearchResults(data);
+
+        shopsRef.current = data;
+        const safeJson = JSON.stringify(data).replace(/'/g, "\\'");
+        const runJS = `window.renderShops('${safeJson}'); true;`;
+        webviewRef.current?.injectJavaScript(runJS);
+
       } catch (error) {
         console.error("검색 API 에러:", error);
       }
