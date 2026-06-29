@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { shopApi } from '../../api/shop';
 import { favoriteApi } from '../../api/favorite';
 import { reviewApi } from '../../api/review';
+import { regionApi } from '@/api/region';
 
 const { width } = Dimensions.get('window');
 
@@ -24,6 +25,8 @@ export default function ShopDetailScreen() {
   const [favoriteCount, setFavoriteCount] = useState<number>(0);
   const [shopReviews, setShopReviews] = useState<any[]>([]);
 
+  const [isVerified, setIsVerified] = useState<boolean>(false);
+
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
 
   // 1. 데이터 로딩 (찜, 리뷰 조회 포함)
@@ -31,12 +34,13 @@ export default function ShopDetailScreen() {
     const fetchShopData = async () => {
       try {
         setIsLoading(true);
-        const [detailData, productsData, checkRes, countRes, reviewsRes] = await Promise.all([
+        const [detailData, productsData, checkRes, countRes, reviewsRes, regionsRes] = await Promise.all([
           shopApi.getShopDetail(shopIdNum),
           shopApi.getShopProducts(shopIdNum),
           favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
           favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null),
-          reviewApi.getReviews(shopIdNum).catch(() => null)
+          reviewApi.getReviews(shopIdNum).catch(() => null),
+          regionApi.getMyRegions().catch(() => null) // 내 동네 정보 조회
         ]);
 
         setShopReviews(reviewsRes?.content || reviewsRes?.data || []);
@@ -44,6 +48,16 @@ export default function ShopDetailScreen() {
         setShopProducts(productsData || []);
         if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
         if (countRes?.data) setFavoriteCount(countRes.data.data);
+
+        // 내 동네 목록에서 대표 동네를 찾고, 인증(verified) 되었는지 확인
+        if (regionsRes?.data) {
+          const primaryRegion = regionsRes.data.find((r: any) => r.isPrimary === true);
+          if (primaryRegion && primaryRegion.verified === true) {
+            setIsVerified(true);
+          } else {
+            setIsVerified(false);
+          }
+        }
       } catch (e) {
         console.log("❌ 에러:", e);
         Alert.alert("오류", "정보를 불러오지 못했습니다.");
@@ -185,10 +199,17 @@ export default function ShopDetailScreen() {
           <View style={{ width: '100%', gap: 10 }}>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => router.push({
-                pathname: '/restaurant/reservation' as any,
-                params: { storeId: shopDetail.storeId }
-              })}
+              onPress={() => {
+                // 인증되지 않은 유저는 예약을 막고 알림 띄우기
+                if (!isVerified) {
+                  Alert.alert('동네 인증 필요', '예약하려면 대표 동네를 인증해주세요.');
+                  return;
+                }
+                router.push({
+                  pathname: '/restaurant/reservation' as any,
+                  params: { storeId: shopDetail.storeId }
+                });
+              }}
             >
               <Text fontWeight="bold" style={styles.primaryBtnText}>방문 예약하기</Text>
             </TouchableOpacity>
@@ -203,7 +224,14 @@ export default function ShopDetailScreen() {
         ) : (
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => router.push('/cart')}
+            onPress={() => {
+              // 인증되지 않은 유저는 장바구니 담기를 막고 알림 띄우기
+              if (!isVerified) {
+                Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
+                return;
+              }
+              router.push('/cart');
+            }}
           >
             <Text fontWeight="bold" style={styles.primaryBtnText}>장바구니 보기</Text>
           </TouchableOpacity>

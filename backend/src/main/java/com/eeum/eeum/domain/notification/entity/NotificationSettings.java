@@ -181,6 +181,7 @@ public class NotificationSettings extends BaseEntity {
             // 선택 알림
             case CHAT_MESSAGE                             -> chatEnabled;
             case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE -> communityEnabled;
+            case COMMUNITY_ADMIN_ACTION                              -> true;
             case STORE_REVIEW, STORE_REVIEW_REPLY, STORE_PRODUCT_RESTOCK -> storeReviewEnabled;
             case USED_PRODUCT_INQUIRY, USED_REVIEW        -> usedProductEnabled;
             case STOCK_WARNING                            -> stockEnabled;
@@ -215,6 +216,7 @@ public class NotificationSettings extends BaseEntity {
             case REVIEW      -> reviewEmailEnabled;
             case RESERVATION -> reservationEmailEnabled;
             case PRODUCT     -> stockEmailEnabled;
+            case COMMUNITY   -> false;
             case SYSTEM      -> settlementEmailEnabled;
         };
     }
@@ -228,6 +230,7 @@ public class NotificationSettings extends BaseEntity {
             case REVIEW      -> reviewSoundEnabled;
             case RESERVATION -> reservationSoundEnabled;
             case PRODUCT     -> stockSoundEnabled;
+            case COMMUNITY   -> false;
             case SYSTEM      -> settlementSoundEnabled;
         };
     }

@@ -12,6 +12,7 @@ public enum NotificationCategory {
     REVIEW,      // 리뷰
     RESERVATION, // 예약
     PRODUCT,     // 상품/재고
+    COMMUNITY,   // 커뮤니티
     SYSTEM;      // 시스템/정산/기타
 
     // 해당 카테고리에 속하는 NotificationType 목록 반환

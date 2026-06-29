@@ -30,12 +30,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -78,26 +74,17 @@ public class CommunityPostService {
 
     private Page<CommunityPostSummaryResponseDto> toSummaryPage(Long accountId, Page<CommunityPost> posts) {
         if (posts.isEmpty()) {
-            return posts.map(post -> CommunityPostSummaryResponseDto.from(post, null, false));
+            return posts.map(post -> CommunityPostSummaryResponseDto.from(post, false));
         }
 
         List<Long> postIds = posts.stream()
                 .map(CommunityPost::getPostId)
                 .toList();
 
-        Map<Long, String> thumbnailMap = imageRepository.findThumbnailsByPostIds(postIds)
-                .stream()
-                .collect(Collectors.toMap(
-                        image -> image.getPost().getPostId(),
-                        CommunityImage::getImageUrl,
-                        (first, second) -> first
-                ));
-
         Set<Long> likedPostIds = postLikeRepository.findLikedPostIds(accountId, postIds);
 
         return posts.map(post -> CommunityPostSummaryResponseDto.from(
                 post,
-                thumbnailMap.get(post.getPostId()),
                 likedPostIds.contains(post.getPostId())
         ));
     }
@@ -116,7 +103,8 @@ public class CommunityPostService {
 
         validateSameRegion(post, account);
 
-        postRepository.increaseViewCount(postId);
+        postRepository.increaseViewCount(postId);  // clearAutomatically = true → 캐시 초기화
+        post = getPostOrThrow(postId);              // 최신 viewCount 반영된 엔티티 재조회
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
 
@@ -142,11 +130,9 @@ public class CommunityPostService {
 
         postRepository.save(post);
 
-        List<CommunityImage> images = saveImages(post, request.getImageUrls());
-
         log.info("커뮤니티 게시글 작성: accountId={}, postId={}", accountId, post.getPostId());
 
-        return CommunityPostDetailResponseDto.of(post, false, images);
+        return CommunityPostDetailResponseDto.of(post, false, List.of());
     }
 
     @Transactional
@@ -161,11 +147,10 @@ public class CommunityPostService {
         Category category = getCategoryOrThrow(request.getCategoryId());
         post.update(category, request.getTitle(), request.getContent());
 
-        imageRepository.deleteByPost_PostId(postId);
-        List<CommunityImage> images = saveImages(post, request.getImageUrls());
-
         boolean likedByMe = postLikeRepository
                 .existsByAccount_AccountIdAndPost_PostId(accountId, postId);
+
+        List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
 
         return CommunityPostDetailResponseDto.of(post, likedByMe, images);
     }
@@ -183,27 +168,6 @@ public class CommunityPostService {
         postRepository.delete(post);
 
         log.info("커뮤니티 게시글 삭제: accountId={}, postId={}", accountId, postId);
-    }
-
-    private List<CommunityImage> saveImages(CommunityPost post, List<String> imageUrls) {
-        if (imageUrls == null || imageUrls.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        List<CommunityImage> images = new ArrayList<>();
-
-        for (int i = 0; i < imageUrls.size(); i++) {
-            images.add(imageRepository.save(
-                    CommunityImage.create(
-                            post,
-                            imageUrls.get(i),
-                            i,
-                            i == 0
-                    )
-            ));
-        }
-
-        return images;
     }
 
     private CommunityPost getPostOrThrow(Long postId) {

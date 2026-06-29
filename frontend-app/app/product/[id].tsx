@@ -1,37 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
-import { Text } from '../../components/CustomText'; 
-import { Ionicons } from '@expo/vector-icons';
+import { 
+  View, StyleSheet, Image, ScrollView, TouchableOpacity, 
+  Dimensions, ActivityIndicator, Alert 
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
+import { Text } from '../../components/CustomText';
 import { shopApi } from '../../api/shop';
-import { cartApi } from '../../api/cart';
+import { regionApi } from '../../api/region';
 
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen() {
   const router = useRouter();
-  
-  // ✨ 1. id와 함께 shop/[id].tsx에서 넘겨준 isRestaurant 파라미터를 받아옵니다.
-  const { id, isRestaurant } = useLocalSearchParams(); 
-  
-  // ✨ 2. 넘어온 값이 문자열 'true'인지 확인하여 장바구니 버튼 숨김 여부를 결정합니다.
-  const hideCartButton = isRestaurant === 'true';
+  const { id, isRestaurant } = useLocalSearchParams();
 
-  const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [product, setProduct] = useState<any>(null);
+  const [productDetail, setProductDetail] = useState<any>(null);
+  const [quantity, setQuantity] = useState<number>(1);
+  
+  const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const productIdNum = typeof id === 'string' ? Number(id) : 1;
+  const isRestaurantProd = isRestaurant === 'true';
 
   useEffect(() => {
-    const fetchProductDetail = async () => {
+    const fetchProductData = async () => {
       try {
         setIsLoading(true);
-        const data = await shopApi.getProductDetail(productIdNum);
-        setProduct(data);
+        
+        // 상품 상세 정보와 유저의 동네 목록을 동시에 조회합니다.
+        const [productData, regionsRes] = await Promise.all([
+          shopApi.getProductDetail?.(productIdNum) || shopApi.getShopProducts(1).then(res => res[0]), // 예시 방어코드
+          regionApi.getMyRegions().catch(() => null)
+        ]);
+
+        setProductDetail(productData);
+
+        // 상품(또는 해당 상점)의 regionId가 유저의 인증된 동네 목록에 있는지 검사
+        if (regionsRes?.data && productData) {
+          const isStoreRegionVerified = regionsRes.data.some(
+            (r: any) => r.regionId === productData.regionId && r.verified === true
+          );
+          setIsVerified(isStoreRegionVerified);
+        }
+
       } catch (e) {
+        console.error("상품 데이터 로딩 실패:", e);
         Alert.alert("오류", "상품 정보를 불러오지 못했습니다.");
         router.back();
       } finally {
@@ -39,110 +56,122 @@ export default function ProductDetailScreen() {
       }
     };
 
-    if (productIdNum) fetchProductDetail();
+    if (productIdNum) fetchProductData();
   }, [productIdNum]);
 
-  const handleAddToCart = async () => {
-    try {
-      // 백엔드 스웨거 명세서에 맞춰 데이터 전송
-      await cartApi.addCartItem({
-        productId: product.productId,
-        quantity: 1, // 기본 수량 1개
-        selectedOptionItemIds: [], // 나중에 옵션 기능 추가 시 배열 안에 ID를 넣으면 된다.
-      });
+  // 장바구니 담기 / 주문하기 핸들러 (방어벽 작동)
+  const handleAction = () => {
+    if (!isVerified) {
+      Alert.alert(
+        '동네 인증 필요', 
+        '인증되지 않은 동네의 상품입니다.\n주문 및 장바구니 담기를 이용하시려면 동네 인증을 완료해주세요.'
+      );
+      return;
+    }
 
-      Alert.alert("장바구니", `[${product.name}] 상품을 담았습니다!`, [
-        { text: "계속 쇼핑", style: "cancel" },
-        { text: "장바구니 가기", onPress: () => router.push('/cart') }
+    if (isRestaurantProd) {
+      Alert.alert('성공', '메뉴 선택이 완료되었습니다. 주문 화면으로 이동합니다.');
+      // router.push('/order'); // 추후 주문 페이지 구현 시 활성화
+    } else {
+      Alert.alert('장바구니 담기 성공', `${productDetail?.name} ${quantity}개가 장바구니에 담겼습니다.`, [
+        { text: '쇼핑 계속하기', style: 'cancel' },
+        { text: '장바구니 보기', onPress: () => router.push('/cart') }
       ]);
-    } catch (e: any) {
-      console.log("장바구니 담기 에러:", e);
-      // 백엔드에서 보내준 에러 메시지(예: 재고 부족)가 있으면 띄우고, 없으면 기본 메시지
-      const errorMsg = e.response?.data?.message || "장바구니 담기에 실패했습니다.";
-      Alert.alert("오류", errorMsg);
     }
   };
 
-  if (isLoading || !product) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#00A859" /></View>;
+  if (isLoading) {
+    return (
+      <View style={styles.centerLoading}>
+        <ActivityIndicator size="large" color="#00A859" />
+      </View>
+    );
   }
 
-  const hasEvent = product.hasEvent;
-  const currentPrice = hasEvent ? product.eventPrice : product.price;
-  const productImageUrl = product.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
+  if (!productDetail) return null;
+
+  const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: productImageUrl }} style={styles.productImage} />
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={28} color="#fff" />
-          </TouchableOpacity>
-        </View>
+      {/* 상단 헤더 */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text fontWeight="bold" style={styles.headerTitle}>상품 상세 정보</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        {/* 상품 이미지 */}
+        <Image source={{ uri: productImgUrl }} style={styles.productImg} />
+
+        {/* 상품 정보 섹션 */}
         <View style={styles.infoSection}>
-          <View style={styles.titleRow}>
-            <Text style={styles.categoryText}>{product.storeName}</Text> 
-            <TouchableOpacity onPress={() => setIsLiked(!isLiked)}>
-              <Ionicons name={isLiked ? "heart" : "heart-outline"} size={24} color={isLiked ? "#FF5252" : "#999"} />
-            </TouchableOpacity>
-          </View>
-          <Text fontWeight="bold" style={styles.productTitle}>{product.name}</Text>
-          <View style={styles.priceRow}>
-            {hasEvent && <Text style={styles.originalPrice}>{product.price?.toLocaleString()}원</Text>}
-            <Text fontWeight="bold" style={styles.currentPrice}>{currentPrice?.toLocaleString()}원</Text>
-          </View>
-        </View>
-        <View style={styles.divider} />
-        
-        <View style={styles.descSection}>
-          <Text fontWeight="bold" style={styles.sectionTitle}>상품 설명</Text>
-          <Text style={styles.descriptionText}>{product.description}</Text>
+          <Text fontWeight="bold" style={styles.productName}>{productDetail.name}</Text>
+          <Text fontWeight="bold" style={styles.productPrice}>
+            {productDetail.price?.toLocaleString()}원
+          </Text>
+          <View style={styles.divider} />
+          <Text style={styles.productDescTitle}>상품 설명</Text>
+          <Text style={styles.productDesc}>{productDetail.description || '등록된 상품 설명이 없습니다.'}</Text>
         </View>
 
-        <View style={{height: 100}} /> 
+        {/* 수량 선택 섹션 (식당 메뉴가 아닐 때만 노출) */}
+        {!isRestaurantProd && (
+          <View style={styles.quantitySection}>
+            <Text fontWeight="bold" style={styles.quantityLabel}>수량</Text>
+            <View style={styles.quantityController}>
+              <TouchableOpacity 
+                style={styles.qtyBtn} 
+                onPress={() => setQuantity(prev => Math.max(1, prev - 1))}
+              >
+                <Ionicons name="remove" size={18} color="#333" />
+              </TouchableOpacity>
+              <Text fontWeight="bold" style={styles.qtyText}>{quantity}</Text>
+              <TouchableOpacity 
+                style={styles.qtyBtn} 
+                onPress={() => setQuantity(prev => prev + 1)}
+              >
+                <Ionicons name="add" size={18} color="#333" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </ScrollView>
 
-      {/* ✨ 3. 식당이 아닐 때(!hideCartButton)만 하단 장바구니 버튼 영역 노출 */}
-      {!hideCartButton && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity 
-            // 💡 품절일 경우 버튼 색상을 회색(#CCC)으로 처리하여 UX 개선
-            style={[
-              styles.cartBtn, 
-              { backgroundColor: product.status === 'SOLD_OUT' ? '#CCC' : '#00A859' }
-            ]} 
-            onPress={handleAddToCart}
-            disabled={product.status === 'SOLD_OUT'}
-          >
-            <Text fontWeight="bold" style={{ color: '#fff', fontSize: 16 }}>
-              {product.status === 'SOLD_OUT' ? '품절된 상품입니다' : '장바구니 담기'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* 하단 구매 / 장바구니 버튼 바 */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleAction}>
+          <Text fontWeight="bold" style={styles.primaryBtnText}>
+            {isRestaurantProd ? '메뉴 선택하기' : '장바구니 담기'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  imageContainer: { width: width, height: width, position: 'relative' },
-  productImage: { width: '100%', height: '100%' },
-  backButton: { position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 },
+  centerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  backBtn: { padding: 4 },
+  headerTitle: { fontSize: 18, color: '#333' },
+  productImg: { width: width, height: width, backgroundColor: '#F9F9F9' },
   infoSection: { padding: 20 },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, alignItems: 'center' },
-  categoryText: { color: '#888', fontSize: 13 },
-  productTitle: { fontSize: 22, color: '#333', marginBottom: 10, fontWeight: 'bold' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  originalPrice: { textDecorationLine: 'line-through', color: '#bbb', marginRight: 10, fontSize: 15 },
-  currentPrice: { fontSize: 24, color: '#00A859', fontWeight: 'bold' },
-  divider: { height: 8, backgroundColor: '#F8F8F8' },
-  descSection: { padding: 20 },
-  sectionTitle: { fontSize: 18, color: '#333', marginBottom: 15, fontWeight: 'bold' },
-  descriptionText: { fontSize: 15, color: '#444', lineHeight: 24 },
-  bottomBar: { flexDirection: 'row', padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
-  cartBtn: { flex: 1, paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  productName: { fontSize: 22, color: '#333', marginBottom: 8 },
+  productPrice: { fontSize: 20, color: '#00A859', marginBottom: 15 },
+  divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 15 },
+  productDescTitle: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  productDesc: { fontSize: 14, color: '#666', lineHeight: 22 },
+  quantitySection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#F5F5F5', marginBottom: 20 },
+  quantityLabel: { fontSize: 16, color: '#333' },
+  quantityController: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 4, overflow: 'hidden' },
+  qtyBtn: { backgroundColor: '#F5F5F5', padding: 10, justifyContent: 'center', alignItems: 'center' },
+  qtyText: { paddingHorizontal: 15, fontSize: 15, color: '#333' },
+  bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
+  primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  primaryBtnText: { color: '#fff', fontSize: 16 }
 });

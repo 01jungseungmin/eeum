@@ -67,11 +67,13 @@ function LoginPage() {
       const { success, data, message } = responseData;
 
       if (success) {
+        // 전역 토큰 및 세션 상태 업데이트
         login(data.accessToken, data.role, data.refreshToken);
         alert(message);
 
+        // 사장님(ROLE_OWNER)일 경우 라우터의 루트("/") 주소로 보냅니다.
         const redirectPath =
-          data.role === 'ROLE_ADMIN' ? '/admin/dashboard' : '/approval-status';
+          data.role === 'ROLE_ADMIN' ? '/admin/dashboard' : '/';
 
         navigate(redirectPath);
       } else {
