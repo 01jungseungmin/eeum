@@ -1,0 +1,109 @@
+package com.eeum.eeum.application.auth.listener;
+
+import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class AccountTokenCleanupEventListenerTest {
+
+    @InjectMocks AccountTokenCleanupEventListener listener;
+
+    @Mock TokenService tokenService;
+    @Mock StringRedisTemplate redisTemplate;
+
+    // ─────────────────── refreshOnly 이벤트 ───────────────────
+
+    @Test
+    void refreshOnly_이벤트_수신_시_deleteRefreshToken만_호출() {
+        // given
+        Long accountId = 1L;
+        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.refreshOnly(accountId);
+
+        // when
+        listener.onAccountTokenCleanup(event);
+
+        // then
+        verify(tokenService).deleteRefreshToken(accountId);
+        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(tokenService, never()).deletePasswordResetToken(any());
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    // ─────────────────── reAuthAndRefresh 이벤트 ───────────────────
+
+    @Test
+    void reAuthAndRefresh_이벤트_수신_시_deleteRefreshToken과_consumeReAuthToken_호출() {
+        // given
+        Long accountId = 2L;
+        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.reAuthAndRefresh(accountId);
+
+        // when
+        listener.onAccountTokenCleanup(event);
+
+        // then
+        verify(tokenService).deleteRefreshToken(accountId);
+        verify(tokenService).consumeReAuthToken(accountId);
+        verify(tokenService, never()).deletePasswordResetToken(any());
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    // ─────────────────── passwordResetAndRefresh 이벤트 ───────────────────
+
+    @Test
+    void passwordResetAndRefresh_이벤트_수신_시_deleteRefreshToken과_deletePasswordResetToken_호출() {
+        // given
+        Long accountId = 3L;
+        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.passwordResetAndRefresh(accountId);
+
+        // when
+        listener.onAccountTokenCleanup(event);
+
+        // then
+        verify(tokenService).deleteRefreshToken(accountId);
+        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(tokenService).deletePasswordResetToken(accountId);
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    // ─────────────────── oauthTemp 이벤트 ───────────────────
+
+    @Test
+    void oauthTemp_이벤트_수신_시_redis_oauth_temp_키_삭제() {
+        // given
+        String tempToken = "uuid-temp-token";
+        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.oauthTemp(tempToken);
+
+        // when
+        listener.onAccountTokenCleanup(event);
+
+        // then: "oauth:temp:{tempToken}" 키 삭제, tokenService 호출 없음
+        verify(redisTemplate).delete("oauth:temp:" + tempToken);
+        verify(tokenService, never()).deleteRefreshToken(any());
+        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(tokenService, never()).deletePasswordResetToken(any());
+    }
+
+    // ─────────────────── Redis 예외 발생 시 외부 전파 없음 ───────────────────
+
+    @Test
+    void Redis_예외_발생_시_예외를_외부로_전파하지_않고_로그만_기록() {
+        // given
+        Long accountId = 1L;
+        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.refreshOnly(accountId);
+        doThrow(new RuntimeException("Redis 연결 실패")).when(tokenService).deleteRefreshToken(accountId);
+
+        // when: 예외가 전파되지 않아야 함
+        listener.onAccountTokenCleanup(event);
+
+        // then: 예외 미전파 확인
+        verify(tokenService).deleteRefreshToken(accountId);
+    }
+}

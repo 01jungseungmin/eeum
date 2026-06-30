@@ -1,0 +1,38 @@
+# 테스트 전용 설정 파일입니다.
+# 아래 값들은 실제 외부 서비스 키가 아닌 더미 값입니다.
+# 운영/개인 secret 값은 절대 이 파일에 넣지 마세요.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+jwt:
+  secret: test-secret-key-for-integration-tests-must-be-at-least-32-characters
+  access-token-expiration: 1800
+  refresh-token-expiration: 1209600
+  reauth-token-expiration: 300
+  password-reset-token-expiration: 1800
+
+auth:
+  email-verification-code-expiration: 300
+  email-verification-token-expiration: 1800
+
+business:
+  nts:
+    service-key: test-nts-key
+
+kakao:
+  rest-api-key: test-kakao-key
+
+portone:
+  api-secret: test-portone-secret
+  base-url: https://api.portone.io
+  webhook-secret: test-portone-webhook-secret
+
+fcm:
+  project-id: test-project-id
+  service-account-key-path: test-path

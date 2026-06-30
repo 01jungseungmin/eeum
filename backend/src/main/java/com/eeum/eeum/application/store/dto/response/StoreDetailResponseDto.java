@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.store.dto.response;
 
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.store.entity.Store;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -59,4 +61,41 @@ public class StoreDetailResponseDto {
 
     @Schema(description = "상점 공지 목록")
     private List<StoreNoticeResponseDto> notices;
+
+    @Schema(description = "상점 채팅방 ID", example = "12")
+    private Long chatRoomId;
+
+    @Schema(description = "채팅방 존재 여부", example = "true")
+    private boolean chatRoomExists;
+
+    @Schema(description = "현재 사용자의 채팅방 참여 여부", example = "false")
+    private boolean joinedChatRoom;
+
+    public static StoreDetailResponseDto of(
+            Store store,
+            List<ImageResponseDto> images,
+            List<StoreNoticeResponseDto> notices,
+            List<StoreBusinessHourResponseDto> businessHours,
+            Long chatRoomId
+    ) {
+        return StoreDetailResponseDto.builder()
+                .storeId(store.getStoreId())
+                .name(store.getName())
+                .address(store.getAddress())
+                .phone(store.getPhone())
+                .description(store.getDescription())
+                .businessHours(businessHours)
+                .status(store.getStatus().name())
+                .rating(store.getRating())
+                .favoriteCount(store.getFavoriteCount())
+                .reviewCount(store.getReviewCount())
+                .categoryId(store.getCategory() != null ? store.getCategory().getCategoryId() : null)
+                .categoryName(store.getCategory() != null ? store.getCategory().getName() : null)
+                .latitude(store.getLatitude())
+                .longitude(store.getLongitude())
+                .chatRoomId(chatRoomId)
+                .images(images)
+                .notices(notices)
+                .build();
+    }
 }
