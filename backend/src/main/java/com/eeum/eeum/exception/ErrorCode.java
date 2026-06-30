@@ -213,8 +213,11 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // ===================== 문의 (INQUIRY) =====================
     INQUIRY_NOT_FOUND("INQUIRY_001", "존재하지 않는 문의입니다", HttpStatus.NOT_FOUND),
     INQUIRY_ACCESS_DENIED("INQUIRY_002", "문의 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
-    INQUIRY_MODIFY_NOT_ALLOWED("INQUIRY_003", "수정할 수 없는 문의 상태입니다", HttpStatus.BAD_REQUEST),
     INQUIRY_ALREADY_ANSWERED("INQUIRY_004", "이미 답변된 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_STORE_REQUIRED("INQUIRY_005", "상점 문의 시 storeId는 필수입니다", HttpStatus.BAD_REQUEST),
+    INQUIRY_TARGET_TYPE_MISMATCH("INQUIRY_006", "해당 문의 유형에 대한 답변 권한이 없습니다", HttpStatus.FORBIDDEN),
+    INQUIRY_ANSWER_NOT_FOUND("INQUIRY_007", "존재하지 않는 답변입니다", HttpStatus.NOT_FOUND),
+    INQUIRY_STORE_NOT_ALLOWED("INQUIRY_008", "관리자 문의에는 storeId를 포함할 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 이미지 (IMAGE) =====================
     IMAGE_INVALID_FORMAT("IMAGE_001", "지원하지 않는 이미지 형식입니다 (jpg, png, webp만 가능)", HttpStatus.BAD_REQUEST),
