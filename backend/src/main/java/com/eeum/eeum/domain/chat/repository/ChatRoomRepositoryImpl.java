@@ -53,6 +53,28 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     }
 
     @Override
+    public Slice<ChatRoom> findPublicRooms(Long regionId, Pageable pageable) {
+        int size = pageable.getPageSize();
+        List<ChatRoom> content = queryFactory
+                .selectFrom(room)
+                .where(
+                        room.region.regionId.eq(regionId),
+                        room.type.in(ChatRoomType.GROUP, ChatRoomType.GROUP_STREET),
+                        room.isActive.isTrue()
+                )
+                .orderBy(room.lastMessageAt.desc().nullsLast(), room.chatroomId.desc())
+                .offset(pageable.getOffset())
+                .limit(size + 1L)
+                .fetch();
+
+        boolean hasNext = content.size() > size;
+        if (hasNext) {
+            content = content.subList(0, size);
+        }
+        return new SliceImpl<>(content, pageable, hasNext);
+    }
+
+    @Override
     public Page<ChatRoom> searchRoomsByAdmin(ChatRoomAdminSearchDto condition, Pageable pageable) {
         List<ChatRoom> content = queryFactory
                 .selectFrom(room)

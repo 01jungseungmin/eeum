@@ -14,7 +14,7 @@ backend/out/
 backend/*.jar
 backend/*.war
 backend/logs/
-backend/src/test/
+backend/src/test/chat-ws-test.html
 
 # ========================
 # 프론트 웹 (React)

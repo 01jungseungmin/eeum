@@ -54,20 +54,10 @@ public interface FavoriteRepository
     // 회원 탈퇴 시 favoriteCount 동기화를 위한 타입별 찜 목록 조회
     List<Favorite> findByAccount_AccountIdAndRefType(Long accountId, FavoriteRefType refType);
 
-    //사장용 찜 고객 목록 — Account JOIN FETCH로 N+1 방지 (@ManyToOne 페치이므로 Pagination과 병용해도 안전)
-    @Query(value = """
-                SELECT f FROM Favorite f
-                JOIN FETCH f.account
-                WHERE f.refType = :refType AND f.refId = :refId
-                ORDER BY f.createdAt DESC
-            """,
-           countQuery = """
-                SELECT COUNT(f) FROM Favorite f
-                WHERE f.refType = :refType AND f.refId = :refId
-            """)
-    Page<Favorite> findByRefTypeAndRefIdWithAccount(
+    // 사장 통합 고객 목록 — 상점을 찜한 고객 accountId 목록 (합집합 구성 및 찜 여부 판정용)
+    @Query("SELECT f.account.accountId FROM Favorite f WHERE f.refType = :refType AND f.refId = :refId")
+    List<Long> findAccountIdsByRefTypeAndRefId(
             @Param("refType") FavoriteRefType refType,
-            @Param("refId") Long refId,
-            Pageable pageable
+            @Param("refId") Long refId
     );
 }

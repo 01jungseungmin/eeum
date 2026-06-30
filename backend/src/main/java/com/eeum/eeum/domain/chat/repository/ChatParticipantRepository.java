@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.chat.repository;
 
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -37,5 +38,19 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
            "GROUP BY cp.chatRoom.chatroomId")
     List<Object[]> countGroupedByRoomIdsAndStatus(
             @Param("roomIds") List<Long> roomIds, @Param("status") ParticipantStatus status);
+
+    // 사장 통합 고객 목록 — 특정 상점 채팅방에 ACTIVE 참여 중인 고객 accountId 목록 (합집합 구성 및 참여 여부 판정용)
+    @Query("""
+        SELECT DISTINCT cp.account.accountId
+        FROM ChatParticipant cp
+        WHERE cp.chatRoom.refType = :refType
+          AND cp.chatRoom.refId   = :storeId
+          AND cp.status           = :status
+    """)
+    List<Long> findActiveParticipantAccountIdsByStoreRefId(
+            @Param("storeId") Long storeId,
+            @Param("refType") ChatRoomRefType refType,
+            @Param("status") ParticipantStatus status
+    );
 
 }
