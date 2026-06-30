@@ -4,17 +4,28 @@ import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Getter
 @Entity
-@Table(name = "reservation")
+@Table(
+    name = "reservation",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_reservation_table_start",
+            columnNames = {"store_table_id", "reserved_start_at"}
+        )
+    }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class VisitReservation extends BaseEntity {
 
@@ -46,6 +57,16 @@ public class VisitReservation extends BaseEntity {
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "store_table_id")
+    private StoreTable storeTable;
+
+    @Column(name = "reserved_start_at")
+    private LocalDateTime reservedStartAt;
+
+    @Column(name = "reserved_end_at")
+    private LocalDateTime reservedEndAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private VisitReservationStatus status;
@@ -60,7 +81,10 @@ public class VisitReservation extends BaseEntity {
             LocalDate visitDate,
             LocalTime visitTime,
             Integer visitorCount,
-            String requestMessage
+            String requestMessage,
+            StoreTable storeTable,
+            LocalDateTime reservedStartAt,
+            LocalDateTime reservedEndAt
     ) {
         VisitReservation reservation = new VisitReservation();
         reservation.store = store;
@@ -69,41 +93,46 @@ public class VisitReservation extends BaseEntity {
         reservation.visitTime = visitTime;
         reservation.visitorCount = visitorCount != null ? visitorCount : 1;
         reservation.requestMessage = requestMessage;
+        reservation.storeTable = storeTable;
+        reservation.reservedStartAt = reservedStartAt;
+        reservation.reservedEndAt = reservedEndAt;
         reservation.status = VisitReservationStatus.PENDING;
         return reservation;
     }
 
     public void approve() {
         if (this.status != VisitReservationStatus.PENDING) {
-            throw new IllegalStateException("대기 중인 예약만 승인할 수 있습니다.");
+            throw new BusinessException(ErrorCode.RESERVATION_APPROVE_NOT_ALLOWED);
         }
-
         this.status = VisitReservationStatus.APPROVED;
         this.rejectReason = null;
     }
 
     public void reject(String reason) {
         if (this.status != VisitReservationStatus.PENDING) {
-            throw new IllegalStateException("대기 중인 예약만 거절할 수 있습니다.");
+            throw new BusinessException(ErrorCode.RESERVATION_REJECT_NOT_ALLOWED);
         }
-
         this.status = VisitReservationStatus.REJECTED;
         this.rejectReason = reason;
+        this.storeTable = null;
+        this.reservedStartAt = null;
+        this.reservedEndAt = null;
     }
 
     public void cancel() {
-        if (this.status == VisitReservationStatus.COMPLETED) {
-            throw new IllegalStateException("완료된 예약은 취소할 수 없습니다.");
+        if (this.status != VisitReservationStatus.PENDING && this.status != VisitReservationStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED);
         }
-
         this.status = VisitReservationStatus.CANCELED;
+        this.storeTable = null;
+        this.reservedStartAt = null;
+        this.reservedEndAt = null;
     }
 
     public void complete() {
         if (this.status != VisitReservationStatus.APPROVED) {
-            throw new IllegalStateException("승인된 예약만 완료 처리할 수 있습니다.");
+            throw new BusinessException(ErrorCode.RESERVATION_COMPLETE_NOT_ALLOWED);
         }
-
         this.status = VisitReservationStatus.COMPLETED;
     }
 }

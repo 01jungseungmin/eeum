@@ -44,4 +44,9 @@ public final class LockKeys {
     public static String accountStatus(Long accountId) {
         return "lock:account-status:" + accountId;
     }
+
+    // 예약 생성 / 테이블 구성 변경 / 슬롯 비활성화가 공유하는 매장 단위 락
+    public static String storeReservation(Long storeId) {
+        return "lock:store:" + storeId + ":reservation";
+    }
 }

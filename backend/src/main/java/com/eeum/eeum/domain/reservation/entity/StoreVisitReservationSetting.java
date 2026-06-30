@@ -50,6 +50,10 @@ public class StoreVisitReservationSetting extends BaseEntity {
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime = LocalTime.of(18, 0);
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public static StoreVisitReservationSetting createDefault(Store store) {
         StoreVisitReservationSetting setting = new StoreVisitReservationSetting();
         setting.store = store;

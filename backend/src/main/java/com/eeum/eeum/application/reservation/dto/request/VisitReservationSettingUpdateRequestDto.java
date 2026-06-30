@@ -46,4 +46,5 @@ public class VisitReservationSettingUpdateRequestDto {
     @NotNull(message = "예약 가능 종료 시간은 필수입니다.")
     @Schema(description = "예약 슬롯 생성 종료 시간 (이 시각 미만까지 슬롯 생성)", example = "18:00")
     private LocalTime endTime;
+
 }

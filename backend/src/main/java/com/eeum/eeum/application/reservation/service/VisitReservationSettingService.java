@@ -5,6 +5,8 @@ import com.eeum.eeum.application.reservation.dto.request.VisitReservationTimeSlo
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationTimeSlotUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationSettingResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationTimeSlotResponseDto;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.entity.VisitReservationTimeSlot;
 import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
@@ -19,7 +21,9 @@ import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -36,6 +40,8 @@ public class VisitReservationSettingService {
     private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
     private final VisitReservationTimeSlotRepository visitReservationTimeSlotRepository;
     private final VisitReservationRepository visitReservationRepository;
+    private final RedisLockService redisLockService;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional(readOnly = true)
     public VisitReservationSettingResponseDto getSetting(Long ownerAccountId) {
@@ -45,26 +51,30 @@ public class VisitReservationSettingService {
         return toSettingDto(setting);
     }
 
-    @Transactional
     public VisitReservationSettingResponseDto updateSetting(
             Long ownerAccountId,
             VisitReservationSettingUpdateRequestDto request
     ) {
         Store store = getOwnerStore(ownerAccountId);
-        StoreVisitReservationSetting setting = getSettingByStore(store);
-
-        setting.update(
-                request.getEnabled(),
-                request.getDefaultMaxVisitorCount(),
-                request.getDefaultMaxTeamCount(),
-                request.getSlotIntervalMinutes(),
-                request.getSameDayReservationAllowed(),
-                request.getCancelDeadlineMinutes(),
-                request.getStartTime(),
-                request.getEndTime()
+        return redisLockService.executeWithLock(
+                LockKeys.storeReservation(store.getStoreId()),
+                Duration.ofSeconds(30),
+                ErrorCode.LOCK_RESERVATION_FAILED,
+                () -> transactionTemplate.execute(status -> {
+                    StoreVisitReservationSetting setting = getSettingByStore(store);
+                    setting.update(
+                            request.getEnabled(),
+                            request.getDefaultMaxVisitorCount(),
+                            request.getDefaultMaxTeamCount(),
+                            request.getSlotIntervalMinutes(),
+                            request.getSameDayReservationAllowed(),
+                            request.getCancelDeadlineMinutes(),
+                            request.getStartTime(),
+                            request.getEndTime()
+                    );
+                    return toSettingDto(setting);
+                })
         );
-
-        return toSettingDto(setting);
     }
 
     // 특정 날짜의 시간대 설정 목록 조회.
@@ -105,12 +115,23 @@ public class VisitReservationSettingService {
 
     // 특정 날짜의 시간대 설정 수정
     // 기본값과 동일한 슬롯은 오버라이드 레코드를 삭제(또는 생성 안 함) 다른 슬롯만 DB에 저장
-    @Transactional
     public List<VisitReservationTimeSlotResponseDto> updateTimeSlots(
             Long ownerAccountId,
             VisitReservationTimeSlotUpdateRequestDto request
     ) {
         Store store = getOwnerStore(ownerAccountId);
+        return redisLockService.executeWithLock(
+                LockKeys.storeReservation(store.getStoreId()),
+                Duration.ofSeconds(30),
+                ErrorCode.LOCK_RESERVATION_FAILED,
+                () -> transactionTemplate.execute(status -> updateTimeSlotsInternal(store, request))
+        );
+    }
+
+    private List<VisitReservationTimeSlotResponseDto> updateTimeSlotsInternal(
+            Store store,
+            VisitReservationTimeSlotUpdateRequestDto request
+    ) {
         StoreVisitReservationSetting setting = getSettingByStore(store);
 
         for (VisitReservationTimeSlotItemRequestDto item : request.getSlots()) {
@@ -123,10 +144,8 @@ public class VisitReservationSettingService {
                             store.getStoreId(), request.getDate(), item.getTime());
 
             if (isDefault) {
-                // 기본값과 동일 → 오버라이드 불필요, 기존 오버라이드가 있으면 삭제
                 existing.ifPresent(visitReservationTimeSlotRepository::delete);
             } else {
-                // 기본값과 다름 → 오버라이드 upsert
                 VisitReservationTimeSlot slot = existing.orElseGet(() ->
                         VisitReservationTimeSlot.create(
                                 store, request.getDate(), item.getTime(),
@@ -137,7 +156,6 @@ public class VisitReservationSettingService {
             }
         }
 
-        // 변경 후 최신 상태 반환 (generate + overlay)
         List<LocalTime> slotTimes = generateSlotTimes(setting);
         Map<LocalTime, VisitReservationTimeSlot> overrideMap = buildOverrideMap(store.getStoreId(), request.getDate());
         Map<LocalTime, VisitReservationTimeSlotCountProjection> countMap =
@@ -175,12 +193,13 @@ public class VisitReservationSettingService {
     }
 
     // 설정(startTime, endTime, slotIntervalMinutes)에서 슬롯 시각 목록을 동적으로 생성
+    // current+interval > end인 슬롯은 제외 (예약 종료 시각이 영업 종료 시각을 넘지 않도록)
     private List<LocalTime> generateSlotTimes(StoreVisitReservationSetting setting) {
         List<LocalTime> times = new ArrayList<>();
         LocalTime current = setting.getStartTime();
         LocalTime end = setting.getEndTime();
         int interval = setting.getSlotIntervalMinutes();
-        while (current.isBefore(end)) {
+        while (!current.plusMinutes(interval).isAfter(end)) {
             times.add(current);
             current = current.plusMinutes(interval);
         }

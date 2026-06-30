@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.reservation;
 
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.TimeSlotAvailabilityResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationResponseDto;
 import com.eeum.eeum.application.reservation.service.VisitReservationService;
 import com.eeum.eeum.application.store.dto.request.StoreReservationReviewCreateRequestDto;
@@ -16,9 +17,13 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "18. Visit Reservation", description = "매장 방문 예약 API")
 @SecurityRequirement(name = "bearerAuth")
@@ -29,6 +34,19 @@ public class VisitReservationController {
 
     private final VisitReservationService visitReservationService;
     private final StoreReviewService storeReviewService;
+
+    @Operation(summary = "예약 가능 시간대 조회",
+            description = "날짜와 인원 수 기준으로 테이블 자동 배정 가능한 슬롯 목록을 반환합니다.")
+    @GetMapping("/stores/{storeId}/time-slots")
+    public ResponseEntity<ApiResponse<List<TimeSlotAvailabilityResponseDto>>> getAvailableTimeSlots(
+            @PathVariable Long storeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Integer visitorCount
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                visitReservationService.getAvailableTimeSlots(storeId, date, visitorCount)
+        ));
+    }
 
     @Operation(summary = "매장 방문 예약 생성")
     @PostMapping("/stores/{storeId}")

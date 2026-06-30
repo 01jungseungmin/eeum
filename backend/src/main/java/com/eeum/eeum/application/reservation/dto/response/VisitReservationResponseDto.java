@@ -26,6 +26,11 @@ public class VisitReservationResponseDto {
     private LocalDate visitDate;
     private LocalTime visitTime;
     private Integer visitorCount;
+    private Long storeTableId;
+    private String tableName;
+    private Integer tableCapacity;
+    private LocalDateTime reservedStartAt;
+    private LocalDateTime reservedEndAt;
 
     private String requestMessage;
     private String rejectReason;

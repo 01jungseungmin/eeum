@@ -23,7 +23,7 @@ public class VisitReservationCreateRequestDto {
     private LocalTime visitTime;
 
     @Min(value = 1, message = "방문 인원은 1명 이상이어야 합니다.")
-    @Schema(description = "방문 인원", example = "1", defaultValue = "1")
+    @Schema(description = "방문 인원 (테이블 자동 배정 기준)", example = "3", defaultValue = "1")
     private Integer visitorCount;
 
     @Schema(description = "요청사항", example = "창가 자리 가능하면 부탁드립니다.")

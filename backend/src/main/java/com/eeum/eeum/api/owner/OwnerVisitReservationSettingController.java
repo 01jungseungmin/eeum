@@ -1,9 +1,12 @@
 package com.eeum.eeum.api.owner;
 
+import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationSettingUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationTimeSlotUpdateRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationSettingResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationTimeSlotResponseDto;
+import com.eeum.eeum.application.reservation.service.StoreTableService;
 import com.eeum.eeum.application.reservation.service.VisitReservationSettingService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -29,6 +32,7 @@ import java.util.List;
 public class OwnerVisitReservationSettingController {
 
     private final VisitReservationSettingService visitReservationSettingService;
+    private final StoreTableService storeTableService;
 
     @Operation(summary = "방문 예약 기본 설정 조회")
     @GetMapping("/settings")
@@ -76,5 +80,21 @@ public class OwnerVisitReservationSettingController {
         return ResponseEntity.ok(ApiResponse.success(
                 visitReservationSettingService.updateTimeSlots(accountId, request)
         ));
+    }
+
+    @Operation(summary = "테이블 구성 조회")
+    @GetMapping("/tables")
+    public ResponseEntity<ApiResponse<List<StoreTableResponseDto>>> getTables() {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(storeTableService.getTables(accountId)));
+    }
+
+    @Operation(summary = "테이블 구성 저장", description = "기존 테이블 비활성화 후 새 테이블 생성. capacity 기준 가장 작은 테이블 자동 배정.")
+    @PutMapping("/tables")
+    public ResponseEntity<ApiResponse<List<StoreTableResponseDto>>> configureTables(
+            @Valid @RequestBody StoreTableConfigRequestDto request
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(storeTableService.configureTables(accountId, request)));
     }
 }
