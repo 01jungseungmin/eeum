@@ -8,8 +8,8 @@ if (typeof global.TextEncoder === 'undefined') {
   global.TextDecoder = encoding.TextDecoder;
 }
 
-// 본인 테스트 환경에 맞게 IP 수정 (에뮬레이터: 10.0.2.2, 실제 폰: 컴퓨터의 와이파이 IP)
-const WEBSOCKET_URL = process.env.EXPO_PUBLIC_WS_URL || 'ws://192.168.0.17:8080/ws'; 
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
+const WEBSOCKET_URL = BASE_URL.replace(/^http/, 'ws') + '/ws';
 
 export const useChatStomp = (roomId: number) => {
   const clientRef = useRef<Client | null>(null);
@@ -35,27 +35,27 @@ export const useChatStomp = (roomId: number) => {
           console.log('✅ STOMP 웹소켓 연결 성공!');
           setIsConnected(true);
 
-          // ✨ 1. 일반 메시지 구독
+          // 1. 일반 메시지 구독
           client.subscribe(`/sub/chat/rooms/${roomId}`, (message) => {
             const received = JSON.parse(message.body);
             console.log("💌 메시지 수신:", received);
             setMessages((prev) => [...prev, received]);
           });
 
-          // ✨ 2. 읽음 이벤트 구독
+          // 2. 읽음 이벤트 구독
           client.subscribe(`/sub/chat/rooms/${roomId}/read`, (message) => {
             console.log("👀 읽음 이벤트 수신:", JSON.parse(message.body));
             // 나중에 여기서 메시지 숫자 '1'을 지우는 로직을 추가할 수 있습니다.
           });
 
-          // ✨ 3. 타이핑 이벤트 구독
+          // 3. 타이핑 이벤트 구독
           client.subscribe(`/sub/chat/rooms/${roomId}/typing`, (message) => {
             const typingData = JSON.parse(message.body);
             console.log("⌨️ 타이핑 이벤트 수신:", typingData);
             setIsOpponentTyping(typingData.typing);
           });
 
-          // ✨ 4. 에러 구독
+          // 4. 에러 구독
           client.subscribe(`/user/sub/errors`, (message) => {
             console.error("❌ 서버 에러 수신:", JSON.parse(message.body));
           });
@@ -77,7 +77,7 @@ export const useChatStomp = (roomId: number) => {
     };
   }, [roomId]);
 
-  // ✨ 5. 메시지 발행 (전송)
+  // 5. 메시지 발행 (전송)
   const sendMessage = useCallback((content: string) => {
     if (clientRef.current && isConnected) {
       clientRef.current.publish({
@@ -90,7 +90,7 @@ export const useChatStomp = (roomId: number) => {
     }
   }, [roomId, isConnected]);
 
-  // ✨ 6. 읽음 처리 발행
+  // 6. 읽음 처리 발행
   const sendReadReceipt = useCallback(() => {
     if (clientRef.current && isConnected) {
       clientRef.current.publish({
@@ -100,7 +100,7 @@ export const useChatStomp = (roomId: number) => {
     }
   }, [roomId, isConnected]);
 
-  // ✨ 7. 타이핑 이벤트 발행
+  // 7. 타이핑 이벤트 발행
   const sendTyping = useCallback((isTyping: boolean) => {
     if (clientRef.current && isConnected) {
       clientRef.current.publish({

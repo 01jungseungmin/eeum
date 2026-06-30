@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { shopApi } from '../../api/shop';
 import { favoriteApi } from '../../api/favorite';
 import { reviewApi } from '../../api/review';
 import { regionApi } from '@/api/region';
+import { chatApi } from '../../api/chat';
 
 const { width } = Dimensions.get('window');
 
@@ -16,20 +17,18 @@ export default function ShopDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
 
+  const insets = useSafeAreaInsets(); 
+
   const [isLoading, setIsLoading] = useState(true);
   const [shopDetail, setShopDetail] = useState<any>(null);
   const [shopProducts, setShopProducts] = useState<any[]>([]);
-  
-  // 찜 기능 상태
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
   const [favoriteCount, setFavoriteCount] = useState<number>(0);
   const [shopReviews, setShopReviews] = useState<any[]>([]);
-
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
 
-  // 1. 데이터 로딩 (찜, 리뷰 조회 포함)
   useEffect(() => {
     const fetchShopData = async () => {
       try {
@@ -40,7 +39,7 @@ export default function ShopDetailScreen() {
           favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
           favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null),
           reviewApi.getReviews(shopIdNum).catch(() => null),
-          regionApi.getMyRegions().catch(() => null) // 내 동네 정보 조회
+          regionApi.getMyRegions().catch(() => null) 
         ]);
 
         setShopReviews(reviewsRes?.content || reviewsRes?.data || []);
@@ -49,14 +48,15 @@ export default function ShopDetailScreen() {
         if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
         if (countRes?.data) setFavoriteCount(countRes.data.data);
 
-        // 내 동네 목록에서 대표 동네를 찾고, 인증(verified) 되었는지 확인
+        // 유연한 동네 인증 검사 로직
         if (regionsRes?.data) {
           const primaryRegion = regionsRes.data.find((r: any) => r.isPrimary === true);
-          if (primaryRegion && primaryRegion.verified === true) {
-            setIsVerified(true);
-          } else {
-            setIsVerified(false);
-          }
+          const isPrimaryVerified = primaryRegion?.verified === true || primaryRegion?.isVerified === true;
+          const targetRegionId = detailData?.regionId || detailData?.region?.regionId;
+          const isStoreRegionVerified = regionsRes.data.some(
+            (r: any) => r.regionId === targetRegionId && (r.verified === true || r.isVerified === true)
+          );
+          setIsVerified(isPrimaryVerified || isStoreRegionVerified);
         }
       } catch (e) {
         console.log("❌ 에러:", e);
@@ -70,7 +70,6 @@ export default function ShopDetailScreen() {
     if (shopIdNum) fetchShopData();
   }, [shopIdNum]);
 
-  // 2. 찜 토글 함수
   const handleToggleFavorite = async () => {
     try {
       const res = await favoriteApi.toggleFavorite('STORE', shopIdNum);
@@ -79,6 +78,33 @@ export default function ShopDetailScreen() {
       setFavoriteCount(newCount);
     } catch (error) {
       Alert.alert("알림", "찜 상태를 변경할 수 없습니다.");
+    }
+  };
+
+  const handleGroupChat = async () => {
+    if (!isVerified) {
+      Alert.alert('동네 인증 필요', '이 상점의 단체 채팅방에 참여하려면 마이페이지에서 대표 동네를 인증해주세요.');
+      return;
+    }
+
+    console.log("🔥 백엔드가 준 상점 상세 데이터:", JSON.stringify(shopDetail, null, 2));
+
+    // const roomId = shopDetail?.chatRoomId || shopDetail?.groupChatRoomId; 
+    const roomId = 3;
+    if (!roomId) {
+      Alert.alert('알림', '아직 이 상점의 단체 채팅방이 개설되지 않았습니다.');
+      return;
+    }
+
+    try {
+      await chatApi.joinRoom(roomId); 
+      router.push(`/chat/${roomId}` as any); 
+    } catch (error: any) {
+      if (error.response?.status === 409 || error.response?.status === 400) {
+        router.push(`/chat/${roomId}` as any);
+      } else {
+        Alert.alert('오류', '단체 채팅방에 입장할 수 없습니다.');
+      }
     }
   };
 
@@ -97,9 +123,9 @@ export default function ShopDetailScreen() {
   const isRestaurant = shopDetail.categoryId === 1 || shopDetail.categoryId === 2;
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    // SafeAreaView의 설정을 edges={['top']}으로 바꾸어 하단 영역은 직접 컨트롤합니다.
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }}>
-
         {/* 커버 이미지 */}
         <View style={styles.coverContainer}>
           <Image source={{ uri: coverImageUrl }} style={styles.coverImg} />
@@ -113,7 +139,6 @@ export default function ShopDetailScreen() {
           <View style={styles.nameRow}>
             <Text fontWeight="bold" style={styles.shopName}>{shopDetail.name}</Text>
             <View style={styles.ratingRow}>
-              {/* 찜 버튼 UI */}
               <TouchableOpacity onPress={handleToggleFavorite} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
                 <Ionicons name={isFavorited ? "heart" : "heart-outline"} size={22} color={isFavorited ? "#FF5252" : "#999"} />
                 <Text style={{ marginLeft: 4, fontSize: 16, color: '#333' }}>{favoriteCount}</Text>
@@ -152,7 +177,7 @@ export default function ShopDetailScreen() {
 
         <View style={styles.divider} />
 
-        {/* 리뷰 섹션 (리뷰 쓰기 버튼 제거됨) */}
+        {/* 리뷰 섹션 */}
         <View style={styles.reviewSection}>
           <View style={styles.reviewHeader}>
             <Text fontWeight="bold" style={styles.sectionTitle}>상점 리뷰</Text>
@@ -176,7 +201,6 @@ export default function ShopDetailScreen() {
             ))
           )}
           
-          {/* 리뷰가 3개 이상일 때만 더보기 버튼 노출 */}
           {shopReviews.length > 0 && (
             <TouchableOpacity 
               style={styles.moreReviewBtn}
@@ -193,16 +217,18 @@ export default function ShopDetailScreen() {
 
       </ScrollView>
 
-      {/* 하단 버튼 영역 */}
-      <View style={styles.bottomBar}>
-        {isRestaurant ? (
-          <View style={{ width: '100%', gap: 10 }}>
+      {/* 하단 고정 버튼 영역: insets.bottom을 더해서 시스템 내비게이션 바와 겹치지 않게 보호! */}
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 15) + 10 }]}>
+        <View style={{ width: '100%' }}>
+          
+          {/* 1. 상단 메인 액션 버튼 (업종에 따라 다름) */}
+          {isRestaurant ? (
             <TouchableOpacity
-              style={styles.primaryBtn}
+              style={styles.reserveButton}
+              activeOpacity={0.8}
               onPress={() => {
-                // 인증되지 않은 유저는 예약을 막고 알림 띄우기
                 if (!isVerified) {
-                  Alert.alert('동네 인증 필요', '예약하려면 대표 동네를 인증해주세요.');
+                  Alert.alert('동네 인증 필요', '예약하려면 마이페이지에서 대표 동네를 인증해주세요.');
                   return;
                 }
                 router.push({
@@ -211,31 +237,48 @@ export default function ShopDetailScreen() {
                 });
               }}
             >
-              <Text fontWeight="bold" style={styles.primaryBtnText}>방문 예약하기</Text>
+              <Ionicons name="calendar-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+              <Text fontWeight="bold" style={styles.reserveButtonText}>상점 방문 예약</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.reserveButton} // 장바구니 버튼도 예약 버튼과 동일한 스타일 적용
+              activeOpacity={0.8}
+              onPress={() => {
+                if (!isVerified) {
+                  Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
+                  return;
+                }
+                router.push('/cart');
+              }}
+            >
+              <Ionicons name="cart-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+              <Text fontWeight="bold" style={styles.reserveButtonText}>장바구니 보기</Text>
+            </TouchableOpacity>
+          )}
+
+            {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
+            <View style={styles.rowButtons}>
+            <TouchableOpacity 
+              style={styles.halfButton} 
+              activeOpacity={0.7}
+              onPress={() => Alert.alert('안내', '문의하기 기능은 준비 중입니다.')}
+            >
+              <Ionicons name="chatbubble-outline" size={18} color="#1B854A" style={{ marginRight: 6 }} />
+              <Text style={styles.halfButtonText}>문의하기</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.chatBtn}
-              onPress={() => Alert.alert('안내', '채팅 기능은 준비 중입니다.')}
+            <TouchableOpacity 
+              style={styles.halfButton} 
+              activeOpacity={0.7} 
+              onPress={handleGroupChat}
             >
-              <Text style={styles.chatBtnText}>사장님과 채팅</Text>
+              <Ionicons name="chatbubbles-outline" size={18} color="#1B854A" style={{ marginRight: 6 }} />
+              <Text style={styles.halfButtonText}>단체 채팅</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => {
-              // 인증되지 않은 유저는 장바구니 담기를 막고 알림 띄우기
-              if (!isVerified) {
-                Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
-                return;
-              }
-              router.push('/cart');
-            }}
-          >
-            <Text fontWeight="bold" style={styles.primaryBtnText}>장바구니 보기</Text>
-          </TouchableOpacity>
-        )}
+          
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -278,10 +321,14 @@ const styles = StyleSheet.create({
   moreReviewBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15 },
   moreReviewBtnText: { color: '#666', fontSize: 14, marginRight: 4, fontWeight: '500' },
 
-  bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
-  primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EAEAEA', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
+  
+  reserveButton: { flexDirection: 'row', backgroundColor: '#1B854A', paddingVertical: 14, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  reserveButtonText: { color: '#FFF', fontSize: 15 },
+  rowButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+  halfButton: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#1B854A', paddingVertical: 12, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
+  halfButtonText: { color: '#1B854A', fontSize: 14 },
+  
+  primaryBtn: { backgroundColor: '#1B854A', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 0 },
   primaryBtnText: { color: '#fff', fontSize: 16 },
-
-  chatBtn: { width: '100%', paddingVertical: 16, borderRadius: 8, borderWidth: 1, borderColor: '#00A859', alignItems: 'center', justifyContent: 'center' },
-  chatBtnText: { color: '#00A859', fontSize: 16, fontWeight: 'bold' }
 });

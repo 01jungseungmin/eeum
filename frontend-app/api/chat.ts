@@ -1,9 +1,6 @@
 import { client } from './client';
 
 export const chatApi = {
-  // ==========================================
-  // [15. Chat Room] 채팅방 관련 API
-  // ==========================================
 
   // 1. 내 채팅방 목록 조회 (GET /chat/rooms) - 중복 해결 및 페이징 적용!
   getRooms: async (page: number = 0, size: number = 20) => {
@@ -13,6 +10,18 @@ export const chatApi = {
     } catch (error) {
       console.error('채팅방 목록 조회 에러:', error);
       return [];
+    }
+  },
+
+  // ✨ [NEW] 새로운 모임 찾기 (전체 오픈 채팅방 목록 조회) (GET /chat/rooms/discover)
+  getDiscoverRooms: async (page: number = 0, size: number = 20) => {
+    try {
+      // 🚨 혹시 백엔드에서 만든 전체 방 목록 주소가 /chat/rooms/discover 가 아니라면 이 부분만 수정해 주세요!
+      const response = await client.get('/chat/rooms/discover', { params: { page, size } });
+      return response.data?.data?.content || response.data?.data || [];
+    } catch (error) {
+      console.error('오픈 채팅방 목록 조회 에러:', error);
+      throw error; // 에러를 던져서 화면에서 로딩 스피너를 멈출 수 있게 합니다.
     }
   },
 
@@ -57,10 +66,6 @@ export const chatApi = {
     return response.data?.data || response.data;
   },
 
-
-  // ==========================================
-  // [16. Chat Message] 채팅 메시지 관련 API
-  // ==========================================
 
   // 8. 메시지 삭제 (DELETE /chat/messages/{messageId})
   deleteMessage: async (messageId: string | number) => {

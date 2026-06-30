@@ -166,58 +166,67 @@ export default function ChatRoomScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 키보드 회피 뷰 */}
       <KeyboardAvoidingView 
-        style={styles.keyboardAvoidingView} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        {isLoading ? (
-          <View style={styles.centerLoading}>
-            <ActivityIndicator size="large" color="#1B854A" />
-          </View>
-        ) : (
-          <>
-            {!isConnected && (
-              <View style={styles.connectingBanner}>
-                <ActivityIndicator size="small" color="#666" style={{ marginRight: 8 }} />
-                <Text style={styles.connectingText}>실시간 채팅 서버에 연결 중...</Text>
-              </View>
-            )}
-            
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              keyExtractor={(item, index) => item.messageId?.toString() || index.toString()}
-              renderItem={renderMessage}
-              contentContainerStyle={styles.messageList}
-              showsVerticalScrollIndicator={false}
-              onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-            />
-          </>
-        )}
 
-        {/* 입력창 */}
-        <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <TouchableOpacity style={styles.attachButton}>
-            <Ionicons name="add" size={26} color="#888" />
-          </TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: 'space-between' }}>
           
-          <View style={styles.textInputWrapper}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="메시지를 입력하세요"
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-              maxLength={500}
-            />
-            <TouchableOpacity 
-              style={[styles.sendButton, !inputText.trim() && { backgroundColor: '#E0E0E0' }]} 
-              onPress={handleSend}
-              disabled={!inputText.trim() || !isConnected}
-            >
-              <Ionicons name="paper-plane" size={16} color="#FFF" />
+          {isLoading ? (
+            <View style={styles.centerLoading}>
+              <ActivityIndicator size="large" color="#1B854A" />
+            </View>
+          ) : (
+            // 채팅 영역 전체를 하나의 flex: 1 뷰로 묶어 키보드가 밀고 올라올 때 유연하게 줄어들게 합니다.
+            <View style={{ flex: 1 }}>
+              {!isConnected && (
+                <View style={styles.connectingBanner}>
+                  <ActivityIndicator size="small" color="#666" style={{ marginRight: 8 }} />
+                  <Text style={styles.connectingText}>실시간 채팅 서버에 연결 중...</Text>
+                </View>
+              )}
+              
+              <FlatList
+                ref={flatListRef}
+                data={messages}
+                keyExtractor={(item, index) => item.messageId?.toString() || index.toString()}
+                renderItem={renderMessage}
+                // flexGrow: 1을 추가하여 메시지가 적을 때도 영역을 꽉 채우고, 키보드가 오면 부드럽게 리사이즈되게 합니다.
+                contentContainerStyle={[styles.messageList, { flexGrow: 1 }]}
+                showsVerticalScrollIndicator={false}
+                onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              />
+            </View>
+          )}
+
+          {/* 입력창 (항상 최하단 고정) */}
+          <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            <TouchableOpacity style={styles.attachButton}>
+              <Ionicons name="add" size={26} color="#888" />
             </TouchableOpacity>
+            
+            <View style={styles.textInputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="메시지를 입력하세요"
+                value={inputText}
+                onChangeText={setInputText}
+                multiline
+                maxLength={500}
+              />
+              <TouchableOpacity 
+                style={[styles.sendButton, !inputText.trim() && { backgroundColor: '#E0E0E0' }]} 
+                onPress={handleSend}
+                disabled={!inputText.trim() || !isConnected}
+              >
+                <Ionicons name="paper-plane" size={16} color="#FFF" />
+              </TouchableOpacity>
+            </View>
           </View>
+
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -247,7 +256,7 @@ const styles = StyleSheet.create({
   // 상대방 말풍선 스타일
   otherMessageRow: { flexDirection: 'row', marginBottom: 12 },
   profileImage: { width: 36, height: 36, borderRadius: 18, marginRight: 8, backgroundColor: '#DDD' },
-  profilePlaceholder: { width: 36, marginRight: 8 },
+  profilePlaceholder: { display: 'none' },
   otherMessageContent: { flex: 1, alignItems: 'flex-start' },
   senderName: { fontSize: 13, color: '#555', marginBottom: 4 },
   otherBubbleRow: { flexDirection: 'row', alignItems: 'flex-end' },
