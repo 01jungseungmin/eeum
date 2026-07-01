@@ -61,40 +61,42 @@ export default function ReviewWriteScreen() {
       setIsSubmitting(true);
 
       if (isEditMode && reviewIdNum) {
-        // [수정 모드 로직] 
-        // 텍스트와 별점을 먼저 수정 (PATCH)
         await reviewApi.updateReview(storeIdNum, reviewIdNum, {
           rating: rating,
           content: content,
         });
-
-        // 2. 이미지가 지워졌다면 삭제 API 호출
         if (initialImageId && !existingImage) {
           await reviewApi.deleteReviewImage(storeIdNum, reviewIdNum, Number(initialImageId));
         }
-
-        // 3. 새 이미지가 선택되었다면 추가 API 호출
         if (image) {
           await reviewApi.addReviewImages(storeIdNum, reviewIdNum, [image.uri]);
         }
-
         Alert.alert('성공', '리뷰가 성공적으로 수정되었습니다.');
       } 
       else {
-        // [작성 모드 로직]
-        const payload: any = {
-          rating: rating,
-          content: content,
-          imageUrls: image ? [image.uri] : [],
-          orderId: orderIdNum || 0, 
-        };
-
+        
         if (reservationIdNum) {
-          payload.reservationId = reservationIdNum; 
-          payload.visitReservationId = reservationIdNum; 
+          // 1. 방문 예약 리뷰일 때: 새 전용 API 호출
+          const payload = {
+            rating: rating,
+            content: content,
+            imageUrls: image ? [image.uri] : [],
+          };
+          
+          await reviewApi.createReservationReview(reservationIdNum, payload);
+        } 
+        else {
+          // 2. 일반 주문 리뷰일 때: 기존 API 호출
+          const payload = {
+            orderId: orderIdNum,
+            rating: rating,
+            content: content,
+            imageUrls: image ? [image.uri] : [],
+          };
+          
+          await reviewApi.createReview(storeIdNum, payload);
         }
 
-        await reviewApi.createReview(storeIdNum, payload);
         Alert.alert('성공', '리뷰가 소중하게 등록되었습니다!');
       }
 

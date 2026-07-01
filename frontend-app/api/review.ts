@@ -117,5 +117,16 @@ export const reviewApi = {
       console.error('내 리뷰 목록 조회 에러:', error);
       throw error;
     }
+  },
+
+  // 예약 리뷰
+  createReservationReview: async (reservationId: number, data: { rating: number; content: string; imageUrls?: string[] }) => {
+    try {
+      const response = await client.post(`/reservations/visits/${reservationId}/review`, data);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error('방문 예약 리뷰 작성 에러:', error);
+      throw error;
+    }
   }
 };
