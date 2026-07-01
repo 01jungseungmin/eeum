@@ -18,7 +18,7 @@ import OrderManagementPage from './pages/owner/main/OrderManagementPage';
 import ReservationPage from './pages/owner/main/ReservationPage';
 import ProductManagementPage from './pages/owner/main/ProductManagementPage';
 import ReviewManagementPage from './pages/owner/main/ReviewManagementPage';
-import CustomerReviewManagementPage from './pages/owner/main/CustomerReviewManagementPage';
+import CustomerManagementPage from './pages/owner/main/CustomerManagementPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
@@ -89,7 +89,7 @@ function App() {
           <Route path="/categories" element={<CategoryPage />} />
           <Route path="/events" element={<EventPage />} />
           <Route path="/reviews" element={<ReviewManagementPage />} />
-          <Route path="/customer-reviews" element={<ReviewManagementPage />} />
+          <Route path="/customers" element={<CustomerManagementPage />} />
         </Route>
       </Route>
     </Routes>

@@ -87,7 +87,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'customers',
         name: '고객 관리',
-        path: '/customer-management',
+        path: '/customers',
         icon: <Users {...iconProps} />,
         subtitle: '우리 가게 단골 손님을 관리하세요',
       },
