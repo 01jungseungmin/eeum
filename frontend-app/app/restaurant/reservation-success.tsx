@@ -45,10 +45,9 @@ export default function ReservationSuccessScreen() {
           <TouchableOpacity 
             style={styles.detailBtn} 
             onPress={() => {
-              // ✨ 상세 화면으로 이동하면서 예약 번호를 넘겨줍니다.
               router.push({
                 pathname: '/restaurant/reservation-detail' as any,
-                params: { reservationId }
+                params: { id: reservationId }
               });
             }}
           >

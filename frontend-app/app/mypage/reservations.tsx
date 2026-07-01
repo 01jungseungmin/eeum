@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-// ✨ useEffect 대신 useFocusEffect를 가져옵니다.
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
@@ -16,7 +15,6 @@ export default function ReservationsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [reservationList, setReservationList] = useState<any[]>([]);
 
-  // ✨ 화면에 돌아올 때마다 자동으로 최신 데이터를 불러옵니다.
   useFocusEffect(
     useCallback(() => {
       fetchReservations();
@@ -65,30 +63,31 @@ export default function ReservationsScreen() {
     const rId = item.visitReservationId; 
     const storeName = item.storeName;
     
-    // 시간 텍스트 정제 ("11:30:00" -> "11:30")
     const timeText = item.visitTime ? item.visitTime.substring(0, 5) : '';
     const dateText = `${item.visitDate} ${timeText}`;
 
-    // ✨ 모든 예약 상태(status) 분기 처리
     let statusText = '예약 대기';
-    let statusColor = '#FF9800'; // 주황색
+    let statusColor = '#FF9800'; 
     let statusBg = '#FFF3E0';
 
     if (item.status === 'APPROVED' || item.status === 'RESERVED' || item.status === 'CONFIRMED') {
       statusText = '예약 확정';
-      statusColor = '#2196F3'; // 파란색
+      statusColor = '#2196F3';
       statusBg = '#E3F2FD';
     } else if (item.status === 'COMPLETED') {
       statusText = '이용 완료';
-      statusColor = '#00A859'; // 초록색
+      statusColor = '#00A859';
       statusBg = '#E8F5E9';
     } else if (item.status === 'CANCELLED' || item.status === 'REJECTED') {
       statusText = item.status === 'CANCELLED' ? '예약 취소' : '예약 거절';
-      statusColor = '#FF5252'; // 빨간색
+      statusColor = '#FF5252';
       statusBg = '#FFEBEE';
     }
 
-    const isReviewCompleted = item.hasReview === true;
+    const isReviewCompleted = 
+      item.hasReview === true || 
+      item.isReviewed === true || 
+      (item.reviewId !== null && item.reviewId !== undefined && item.reviewId > 0);
 
     return (
       <TouchableOpacity 
@@ -123,31 +122,27 @@ export default function ReservationsScreen() {
 
         {/* 하단 버튼 영역 분기 처리 */}
         <View style={{ marginTop: 12 }}>
-          {/* 1. 대기/확정 상태일 때 -> 취소 버튼 */}
+          
+          {/* 1. 예약 취소하기 버튼 (유지) */}
           {(item.status === 'PENDING' || item.status === 'APPROVED' || item.status === 'RESERVED' || item.status === 'CONFIRMED') && (
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={(e) => {
-                e.stopPropagation(); // 카드 터치(상세이동) 방지
-                handleCancelReservation(rId);
-              }}
-            >
+            <TouchableOpacity style={styles.cancelButton} onPress={(e) => { e.stopPropagation(); handleCancelReservation(rId); }}>
               <Text fontWeight="bold" style={styles.cancelButtonText}>예약 취소하기</Text>
             </TouchableOpacity>
           )}
 
-          {/* 2. 이용 완료 상태일 때 -> 리뷰 버튼 */}
+          {/* 2. 리뷰 작성 / 완료 버튼 (교체된 isReviewCompleted가 여기서 작동합니다!) */}
           {item.status === 'COMPLETED' && (
             isReviewCompleted ? (
+              // 🟢 리뷰 작성이 완료되었을 때 (회색 버튼)
               <View style={[styles.reviewButton, { backgroundColor: '#F5F5F5', borderColor: '#EEE' }]}>
                 <Text fontWeight="bold" style={[styles.reviewButtonText, { color: '#999' }]}>리뷰 작성 완료</Text>
               </View>
             ) : (
+              // 🔵 아직 리뷰를 안 썼을 때 (초록색 버튼)
               <TouchableOpacity 
                 style={styles.reviewButton}
                 onPress={(e) => {
                   e.stopPropagation(); 
-                  // 예약 번호를 넘겨서 리뷰 작성 페이지로 이동
                   router.push(`/review/write?storeId=${item.storeId}&reservationId=${rId}`);
                 }}
               >
