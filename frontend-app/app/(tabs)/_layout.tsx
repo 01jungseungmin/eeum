@@ -42,7 +42,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="used-trade" 
+        name="community" 
         options={{
           title: '커뮤니티',
           tabBarIcon: ({ color, focused }) => (
