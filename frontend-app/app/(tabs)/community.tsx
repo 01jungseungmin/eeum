@@ -30,7 +30,7 @@ export default function CommunityListScreen() {
     }, [])
   );
 
-  // ✨ 2. 검색어나 카테고리가 바뀔 때 즉각적으로 실행되도록 useEffect로 분리!
+  // 2. 검색어나 카테고리가 바뀔 때 즉각적으로 실행되도록 useEffect로 분리!
   useEffect(() => {
     fetchPosts();
   }, [activeCategory, debouncedKeyword]);
@@ -38,8 +38,6 @@ export default function CommunityListScreen() {
   const fetchPosts = async () => {
     try {
       setIsLoading(true);
-      
-      console.log("🔥 서버에 요청하는 검색어:", debouncedKeyword);
 
       // 백엔드 API에 검색어 전달
       let data = await communityApi.getPosts(0, 50, debouncedKeyword); 
@@ -49,8 +47,6 @@ export default function CommunityListScreen() {
         data = data.filter((item: any) => item.categoryName === activeCategory);
       }
 
-      // ✨ 3. [에러 방어] 백엔드 검색 로직 미완성 대비용 프론트 강제 필터링
-      // 백엔드가 검색어를 무시하고 전체 리스트를 주더라도, 앱에서 한 번 더 걸러서 화면엔 정확히 띄워줍니다!
       if (debouncedKeyword && debouncedKeyword.trim() !== '') {
         const lowerKeyword = debouncedKeyword.toLowerCase();
         data = data.filter((item: any) => 
@@ -147,9 +143,8 @@ export default function CommunityListScreen() {
           <Text fontWeight="bold" style={styles.headerTitle}>동네생활</Text>
           <View style={styles.headerIcons}>
             <TouchableOpacity onPress={() => setIsSearchMode(true)}>
-              <Ionicons name="search" size={24} color="#333" style={{ marginRight: 15 }} />
+              <Ionicons name="search" size={24} color="#333" />
             </TouchableOpacity>
-            <TouchableOpacity><Ionicons name="notifications-outline" size={24} color="#333" /></TouchableOpacity>
           </View>
         </View>
       )}

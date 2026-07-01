@@ -15,7 +15,7 @@ const CATEGORY_MAP = [
   { id: 12, name: '공동배달' },
 ];
 
-// ✨ 이미지 관리를 위한 타입 정의 (기존 이미지인지 새 이미지인지 구분)
+// 이미지 관리를 위한 타입 정의 (기존 이미지인지 새 이미지인지 구분)
 interface ImageItem {
   id?: number; // 백엔드에 이미 저장된 이미지면 id가 있음
   uri: string;
@@ -30,9 +30,9 @@ export default function CommunityWriteScreen() {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // ✨ 선택된 이미지 배열 구조 변경
+  // 선택된 이미지 배열 구조 변경
   const [selectedImages, setSelectedImages] = useState<ImageItem[]>([]);
-  // ✨ 삭제할 기존 이미지의 ID들을 모아두는 배열
+  // 삭제할 기존 이미지의 ID들을 모아두는 배열
   const [deletedImageIds, setDeletedImageIds] = useState<number[]>([]);
 
   useEffect(() => {
@@ -83,7 +83,7 @@ export default function CommunityWriteScreen() {
   const removeImage = (indexToRemove: number) => {
     const targetImage = selectedImages[indexToRemove];
     
-    // ✨ 기존에 서버에 있던 이미지를 삭제한 거라면 삭제 명단에 기록해둡니다.
+    // 기존에 서버에 있던 이미지를 삭제한 거라면 삭제 명단에 기록해둡니다.
     if (targetImage.id) {
       setDeletedImageIds(prev => [...prev, targetImage.id!]);
     }
@@ -108,10 +108,10 @@ export default function CommunityWriteScreen() {
       let currentPostId = editId as string;
 
       if (editId) {
-        // [수정 모드] 1. 게시글 텍스트 업데이트
+        // 1. 게시글 텍스트 업데이트
         await communityApi.updatePost(currentPostId, postData);
         
-        // [수정 모드] 2. 삭제 처리된 기존 이미지가 있다면 백엔드에 삭제 요청!
+        // 2. 삭제 처리된 기존 이미지가 있다면 백엔드에 삭제 요청!
         if (deletedImageIds.length > 0) {
           await Promise.all(
             deletedImageIds.map(imgId => communityApi.deletePostImage(currentPostId, imgId))
@@ -128,8 +128,8 @@ export default function CommunityWriteScreen() {
       const newImages = selectedImages.filter(img => !img.id);
       if (newImages.length > 0 && currentPostId) {
         const imagePayload = newImages.map((img, index) => ({
-          imageUrl: img.uri, // 🚨 주의: 프로필 사진 때처럼 S3에 올려서 https 주소를 뽑은 후 넣어야 다른 사람들도 볼 수 있습니다!
-          thumbnail: index === 0 && selectedImages[0].uri === img.uri // 첫 번째 이미지를 썸네일로
+          imageUrl: img.uri, 
+          thumbnail: index === 0 && selectedImages[0].uri === img.uri
         }));
         
         await communityApi.uploadPostImages(currentPostId, imagePayload);

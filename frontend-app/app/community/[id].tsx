@@ -39,7 +39,7 @@ export default function CommunityDetailScreen() {
     fetchMyInfo();
   }, []);
 
-  // ✨ 1. 데이터를 불러오는 함수를 useCallback으로 감싸서 메모리 갇힘(Closure) 현상을 박살냅니다!
+  // 1. 데이터를 불러오는 함수를 useCallback으로 감싸서 메모리 갇힘(Closure) 현상을 박살냅니다!
   const fetchDetailAndComments = useCallback(async () => {
     if (!id) return;
     try {
@@ -72,7 +72,7 @@ export default function CommunityDetailScreen() {
     }
   }, [id]);
 
-  // ✨ 2. 이제 화면이 다시 보일 때마다 위에서 만든 '무조건 최신화' 함수가 실행됩니다!
+  // 2. 이제 화면이 다시 보일 때마다 위에서 만든 '무조건 최신화' 함수가 실행됩니다!
   useFocusEffect(
     useCallback(() => {
       fetchDetailAndComments();
@@ -148,6 +148,46 @@ export default function CommunityDetailScreen() {
         })
       );
       Alert.alert('오류', '좋아요 처리에 실패했습니다.');
+    }
+  };
+
+  const handleToggleReplyLike = async (commentId: number, replyId: number, currentIsLiked: boolean) => {
+    // 1. 프론트엔드 상태 먼저 업데이트 (빠른 UI 반응)
+    setComments((prevComments) =>
+      prevComments.map((comment) => {
+        if (comment.commentId === commentId || comment.id === commentId) {
+          return {
+            ...comment,
+            replies: comment.replies.map((reply: any) => {
+              const currentReplyId = reply.replyId || reply.commentId || reply.id;
+              if (currentReplyId === replyId) {
+                return {
+                  ...reply,
+                  likedByMe: !currentIsLiked,
+                  likeCount: currentIsLiked ? (reply.likeCount || 1) - 1 : (reply.likeCount || 0) + 1,
+                };
+              }
+              return reply;
+            }),
+          };
+        }
+        return comment;
+      })
+    );
+
+    // 2. 백엔드 API 호출 (에러 시 원상복구)
+    try {
+      if (currentIsLiked) {
+        // [주의] 백엔드 스펙에 맞춰 대댓글 전용 API가 있다면 교체하세요 (예: communityApi.unlikeReply)
+        await communityApi.unlikeComment(replyId); 
+      } else {
+        await communityApi.likeComment(replyId);
+      }
+    } catch (error) {
+      console.error('대댓글 좋아요 실패', error);
+      // 에러 시 상태 원상복구 로직...
+      fetchDetailAndComments(); // 제일 안전한 복구 방식
+      Alert.alert('오류', '대댓글 좋아요 처리에 실패했습니다.');
     }
   };
 
@@ -374,38 +414,53 @@ export default function CommunityDetailScreen() {
 
                   {/* 대댓글 영역 */}
                   {comment.replies && comment.replies.length > 0 && (
-                    <View style={styles.repliesContainer}>
-                      {comment.replies.map((reply: any, rIndex: number) => {
-                        const replyId = reply.replyId || reply.commentId || reply.id;
-                        const replyAuthor = reply.authorNickname || reply.authorName || '익명';
-                        return (
-                          <View key={replyId || rIndex} style={styles.replyItem}>
-                            <Ionicons name="return-down-forward-outline" size={16} color="#BBB" style={styles.replyIcon} />
-                            <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
-                            <View style={{ flex: 1 }}>
-                              <View style={styles.commentAuthorRow}>
-                                <Text fontWeight="bold" style={styles.commentAuthor}>{replyAuthor}</Text>
-                                <Text style={styles.commentTime}>{reply.createdAt ? new Date(reply.createdAt).toLocaleTimeString() : '방금'}</Text>
-                              </View>
-                              <Text style={styles.commentText}>{reply.content}</Text>
+                  <View style={styles.repliesContainer}>
+                    {comment.replies.map((reply: any, rIndex: number) => {
+                      const replyId = reply.replyId || reply.commentId || reply.id;
+                      const replyAuthor = reply.authorNickname || reply.authorName || '익명';
+                      return (
+                        <View key={replyId || rIndex} style={styles.replyItem}>
+                          <Ionicons name="return-down-forward-outline" size={16} color="#BBB" style={styles.replyIcon} />
+                          <View style={styles.commentAvatar}><Ionicons name="person" size={16} color="#CCC" /></View>
+                          <View style={{ flex: 1 }}>
+                            <View style={styles.commentAuthorRow}>
+                              <Text fontWeight="bold" style={styles.commentAuthor}>{replyAuthor}</Text>
+                              <Text style={styles.commentTime}>{reply.createdAt ? new Date(reply.createdAt).toLocaleTimeString() : '방금'}</Text>
+                            </View>
+                            <Text style={styles.commentText}>{reply.content}</Text>
+                            
+                            {/* 대댓글 액션 버튼 영역 추가 */}
+                            <View style={styles.commentActionRow}>
                               
+                              {/* 1. 대댓글 좋아요 버튼 */}
+                              <TouchableOpacity 
+                                style={styles.commentActionBtn}
+                                onPress={() => handleToggleReplyLike(currentCommentId, replyId, reply.likedByMe)}
+                              >
+                                <Ionicons name={reply.likedByMe ? "heart" : "heart-outline"} size={12} color={reply.likedByMe ? "#E25555" : "#888"} />
+                                <Text style={[styles.commentActionText, reply.likedByMe && { color: "#E25555" }]}>
+                                  좋아요 {reply.likeCount > 0 ? reply.likeCount : ''}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {/* 2. 대댓글 삭제 버튼 (작성자 본인일 때만) */}
                               {myAccountId && reply.authorId === myAccountId && (
-                                <View style={styles.commentActionRow}>
-                                  <TouchableOpacity 
-                                    style={styles.commentActionBtn}
-                                    onPress={() => handleDeleteComment(replyId)}
-                                  >
-                                    <Ionicons name="trash-outline" size={12} color="#888" />
-                                    <Text style={styles.commentActionText}>삭제</Text>
-                                  </TouchableOpacity>
-                                </View>
+                                <TouchableOpacity 
+                                  style={styles.commentActionBtn}
+                                  onPress={() => handleDeleteComment(replyId)}
+                                >
+                                  <Ionicons name="trash-outline" size={12} color="#888" />
+                                  <Text style={styles.commentActionText}>삭제</Text>
+                                </TouchableOpacity>
                               )}
                             </View>
+
                           </View>
-                        );
-                      })}
-                    </View>
-                  )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
                 </View>
               );
             })}
