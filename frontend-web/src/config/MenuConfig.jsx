@@ -101,7 +101,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'reviews',
         name: '리뷰 관리',
-        path: '/5',
+        path: '/reviews',
         icon: <Star {...iconProps} />,
         subtitle: '고객들이 남긴 소중한 리뷰에 답글을 달아주세요',
         countKey: 'reviews',

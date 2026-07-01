@@ -87,13 +87,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("orderNumber") String orderNumber
     );
 
-     //사장용 찜 고객 목록 — 고객별 완료 주문 통계 배치 조회.
-     //IN절 한 번으로 N+1 없이 처리한다.
+    // 사장 통합 고객 목록 — 고객별 완료 주문 통계 배치 조회 (IN절 1번으로 N+1 방지)
+    // recentOrderCount: :sixMonthsAgo 이후 완료 주문 수 (REGULAR 판정용)
     @Query("""
         SELECT o.account.accountId AS accountId,
                COUNT(o.orderId)    AS orderCount,
                SUM(o.totalPrice)   AS totalAmount,
-               MAX(o.createdAt)    AS lastOrderedAt
+               MAX(o.completedAt)  AS lastOrderedAt,
+               SUM(CASE WHEN o.completedAt >= :sixMonthsAgo THEN 1 ELSE 0 END) AS recentOrderCount
         FROM Order o
         WHERE o.store.storeId         = :storeId
           AND o.account.accountId     IN :accountIds
@@ -103,8 +104,27 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<CustomerOrderStatProjection> findOrderStatsByStoreAndAccounts(
             @Param("storeId") Long storeId,
             @Param("accountIds") List<Long> accountIds,
-            @Param("status") OrderStatus status
+            @Param("status") OrderStatus status,
+            @Param("sixMonthsAgo") LocalDateTime sixMonthsAgo
     );
+
+    // 사장 통합 고객 목록 — 완료 주문이 있는 고객 accountId 목록 (합집합 구성용)
+    @Query("""
+        SELECT DISTINCT o.account.accountId
+        FROM Order o
+        WHERE o.store.storeId = :storeId
+          AND o.status = :status
+    """)
+    List<Long> findOrderAccountIdsByStoreIdAndStatus(@Param("storeId") Long storeId, @Param("status") OrderStatus status);
+
+    // 사장 요약 통계 — 상점 전체 완료 주문 누적 매출
+    @Query("""
+        SELECT COALESCE(SUM(o.totalPrice), 0)
+        FROM Order o
+        WHERE o.store.storeId = :storeId
+          AND o.status = :status
+    """)
+    BigDecimal sumOrderAmountByStoreIdAndStatus(@Param("storeId") Long storeId, @Param("status") OrderStatus status);
 
     @Query("""
         SELECT o

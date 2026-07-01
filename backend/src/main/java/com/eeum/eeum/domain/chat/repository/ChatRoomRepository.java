@@ -13,4 +13,6 @@ public interface ChatRoomRepository
     // 가게 단톡방 멱등 검증 / 1:1 채팅방 조회용
     Optional<ChatRoom> findByRefTypeAndRefIdAndType(
             ChatRoomRefType refType, Long refId, ChatRoomType type);
+
+    Optional<ChatRoom> findByRefTypeAndRefId(ChatRoomRefType refType, Long refId);
 }

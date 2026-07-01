@@ -5,10 +5,14 @@ import com.eeum.eeum.application.chat.dto.response.ChatParticipantResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatReadResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomDetailResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatRoomPublicResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.application.chat.helper.ChatMessagePreview;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -58,6 +62,7 @@ public class ChatRoomService {
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final AccountRepository accountRepository;
+    private final AccountRegionRepository accountRegionRepository;
     private final ChatAccessHelper chatAccessHelper;
     private final ChatUnreadService chatUnreadService;
     private final RedisLockService redisLockService;
@@ -101,8 +106,10 @@ public class ChatRoomService {
             }
 
             Account creator = getAccount(accountId);
+            Region creatorRegion = getCreatorRegionOrNull(creator);
             ChatRoom room = ChatRoom.createGroup(creator, type,
-                    resolveRoomName(request.getName(), isStoreRoom, store), refType, request.getRefId());
+                    resolveRoomName(request.getName(), isStoreRoom, store), refType, request.getRefId(),
+                    creatorRegion);
             chatRoomRepository.save(room);
             chatParticipantRepository.save(ChatParticipant.create(room, creator));
 
@@ -342,9 +349,64 @@ public class ChatRoomService {
         return rawName;
     }
 
+    // 지역 내 공개 채팅방 목록 (GROUP/GROUP_STREET) — 입장 전 탐색용, 무한 스크롤
+    @Transactional(readOnly = true)
+    public Slice<ChatRoomPublicResponseDto> getPublicRooms(Long accountId, Pageable pageable) {
+        Account account = getAccount(accountId);
+        Region region = getRegionOrThrow(account);
+
+        Slice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), pageable);
+        if (rooms.isEmpty()) {
+            return rooms.map(r -> ChatRoomPublicResponseDto.of(r, 0L, false));
+        }
+
+        List<Long> roomIds = rooms.stream().map(ChatRoom::getChatroomId).toList();
+
+        Map<Long, Long> participantCounts = chatParticipantRepository
+                .countGroupedByRoomIdsAndStatus(roomIds, ParticipantStatus.ACTIVE)
+                .stream()
+                .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
+
+        Set<Long> joinedRoomIds = chatParticipantRepository
+                .findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE)
+                .stream()
+                .map(p -> p.getChatRoom().getChatroomId())
+                .collect(Collectors.toSet());
+
+        return rooms.map(room -> ChatRoomPublicResponseDto.of(
+                room,
+                participantCounts.getOrDefault(room.getChatroomId(), 0L),
+                joinedRoomIds.contains(room.getChatroomId())
+        ));
+    }
+
     private Account getAccount(Long accountId) {
         return accountRepository.findById(accountId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+    }
+
+    // 생성자의 인증된 주요 지역 반환 (없으면 null)
+    private Region getCreatorRegionOrNull(Account creator) {
+        Long primaryId = creator.getPrimaryRegionId();
+        if (primaryId == null) return null;
+        return accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(primaryId, creator.getAccountId())
+                .filter(AccountRegion::isVerified)
+                .map(AccountRegion::getRegion)
+                .orElse(null);
+    }
+
+    // 사용자의 인증된 주요 지역 반환 (없으면 예외)
+    private Region getRegionOrThrow(Account account) {
+        Long primaryId = account.getPrimaryRegionId();
+        if (primaryId == null) {
+            throw new NotFoundException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+        }
+        return accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(primaryId, account.getAccountId())
+                .filter(AccountRegion::isVerified)
+                .map(AccountRegion::getRegion)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
     }
 
     // 초대 대상 로드 (중복 제거, excludeAccountId 제외)
