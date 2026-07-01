@@ -87,11 +87,9 @@ export default function ShopDetailScreen() {
       return;
     }
 
-    console.log("🔥 백엔드가 준 상점 상세 데이터:", JSON.stringify(shopDetail, null, 2));
+    const roomId = shopDetail?.chatRoomId; 
 
-    // const roomId = shopDetail?.chatRoomId || shopDetail?.groupChatRoomId; 
-    const roomId = 3;
-    if (!roomId) {
+    if (!roomId /* || !shopDetail?.chatRoomExists */) {
       Alert.alert('알림', '아직 이 상점의 단체 채팅방이 개설되지 않았습니다.');
       return;
     }

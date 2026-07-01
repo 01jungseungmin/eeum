@@ -29,6 +29,7 @@ export default function ChatListScreen() {
     try {
       // 백엔드에서 내가 참여 중인 채팅방 목록만 가져옵니다.
       const data = await chatApi.getRooms();
+      console.log("🔥 채팅방 목록 데이터 원본:", JSON.stringify(data[0], null, 2));
       setMyRooms(data);
     } catch (error) {
       console.error('목록 로딩 에러:', error);
@@ -44,22 +45,23 @@ export default function ChatListScreen() {
   };
 
   const renderRoom = ({ item }: { item: any }) => {
-    const timeString = item.lastMessageCreatedAt 
-      ? new Date(item.lastMessageCreatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    const timeData = item.lastMessageAt || item.createdAt;
+    const timeString = timeData 
+      ? new Date(timeData).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
       : '';
+
+    const lastMsgText = item.lastMessagePreview || '아직 대화가 없습니다.';
 
     return (
       <TouchableOpacity 
         style={styles.roomItem} 
         activeOpacity={0.7}
-        // 이제 복잡한 입장 로직 없이, 클릭하면 무조건 해당 방으로 바로 이동합니다.
         onPress={() => router.push(`/chat/${item.roomId}` as any)}
       >
         <View style={styles.roomImageContainer}>
           {item.imageUrl ? (
             <Image source={{ uri: item.imageUrl }} style={styles.roomImage} />
           ) : (
-            // 상점 채팅방 느낌이 나도록 기본 아이콘을 상점 모양으로 바꿨습니다.
             <View style={styles.placeholderImage}>
               <Ionicons name="storefront" size={24} color="#999" />
             </View>
@@ -81,7 +83,7 @@ export default function ChatListScreen() {
           
           <View style={styles.roomFooterRow}>
             <Text style={styles.lastMessage} numberOfLines={2}>
-              {item.lastMessageContent || '아직 대화가 없습니다.'}
+              {lastMsgText}
             </Text>
             
             {item.unreadCount > 0 && (
