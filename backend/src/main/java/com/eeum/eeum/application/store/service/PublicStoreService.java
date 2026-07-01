@@ -11,6 +11,9 @@ import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.entity.ProductImage;
@@ -58,6 +61,7 @@ public class PublicStoreService {
     private final ProductOptionItemRepository productOptionItemRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
+    private final ChatRoomRepository chatRoomRepository;
 
     // ===================== 상점 목록 조회 =====================
 
@@ -100,24 +104,18 @@ public class PublicStoreService {
                 .map(this::toNoticeDto)
                 .toList();
 
-        return StoreDetailResponseDto.builder()
-                .storeId(store.getStoreId())
-                .name(store.getName())
-                .address(store.getAddress())
-                .phone(store.getPhone())
-                .description(store.getDescription())
-                .businessHours(getBusinessHourDtos(store.getStoreId()))
-                .status(store.getStatus().name())
-                .rating(store.getRating())
-                .favoriteCount(store.getFavoriteCount())
-                .reviewCount(store.getReviewCount())
-                .categoryId(store.getCategory() != null ? store.getCategory().getCategoryId() : null)
-                .categoryName(store.getCategory() != null ? store.getCategory().getName() : null)
-                .latitude(store.getLatitude())
-                .longitude(store.getLongitude())
-                .images(images)
-                .notices(notices)
-                .build();
+        Long chatRoomId = chatRoomRepository
+                .findByRefTypeAndRefId(ChatRoomRefType.STORE, storeId)
+                .map(ChatRoom::getChatroomId)
+                .orElse(null);
+
+        return StoreDetailResponseDto.of(
+                store,
+                images,
+                notices,
+                getBusinessHourDtos(store.getStoreId()),
+                chatRoomId
+        );
     }
 
     // ===================== 상점 상품 목록 조회 =====================

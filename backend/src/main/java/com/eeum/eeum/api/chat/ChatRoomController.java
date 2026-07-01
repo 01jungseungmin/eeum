@@ -3,6 +3,7 @@ package com.eeum.eeum.api.chat;
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.request.ParticipantInviteRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomDetailResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatRoomPublicResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.application.chat.service.ChatRoomService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -47,6 +48,21 @@ public class ChatRoomController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 chatRoomService.getMyRooms(accountId, pageable)));
+    }
+
+    @Operation(
+            summary = "지역 공개 채팅방 탐색",
+            description = "내 인증 지역과 동일한 지역의 활성 GROUP/GROUP_STREET 채팅방을 조회합니다. " +
+                    "joined=true이면 이미 입장한 방이며, false이면 입장 버튼을 통해 참여할 수 있습니다. " +
+                    "주요 지역이 설정되지 않은 경우 404를 반환합니다. 무한 스크롤 지원."
+    )
+    @GetMapping("/public")
+    public ResponseEntity<ApiResponse<Slice<ChatRoomPublicResponseDto>>> getPublicRooms(
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                chatRoomService.getPublicRooms(accountId, pageable)));
     }
 
     @Operation(summary = "채팅방 상세", description = "참여자(ACTIVE) 목록을 포함한 채팅방 상세를 조회합니다.")
