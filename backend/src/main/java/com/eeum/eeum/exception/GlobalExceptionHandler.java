@@ -72,6 +72,10 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail(ErrorCode.RESERVATION_TABLE_UNAVAILABLE));
         }
+        if (rootMsg.contains("uk_reservation_account_store_start")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.VISIT_RESERVATION_ALREADY_EXISTS));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
     }

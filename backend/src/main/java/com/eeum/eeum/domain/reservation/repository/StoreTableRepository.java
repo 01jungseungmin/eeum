@@ -20,13 +20,13 @@ public interface StoreTableRepository extends JpaRepository<StoreTable, Long> {
         SELECT t FROM StoreTable t
         WHERE t.store.storeId = :storeId
           AND t.active = true
-          AND t.capacity >= :visitorCount
+          AND t.capacity >= :partySize
           AND t.storeTableId NOT IN :occupiedTableIds
         ORDER BY t.capacity ASC, t.storeTableId ASC
     """)
     List<StoreTable> findAvailableTablesExcludingOccupied(
             @Param("storeId") Long storeId,
-            @Param("visitorCount") int visitorCount,
+            @Param("partySize") int partySize,
             @Param("occupiedTableIds") List<Long> occupiedTableIds
     );
 }

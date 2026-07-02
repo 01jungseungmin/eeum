@@ -13,14 +13,6 @@ public class VisitReservationTimeSlotResponseDto {
 
     private LocalTime time;
 
-    private Integer maxVisitorCount;
-
-    private Integer maxTeamCount;
-
-    private Integer reservedVisitorCount;
-
-    private Long reservedTeamCount;
-
     private Boolean enabled;
 
     private Boolean closed;

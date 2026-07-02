@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -31,4 +32,7 @@ public class VisitReservationLeftTimeSlotResponseDto {
 
     @Schema(description = "예약 가능한 테이블 중 최대 수용 인원 (테이블 없으면 null)")
     private Integer maxAvailableCapacity;
+
+    @Schema(description = "좌석 수별 잔여 테이블 수")
+    private List<TableAvailabilityResponseDto> tableAvailabilities;
 }

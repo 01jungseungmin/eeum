@@ -23,7 +23,7 @@ public class VisitReservationMapper {
                 .customerPhone(account.getPhone())
                 .visitDate(reservation.getVisitDate())
                 .visitTime(reservation.getVisitTime())
-                .visitorCount(reservation.getVisitorCount())
+                .partySize(reservation.getPartySize())
                 .storeTableId(reservation.getStoreTable() != null ? reservation.getStoreTable().getStoreTableId() : null)
                 .tableName(reservation.getStoreTable() != null ? reservation.getStoreTable().getTableName() : null)
                 .tableCapacity(reservation.getStoreTable() != null ? reservation.getStoreTable().getCapacity() : null)

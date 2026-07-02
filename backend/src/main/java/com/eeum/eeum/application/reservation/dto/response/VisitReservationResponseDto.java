@@ -25,7 +25,7 @@ public class VisitReservationResponseDto {
 
     private LocalDate visitDate;
     private LocalTime visitTime;
-    private Integer visitorCount;
+    private Integer partySize;
     private Long storeTableId;
     private String tableName;
     private Integer tableCapacity;

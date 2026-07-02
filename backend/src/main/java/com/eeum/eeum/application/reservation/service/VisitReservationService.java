@@ -2,6 +2,7 @@ package com.eeum.eeum.application.reservation.service;
 
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationStatusUpdateRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.TableAvailabilityResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.TimeSlotAvailabilityResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationLeftTimeSlotResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationResponseDto;
@@ -113,8 +114,11 @@ public class VisitReservationService {
         StoreVisitReservationSetting setting = storeVisitReservationSettingRepository
                 .findByStore_StoreId(reservation.getStore().getStoreId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SETTING_NOT_FOUND));
-        LocalDateTime visitDateTime = LocalDateTime.of(reservation.getVisitDate(), reservation.getVisitTime());
-        if (LocalDateTime.now().isAfter(visitDateTime.minusMinutes(setting.getCancelDeadlineMinutes()))) {
+        LocalDateTime reservedStartAt = reservation.getReservedStartAt() != null
+                ? reservation.getReservedStartAt()
+                : LocalDateTime.of(reservation.getVisitDate(), reservation.getVisitTime());
+
+        if (LocalDateTime.now().isAfter(reservedStartAt.minusMinutes(setting.getCancelDeadlineMinutes()))) {
             throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED);
         }
         reservation.cancel();
@@ -126,7 +130,7 @@ public class VisitReservationService {
     public List<TimeSlotAvailabilityResponseDto> getAvailableTimeSlots(
             Long storeId,
             LocalDate date,
-            Integer visitorCount
+            Integer partySize
     ) {
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
@@ -139,6 +143,9 @@ public class VisitReservationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SETTING_NOT_FOUND));
         if (!setting.isEnabled()) {
             throw new BusinessException(ErrorCode.RESERVATION_DISABLED);
+        }
+        if (date.isBefore(LocalDate.now())) {
+            throw new BusinessException(ErrorCode.RESERVATION_TIME_UNAVAILABLE);
         }
         if (!setting.isSameDayReservationAllowed() && date.isEqual(LocalDate.now())) {
             throw new BusinessException(ErrorCode.RESERVATION_TIME_UNAVAILABLE);
@@ -153,11 +160,11 @@ public class VisitReservationService {
         }
 
         int duration = setting.getSlotIntervalMinutes();
-        int effectiveVisitorCount = resolveVisitorCount(visitorCount);
+        int effectivePartySize = resolvePartySize(partySize);
         List<LocalTime> slotTimes = generateSlotTimes(setting);
 
         boolean isToday = date.isEqual(LocalDate.now());
-        LocalTime now = LocalTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
         List<StoreTable> activeTables = storeTableRepository
                 .findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(storeId);
@@ -170,13 +177,17 @@ public class VisitReservationService {
                         .collect(Collectors.toMap(VisitReservationTimeSlot::getSlotTime, s -> s));
 
         return slotTimes.stream()
-                .filter(time -> !isToday || time.isAfter(now))
+                .filter(time -> LocalDateTime.of(date, time).isAfter(now))
                 .map(time -> {
                     VisitReservationTimeSlot override = overrideMap.get(time);
                     if (override != null && !override.isEnabled()) {
                         return TimeSlotAvailabilityResponseDto.builder()
-                                .time(time).available(false).availableTableCount(0)
-                                .minAvailableCapacity(null).maxAvailableCapacity(null)
+                                .time(time)
+                                .available(false)
+                                .availableTableCount(0)
+                                .minAvailableCapacity(null)
+                                .maxAvailableCapacity(null)
+                                .tableAvailabilities(List.of())
                                 .build();
                     }
 
@@ -188,10 +199,46 @@ public class VisitReservationService {
                             .map(ReservationOccupancyProjection::getTableId)
                             .collect(Collectors.toSet());
 
-                    List<StoreTable> available = activeTables.stream()
-                            .filter(t -> !occupiedIds.contains(t.getStoreTableId())
-                                    && t.getCapacity() >= effectiveVisitorCount)
+                    List<StoreTable> reservableTables = activeTables.stream()
+                            .filter(t -> t.getCapacity() >= effectivePartySize)
                             .toList();
+
+                    List<StoreTable> available = reservableTables.stream()
+                            .filter(t -> !occupiedIds.contains(t.getStoreTableId()))
+                            .toList();
+
+                    Map<Integer, Long> totalCountByCapacity = reservableTables.stream()
+                            .collect(Collectors.groupingBy(
+                                    StoreTable::getCapacity,
+                                    TreeMap::new,
+                                    Collectors.counting()
+                            ));
+
+                    Map<Integer, Long> reservedCountByCapacity = reservableTables.stream()
+                            .filter(t -> occupiedIds.contains(t.getStoreTableId()))
+                            .collect(Collectors.groupingBy(
+                                    StoreTable::getCapacity,
+                                    TreeMap::new,
+                                    Collectors.counting()
+                            ));
+
+                    List<TableAvailabilityResponseDto> tableAvailabilities =
+                            totalCountByCapacity.entrySet().stream()
+                                    .map(entry -> {
+                                        Integer capacity = entry.getKey();
+                                        int totalCount = entry.getValue().intValue();
+                                        int reservedCount = reservedCountByCapacity
+                                                .getOrDefault(capacity, 0L)
+                                                .intValue();
+
+                                        return TableAvailabilityResponseDto.builder()
+                                                .capacity(capacity)
+                                                .totalCount(totalCount)
+                                                .reservedCount(reservedCount)
+                                                .availableCount(totalCount - reservedCount)
+                                                .build();
+                                    })
+                                    .toList();
 
                     return TimeSlotAvailabilityResponseDto.builder()
                             .time(time)
@@ -199,6 +246,7 @@ public class VisitReservationService {
                             .availableTableCount(available.size())
                             .minAvailableCapacity(available.isEmpty() ? null : available.get(0).getCapacity())
                             .maxAvailableCapacity(available.isEmpty() ? null : available.get(available.size() - 1).getCapacity())
+                            .tableAvailabilities(tableAvailabilities)
                             .build();
                 })
                 .toList();
@@ -304,48 +352,62 @@ public class VisitReservationService {
                 visitReservationTimeSlotRepository
                         .findByStore_StoreIdAndSlotDateOrderBySlotTimeAsc(storeId, date)
                         .stream()
-                        .collect(Collectors.toMap(VisitReservationTimeSlot::getSlotTime, s -> s));
+                        .collect(Collectors.toMap(
+                                VisitReservationTimeSlot::getSlotTime,
+                                s -> s
+                        ));
 
         List<ReservationOccupancyProjection> dayOccupancies = visitReservationRepository
-                .findDayOccupancies(storeId, date.atStartOfDay(), date.plusDays(1).atStartOfDay(), ACTIVE_STATUSES);
+                .findDayOccupancies(
+                        storeId,
+                        date.atStartOfDay(),
+                        date.plusDays(1).atStartOfDay(),
+                        ACTIVE_STATUSES
+                );
 
         return slotTimes.stream()
                 .map(time -> {
                     VisitReservationTimeSlot override = overrideMap.get(time);
-                    if (override != null && !override.isEnabled()) {
-                        return VisitReservationLeftTimeSlotResponseDto.builder()
-                                .time(time).available(false).availableTableCount(0)
-                                .totalTableCount(totalTableCount).reservedTableCount(0)
-                                .minAvailableCapacity(null).maxAvailableCapacity(null)
-                                .build();
-                    }
 
                     LocalDateTime startAt = LocalDateTime.of(date, time);
                     LocalDateTime endAt = startAt.plusMinutes(interval);
 
                     Set<Long> occupiedIds = dayOccupancies.stream()
-                            .filter(o -> o.getStartAt().isBefore(endAt) && o.getEndAt().isAfter(startAt))
+                            .filter(o -> o.getStartAt().isBefore(endAt)
+                                    && o.getEndAt().isAfter(startAt))
                             .map(ReservationOccupancyProjection::getTableId)
                             .collect(Collectors.toSet());
+
                     int reservedTableCount = occupiedIds.size();
 
-                    List<StoreTable> availableTables = allTables.stream()
+                    boolean slotDisabled = override != null && !override.isEnabled();
+
+                    List<StoreTable> availableTables = slotDisabled
+                            ? List.of()
+                            : allTables.stream()
                             .filter(t -> !occupiedIds.contains(t.getStoreTableId()))
                             .toList();
 
+                    List<TableAvailabilityResponseDto> tableAvailabilities =
+                            buildTableAvailabilities(allTables, occupiedIds, slotDisabled);
+
                     return VisitReservationLeftTimeSlotResponseDto.builder()
                             .time(time)
-                            .available(!availableTables.isEmpty())
+                            .available(!slotDisabled && !availableTables.isEmpty())
                             .availableTableCount(availableTables.size())
                             .totalTableCount(totalTableCount)
                             .reservedTableCount(reservedTableCount)
-                            .minAvailableCapacity(availableTables.isEmpty() ? null : availableTables.get(0).getCapacity())
-                            .maxAvailableCapacity(availableTables.isEmpty() ? null : availableTables.get(availableTables.size() - 1).getCapacity())
+                            .minAvailableCapacity(availableTables.isEmpty()
+                                    ? null
+                                    : availableTables.get(0).getCapacity())
+                            .maxAvailableCapacity(availableTables.isEmpty()
+                                    ? null
+                                    : availableTables.get(availableTables.size() - 1).getCapacity())
+                            .tableAvailabilities(tableAvailabilities)
                             .build();
                 })
                 .toList();
     }
-
     // ===================== 내부 유틸 =====================
 
     private VisitReservationResponseDto createReservationInternal(
@@ -378,14 +440,14 @@ public class VisitReservationService {
         validateSlotEnabled(storeId, request.getVisitDate(), request.getVisitTime());
         validateDuplicateMyReservation(accountId, store, request.getVisitDate(), request.getVisitTime());
 
-        int visitorCount = resolveVisitorCount(request.getVisitorCount());
+        int partySize = resolvePartySize(request.getPartySize());
 
-        StoreTable assignedTable = assignAvailableTable(storeId, visitorCount, startAt, endAt);
+        StoreTable assignedTable = assignAvailableTable(storeId, partySize, startAt, endAt);
 
         VisitReservation reservation = VisitReservation.create(
                 store, account,
                 request.getVisitDate(), request.getVisitTime(),
-                visitorCount, request.getRequestMessage(),
+                partySize, request.getRequestMessage(),
                 assignedTable, startAt, endAt
         );
         visitReservationRepository.save(reservation);
@@ -405,8 +467,50 @@ public class VisitReservationService {
         return visitReservationMapper.toVisitReservationResponseDto(reservation);
     }
 
+    private List<TableAvailabilityResponseDto> buildTableAvailabilities(
+            List<StoreTable> tables,
+            Set<Long> occupiedIds,
+            boolean slotDisabled
+    ) {
+        Map<Integer, Long> totalCountByCapacity = tables.stream()
+                .collect(Collectors.groupingBy(
+                        StoreTable::getCapacity,
+                        TreeMap::new,
+                        Collectors.counting()
+                ));
+
+        Map<Integer, Long> reservedCountByCapacity = tables.stream()
+                .filter(t -> occupiedIds.contains(t.getStoreTableId()))
+                .collect(Collectors.groupingBy(
+                        StoreTable::getCapacity,
+                        TreeMap::new,
+                        Collectors.counting()
+                ));
+
+        return totalCountByCapacity.entrySet().stream()
+                .map(entry -> {
+                    Integer capacity = entry.getKey();
+                    int totalCount = entry.getValue().intValue();
+                    int reservedCount = reservedCountByCapacity
+                            .getOrDefault(capacity, 0L)
+                            .intValue();
+
+                    int availableCount = slotDisabled
+                            ? 0
+                            : totalCount - reservedCount;
+
+                    return TableAvailabilityResponseDto.builder()
+                            .capacity(capacity)
+                            .totalCount(totalCount)
+                            .reservedCount(reservedCount)
+                            .availableCount(availableCount)
+                            .build();
+                })
+                .toList();
+    }
+
     private StoreTable assignAvailableTable(
-            Long storeId, int visitorCount, LocalDateTime startAt, LocalDateTime endAt
+            Long storeId, int partySize, LocalDateTime startAt, LocalDateTime endAt
     ) {
         List<Long> occupiedTableIds = visitReservationRepository.findOccupiedTableIds(
                 storeId, startAt, endAt, ACTIVE_STATUSES);
@@ -415,10 +519,10 @@ public class VisitReservationService {
         if (occupiedTableIds.isEmpty()) {
             candidates = storeTableRepository
                     .findByStore_StoreIdAndActiveTrueAndCapacityGreaterThanEqualOrderByCapacityAscStoreTableIdAsc(
-                            storeId, visitorCount);
+                            storeId, partySize);
         } else {
             candidates = storeTableRepository.findAvailableTablesExcludingOccupied(
-                    storeId, visitorCount, occupiedTableIds);
+                    storeId, partySize, occupiedTableIds);
         }
 
         return candidates.stream()
@@ -452,10 +556,11 @@ public class VisitReservationService {
         if (visitDate == null || visitTime == null) {
             throw new BusinessException(ErrorCode.RESERVATION_TIME_UNAVAILABLE);
         }
-        if (visitDate.isBefore(LocalDate.now())) {
-            throw new BusinessException(ErrorCode.RESERVATION_TIME_UNAVAILABLE);
-        }
-        if (visitDate.isEqual(LocalDate.now()) && visitTime.isBefore(LocalTime.now())) {
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime visitDateTime = LocalDateTime.of(visitDate, visitTime);
+
+        if (!visitDateTime.isAfter(now)) {
             throw new BusinessException(ErrorCode.RESERVATION_TIME_UNAVAILABLE);
         }
     }
@@ -508,14 +613,14 @@ public class VisitReservationService {
         }
     }
 
-    private int resolveVisitorCount(Integer visitorCount) {
-        if (visitorCount == null) {
+    private int resolvePartySize(Integer partySize) {
+        if (partySize == null) {
             return 1;
         }
-        if (visitorCount < 1) {
-            throw new BusinessException(ErrorCode.RESERVATION_INVALID_VISITOR_COUNT);
+        if (partySize < 1) {
+            throw new BusinessException(ErrorCode.RESERVATION_INVALID_PARTY_SIZE);
         }
-        return visitorCount;
+        return partySize;
     }
 
     private List<LocalTime> generateSlotTimes(StoreVisitReservationSetting setting) {

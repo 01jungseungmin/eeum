@@ -149,12 +149,13 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     RESERVATION_SETTING_NOT_FOUND("RESERVATION_012","예약 설정을 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
     RESERVATION_DISABLED("RESERVATION_013","해당 상점은 방문 예약 기능을 사용하지 않습니다.",HttpStatus.BAD_REQUEST),
     RESERVATION_TABLE_UNAVAILABLE("RESERVATION_014", "해당 시간에 예약 가능한 테이블이 없습니다.", HttpStatus.CONFLICT),
-    RESERVATION_INVALID_VISITOR_COUNT("RESERVATION_015", "예약 인원 수가 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_INVALID_PARTY_SIZE("RESERVATION_015", "예약 인원 수가 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
     RESERVATION_INVALID_SLOT_TIME("RESERVATION_016", "예약 가능한 시간 단위가 아닙니다.", HttpStatus.BAD_REQUEST),
     RESERVATION_TABLE_CHANGE_NOT_ALLOWED("RESERVATION_018", "진행 중인 미래 예약이 있어 테이블 구성을 변경할 수 없습니다.", HttpStatus.CONFLICT),
     RESERVATION_APPROVE_NOT_ALLOWED("RESERVATION_019", "승인할 수 없는 예약 상태입니다.", HttpStatus.BAD_REQUEST),
     RESERVATION_REJECT_NOT_ALLOWED("RESERVATION_020", "거절할 수 없는 예약 상태입니다.", HttpStatus.BAD_REQUEST),
     RESERVATION_COMPLETE_NOT_ALLOWED("RESERVATION_021", "완료 처리할 수 없는 예약 상태입니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_SLOT_CHANGE_NOT_ALLOWED("RESERVATION_022", "활성 예약이 있는 시간대는 비활성화할 수 없습니다.", HttpStatus.CONFLICT),
 
     // ===================== 중고거래 (USED) =====================
     USED_PRODUCT_NOT_FOUND("USED_001", "존재하지 않는 중고 게시글입니다", HttpStatus.NOT_FOUND),

@@ -18,10 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -52,29 +53,43 @@ public class StoreTableService {
         return redisLockService.executeWithLock(
                 LockKeys.storeReservation(storeId),
                 Duration.ofSeconds(30),
-                ErrorCode.COMMON_CONFLICT,
+                ErrorCode.LOCK_RESERVATION_FAILED,
                 () -> transactionTemplate.execute(status -> configureTablesInternal(store, storeId, request))
         );
     }
 
     private List<StoreTableResponseDto> configureTablesInternal(
-            Store store, Long storeId, StoreTableConfigRequestDto request
+            Store store,
+            Long storeId,
+            StoreTableConfigRequestDto request
     ) {
+        LocalDateTime now = LocalDateTime.now();
         if (visitReservationRepository.existsActiveFutureReservations(
-                storeId, ACTIVE_STATUSES, LocalDateTime.now(), LocalDate.now())) {
+                storeId, ACTIVE_STATUSES, now, now.toLocalDate())) {
             throw new BusinessException(ErrorCode.RESERVATION_TABLE_CHANGE_NOT_ALLOWED);
         }
 
         storeTableRepository.findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(storeId)
                 .forEach(StoreTable::deactivate);
 
+        Map<Integer, Integer> capacityCountMap = request.getTables().stream()
+                .collect(Collectors.toMap(
+                        StoreTableConfigRequestDto.TableItem::getCapacity,
+                        StoreTableConfigRequestDto.TableItem::getCount,
+                        Integer::sum
+                ));
+
         List<StoreTable> newTables = new ArrayList<>();
-        for (StoreTableConfigRequestDto.TableItem item : request.getTables()) {
-            for (int i = 1; i <= item.getCount(); i++) {
-                String name = item.getCapacity() + "인석-" + i;
-                newTables.add(StoreTable.create(store, item.getCapacity(), name));
-            }
-        }
+        capacityCountMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    int capacity = entry.getKey();
+                    int count = entry.getValue();
+                    for (int i = 1; i <= count; i++) {
+                        newTables.add(StoreTable.create(store, capacity, capacity + "인석-" + i));
+                    }
+                });
+
         storeTableRepository.saveAll(newTables);
 
         return newTables.stream()

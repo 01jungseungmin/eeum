@@ -18,13 +18,31 @@ import java.time.LocalTime;
 @Getter
 @Entity
 @Table(
-    name = "reservation",
-    uniqueConstraints = {
-        @UniqueConstraint(
-            name = "uk_reservation_table_start",
-            columnNames = {"store_table_id", "reserved_start_at"}
-        )
-    }
+        name = "reservation",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_reservation_table_start",
+                        columnNames = {"store_table_id", "reserved_start_at"}
+                ),
+                @UniqueConstraint(
+                        name = "uk_reservation_account_store_start",
+                        columnNames = {"account_id", "store_id", "reserved_start_at"}
+                )
+        },
+        indexes = {
+                @Index(
+                        name = "idx_visit_reservation_table_time_status",
+                        columnList = "store_table_id, reserved_start_at, reserved_end_at, status"
+                ),
+                @Index(
+                        name = "idx_visit_reservation_store_date_time_status",
+                        columnList = "store_id, visit_date, visit_time, status"
+                ),
+                @Index(
+                        name = "idx_visit_reservation_account_status",
+                        columnList = "account_id, status"
+                )
+        }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class VisitReservation extends BaseEntity {
@@ -48,8 +66,8 @@ public class VisitReservation extends BaseEntity {
     @Column(name = "visit_time", nullable = false)
     private LocalTime visitTime;
 
-    @Column(name = "visitor_count", nullable = false)
-    private Integer visitorCount = 1;
+    @Column(name = "party_size", nullable = false)
+    private Integer partySize = 1;
 
     @Column(name = "request_message", length = 500)
     private String requestMessage;
@@ -80,7 +98,7 @@ public class VisitReservation extends BaseEntity {
             Account account,
             LocalDate visitDate,
             LocalTime visitTime,
-            Integer visitorCount,
+            Integer partySize,
             String requestMessage,
             StoreTable storeTable,
             LocalDateTime reservedStartAt,
@@ -91,7 +109,7 @@ public class VisitReservation extends BaseEntity {
         reservation.account = account;
         reservation.visitDate = visitDate;
         reservation.visitTime = visitTime;
-        reservation.visitorCount = visitorCount != null ? visitorCount : 1;
+        reservation.partySize = partySize != null ? partySize : 1;
         reservation.requestMessage = requestMessage;
         reservation.storeTable = storeTable;
         reservation.reservedStartAt = reservedStartAt;

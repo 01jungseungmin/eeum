@@ -75,22 +75,6 @@ public interface VisitReservationRepository extends JpaRepository<VisitReservati
     );
 
     @Query("""
-    SELECT r.visitTime          AS reservationTime,
-           SUM(r.visitorCount)  AS reservedPeople,
-           COUNT(r)             AS reservedTeams
-    FROM VisitReservation r
-        where r.store.storeId = :storeId
-          and r.visitDate = :date
-          and r.status in :statuses
-        group by r.visitTime
-    """)
-    List<VisitReservationTimeSlotCountProjection> countTimeSlotsByStoreAndDate(
-            @Param("storeId") Long storeId,
-            @Param("date") LocalDate date,
-            @Param("statuses") List<VisitReservationStatus> statuses
-    );
-
-    @Query("""
         SELECT DISTINCT r.storeTable.storeTableId
         FROM VisitReservation r
         WHERE r.store.storeId = :storeId

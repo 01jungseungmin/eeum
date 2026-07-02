@@ -12,6 +12,8 @@ import com.eeum.eeum.common.service.RateLimitService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.AccountRole;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -543,12 +545,34 @@ public class AuthService {
 
         tokenService.saveRefreshToken(account.getAccountId(), refreshToken);
 
+        Optional<OwnerInfo> ownerInfoOpt =
+                ownerInfoRepository.findByAccount_AccountId(account.getAccountId());
+
+        boolean ownerInfoExists = ownerInfoOpt.isPresent();
+
+        String ownerApprovalStatus = ownerInfoOpt
+                .map(ownerInfo -> ownerInfo.getApprovalStatus() == null
+                        ? null
+                        : ownerInfo.getApprovalStatus().name())
+                .orElse(null);
+
+        boolean canAccessApprovalPage =
+                account.getRole() == AccountRole.ROLE_USER
+                        && ownerInfoOpt
+                        .map(ownerInfo ->
+                                ownerInfo.getApprovalStatus() == ApprovalStatus.PENDING
+                                        || ownerInfo.getApprovalStatus() == ApprovalStatus.REJECTED
+                        )
+                        .orElse(false);
+
         return TokenResponseDto.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .accessTokenExpiresIn(jwtProvider.getAccessTokenExpiration())
                 .refreshTokenExpiresIn(jwtProvider.getRefreshTokenExpiration())
                 .role(account.getRole().name())
+                .ownerInfoExists(ownerInfoExists)
+                .ownerApprovalStatus(ownerApprovalStatus)
                 .build();
     }
 }

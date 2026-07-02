@@ -27,12 +27,6 @@ public class StoreVisitReservationSetting extends BaseEntity {
     @Column(name = "enabled", nullable = false)
     private boolean enabled = false;
 
-    @Column(name = "default_max_visitor_count", nullable = false)
-    private Integer defaultMaxVisitorCount = 5;
-
-    @Column(name = "default_max_team_count", nullable = false)
-    private Integer defaultMaxTeamCount = 1;
-
     @Column(name = "slot_interval_minutes", nullable = false)
     private Integer slotIntervalMinutes = 30;
 
@@ -62,8 +56,6 @@ public class StoreVisitReservationSetting extends BaseEntity {
 
     public void update(
             boolean enabled,
-            Integer defaultMaxVisitorCount,
-            Integer defaultMaxTeamCount,
             Integer slotIntervalMinutes,
             boolean sameDayReservationAllowed,
             Integer cancelDeadlineMinutes,
@@ -71,8 +63,6 @@ public class StoreVisitReservationSetting extends BaseEntity {
             LocalTime endTime
     ) {
         this.enabled = enabled;
-        this.defaultMaxVisitorCount = defaultMaxVisitorCount;
-        this.defaultMaxTeamCount = defaultMaxTeamCount;
         this.slotIntervalMinutes = slotIntervalMinutes;
         this.sameDayReservationAllowed = sameDayReservationAllowed;
         this.cancelDeadlineMinutes = cancelDeadlineMinutes;

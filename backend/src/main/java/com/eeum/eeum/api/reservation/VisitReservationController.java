@@ -41,10 +41,10 @@ public class VisitReservationController {
     public ResponseEntity<ApiResponse<List<TimeSlotAvailabilityResponseDto>>> getAvailableTimeSlots(
             @PathVariable Long storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) Integer visitorCount
+            @RequestParam(required = false) Integer partySize
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                visitReservationService.getAvailableTimeSlots(storeId, date, visitorCount)
+                visitReservationService.getAvailableTimeSlots(storeId, date, partySize)
         ));
     }
 

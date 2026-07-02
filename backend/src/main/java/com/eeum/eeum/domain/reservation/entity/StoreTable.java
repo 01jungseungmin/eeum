@@ -8,9 +8,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "store_table")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(
+        name = "store_table",
+        indexes = {
+                @Index(name = "idx_store_table_store_active", columnList = "store_id, active"),
+                @Index(name = "idx_store_table_store_capacity", columnList = "store_id, capacity")
+        }
+)
 public class StoreTable extends BaseEntity {
 
     @Id
