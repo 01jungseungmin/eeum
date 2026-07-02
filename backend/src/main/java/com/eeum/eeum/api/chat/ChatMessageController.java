@@ -31,13 +31,13 @@ public class ChatMessageController {
     private final ChatMessageService chatMessageService;
 
     @Operation(summary = "메시지 목록 조회",
-               description = "최신순 커서 페이징. cursor(sentAt)가 없으면 첫 페이지. 삭제된 메시지는 '삭제된 메시지입니다'로 표시됩니다.")
+               description = "최신순 커서 페이징. cursor(sentAt)가 없으면 첫 페이지(최근 50개). 이전 메시지는 cursor에 마지막 sentAt을 담아 스크롤 시 추가 로드. 삭제된 메시지는 '삭제된 메시지입니다'로 표시됩니다.")
     @GetMapping("/rooms/{roomId}/messages")
     public ResponseEntity<ApiResponse<Slice<ChatMessageResponseDto>>> getMessages(
             @PathVariable Long roomId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursor,
-            @RequestParam(defaultValue = "30") int size
+            @RequestParam(defaultValue = "50") int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(

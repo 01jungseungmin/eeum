@@ -71,6 +71,9 @@ public class StoreDetailResponseDto {
     @Schema(description = "현재 사용자의 채팅방 참여 여부", example = "false")
     private boolean joinedChatRoom;
 
+    @Schema(description = "공유 딥링크 URL", example = "eeum://stores/1")
+    private String shareUrl;
+
     public static StoreDetailResponseDto of(
             Store store,
             List<ImageResponseDto> images,
@@ -96,6 +99,7 @@ public class StoreDetailResponseDto {
                 .chatRoomId(chatRoomId)
                 .images(images)
                 .notices(notices)
+                .shareUrl("eeum://stores/" + store.getStoreId())
                 .build();
     }
 }

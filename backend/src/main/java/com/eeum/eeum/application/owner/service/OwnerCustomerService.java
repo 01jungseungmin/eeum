@@ -1,7 +1,14 @@
 package com.eeum.eeum.application.owner.service;
 
+import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
 import com.eeum.eeum.application.owner.dto.response.OwnerCustomerResponseDto;
 import com.eeum.eeum.application.owner.dto.response.OwnerCustomerSummaryResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
+import com.eeum.eeum.domain.order.entity.Order;
+import com.eeum.eeum.domain.order.entity.OrderItem;
+import com.eeum.eeum.domain.order.entity.Payment;
+import com.eeum.eeum.domain.order.repository.OrderItemRepository;
+import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.application.owner.enums.OwnerCustomerInterestType;
 import com.eeum.eeum.application.owner.enums.OwnerCustomerSortType;
 import com.eeum.eeum.application.owner.enums.OwnerCustomerType;
@@ -40,6 +47,8 @@ public class OwnerCustomerService {
 
     private final StoreRepository storeRepository;
     private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final PaymentRepository paymentRepository;
     private final FavoriteRepository favoriteRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final StoreReviewRepository storeReviewRepository;
@@ -231,6 +240,18 @@ public class OwnerCustomerService {
                 .chatParticipantCustomerCount(chatAccountIds.size())
                 .totalSalesAmount(totalSales != null ? totalSales : BigDecimal.ZERO)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<StoreOrderResponseDto> getCustomerOrders(Long ownerId, Long customerId, Pageable pageable) {
+        Long storeId = getOwnerStoreId(ownerId);
+        Page<Order> orders = orderRepository
+                .findByStore_StoreIdAndAccount_AccountIdOrderByCreatedAtDesc(storeId, customerId, pageable);
+        return orders.map(order -> {
+            List<OrderItem> items = orderItemRepository.findByOrder_OrderId(order.getOrderId());
+            Payment payment = paymentRepository.findByOrder_OrderId(order.getOrderId()).orElse(null);
+            return StoreOrderResponseDto.of(order, items, payment);
+        });
     }
 
     // ===================== 내부 유틸 =====================
