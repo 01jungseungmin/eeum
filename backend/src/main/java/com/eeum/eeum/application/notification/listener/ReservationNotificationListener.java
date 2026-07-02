@@ -70,8 +70,8 @@ public class ReservationNotificationListener {
         }
         notificationService.createNotification(NotificationCreateRequestDto.builder()
                 .accountId(event.customerAccountId())
-                .type(NotificationType.RESERVATION_CANCELLED)
-                .title("예약이 취소되었습니다")
+                .type(NotificationType.RESERVATION_REJECTED)
+                .title("예약이 거절되었습니다")
                 .content(content)
                 .refType(NotificationRefType.RESERVATION)
                 .refId(event.reservationId())

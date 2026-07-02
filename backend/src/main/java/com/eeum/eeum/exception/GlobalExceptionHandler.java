@@ -3,8 +3,10 @@ package com.eeum.eeum.exception;
 import com.eeum.eeum.common.dto.response.ApiResponse; //공통 응답 객체
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j; //로그
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus; //HTTP 상태 코드
 import org.springframework.http.ResponseEntity; //응답 객체 생성
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException; //@Valid 검증 실패를 처리하기 위한 클래스
 import org.springframework.web.bind.annotation.ExceptionHandler; //특정 예외 타입을 처리하는 메서드 지정
 import org.springframework.web.bind.annotation.RestControllerAdvice; //모든 Controller에서 발생한 예외를 잡는 클래스
@@ -57,6 +59,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.fail(ErrorCode.VALIDATION_INVALID_INPUT.getCode(), errorMessage));
+    }
+
+    // ===================== DB 제약 위반 =====================
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<?>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("[DataIntegrityViolationException] {}", e.getMessage());
+        Throwable root = e.getRootCause();
+        String rootMsg = root != null ? root.getMessage() : "";
+        if (rootMsg.contains("uk_reservation_table_start")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.RESERVATION_TABLE_UNAVAILABLE));
+        }
+        if (rootMsg.contains("uk_reservation_account_store_start")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.VISIT_RESERVATION_ALREADY_EXISTS));
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
+    }
+
+    // ===================== 낙관적 락 충돌 =====================
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<?>> handleOptimisticLockingFailure(ObjectOptimisticLockingFailureException e) {
+        log.warn("[OptimisticLockingFailure] {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
     }
 
     // ===================== 서버 오류 =====================

@@ -138,7 +138,6 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
-    RESERVATION_CAPACITY_EXCEEDED("RESERVATION_002", "예약 가능 인원을 초과했습니다", HttpStatus.BAD_REQUEST),
     RESERVATION_CANCEL_NOT_ALLOWED("RESERVATION_003", "취소할 수 없는 예약 상태입니다", HttpStatus.BAD_REQUEST),
     RESERVATION_ACCESS_DENIED("RESERVATION_004", "예약 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     RESERVATION_TIME_UNAVAILABLE("RESERVATION_005", "해당 시간대는 예약할 수 없습니다", HttpStatus.BAD_REQUEST),
@@ -146,11 +145,17 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     RESERVATION_STORE_CLOSED_DAY("RESERVATION_007", "해당 요일은 상점 휴무일입니다.",HttpStatus.BAD_REQUEST),
     RESERVATION_STORE_OUTSIDE_BUSINESS_HOURS("RESERVATION_008", "상점 영업시간 외에는 예약할 수 없습니다.",HttpStatus.BAD_REQUEST),
     RESERVATION_STORE_BUSINESS_HOURS_NOT_SET("RESERVATION_009", "상점 영업시간이 등록되어 있지 않습니다.",HttpStatus.BAD_REQUEST),
-    VISIT_RESERVATION_DUPLICATED("RESERVATION_010","해당 시간에는 이미 방문 예약이 있습니다.",HttpStatus.CONFLICT),
-    RESERVATION_TEAM_LIMIT_EXCEEDED("RESERVATION_011","해당 시간대의 예약 가능 팀 수를 초과했습니다.",HttpStatus.CONFLICT),
+    VISIT_RESERVATION_ALREADY_EXISTS("RESERVATION_010","해당 시간에는 이미 방문 예약이 있습니다.",HttpStatus.CONFLICT),
     RESERVATION_SETTING_NOT_FOUND("RESERVATION_012","예약 설정을 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
     RESERVATION_DISABLED("RESERVATION_013","해당 상점은 방문 예약 기능을 사용하지 않습니다.",HttpStatus.BAD_REQUEST),
-    VISIT_RESERVATION_ALREADY_EXISTS("RESERVATION_014","이미 동일시간 예약이 존재합니다.",HttpStatus.CONFLICT),
+    RESERVATION_TABLE_UNAVAILABLE("RESERVATION_014", "해당 시간에 예약 가능한 테이블이 없습니다.", HttpStatus.CONFLICT),
+    RESERVATION_INVALID_PARTY_SIZE("RESERVATION_015", "예약 인원 수가 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_INVALID_SLOT_TIME("RESERVATION_016", "예약 가능한 시간 단위가 아닙니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_TABLE_CHANGE_NOT_ALLOWED("RESERVATION_018", "진행 중인 미래 예약이 있어 테이블 구성을 변경할 수 없습니다.", HttpStatus.CONFLICT),
+    RESERVATION_APPROVE_NOT_ALLOWED("RESERVATION_019", "승인할 수 없는 예약 상태입니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_REJECT_NOT_ALLOWED("RESERVATION_020", "거절할 수 없는 예약 상태입니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_COMPLETE_NOT_ALLOWED("RESERVATION_021", "완료 처리할 수 없는 예약 상태입니다.", HttpStatus.BAD_REQUEST),
+    RESERVATION_SLOT_CHANGE_NOT_ALLOWED("RESERVATION_022", "활성 예약이 있는 시간대는 비활성화할 수 없습니다.", HttpStatus.CONFLICT),
 
     // ===================== 중고거래 (USED) =====================
     USED_PRODUCT_NOT_FOUND("USED_001", "존재하지 않는 중고 게시글입니다", HttpStatus.NOT_FOUND),

@@ -9,28 +9,22 @@ import java.util.List;
 
 @Getter
 @Builder
-@Schema(description = "사장용 날짜별 시간대 예약 현황")
-public class VisitReservationLeftTimeSlotResponseDto {
+@Schema(description = "예약 가능 시간대 응답")
+public class TimeSlotAvailabilityResponseDto {
 
     @Schema(description = "슬롯 시간")
     private LocalTime time;
 
-    @Schema(description = "예약 가능 여부 (활성 테이블이 1개 이상 남아 있으면 true)")
+    @Schema(description = "해당 시간대 예약 가능 여부")
     private boolean available;
 
     @Schema(description = "예약 가능한 테이블 수")
     private int availableTableCount;
 
-    @Schema(description = "전체 활성 테이블 수")
-    private int totalTableCount;
-
-    @Schema(description = "예약된 테이블 수")
-    private int reservedTableCount;
-
-    @Schema(description = "예약 가능한 테이블 중 최소 수용 인원 (테이블 없으면 null)")
+    @Schema(description = "요청 인원 기준 예약 가능한 최소 좌석 수 (테이블이 없으면 null)")
     private Integer minAvailableCapacity;
 
-    @Schema(description = "예약 가능한 테이블 중 최대 수용 인원 (테이블 없으면 null)")
+    @Schema(description = "요청 인원 기준 예약 가능한 최대 좌석 수 (테이블이 없으면 null)")
     private Integer maxAvailableCapacity;
 
     @Schema(description = "좌석 수별 잔여 테이블 수")
