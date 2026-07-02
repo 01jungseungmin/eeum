@@ -224,6 +224,13 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     INQUIRY_ANSWER_NOT_FOUND("INQUIRY_007", "존재하지 않는 답변입니다", HttpStatus.NOT_FOUND),
     INQUIRY_STORE_NOT_ALLOWED("INQUIRY_008", "관리자 문의에는 storeId를 포함할 수 없습니다", HttpStatus.BAD_REQUEST),
 
+    // ===================== 신고 (REPORT) =====================
+    REPORT_NOT_FOUND("REPORT_001", "존재하지 않는 신고입니다.", HttpStatus.NOT_FOUND),
+    REPORT_ACCESS_DENIED("REPORT_002", "신고 접근 권한이 없습니다.", HttpStatus.FORBIDDEN),
+    REPORT_ALREADY_EXISTS("REPORT_003", "이미 신고한 대상입니다.", HttpStatus.CONFLICT),
+    REPORT_ALREADY_PROCESSED("REPORT_004", "이미 처리된 신고입니다.", HttpStatus.CONFLICT),
+    REPORT_SELF_NOT_ALLOWED("REPORT_005", "자기 자신 또는 자신의 콘텐츠는 신고할 수 없습니다.", HttpStatus.BAD_REQUEST),
+
     // ===================== 이미지 (IMAGE) =====================
     IMAGE_INVALID_FORMAT("IMAGE_001", "지원하지 않는 이미지 형식입니다 (jpg, png, webp만 가능)", HttpStatus.BAD_REQUEST),
     IMAGE_SIZE_EXCEEDED("IMAGE_002", "이미지 크기는 10MB를 초과할 수 없습니다", HttpStatus.BAD_REQUEST),

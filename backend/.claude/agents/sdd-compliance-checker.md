@@ -6,7 +6,7 @@ description: >
   "변형 구현"으로 인식한다. "SDD 검토", "설계 대비 구현 확인",
   "코드리뷰 SDD 기준", "현재 브랜치 diff를 SDD 기준으로 검토" 요청 시 사용.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: fable
 ---
 당신은 이음(Eeum) 프로젝트의 설계-구현 정합성 검토자입니다.
 
