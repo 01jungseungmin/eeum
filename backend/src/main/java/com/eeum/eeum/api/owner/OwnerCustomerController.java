@@ -2,6 +2,7 @@ package com.eeum.eeum.api.owner;
 
 import com.eeum.eeum.application.owner.dto.response.OwnerCustomerResponseDto;
 import com.eeum.eeum.application.owner.dto.response.OwnerCustomerSummaryResponseDto;
+import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.application.owner.enums.OwnerCustomerInterestType;
 import com.eeum.eeum.application.owner.enums.OwnerCustomerSortType;
 import com.eeum.eeum.application.owner.enums.OwnerCustomerType;
@@ -63,6 +64,20 @@ public class OwnerCustomerController {
         Long ownerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 ownerCustomerService.getCustomers(ownerId, customerType, interestType, sort, pageable)));
+    }
+
+    @Operation(
+            summary = "고객별 주문 내역 조회",
+            description = "특정 고객의 내 상점 주문 내역을 최신순으로 조회합니다. 주문 상품, 결제, 환불 정보를 포함합니다."
+    )
+    @GetMapping("/{customerId}/orders")
+    public ResponseEntity<ApiResponse<Page<StoreOrderResponseDto>>> getCustomerOrders(
+            @Parameter(description = "고객 계정 ID") @PathVariable Long customerId,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Long ownerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                ownerCustomerService.getCustomerOrders(ownerId, customerId, pageable)));
     }
 
     @Operation(
