@@ -122,7 +122,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'qna',
         name: '문의 관리',
-        path: '/7',
+        path: '/inquiry',
         icon: <MessageCircle {...iconProps} />,
         subtitle: '매장 이용 관련 문의 사항에 답변하세요',
         countKey: 'qna',
