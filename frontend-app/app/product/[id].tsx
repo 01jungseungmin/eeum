@@ -103,7 +103,7 @@ export default function ProductDetailScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
         {/* 상품 이미지 */}
         <Image source={{ uri: productImgUrl }} style={styles.productImg} />
 
@@ -148,6 +148,22 @@ export default function ProductDetailScreen() {
             {isRestaurantProd ? '메뉴 선택하기' : '장바구니 담기'}
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.inquiryBtn} 
+          onPress={() => {
+            // 상품 데이터에서 상점 ID를 추출합니다. (백엔드 필드명에 따라 storeId 또는 shopId)
+            const targetStoreId = productDetail?.storeId || productDetail?.shopId;
+            
+            if (!targetStoreId) {
+              Alert.alert('알림', '상점 정보를 찾을 수 없습니다.');
+              return;
+            }
+            router.push(`/inquiry/write?storeId=${targetStoreId}` as any);
+          }}
+        >
+          <Text fontWeight="bold" style={styles.inquiryBtnText}>상품 / 상점 문의하기</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -173,5 +189,16 @@ const styles = StyleSheet.create({
   qtyText: { paddingHorizontal: 15, fontSize: 15, color: '#333' },
   bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  primaryBtnText: { color: '#fff', fontSize: 16 }
+  primaryBtnText: { color: '#fff', fontSize: 16 },
+  inquiryBtn: { 
+    marginTop: 10, 
+    backgroundColor: '#fff', 
+    paddingVertical: 14, 
+    borderRadius: 8, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    borderWidth: 1, 
+    borderColor: '#E0E0E0' 
+  },
+  inquiryBtnText: { color: '#555', fontSize: 15 }
 });

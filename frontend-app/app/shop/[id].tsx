@@ -216,9 +216,11 @@ export default function ShopDetailScreen() {
 
             <TouchableOpacity
               style={styles.chatBtn}
-              onPress={() => Alert.alert('안내', '채팅 기능은 준비 중입니다.')}
+              onPress={() => {
+                router.push(`/inquiry/write?storeId=${id}`); 
+              }}
             >
-              <Text style={styles.chatBtnText}>사장님과 채팅</Text>
+              <Text style={styles.chatBtnText}>문의하기</Text>
             </TouchableOpacity>
           </View>
         ) : (
