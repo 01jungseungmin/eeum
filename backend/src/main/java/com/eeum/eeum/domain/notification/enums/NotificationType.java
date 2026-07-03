@@ -14,6 +14,7 @@ public enum NotificationType {
     // 예약 (사용자용 필수)
     RESERVATION_CONFIRMED,   // 예약 확정
     RESERVATION_CANCELLED,   // 예약 취소
+    RESERVATION_REJECTED,    // 예약 거절
     RESERVATION_REMINDER,    // 예약 당일 리마인드
 
     // 예약 (사장님 수신)
@@ -64,7 +65,7 @@ public enum NotificationType {
         return switch (this) {
             case ORDER_STATUS_CHANGED, PAYMENT_COMPLETED, NEW_ORDER
                     -> NotificationCategory.ORDER;
-            case RESERVATION_CONFIRMED, RESERVATION_CANCELLED,
+            case RESERVATION_CONFIRMED, RESERVATION_CANCELLED, RESERVATION_REJECTED,
                  RESERVATION_REMINDER, NEW_RESERVATION
                     -> NotificationCategory.RESERVATION;
             case CHAT_MESSAGE

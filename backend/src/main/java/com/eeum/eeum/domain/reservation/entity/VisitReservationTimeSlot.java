@@ -9,7 +9,21 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Entity
-@Table(name = "visit_reservation_time_slot")
+@Table(
+        name = "visit_reservation_time_slot",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_visit_reservation_time_slot_store_date_time",
+                        columnNames = {"store_id", "slot_date", "slot_time"}
+                )
+        },
+        indexes = {
+                @Index(
+                        name = "idx_visit_reservation_time_slot_store_date",
+                        columnList = "store_id, slot_date"
+                )
+        }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class VisitReservationTimeSlot extends BaseEntity {
@@ -29,12 +43,6 @@ public class VisitReservationTimeSlot extends BaseEntity {
     @Column(name = "slot_time", nullable = false)
     private LocalTime slotTime;
 
-    @Column(name = "max_visitor_count", nullable = false)
-    private Integer maxVisitorCount;
-
-    @Column(name = "max_team_count", nullable = false)
-    private Integer maxTeamCount;
-
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
@@ -42,27 +50,19 @@ public class VisitReservationTimeSlot extends BaseEntity {
             Store store,
             LocalDate slotDate,
             LocalTime slotTime,
-            Integer maxVisitorCount,
-            Integer maxTeamCount,
             Boolean enabled
     ) {
         VisitReservationTimeSlot slot = new VisitReservationTimeSlot();
         slot.store = store;
         slot.slotDate = slotDate;
         slot.slotTime = slotTime;
-        slot.maxVisitorCount = maxVisitorCount;
-        slot.maxTeamCount = maxTeamCount;
         slot.enabled = enabled != null ? enabled : true;
         return slot;
     }
 
     public void update(
-            Integer maxVisitorCount,
-            Integer maxTeamCount,
             boolean enabled
     ) {
-        this.maxVisitorCount = maxVisitorCount;
-        this.maxTeamCount = maxTeamCount;
         this.enabled = enabled;
     }
 }

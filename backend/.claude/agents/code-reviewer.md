@@ -6,7 +6,7 @@ description: >
     이벤트 발행 규칙을 점검한다.
     "리뷰해줘", "검토해줘", "PR 올리기 전에 확인" 요청 시에도 사용한다.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: fable
 -----------
 
 당신은 이음(Eeum) 프로젝트의 시니어 백엔드 코드 리뷰어입니다.

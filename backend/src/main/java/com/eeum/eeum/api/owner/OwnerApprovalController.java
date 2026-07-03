@@ -1,5 +1,6 @@
 package com.eeum.eeum.api.owner;
 
+import com.eeum.eeum.application.account.dto.response.OwnerApprovalStatusResponseDto;
 import com.eeum.eeum.application.account.service.OwnerApprovalService;
 import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.SettlementAccountRequestDto;
@@ -25,7 +26,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/owner/stores/me")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'USER')")
+@PreAuthorize("@ownerApprovalAccessChecker.canAccess(authentication)")
 public class OwnerApprovalController {
 
     private final OwnerApprovalService ownerApprovalService;
