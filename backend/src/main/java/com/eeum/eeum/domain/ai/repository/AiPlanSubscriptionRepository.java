@@ -7,5 +7,6 @@ import java.util.Optional;
 
 public interface AiPlanSubscriptionRepository extends JpaRepository<AiPlanSubscription, Long> {
 
-    Optional<AiPlanSubscription> findByStore_StoreIdAndActiveTrue(Long storeId);
+    // 활성 구독이 2건 이상 존재할 경우 NonUniqueResultException 방지 — 최신 구독을 우선 반환
+    Optional<AiPlanSubscription> findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(Long storeId);
 }

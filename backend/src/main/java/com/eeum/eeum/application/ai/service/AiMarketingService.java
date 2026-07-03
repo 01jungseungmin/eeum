@@ -74,7 +74,7 @@ public class AiMarketingService {
         if (noticeChannelOnly && request.getChannels().stream().anyMatch(channel -> !channel.isNoticeSendable())) {
             throw new BusinessException(ErrorCode.AI_INVALID_CHANNEL);
         }
-        supportService.consumeGeneration(store, feature, usageType);
+        supportService.consumeGeneration(store, ownerId, feature, usageType);
 
         AiText text = messageType == AiMessageType.NOTICE
                 ? aiTextGenerator.noticeCopy(store.getName(), request.getNoticeType(), request.getTone(), request.getKeyword())

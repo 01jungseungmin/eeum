@@ -28,6 +28,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -104,23 +105,18 @@ class AiReviewInquiryServiceTest {
     }
 
     @Test
-    void 본인_상점이_아닌_문의의_답변_초안_생성_시_AI_FORBIDDEN_예외가_발생한다() {
+    void 본인_상점이_아닌_문의의_답변_초안_생성_시_INQUIRY_NOT_FOUND_예외가_발생한다() {
         // given
         Store store = stubStore();
-        Store otherStore = mock(Store.class);
-        when(otherStore.getStoreId()).thenReturn(999L);
-
-        com.eeum.eeum.domain.inquiry.entity.Inquiry inquiry =
-                mock(com.eeum.eeum.domain.inquiry.entity.Inquiry.class);
-        when(inquiry.getStore()).thenReturn(otherStore);
-        when(inquiryRepository.findByInquiryId(anyLong()))
-                .thenReturn(java.util.Optional.of(inquiry));
+        // findByInquiryIdAndStore_StoreId 가 empty를 반환하면 INQUIRY_NOT_FOUND 예외 발생
+        when(inquiryRepository.findByInquiryIdAndStore_StoreId(eq(10L), eq(STORE_ID)))
+                .thenReturn(java.util.Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> aiReviewInquiryService.createInquiryReplyDraft(OWNER_ID, 10L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.AI_FORBIDDEN);
+                .isEqualTo(ErrorCode.INQUIRY_NOT_FOUND);
     }
 
     @Test
@@ -128,12 +124,11 @@ class AiReviewInquiryServiceTest {
         // given
         Store store = stubStore();
         StoreReview review = mock(StoreReview.class);
-        when(review.getStorereviewId()).thenReturn(1L);
         when(review.getRating()).thenReturn(2);
         when(review.getContent()).thenReturn("음식이 맛없어요");
         when(storeReviewRepository.findByStorereviewIdAndStore_StoreId(1L, STORE_ID))
                 .thenReturn(java.util.Optional.of(review));
-        when(aiTextGenerator.reviewReply(any(), any(), any())).thenReturn(new AiText("제목", "답글 내용"));
+        when(aiTextGenerator.reviewReply(any(), anyInt(), any())).thenReturn(new AiText("제목", "답글 내용"));
         AiGeneratedMessage savedMessage = AiGeneratedMessage.createDraft(
                 store, store.getAccount(), com.eeum.eeum.domain.ai.enums.AiMessageType.REVIEW_REPLY,
                 "STORE_REVIEW", 1L, "제목", "답글 내용",

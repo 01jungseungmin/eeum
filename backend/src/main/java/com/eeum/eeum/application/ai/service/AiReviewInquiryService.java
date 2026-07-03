@@ -95,7 +95,7 @@ public class AiReviewInquiryService {
                 .findByStorereviewIdAndStore_StoreId(reviewId, store.getStoreId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
 
-        supportService.consumeGeneration(store, AiFeature.REVIEW_REPLY_DRAFT, AiUsageType.REVIEW_REPLY_DRAFT);
+        supportService.consumeGeneration(store, ownerId, AiFeature.REVIEW_REPLY_DRAFT, AiUsageType.REVIEW_REPLY_DRAFT);
 
         AiText text = aiTextGenerator.reviewReply(store.getName(), review.getRating(), review.getContent());
         return saveDraft(store, AiMessageType.REVIEW_REPLY, "STORE_REVIEW", reviewId, text, "리뷰 답글 초안 생성");
@@ -104,13 +104,10 @@ public class AiReviewInquiryService {
     @Transactional
     public AiGeneratedMessageResponseDto createInquiryReplyDraft(Long ownerId, Long inquiryId) {
         Store store = supportService.getOwnerStore(ownerId);
-        Inquiry inquiry = inquiryRepository.findByInquiryId(inquiryId)
+        Inquiry inquiry = inquiryRepository.findByInquiryIdAndStore_StoreId(inquiryId, store.getStoreId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
-        if (inquiry.getStore() == null || !inquiry.getStore().getStoreId().equals(store.getStoreId())) {
-            throw new BusinessException(ErrorCode.AI_FORBIDDEN);
-        }
 
-        supportService.consumeGeneration(store, AiFeature.INQUIRY_REPLY_DRAFT, AiUsageType.INQUIRY_REPLY_DRAFT);
+        supportService.consumeGeneration(store, ownerId, AiFeature.INQUIRY_REPLY_DRAFT, AiUsageType.INQUIRY_REPLY_DRAFT);
 
         AiText text = aiTextGenerator.inquiryReply(store.getName(), inquiry.getTitle());
         return saveDraft(store, AiMessageType.INQUIRY_REPLY, "INQUIRY", inquiryId, text, "문의 답변 초안 생성");
@@ -119,7 +116,7 @@ public class AiReviewInquiryService {
     @Transactional
     public AiGeneratedMessageResponseDto createComplaintDraft(Long ownerId, AiComplaintDraftRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
-        supportService.consumeGeneration(store, AiFeature.COMPLAINT_DRAFT, AiUsageType.COMPLAINT_DRAFT);
+        supportService.consumeGeneration(store, ownerId, AiFeature.COMPLAINT_DRAFT, AiUsageType.COMPLAINT_DRAFT);
 
         AiText text = aiTextGenerator.complaintReply(store.getName(), request.getKeyword());
         return saveDraft(store, AiMessageType.COMPLAINT_REPLY, "COMPLAINT_KEYWORD", null, text, "반복 불만 대응 문구 생성");

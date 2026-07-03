@@ -16,6 +16,7 @@ import java.util.List;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "ai_saving_plan")
+// 절감 계획 묶음 저장
 public class AiSavingPlan extends BaseEntity {
 
     @Id
@@ -54,6 +55,16 @@ public class AiSavingPlan extends BaseEntity {
     }
 
     public void save() {
+        if (this.status == AiSavingPlanStatus.SAVED) {
+            return;
+        }
         this.status = AiSavingPlanStatus.SAVED;
+    }
+
+    public void recreateDraft(String title, BigDecimal expectedMonthlySavingAmount) {
+        this.title = title;
+        this.expectedMonthlySavingAmount = expectedMonthlySavingAmount;
+        this.status = AiSavingPlanStatus.DRAFT;
+        this.items.clear();
     }
 }

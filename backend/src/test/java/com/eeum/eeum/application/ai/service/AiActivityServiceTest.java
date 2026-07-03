@@ -57,6 +57,7 @@ class AiActivityServiceTest {
         AiGeneratedMessage message = AiGeneratedMessage.createDraft(
                 store, account, type, targetType, null, "제목", "내용", AiChannel.APP_PUSH);
         if (status == AiMessageStatus.SENT) {
+            message.edit("제목", "내용"); // REVIEWED 상태로 전환
             message.send(LocalDateTime.now());
         }
         return message;

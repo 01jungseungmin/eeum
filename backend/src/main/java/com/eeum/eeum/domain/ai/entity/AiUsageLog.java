@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "ai_usage_log", indexes = {
         @Index(name = "idx_ai_usage_store_month", columnList = "store_id, usage_year_month")
 })
+// 월별 AI 생성 기능 사용량 기록
 public class AiUsageLog extends BaseEntity {
 
     @Id

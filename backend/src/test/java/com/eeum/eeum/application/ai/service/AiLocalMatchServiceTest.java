@@ -5,7 +5,6 @@ import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.entity.AiExposureStatus;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiExposureStatusRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
@@ -44,7 +43,7 @@ class AiLocalMatchServiceTest {
 
     @Mock private AiManagerSupportService supportService;
     @Mock private AiExposureStatusRepository aiExposureStatusRepository;
-    @Mock private AiActionLogRepository aiActionLogRepository;
+    @Mock private AiExposureCommandExecutor exposureCommandExecutor;
     @Mock private OrderRepository orderRepository;
     @Mock private FavoriteRepository favoriteRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
@@ -76,7 +75,7 @@ class AiLocalMatchServiceTest {
                 .thenReturn(List.of());
         lenient().when(favoriteRepository.findAccountIdsByRefTypeAndRefId(any(), anyLong()))
                 .thenReturn(List.of());
-        lenient().when(orderRepository.findByStore_StoreIdAndStatus(anyLong(), any()))
+        lenient().when(orderRepository.findRegularAccountIds(anyLong(), any(), anyLong()))
                 .thenReturn(List.of());
     }
 
@@ -87,9 +86,9 @@ class AiLocalMatchServiceTest {
         // given
         Store store = stubStore();
         stubLockPassThrough();
-        stubEmptyCustomers();
         AiExposureStatus status = AiExposureStatus.init(store);
-        when(aiExposureStatusRepository.findByStore_StoreId(STORE_ID)).thenReturn(Optional.of(status));
+        status.start(LocalDateTime.now(), 0);
+        when(exposureCommandExecutor.startExposureInTx(store, OWNER_ID)).thenReturn(status);
 
         // when
         AiExposureStatusResponseDto response = localMatchService.startExposure(OWNER_ID);
@@ -97,7 +96,7 @@ class AiLocalMatchServiceTest {
         // then
         assertThat(response.isActive()).isTrue();
         assertThat(response.getStartedAt()).isNotNull();
-        verify(aiActionLogRepository).save(any());
+        verify(exposureCommandExecutor).startExposureInTx(store, OWNER_ID);
     }
 
     @Test
@@ -105,10 +104,8 @@ class AiLocalMatchServiceTest {
         // given
         Store store = stubStore();
         stubLockPassThrough();
-        stubEmptyCustomers();
-        AiExposureStatus status = AiExposureStatus.init(store);
-        status.start(LocalDateTime.now(), 0);
-        when(aiExposureStatusRepository.findByStore_StoreId(STORE_ID)).thenReturn(Optional.of(status));
+        when(exposureCommandExecutor.startExposureInTx(store, OWNER_ID))
+                .thenThrow(new BusinessException(ErrorCode.AI_INVALID_STATUS));
 
         // when & then
         assertThatThrownBy(() -> localMatchService.startExposure(OWNER_ID))
@@ -124,7 +121,8 @@ class AiLocalMatchServiceTest {
         stubLockPassThrough();
         AiExposureStatus status = AiExposureStatus.init(store);
         status.start(LocalDateTime.now(), 5);
-        when(aiExposureStatusRepository.findByStore_StoreId(STORE_ID)).thenReturn(Optional.of(status));
+        status.stop(LocalDateTime.now());
+        when(exposureCommandExecutor.stopExposureInTx(store, OWNER_ID)).thenReturn(status);
 
         // when
         AiExposureStatusResponseDto response = localMatchService.stopExposure(OWNER_ID);
@@ -132,7 +130,7 @@ class AiLocalMatchServiceTest {
         // then
         assertThat(response.isActive()).isFalse();
         assertThat(response.getStoppedAt()).isNotNull();
-        verify(aiActionLogRepository).save(any());
+        verify(exposureCommandExecutor).stopExposureInTx(store, OWNER_ID);
     }
 
     @Test
@@ -140,8 +138,8 @@ class AiLocalMatchServiceTest {
         // given
         Store store = stubStore();
         stubLockPassThrough();
-        AiExposureStatus status = AiExposureStatus.init(store);
-        when(aiExposureStatusRepository.findByStore_StoreId(STORE_ID)).thenReturn(Optional.of(status));
+        when(exposureCommandExecutor.stopExposureInTx(store, OWNER_ID))
+                .thenThrow(new BusinessException(ErrorCode.AI_INVALID_STATUS));
 
         // when & then
         assertThatThrownBy(() -> localMatchService.stopExposure(OWNER_ID))

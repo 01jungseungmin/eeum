@@ -256,6 +256,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     AI_INVALID_SCHEDULE_TIME("AI_009", "예약 발송 시간은 현재 시각 이후여야 합니다", HttpStatus.BAD_REQUEST),
     AI_SAVING_PLAN_NOT_FOUND("AI_010", "저장할 절감 계획이 없습니다. 먼저 절감 계획을 생성해 주세요", HttpStatus.NOT_FOUND),
     AI_INVALID_CHANNEL("AI_011", "해당 채널로는 공지를 발송할 수 없습니다", HttpStatus.BAD_REQUEST),
+    AI_INVALID_MESSAGE_TYPE("AI_012", "해당 메시지 타입으로는 이 작업을 수행할 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 입력값 검증 (VALIDATION) =====================
     VALIDATION_INVALID_INPUT("VALIDATION_001", "입력값이 올바르지 않습니다", HttpStatus.BAD_REQUEST);

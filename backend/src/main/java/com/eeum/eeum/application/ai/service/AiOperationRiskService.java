@@ -10,7 +10,6 @@ import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiOwnerMetricInput;
 import com.eeum.eeum.domain.ai.entity.AiSavingPlan;
-import com.eeum.eeum.domain.ai.entity.AiSavingPlanItem;
 import com.eeum.eeum.domain.ai.enums.AiActionType;
 import com.eeum.eeum.domain.ai.enums.AiDataSourceType;
 import com.eeum.eeum.domain.ai.enums.AiMetricType;
@@ -19,6 +18,8 @@ import com.eeum.eeum.domain.ai.enums.AiSavingPlanStatus;
 import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiOwnerMetricInputRepository;
 import com.eeum.eeum.domain.ai.repository.AiSavingPlanRepository;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.store.entity.StoreReview;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
@@ -44,13 +46,19 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor
 public class AiOperationRiskService {
 
+    private static final Duration METRIC_LOCK_LEASE = Duration.ofSeconds(5);
+    private static final Duration SAVING_LOCK_LEASE = Duration.ofSeconds(5);
+
     private final AiManagerSupportService supportService;
+    private final RedisLockService redisLockService;
     private final AiInsightGenerator aiInsightGenerator;
     private final AiOwnerMetricInputRepository aiOwnerMetricInputRepository;
     private final AiSavingPlanRepository aiSavingPlanRepository;
     private final AiActionLogRepository aiActionLogRepository;
     private final StoreReviewRepository storeReviewRepository;
     private final InquiryRepository inquiryRepository;
+    private final AiOwnerMetricCommandExecutor ownerMetricCommandExecutor;
+    private final AiSavingPlanCommandExecutor savingPlanCommandExecutor;
 
     @Transactional(readOnly = true)
     public AiOperationRiskResponseDto getRisks(Long ownerId) {
@@ -66,48 +74,25 @@ public class AiOperationRiskService {
         return buildRiskResponse(store, true);
     }
 
-    // 사장님 실측값 입력 — 동일 (store, type, yearMonth)는 갱신
-    @Transactional
+    // 사장님 실측값 입력 — 락 먼저 잡고 → Executor에서 @Transactional 시작 → TX 커밋 후 락 해제
+    // upsert + action log 를 단일 TX로 묶어 커밋 전 락 해제로 인한 중복 insert 방지
     public void saveOwnerInput(Long ownerId, AiOwnerMetricInputRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.OPERATION_RISK_SUMMARY);
 
-        aiOwnerMetricInputRepository
-                .findByStore_StoreIdAndMetricTypeAndYearMonth(
-                        store.getStoreId(), request.getMetricType(), request.getYearMonth())
-                .ifPresentOrElse(
-                        existing -> existing.updateValue(request.getValue()),
-                        () -> aiOwnerMetricInputRepository.save(AiOwnerMetricInput.create(
-                                store, request.getMetricType(), request.getValue(), request.getYearMonth())));
-
-        aiActionLogRepository.save(AiActionLog.record(
-                store, store.getAccount(), AiActionType.OWNER_METRIC_INPUT,
-                request.getMetricType().name(), null, "사장님 실측값 입력 (" + request.getYearMonth() + ")"));
+        redisLockService.executeWithLock(
+                LockKeys.aiOwnerMetric(store.getStoreId(), request.getMetricType(), request.getYearMonth()),
+                METRIC_LOCK_LEASE,
+                () -> ownerMetricCommandExecutor.upsertMetricInTx(store, ownerId, request));
     }
 
-    // 절감 계획 생성 — 템플릿 기반 항목, 절감액은 실측값이 있을 때만 계산
-    @Transactional
+    // 절감 계획 생성 — 락 먼저 잡고 → Executor에서 @Transactional 시작 → TX 커밋 후 락 해제.
+    // check-then-insert를 락으로 직렬화해 동시 요청으로 인한 DRAFT 중복 생성 방지.
     public AiSavingPlanResponseDto createSavingPlan(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.SAVING_PLAN);
-
-        BigDecimal monthlyBill = findLatestMetricValue(store.getStoreId(), AiMetricType.MONTHLY_POWER_BILL);
-        BigDecimal coolingSaving = percentOf(monthlyBill, 5);
-        BigDecimal fridgeSaving = percentOf(monthlyBill, 3);
-        BigDecimal equipmentSaving = percentOf(monthlyBill, 8);
-
-        // 총 예상 절감액 = 기본 선택 항목 합 (실측값 없으면 null)
-        BigDecimal total = (coolingSaving != null && fridgeSaving != null)
-                ? coolingSaving.add(fridgeSaving)
-                : null;
-
-        AiSavingPlan plan = AiSavingPlan.create(store, "이번 달 전력 절감 계획", total);
-        plan.addItem(AiSavingPlanItem.create(plan, "냉방 시간대 관리", "쉬움", "즉시", coolingSaving, true));
-        plan.addItem(AiSavingPlanItem.create(plan, "냉장 설비 점검", "보통", "이번 주", fridgeSaving, true));
-        plan.addItem(AiSavingPlanItem.create(plan, "고효율 설비 교체 검토", "어려움", "이번 달", equipmentSaving, false));
-        AiSavingPlan saved = aiSavingPlanRepository.save(plan);
-
-        return AiSavingPlanResponseDto.from(saved, "이번 주부터 순차 실행 권장");
+        return redisLockService.executeWithLock(LockKeys.aiSavingPlan(store.getStoreId()), SAVING_LOCK_LEASE,
+                () -> savingPlanCommandExecutor.createSavingPlanInTx(store));
     }
 
     @Transactional

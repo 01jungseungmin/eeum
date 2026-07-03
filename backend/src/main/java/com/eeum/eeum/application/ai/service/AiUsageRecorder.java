@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.policy.AiPlanPolicy;
+import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.ai.entity.AiUsageLog;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
@@ -25,9 +27,10 @@ public class AiUsageRecorder {
 
     private final AiUsageLogRepository aiUsageLogRepository;
     private final AiPlanPolicy aiPlanPolicy;
+    private final AccountRepository accountRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void checkAndRecord(Store store, AiPlanType plan, AiUsageType usageType, String yearMonth) {
+    public void checkAndRecord(Store store, Long ownerAccountId, AiPlanType plan, AiUsageType usageType, String yearMonth) {
         Integer limit = aiPlanPolicy.monthlyLimit(plan);
         if (limit != null) {
             if (limit == 0) {
@@ -39,6 +42,7 @@ public class AiUsageRecorder {
                 throw new BusinessException(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
             }
         }
-        aiUsageLogRepository.save(AiUsageLog.record(store, store.getAccount(), usageType, yearMonth));
+        Account owner = accountRepository.getReferenceById(ownerAccountId);
+        aiUsageLogRepository.save(AiUsageLog.record(store, owner, usageType, yearMonth));
     }
 }

@@ -32,7 +32,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -74,7 +73,7 @@ class AiCustomerCareServiceTest {
         // given
         stubStore();
         when(cartRepository.countByStore_StoreId(STORE_ID)).thenReturn(3L);
-        when(orderRepository.findByStore_StoreIdAndStatus(eq(STORE_ID), any())).thenReturn(List.of());
+        when(orderRepository.findInactiveRegularAccountIds(anyLong(), any(), anyLong(), any())).thenReturn(List.of());
         when(inquiryRepository.countByStore_StoreIdAndStatus(STORE_ID, InquiryStatus.PENDING)).thenReturn(2L);
         when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatusAndSentAtAfter(
                 anyLong(), any(), any(), any())).thenReturn(0L);
@@ -96,7 +95,7 @@ class AiCustomerCareServiceTest {
         // given
         stubStore();
         when(cartRepository.countByStore_StoreId(STORE_ID)).thenReturn(0L);
-        when(orderRepository.findByStore_StoreIdAndStatus(eq(STORE_ID), any())).thenReturn(List.of());
+        when(orderRepository.findInactiveRegularAccountIds(anyLong(), any(), anyLong(), any())).thenReturn(List.of());
         when(inquiryRepository.countByStore_StoreIdAndStatus(STORE_ID, InquiryStatus.PENDING)).thenReturn(0L);
         when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatusAndSentAtAfter(
                 anyLong(), any(), any(), any())).thenReturn(0L);
@@ -126,7 +125,7 @@ class AiCustomerCareServiceTest {
         assertThat(response.getType()).isEqualTo(AiMessageType.CUSTOMER_CARE);
         assertThat(response.getStatus()).isEqualTo(AiMessageStatus.DRAFT);
         assertThat(response.getContent()).isNotBlank();
-        verify(supportService).consumeGeneration(store, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
+        verify(supportService).consumeGeneration(store, OWNER_ID, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
         verify(aiActionLogRepository).save(any());
     }
 
@@ -135,7 +134,7 @@ class AiCustomerCareServiceTest {
         // given
         Store store = stubStore();
         doThrow(new BusinessException(ErrorCode.AI_PLAN_REQUIRED))
-                .when(supportService).consumeGeneration(store, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
+                .when(supportService).consumeGeneration(store, OWNER_ID, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
 
         // when & then
         assertThatThrownBy(() -> customerCareService.createDraft(OWNER_ID, AiCareType.CART_INTEREST, null))

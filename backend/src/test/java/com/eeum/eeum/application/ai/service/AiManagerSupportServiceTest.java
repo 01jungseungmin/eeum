@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -66,7 +67,7 @@ class AiManagerSupportServiceTest {
     private void stubPlan(AiPlanType planType) {
         Store store = mock(Store.class);
         AiPlanSubscription subscription = AiPlanSubscription.create(store, planType, LocalDateTime.now());
-        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
+        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
                 .thenReturn(Optional.of(subscription));
     }
 
@@ -87,7 +88,7 @@ class AiManagerSupportServiceTest {
 
         // when & then
         assertThatThrownBy(() -> supportService.consumeGeneration(
-                store, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT))
+                store, OWNER_ID, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_PLAN_REQUIRED);
@@ -100,11 +101,11 @@ class AiManagerSupportServiceTest {
         stubPlan(AiPlanType.BASIC);
         stubLockPassThrough();
         doThrow(new BusinessException(ErrorCode.AI_USAGE_LIMIT_EXCEEDED))
-                .when(aiUsageRecorder).checkAndRecord(any(), any(), any(), anyString());
+                .when(aiUsageRecorder).checkAndRecord(any(), anyLong(), any(), any(), anyString());
 
         // when & then
         assertThatThrownBy(() -> supportService.consumeGeneration(
-                store, AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT))
+                store, OWNER_ID, AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
@@ -118,10 +119,10 @@ class AiManagerSupportServiceTest {
         stubLockPassThrough();
 
         // when
-        supportService.consumeGeneration(store, AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT);
+        supportService.consumeGeneration(store, OWNER_ID, AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT);
 
         // then
-        verify(aiUsageRecorder).checkAndRecord(any(), any(), any(), anyString());
+        verify(aiUsageRecorder).checkAndRecord(any(), anyLong(), any(), any(), anyString());
     }
 
     @Test
@@ -132,16 +133,16 @@ class AiManagerSupportServiceTest {
         stubLockPassThrough();
 
         // when
-        supportService.consumeGeneration(store, AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT);
+        supportService.consumeGeneration(store, OWNER_ID, AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT);
 
         // then
-        verify(aiUsageRecorder).checkAndRecord(any(), any(), any(), anyString());
+        verify(aiUsageRecorder).checkAndRecord(any(), anyLong(), any(), any(), anyString());
     }
 
     @Test
     void 구독_정보가_없으면_기본_플랜은_FREE다() {
         // given
-        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
+        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
                 .thenReturn(Optional.empty());
 
         // when
@@ -155,12 +156,12 @@ class AiManagerSupportServiceTest {
     void 구독_미존재_사장이_생성_기능_호출_시_AI_PLAN_REQUIRED_예외가_발생한다() {
         // given
         Store store = createStore();
-        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
+        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
                 .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> supportService.consumeGeneration(
-                store, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT))
+                store, OWNER_ID, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_PLAN_REQUIRED);

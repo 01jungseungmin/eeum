@@ -17,6 +17,7 @@ import java.math.BigDecimal;
         @UniqueConstraint(name = "uk_ai_metric_store_type_month",
                 columnNames = {"store_id", "metric_type", "metric_year_month"})
 })
+// 사장님이 직접 입력한 전력/운영 지표 저장
 public class AiOwnerMetricInput extends BaseEntity {
 
     @Id

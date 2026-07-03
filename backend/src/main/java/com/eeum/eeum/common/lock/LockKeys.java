@@ -64,4 +64,14 @@ public final class LockKeys {
     public static String aiExposure(Long storeId) {
         return "lock:ai-exposure:store:" + storeId;
     }
+
+    // 실측값 upsert 락 (동시 저장으로 인한 unique 충돌 방지)
+    public static String aiOwnerMetric(Long storeId, Object metricType, String yearMonth) {
+        return "lock:ai-owner-metric:" + storeId + ":" + metricType + ":" + yearMonth;
+    }
+
+    // 절감 계획 생성 락 (동시 요청으로 인한 DRAFT 중복 생성 방지)
+    public static String aiSavingPlan(Long storeId) {
+        return "lock:ai-saving-plan:store:" + storeId;
+    }
 }

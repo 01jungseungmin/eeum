@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "ai_plan_subscription")
+// 가게별 AI 플랜 구독 정보
 public class AiPlanSubscription extends BaseEntity {
 
     @Id

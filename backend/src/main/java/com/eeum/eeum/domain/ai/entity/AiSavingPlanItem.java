@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "ai_saving_plan_item")
+// 절감 계획의 개별 실천 항목 저장
 public class AiSavingPlanItem extends BaseEntity {
 
     @Id

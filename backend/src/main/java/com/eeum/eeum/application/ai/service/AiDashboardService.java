@@ -31,7 +31,8 @@ public class AiDashboardService {
     private final AiOperationRiskService operationRiskService;
     private final AiActivityService activityService;
 
-    @Transactional(readOnly = true)
+    // @Transactional 없음 — 각 서브 서비스가 자체 TX를 열고 커밋 후 커넥션 반납.
+    // 하나의 TX로 묶으면 AI 텍스트 생성 HTTP 호출 동안 커넥션이 묶여 풀이 고갈된다.
     public AiManagerDashboardResponseDto getDashboard(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.DASHBOARD);

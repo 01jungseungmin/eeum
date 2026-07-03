@@ -66,7 +66,8 @@ class AiMarketingServiceTest {
     @Test
     void SNS_CARD_채널로_공지_초안_생성_시_AI_INVALID_CHANNEL_예외가_발생한다() {
         // given
-        stubStore();
+        Store store = mock(Store.class);
+        when(supportService.getOwnerStore(OWNER_ID)).thenReturn(store);
         AiMarketingDraftRequestDto request = new AiMarketingDraftRequestDto(
                 AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.SNS_CARD), "키워드");
 

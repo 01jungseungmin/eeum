@@ -20,7 +20,7 @@ import java.util.Optional;
 
 
 
-public interface OrderRepository extends JpaRepository<Order, Long> {
+public interface OrderRepository extends JpaRepository<Order, Long>, OrderRepositoryCustom {
 
     Page<Order> findByAccount_AccountIdOrderByCreatedAtDesc(
             Long accountId,

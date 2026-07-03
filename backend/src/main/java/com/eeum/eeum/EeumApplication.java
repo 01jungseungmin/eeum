@@ -1,5 +1,6 @@
 package com.eeum.eeum;
 
+import com.eeum.eeum.application.ai.config.AiProviderProperties;
 import com.eeum.eeum.config.PortOneProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -10,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableScheduling
 @EnableJpaAuditing
-@EnableConfigurationProperties(PortOneProperties.class)
+@EnableConfigurationProperties({PortOneProperties.class, AiProviderProperties.class})
 public class EeumApplication {
 
 	public static void main(String[] args) {

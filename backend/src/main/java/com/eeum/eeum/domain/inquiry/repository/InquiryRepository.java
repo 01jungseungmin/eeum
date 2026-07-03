@@ -26,6 +26,9 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
     Optional<Inquiry> findByInquiryId(Long inquiryId);
 
     @EntityGraph(attributePaths = {"writer", "store"})
+    Optional<Inquiry> findByInquiryIdAndStore_StoreId(Long inquiryId, Long storeId);
+
+    @EntityGraph(attributePaths = {"writer", "store"})
     List<Inquiry> findByStore_StoreIdAndStatusOrderByCreatedAtDesc(Long storeId, InquiryStatus status);
 
     long countByStore_StoreIdAndStatus(Long storeId, InquiryStatus status);

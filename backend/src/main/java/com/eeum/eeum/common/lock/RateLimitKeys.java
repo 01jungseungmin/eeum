@@ -17,6 +17,10 @@ public final class RateLimitKeys {
         return "rate-limit:login-fail:" + normalize(email);
     }
 
+    public static String fcmTest(Long ownerId) {
+        return "rate-limit:fcm-test:" + ownerId;
+    }
+
     private static String normalize(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }

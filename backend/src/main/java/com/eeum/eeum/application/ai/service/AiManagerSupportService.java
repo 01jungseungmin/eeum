@@ -48,7 +48,7 @@ public class AiManagerSupportService {
     // 활성 구독이 없으면 FREE — 미결제 사장이 유료 생성 기능을 쓰지 못하도록 안전한 기본값을 사용한다.
     // 개발/테스트 환경에서는 seed 데이터로 AiPlanSubscription(BASIC/PRO)을 넣어 사용한다.
     public AiPlanType getPlanType(Long storeId) {
-        return aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(storeId)
+        return aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(storeId)
                 .map(AiPlanSubscription::getPlanType)
                 .orElse(AiPlanType.FREE);
     }
@@ -61,7 +61,7 @@ public class AiManagerSupportService {
     // 생성성 기능 — 플랜 게이팅 + 분산 락 안에서 월 사용량 체크/기록 (동시 요청 초과 방지)
     // aiUsageRecorder.checkAndRecord 가 REQUIRES_NEW로 분리되어 락 안에서 커밋까지 완료됨 —
     // 락 해제 후 두 번째 요청이 커밋된 카운트를 정확히 읽는다.
-    public void consumeGeneration(Store store, AiFeature feature, AiUsageType usageType) {
+    public void consumeGeneration(Store store, Long ownerAccountId, AiFeature feature, AiUsageType usageType) {
         AiPlanType plan = getPlanType(store.getStoreId());
         aiPlanPolicy.validateAccess(plan, feature);
 
@@ -73,7 +73,7 @@ public class AiManagerSupportService {
         redisLockService.executeWithLock(
                 LockKeys.aiUsage(store.getStoreId()),
                 USAGE_LOCK_LEASE,
-                () -> aiUsageRecorder.checkAndRecord(store, plan, usageType, yearMonth)
+                () -> aiUsageRecorder.checkAndRecord(store, ownerAccountId, plan, usageType, yearMonth)
         );
     }
 

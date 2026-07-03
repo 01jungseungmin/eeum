@@ -12,5 +12,7 @@ public interface AiSavingPlanRepository extends JpaRepository<AiSavingPlan, Long
 
     Optional<AiSavingPlan> findFirstByStore_StoreIdOrderByCreatedAtDesc(Long storeId);
 
+    Optional<AiSavingPlan> findFirstByStore_StoreIdAndStatusOrderByCreatedAtDesc(Long storeId, AiSavingPlanStatus status);
+
     Optional<AiSavingPlan> findByAiSavingPlanIdAndStore_StoreId(Long aiSavingPlanId, Long storeId);
 }

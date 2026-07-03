@@ -68,3 +68,24 @@ portone:
 fcm:
   project-id: ${FCM_PROJECT_ID}
   service-account-key-path: ${FCM_SERVICE_ACCOUNT_KEY_PATH}
+
+ai:
+  provider: gemini
+  fallback-provider: groq
+  final-fallback: template
+
+  gemini:
+    enabled: true
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    models:
+      flash-lite: gemini-2.5-flash-lite
+      flash: gemini-2.5-flash
+
+  groq:
+    enabled: true
+    api-key: ${GROQ_API_KEY:}
+    base-url: https://api.groq.com/openai/v1
+    models:
+      fast: llama-3.1-8b-instant
+      quality: llama-3.3-70b-versatile

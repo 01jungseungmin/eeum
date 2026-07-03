@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "ai_generated_message")
+//AI가 생성한 모든 문구 및 초안
 public class AiGeneratedMessage extends BaseEntity {
 
     @Id
@@ -72,8 +73,9 @@ public class AiGeneratedMessage extends BaseEntity {
 
     // 상태 전이 낙관적 락 — Redis 락 해제~트랜잭션 커밋 사이 틈에서 발생할 수 있는
     // 중복 발송/중복 StoreNotice 생성을 DB 레벨에서 차단 (충돌 시 두 번째 트랜잭션 롤백)
+    // columnDefinition에 DEFAULT 0을 명시해 ddl-auto:update 시 기존 행도 0으로 채워짐
     @Version
-    @Column(name = "version", nullable = false)
+    @Column(name = "version", nullable = false, columnDefinition = "BIGINT NOT NULL DEFAULT 0")
     private Long version;
 
     public static AiGeneratedMessage createDraft(
@@ -109,6 +111,10 @@ public class AiGeneratedMessage extends BaseEntity {
         }
         if (content != null) {
             this.content = content;
+        }
+        // 예약된 메시지를 수정하면 예약 해제 — 수정 후 다시 보내기/예약하기 필요
+        if (this.status == AiMessageStatus.SCHEDULED) {
+            this.scheduledAt = null;
         }
         this.status = AiMessageStatus.REVIEWED;
     }
@@ -151,11 +157,14 @@ public class AiGeneratedMessage extends BaseEntity {
     }
 
     private void validateTransitable() {
+        // 화이트리스트: 검토 완료(REVIEWED) 또는 예약됨(SCHEDULED) 상태만 전이 허용
+        // DRAFT는 직접 발송 불가 — edit() 을 통해 REVIEWED로 전환 후 발송해야 함
+        if (this.status == AiMessageStatus.REVIEWED || this.status == AiMessageStatus.SCHEDULED) {
+            return;
+        }
         if (this.status == AiMessageStatus.SENT) {
             throw new BusinessException(ErrorCode.AI_MESSAGE_ALREADY_SENT);
         }
-        if (this.status == AiMessageStatus.CANCELLED || this.status == AiMessageStatus.FAILED) {
-            throw new BusinessException(ErrorCode.AI_INVALID_STATUS);
-        }
+        throw new BusinessException(ErrorCode.AI_INVALID_STATUS);
     }
 }

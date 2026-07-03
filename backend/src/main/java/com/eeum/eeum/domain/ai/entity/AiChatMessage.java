@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "ai_chat_message")
+// AI 매니저 챗봇 대화 기록 저장
 public class AiChatMessage extends BaseEntity {
 
     @Id

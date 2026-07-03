@@ -18,7 +18,6 @@ import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
-import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.repository.CartRepository;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
@@ -29,8 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -65,7 +62,7 @@ public class AiCustomerCareService {
     @Transactional
     public AiGeneratedMessageResponseDto createDraft(Long ownerId, AiCareType careType, AiCustomerCareDraftRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
-        supportService.consumeGeneration(store, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
+        supportService.consumeGeneration(store, ownerId, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
 
         String contextHint = request != null ? request.getContextHint() : null;
         AiChannel channel = request != null && request.getChannel() != null ? request.getChannel() : AiChannel.APP_PUSH;
@@ -88,9 +85,9 @@ public class AiCustomerCareService {
     private AiCustomerCareCardDto buildCard(Store store, AiCareType careType) {
         Long storeId = store.getStoreId();
         int targetCount = switch (careType) {
-            case CART_INTEREST -> (int) cartRepository.countByStore_StoreId(storeId);
+            case CART_INTEREST -> (int) Math.min(cartRepository.countByStore_StoreId(storeId), Integer.MAX_VALUE);
             case INACTIVE_REGULAR -> countInactiveRegulars(storeId);
-            case INQUIRY_HESITATION -> (int) inquiryRepository.countByStore_StoreIdAndStatus(storeId, InquiryStatus.PENDING);
+            case INQUIRY_HESITATION -> (int) Math.min(inquiryRepository.countByStore_StoreIdAndStatus(storeId, InquiryStatus.PENDING), Integer.MAX_VALUE);
         };
         int excludedCount = (int) aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatusAndSentAtAfter(
                 storeId, AiMessageType.CUSTOMER_CARE, AiMessageStatus.SENT, LocalDateTime.now().minusDays(7));
@@ -109,22 +106,10 @@ public class AiCustomerCareService {
                 .build();
     }
 
-    // 단골(완료 주문 3건 이상) 중 최근 30일 주문이 없는 고객 수
+    // 단골(완료 주문 3건 이상) 중 최근 30일 주문이 없는 고객 수 — QueryDSL GROUP BY HAVING으로 N+1 제거
     private int countInactiveRegulars(Long storeId) {
-        List<Order> completedOrders = orderRepository.findByStore_StoreIdAndStatus(storeId, OrderStatus.COMPLETED);
         LocalDateTime threshold = LocalDateTime.now().minusDays(30);
-
-        Map<Long, List<Order>> byAccount = completedOrders.stream()
-                .collect(Collectors.groupingBy(order -> order.getAccount().getAccountId()));
-
-        return (int) byAccount.values().stream()
-                .filter(orders -> orders.size() >= 3)
-                .filter(orders -> orders.stream()
-                        .map(Order::getCreatedAt)
-                        .max(LocalDateTime::compareTo)
-                        .map(last -> last.isBefore(threshold))
-                        .orElse(false))
-                .count();
+        return orderRepository.findInactiveRegularAccountIds(storeId, OrderStatus.COMPLETED, 3, threshold).size();
     }
 
     private String buildReason(AiCareType careType, int targetCount) {

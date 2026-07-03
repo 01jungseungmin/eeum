@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 @Table(name = "ai_exposure_status", uniqueConstraints = {
         @UniqueConstraint(name = "uk_ai_exposure_store", columnNames = "store_id")
 })
+// 생활권 매칭 노출 상태 저장
 public class AiExposureStatus extends BaseEntity {
 
     @Id

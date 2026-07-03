@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -50,6 +51,9 @@ class AiOperationRiskServiceTest {
     @Mock private AiOwnerMetricInputRepository aiOwnerMetricInputRepository;
     @Mock private AiSavingPlanRepository aiSavingPlanRepository;
     @Mock private AiActionLogRepository aiActionLogRepository;
+    @Mock private AiOwnerMetricCommandExecutor ownerMetricCommandExecutor;
+    @Mock private AiSavingPlanCommandExecutor savingPlanCommandExecutor;
+    @Mock private com.eeum.eeum.common.service.RedisLockService redisLockService;
     @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private InquiryRepository inquiryRepository;
     @Spy private TemplateAiInsightGenerator aiInsightGenerator = new TemplateAiInsightGenerator();
@@ -120,36 +124,38 @@ class AiOperationRiskServiceTest {
     @Test
     void 실측값_신규_입력_시_저장되고_액션_로그가_기록된다() {
         // given
-        stubStore();
-        when(aiOwnerMetricInputRepository.findByStore_StoreIdAndMetricTypeAndYearMonth(
-                anyLong(), any(), anyString())).thenReturn(Optional.empty());
+        Store store = stubStore();
+        AiOwnerMetricInputRequestDto request = new AiOwnerMetricInputRequestDto(
+                AiMetricType.MONTHLY_POWER_KWH, new BigDecimal("850.5"), "2026-07");
+        // Runnable 기반 lock pass-through
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(2)).run();
+            return null;
+        }).when(redisLockService).executeWithLock(anyString(), any(java.time.Duration.class), any(Runnable.class));
 
         // when
-        operationRiskService.saveOwnerInput(OWNER_ID, new AiOwnerMetricInputRequestDto(
-                AiMetricType.MONTHLY_POWER_KWH, new BigDecimal("850.5"), "2026-07"));
+        operationRiskService.saveOwnerInput(OWNER_ID, request);
 
         // then
-        verify(aiOwnerMetricInputRepository).save(any(AiOwnerMetricInput.class));
-        verify(aiActionLogRepository).save(any());
+        verify(ownerMetricCommandExecutor).upsertMetricInTx(eq(store), eq(OWNER_ID), eq(request));
     }
 
     @Test
-    void 절감_계획_생성에_성공하면_항목_3개가_포함된다() {
+    @SuppressWarnings("unchecked")
+    void 절감_계획_생성_시_Executor에게_위임하고_락을_획득한다() {
         // given
-        stubStore();
-        when(aiOwnerMetricInputRepository.findByStore_StoreIdAndMetricTypeAndYearMonth(
-                anyLong(), any(), anyString())).thenReturn(Optional.empty());
-        when(aiSavingPlanRepository.save(any(AiSavingPlan.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        Store store = stubStore();
+        AiSavingPlanResponseDto mockResponse = mock(AiSavingPlanResponseDto.class);
+        when(redisLockService.executeWithLock(anyString(), any(java.time.Duration.class), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> ((java.util.function.Supplier<Object>) invocation.getArgument(2)).get());
+        when(savingPlanCommandExecutor.createSavingPlanInTx(store)).thenReturn(mockResponse);
 
         // when
         AiSavingPlanResponseDto response = operationRiskService.createSavingPlan(OWNER_ID);
 
         // then
-        assertThat(response.getItems()).hasSize(3);
-        assertThat(response.getStatus()).isEqualTo(AiSavingPlanStatus.DRAFT);
-        // 실측값이 없으면 절감액은 null (하드코딩 금지)
-        assertThat(response.getTotalExpectedSavingAmount()).isNull();
+        assertThat(response).isEqualTo(mockResponse);
+        verify(savingPlanCommandExecutor).createSavingPlanInTx(store);
     }
 
     @Test

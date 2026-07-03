@@ -47,7 +47,9 @@ public class AiActivityService {
                 .filter(message -> message.getType() == AiMessageType.CUSTOMER_CARE)
                 .filter(message -> message.hasCareType(AiCareType.INACTIVE_REGULAR))
                 .count();
-        long draftCount = recentMessages.size();
+        long draftCount = recentMessages.stream()
+                .filter(message -> message.getStatus() == AiMessageStatus.DRAFT)
+                .count();
         long sentCount = recentMessages.stream()
                 .filter(message -> message.getStatus() == AiMessageStatus.SENT)
                 .count();

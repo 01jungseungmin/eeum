@@ -2,6 +2,7 @@ package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.policy.AiPlanPolicy;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
@@ -35,14 +36,16 @@ class AiUsageRecorderTest {
     private AiUsageRecorder aiUsageRecorder;
 
     @Mock private AiUsageLogRepository aiUsageLogRepository;
+    @Mock private AccountRepository accountRepository;
     @Spy private AiPlanPolicy aiPlanPolicy = new AiPlanPolicy();
 
     private static final String YEAR_MONTH = "2026-07";
+    private static final Long OWNER_ID = 100L;
 
     private Store stubStore() {
         Store store = mock(Store.class);
         lenient().when(store.getStoreId()).thenReturn(1L);
-        lenient().when(store.getAccount()).thenReturn(mock(Account.class));
+        lenient().when(accountRepository.getReferenceById(OWNER_ID)).thenReturn(mock(Account.class));
         return store;
     }
 
@@ -54,7 +57,7 @@ class AiUsageRecorderTest {
 
         // when & then
         assertThatThrownBy(() -> aiUsageRecorder.checkAndRecord(
-                store, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH))
+                store, OWNER_ID, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
@@ -68,7 +71,7 @@ class AiUsageRecorderTest {
         when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(5L);
 
         // when
-        aiUsageRecorder.checkAndRecord(store, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
+        aiUsageRecorder.checkAndRecord(store, OWNER_ID, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
 
         // then
         verify(aiUsageLogRepository).save(any());
@@ -80,7 +83,7 @@ class AiUsageRecorderTest {
         Store store = stubStore();
 
         // when
-        aiUsageRecorder.checkAndRecord(store, AiPlanType.PRO, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
+        aiUsageRecorder.checkAndRecord(store, OWNER_ID, AiPlanType.PRO, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
 
         // then
         verify(aiUsageLogRepository, never()).countByStore_StoreIdAndYearMonth(anyLong(), anyString());
@@ -94,7 +97,7 @@ class AiUsageRecorderTest {
 
         // when & then
         assertThatThrownBy(() -> aiUsageRecorder.checkAndRecord(
-                store, AiPlanType.FREE, AiUsageType.MARKETING_DRAFT, YEAR_MONTH))
+                store, OWNER_ID, AiPlanType.FREE, AiUsageType.MARKETING_DRAFT, YEAR_MONTH))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_PLAN_REQUIRED);
@@ -109,7 +112,7 @@ class AiUsageRecorderTest {
         when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(29L);
 
         // when
-        aiUsageRecorder.checkAndRecord(store, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
+        aiUsageRecorder.checkAndRecord(store, OWNER_ID, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
 
         // then
         verify(aiUsageLogRepository).save(any());

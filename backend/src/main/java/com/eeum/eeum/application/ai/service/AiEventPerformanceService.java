@@ -99,7 +99,7 @@ public class AiEventPerformanceService {
                 .map(order -> order.getAccount().getAccountId()).distinct().count();
         long newCustomerCount = eventOrders.stream()
                 .map(order -> order.getAccount().getAccountId()).distinct()
-                .filter(accountId -> !firstOrderAtByAccount.get(accountId).isBefore(eventStart))
+                .filter(accountId -> !firstOrderAtByAccount.getOrDefault(accountId, LocalDateTime.MAX).isBefore(eventStart))
                 .count();
         return (double) newCustomerCount / eventCustomerCount;
     }

@@ -69,7 +69,7 @@ class AiChatbotServiceTest {
         assertThat(response.isOutOfScope()).isTrue();
         assertThat(response.getText()).contains("지원 범위 밖");
         assertThat(response.isUsageCounted()).isFalse();
-        verify(supportService, never()).consumeGeneration(any(), any(), any());
+        verify(supportService, never()).consumeGeneration(any(), any(), any(), any());
     }
 
     @Test
@@ -84,7 +84,7 @@ class AiChatbotServiceTest {
         // then
         assertThat(response.isUsageCounted()).isTrue();
         assertThat(response.getText()).isNotBlank();
-        verify(supportService).consumeGeneration(store, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
+        verify(supportService).consumeGeneration(store, OWNER_ID, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
     }
 
     @Test
@@ -100,7 +100,7 @@ class AiChatbotServiceTest {
 
         // then
         assertThat(response.isUsageCounted()).isFalse();
-        verify(supportService, never()).consumeGeneration(any(), any(), any());
+        verify(supportService, never()).consumeGeneration(any(), any(), any(), any());
     }
 
     @Test

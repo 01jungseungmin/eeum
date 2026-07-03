@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "ai_action_log")
+// AI 매니저에서 발생한 주요 행동 기록
 public class AiActionLog extends BaseEntity {
 
     @Id
