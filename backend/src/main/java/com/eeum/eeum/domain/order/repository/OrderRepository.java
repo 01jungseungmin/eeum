@@ -49,6 +49,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             OrderStatus status
     );
 
+    List<Order> findByStore_StoreIdAndStatusAndCreatedAtBetween(
+            Long storeId,
+            OrderStatus status,
+            LocalDateTime from,
+            LocalDateTime to
+    );
+
+    List<Order> findByStore_StoreIdAndStatus(
+            Long storeId,
+            OrderStatus status
+    );
+
     boolean existsByOrderNumber(String orderNumber);
 
     boolean existsByStore_StoreIdAndStatusIn(

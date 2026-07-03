@@ -244,6 +244,19 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     LOCK_PAYMENT_FAILED("LOCK_003", "결제 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
     LOCK_ORDER_FAILED("LOCK_004", "주문 처리 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT),
 
+    // ===================== AI 매니저 (AI) =====================
+    AI_PLAN_REQUIRED("AI_001", "현재 플랜에서 사용할 수 없는 기능입니다. 플랜 업그레이드가 필요합니다", HttpStatus.FORBIDDEN),
+    AI_USAGE_LIMIT_EXCEEDED("AI_002", "이번 달 AI 사용량을 모두 사용했습니다", HttpStatus.TOO_MANY_REQUESTS),
+    AI_MESSAGE_NOT_FOUND("AI_003", "존재하지 않는 AI 생성 메시지입니다", HttpStatus.NOT_FOUND),
+    AI_MESSAGE_ALREADY_SENT("AI_004", "이미 발송된 메시지입니다", HttpStatus.CONFLICT),
+    AI_MESSAGE_NOT_EDITABLE("AI_005", "수정할 수 없는 메시지 상태입니다", HttpStatus.BAD_REQUEST),
+    AI_FORBIDDEN("AI_006", "AI 매니저 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
+    AI_GENERATION_FAILED("AI_007", "AI 문구 생성에 실패했습니다", HttpStatus.INTERNAL_SERVER_ERROR),
+    AI_INVALID_STATUS("AI_008", "요청을 처리할 수 없는 상태입니다", HttpStatus.CONFLICT),
+    AI_INVALID_SCHEDULE_TIME("AI_009", "예약 발송 시간은 현재 시각 이후여야 합니다", HttpStatus.BAD_REQUEST),
+    AI_SAVING_PLAN_NOT_FOUND("AI_010", "저장할 절감 계획이 없습니다. 먼저 절감 계획을 생성해 주세요", HttpStatus.NOT_FOUND),
+    AI_INVALID_CHANNEL("AI_011", "해당 채널로는 공지를 발송할 수 없습니다", HttpStatus.BAD_REQUEST),
+
     // ===================== 입력값 검증 (VALIDATION) =====================
     VALIDATION_INVALID_INPUT("VALIDATION_001", "입력값이 올바르지 않습니다", HttpStatus.BAD_REQUEST);
 

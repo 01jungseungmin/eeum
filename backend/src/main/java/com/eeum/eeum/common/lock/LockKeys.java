@@ -49,4 +49,19 @@ public final class LockKeys {
     public static String storeReservation(Long storeId) {
         return "lock:store:" + storeId + ":reservation";
     }
+
+    // AI 사용량 체크 + 기록이 공유하는 매장 단위 락 (월 제한 초과 방지)
+    public static String aiUsage(Long storeId) {
+        return "lock:ai-usage:store:" + storeId;
+    }
+
+    // AI 생성 메시지 발송/예약/취소 상태 전이 락 (중복 클릭 방지)
+    public static String aiMessage(Long messageId) {
+        return "lock:ai-message:" + messageId;
+    }
+
+    // 생활권 매칭 노출 시작/중지 락 (중복 시작 방지)
+    public static String aiExposure(Long storeId) {
+        return "lock:ai-exposure:store:" + storeId;
+    }
 }
