@@ -23,4 +23,10 @@ public class TokenResponseDto {
 
     @Schema(description = "회원 역할", example = "ROLE_USER", allowableValues = {"ROLE_USER", "ROLE_OWNER", "ROLE_ADMIN"})
     private String role;
+
+    @Schema(description = "사장 신청 정보 존재 여부", example = "true")
+    private Boolean ownerInfoExists;
+
+    @Schema(description = "사장 입점 심사 상태", example = "PENDING", allowableValues = {"PENDING", "REJECTED", "APPROVED"})
+    private String ownerApprovalStatus;
 }

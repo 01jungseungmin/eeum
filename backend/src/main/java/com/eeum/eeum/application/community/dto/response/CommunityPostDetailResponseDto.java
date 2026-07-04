@@ -65,6 +65,9 @@ public class CommunityPostDetailResponseDto {
     @Schema(description = "수정일시")
     private LocalDateTime modifiedAt;
 
+    @Schema(description = "공유 딥링크 URL", example = "eeum://community/posts/42")
+    private String shareUrl;
+
     public static CommunityPostDetailResponseDto of(CommunityPost post, boolean likedByMe, List<CommunityImage> images) {
         return CommunityPostDetailResponseDto.builder()
                 .postId(post.getPostId())
@@ -84,6 +87,7 @@ public class CommunityPostDetailResponseDto {
                 .images(images.stream().map(CommunityImageResponseDto::from).toList())
                 .createdAt(post.getCreatedAt())
                 .modifiedAt(post.getModifiedAt())
+                .shareUrl("eeum://community/posts/" + post.getPostId())
                 .build();
     }
 }

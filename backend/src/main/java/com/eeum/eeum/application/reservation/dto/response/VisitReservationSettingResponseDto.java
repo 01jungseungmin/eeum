@@ -11,10 +11,6 @@ public class VisitReservationSettingResponseDto {
 
     private Boolean enabled;
 
-    private Integer defaultMaxVisitorCount;
-
-    private Integer defaultMaxTeamCount;
-
     private Integer slotIntervalMinutes;
 
     private Boolean sameDayReservationAllowed;

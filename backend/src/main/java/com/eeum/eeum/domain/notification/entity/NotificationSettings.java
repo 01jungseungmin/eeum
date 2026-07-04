@@ -169,7 +169,7 @@ public class NotificationSettings extends BaseEntity {
         return switch (type) {
             // 필수 알림 (끌 수 없음)
             case ORDER_STATUS_CHANGED, PAYMENT_COMPLETED  -> true;
-            case RESERVATION_CONFIRMED, RESERVATION_CANCELLED, RESERVATION_REMINDER -> true;
+            case RESERVATION_CONFIRMED, RESERVATION_CANCELLED, RESERVATION_REJECTED, RESERVATION_REMINDER -> true;
             case SYSTEM_NOTICE                            -> true;
             case INQUIRY_ANSWERED                         -> true;
             // 사장님 필수

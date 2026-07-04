@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.account.dto.response.OwnerApprovalStatusResponseDto;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
 import com.eeum.eeum.application.product.dto.request.RepresentativeMenuCreateRequestDto;
@@ -8,9 +9,12 @@ import com.eeum.eeum.application.store.dto.request.StoreBusinessHourUpdateReques
 import com.eeum.eeum.application.store.dto.request.StoreBusinessInfoRequestDto;
 import com.eeum.eeum.application.store.dto.response.OwnerChecklistResponseDto;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
+import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.event.OwnerApplicationSubmittedEvent;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -28,6 +32,7 @@ import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.ForbiddenException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,6 +50,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OwnerApprovalService {
 
+    private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final StoreRepository storeRepository;
     private final SettlementAccountRepository settlementAccountRepository;
@@ -264,7 +271,6 @@ public class OwnerApprovalService {
         );
     }
     // ===================== 내부 유틸 =====================
-
     private OwnerInfo getOwnerInfo(Long accountId) {
         return ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
