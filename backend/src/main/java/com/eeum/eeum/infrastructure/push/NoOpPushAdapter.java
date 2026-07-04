@@ -1,13 +1,12 @@
 package com.eeum.eeum.infrastructure.push;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-// FcmPushAdapter(prod/demo)가 없는 환경에서 자동 활성화되는 no-op 폴백
+// prod/demo 외 환경(local, dev 등)에서 활성화되는 no-op 폴백
 @Slf4j
 @Component
 @Profile("!prod & !demo")
