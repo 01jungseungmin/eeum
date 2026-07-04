@@ -13,18 +13,6 @@ export const chatApi = {
     }
   },
 
-  // ✨ [NEW] 새로운 모임 찾기 (전체 오픈 채팅방 목록 조회) (GET /chat/rooms/discover)
-  getDiscoverRooms: async (page: number = 0, size: number = 20) => {
-    try {
-      // 🚨 혹시 백엔드에서 만든 전체 방 목록 주소가 /chat/rooms/discover 가 아니라면 이 부분만 수정해 주세요!
-      const response = await client.get('/chat/rooms/discover', { params: { page, size } });
-      return response.data?.data?.content || response.data?.data || [];
-    } catch (error) {
-      console.error('오픈 채팅방 목록 조회 에러:', error);
-      throw error; // 에러를 던져서 화면에서 로딩 스피너를 멈출 수 있게 합니다.
-    }
-  },
-
   // 2. 채팅방 상세 정보 조회 (GET /chat/rooms/{roomId})
   getRoomDetail: async (roomId: string | number) => {
     try {
@@ -85,11 +73,15 @@ export const chatApi = {
   },
 
   // 10. 메시지 목록 조회 (과거 내역) (GET /chat/rooms/{roomId}/messages) - 중복 해결!
-  getPastMessages: async (roomId: string | number, page: number = 0, size: number = 50) => {
+  getPastMessages: async (roomId: string | number, cursor?: string, size: number = 50) => {
     try {
-      const response = await client.get(`/chat/rooms/${roomId}/messages`, {
-        params: { page, size }
-      });
+      const params: any = { size };
+      // 이전 메시지를 부를 때(cursor 값이 있을 때)만 파라미터에 추가합니다.
+      if (cursor) {
+        params.cursor = cursor; 
+      }
+
+      const response = await client.get(`/chat/rooms/${roomId}/messages`, { params });
       return response.data?.data?.content || response.data?.data || [];
     } catch (error) {
       console.error('과거 채팅 기록 로딩 에러:', error);
@@ -104,8 +96,8 @@ export const chatApi = {
   },
 
   // 12. 이미지 메시지 발송 (POST /chat/rooms/{roomId}/messages/image)
-  sendImageMessage: async (roomId: string | number, imageUrls: string[]) => {
-    const response = await client.post(`/chat/rooms/${roomId}/messages/image`, { imageUrls });
+  sendImageMessage: async (roomId: string | number, imageUrl: string) => {
+    const response = await client.post(`/chat/rooms/${roomId}/messages/image`, { imageUrl });
     return response.data;
   }
 };

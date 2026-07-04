@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, StyleSheet, TextInput, TouchableOpacity, FlatList, 
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert,
-  Text as RNText, Modal, Keyboard, AppState //
+  Text as RNText, Modal, Keyboard, AppState
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,15 +32,15 @@ export default function ChatRoomScreen() {
   const [isLoading, setIsLoading] = useState(true);
   
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [participants, setParticipants] = useState([
-    { id: 1, name: '김철수', isHost: true, profileUrl: null },
-    { id: 2, name: '홍길동', isHost: false, profileUrl: null },
-  ]);
+  const [participants, setParticipants] = useState<any[]>([]);
   
   const flatListRef = useRef<FlatList>(null);
   
-  // ✨ [5번 기능] 앱 상태 감지용 ref (화면 켜짐/꺼짐 감지)
+  // 앱 상태 감지용 ref
   const appState = useRef(AppState.currentState);
+
+  // [NEW] 이전 대화 불러오기 중복 방지용 상태
+  const [isFetchingOlder, setIsFetchingOlder] = useState(false);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
@@ -58,31 +58,25 @@ export default function ChatRoomScreen() {
     };
   }, []);
 
-  // ✨ [5번 기능] 앱이 백그라운드에서 돌아왔을 때 최신 채팅 다시 불러오기
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      // 앱이 꺼져 있다가(background/inactive) 다시 켜졌을 때(active)
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        console.log('🔥 앱 활성화: 백그라운드에서 복귀, 채팅 동기화 시작');
         if (roomId) {
           try {
             const pastMessages = await chatApi.getPastMessages(roomId);
-            setMessages(pastMessages.reverse()); // 최신 메시지로 덮어쓰기
-            chatApi.markAsRead(roomId).catch(() => {}); // 읽음 처리 갱신
+            setMessages(pastMessages.reverse()); 
+            chatApi.markAsRead(roomId).catch(() => {});
           } catch (error) {
-            console.log('최신 메시지 동기화 실패:', error);
+            console.error('최신 메시지 동기화 실패:', error);
           }
         }
       }
       appState.current = nextAppState;
     });
 
-    return () => {
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, [roomId]);
 
-  // 2. 내 정보 및 과거 채팅 기록 불러오기 (읽음 처리 추가)
   useEffect(() => {
     const initChatRoom = async () => {
       try {
@@ -90,18 +84,23 @@ export default function ChatRoomScreen() {
         const myInfo = await userApi.getMyInfo();
         setMyAccountId(myInfo.accountId);
 
-        setParticipants(prev => {
-          if (!prev.find(p => p.id === myInfo.accountId)) {
-            return [...prev, { id: myInfo.accountId, name: '나', isHost: false, profileUrl: null }];
-          }
-          return prev;
-        });
+        const roomDetail = await chatApi.getRoomDetail(roomId);
+        
+        if (roomDetail && roomDetail.participants) {
+          const realParticipants = roomDetail.participants.map((p: any) => ({
+            id: p.accountId,
+            name: p.nickname || p.name || '알 수 없음',
+            isHost: p.accountId === roomDetail.createdBy, 
+            profileUrl: p.profileImageUrl
+          }));
+          setParticipants(realParticipants);
+        }
 
         const pastMessages = await chatApi.getPastMessages(roomId);
         setMessages(pastMessages.reverse()); 
         
         if (roomId) {
-          chatApi.markAsRead(roomId).catch(err => console.log('읽음 처리 에러:', err));
+          chatApi.markAsRead(roomId).catch(err => console.error('읽음 처리 에러:', err));
         }
       } catch (error: any) {
         console.error('채팅방 초기화 에러:', error);
@@ -124,7 +123,32 @@ export default function ChatRoomScreen() {
     }
   }, [messages, roomId]);
 
-  // 3. 메시지 전송 로직
+  // [NEW] 이전 50개 메시지 불러오기 로직 (커서 페이징)
+  const loadMoreMessages = async () => {
+    if (messages.length === 0 || isFetchingOlder) return;
+
+    // 현재 렌더링된 메시지 중 가장 오래된 메시지 (배열 맨 앞 데이터)
+    const oldestMessage = messages[0];
+    const cursorTime = oldestMessage.sentAt || oldestMessage.createdAt;
+
+    if (!cursorTime) return;
+
+    try {
+      setIsFetchingOlder(true);
+      
+      const olderMessages = await chatApi.getPastMessages(roomId, cursorTime);
+      
+      if (olderMessages && olderMessages.length > 0) {
+        // 새로 가져온 과거 메시지를 최신순->과거순에 맞게 뒤집은 뒤, 기존 배열 앞에 붙여줍니다.
+        setMessages((prev) => [...olderMessages.reverse(), ...prev]);
+      }
+    } catch (error) {
+      console.error('이전 메시지 로딩 실패:', error);
+    } finally {
+      setIsFetchingOlder(false);
+    }
+  };
+
   const handleSend = () => {
     if (!inputText.trim()) return;
     sendMessage(inputText.trim());
@@ -146,11 +170,12 @@ export default function ChatRoomScreen() {
 
     if (!result.canceled) {
       const selectedImageUri = result.assets[0].uri;
-      
       try {
-        Alert.alert('개발 중', '이미지 업로드 API가 연결되면 전송됩니다!\n선택한 사진 URI: ' + selectedImageUri);
+        const targetImageUrl = selectedImageUri; 
+        await chatApi.sendImageMessage(roomId, targetImageUrl);
       } catch (error) {
-        Alert.alert('오류', '사진을 전송하지 못했습니다.');
+        console.error('이미지 전송 실패:', error);
+        Alert.alert('오류', '사진 전송 중 문제가 발생했습니다.');
       }
     }
   };
@@ -170,6 +195,7 @@ export default function ChatRoomScreen() {
               setIsMenuVisible(false);
               router.replace('/chat'); 
             } catch (error) {
+              console.error('채팅방 나가기 실패:', error);
               Alert.alert('오류', '채팅방을 나가지 못했습니다.');
             }
           }
@@ -179,7 +205,9 @@ export default function ChatRoomScreen() {
   };
 
   useEffect(() => {
-    if (messages.length > 0) {
+    // 메시지가 새로 추가되었을 때 스크롤 맨 아래로 이동
+    // (이전 대화 로딩 중일 때는 맨 아래로 내려가지 않게 조건 추가)
+    if (messages.length > 0 && !isFetchingOlder) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -306,11 +334,13 @@ export default function ChatRoomScreen() {
                 contentContainerStyle={[styles.messageList, { flexGrow: 1 }]}
                 showsVerticalScrollIndicator={false}
                 onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                // [NEW] 화면 맨 위로 당겨서 새로고침(이전 대화 로드) 기능 활성화
+                refreshing={isFetchingOlder}
+                onRefresh={loadMoreMessages}
               />
             </View>
           )}
 
-          {/* 안드로이드 하단 공백 버그 방지를 위해 고정 여백(12) 추가 */}
           <View style={[styles.inputContainer, { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 10) : 12 }]}>
             <TouchableOpacity style={styles.attachButton} onPress={handleAttachImage}>
               <Ionicons name="add" size={26} color="#888" />
