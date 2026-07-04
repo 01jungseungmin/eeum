@@ -128,5 +128,15 @@ export const reviewApi = {
       console.error('방문 예약 리뷰 작성 에러:', error);
       throw error;
     }
+  },
+
+  getReservationReview: async (reservationId: number) => {
+    try {
+      const response = await client.get(`/reservations/visits/${reservationId}/review`);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error('방문 예약 리뷰 조회 에러:', error);
+      throw error;
+    }
   }
 };

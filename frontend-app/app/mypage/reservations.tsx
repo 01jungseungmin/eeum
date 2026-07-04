@@ -9,6 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
 import { reservationApi } from '@/api/reservation'; 
+import { reviewApi } from '../../api/review'; 
 
 export default function ReservationsScreen() {
   const router = useRouter();
@@ -27,9 +28,29 @@ export default function ReservationsScreen() {
       const res = await reservationApi.getMyVisitReservations();
       
       const realData = res?.content || res?.data || res || [];
-      console.log("🔥 실제 예약 내역 데이터:", JSON.stringify(realData[0], null, 2));
+      
+      // ✨ [추가] 받아온 예약 목록 중 'COMPLETED'인 항목들만 리뷰 작성 여부를 확인합니다.
+      const updatedData = await Promise.all(
+        realData.map(async (item: any) => {
+          if (item.status === 'COMPLETED') {
+            try {
+              // 리뷰 상세 조회 API 호출
+              const reviewData = await reviewApi.getReservationReview(item.visitReservationId);
+              // 데이터가 존재하면 리뷰 작성 완료 처리
+              if (reviewData && reviewData.storereviewId) {
+                return { ...item, isReviewed: true };
+              }
+            } catch (e) {
+              // 에러(404 등)가 나면 아직 리뷰를 안 쓴 것
+              return { ...item, isReviewed: false };
+            }
+          }
+          // COMPLETED가 아니면 기존 데이터 그대로 리턴
+          return item;
+        })
+      );
 
-      setReservationList(realData);
+      setReservationList(updatedData);
     } catch (error) {
       console.error('예약 내역 로딩 실패:', error);
     } finally {
@@ -84,10 +105,7 @@ export default function ReservationsScreen() {
       statusBg = '#FFEBEE';
     }
 
-    const isReviewCompleted = 
-      item.hasReview === true || 
-      item.isReviewed === true || 
-      (item.reviewId !== null && item.reviewId !== undefined && item.reviewId > 0);
+    const isReviewCompleted = item.isReviewed === true;
 
     return (
       <TouchableOpacity 
