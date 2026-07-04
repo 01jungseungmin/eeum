@@ -20,7 +20,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
-@Profile("prod")
+@Profile({"prod", "demo"})
 @RequiredArgsConstructor
 public class FcmPushAdapter implements PushAdapter {
 

@@ -31,7 +31,7 @@ class AiModelRouterTest {
     private final MockAiClient mockAiClient = new MockAiClient();
 
     private AiProviderProperties properties(String provider) {
-        return new AiProviderProperties(provider, "groq", "template", null, null);
+        return new AiProviderProperties(provider, "groq", null, null);
     }
 
     private AiModelRouter createRouter(String provider) {

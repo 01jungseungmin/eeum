@@ -68,11 +68,13 @@ portone:
 fcm:
   project-id: ${FCM_PROJECT_ID}
   service-account-key-path: ${FCM_SERVICE_ACCOUNT_KEY_PATH}
+  # 발표/시연 시 실제 FCM 발송이 필요하면 --spring.profiles.active=demo 로 기동
+  # demo 프로필: FcmPushAdapter(실제 발송) + FCM 단건 테스트 API(/owner/ai-manager/test/fcm) 모두 활성
 
 ai:
   provider: gemini
   fallback-provider: groq
-  final-fallback: template
+  # final-fallback은 Generator(GeminiAiTextGenerator 등)에서 고정 template으로 처리
 
   gemini:
     enabled: true

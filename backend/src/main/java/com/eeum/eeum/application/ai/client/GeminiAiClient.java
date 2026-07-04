@@ -66,9 +66,10 @@ public class GeminiAiClient implements AiClient {
         } catch (AiClientException e) {
             throw e;
         } catch (Exception e) {
-            // 예외 메시지에 URL(=API Key 포함 가능)이 섞이지 않도록 요약만 남긴다
+            // cause를 그대로 넘기면 RestClient가 URL(?key=...)을 예외 메시지에 포함시킬 수 있으므로 제거
+            log.debug("Gemini 호출 실패 상세: {}", e.toString());
             throw new AiClientException(AiProviderType.GEMINI,
-                    "Gemini 호출 실패: " + e.getClass().getSimpleName(), e);
+                    "Gemini 호출 실패: " + e.getClass().getSimpleName());
         }
     }
 

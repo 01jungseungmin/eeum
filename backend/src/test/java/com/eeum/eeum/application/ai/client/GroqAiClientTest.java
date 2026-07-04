@@ -15,7 +15,7 @@ class GroqAiClientTest {
 
     private GroqAiClient createClient(String apiKey) {
         AiProviderProperties properties = new AiProviderProperties(
-                "groq", null, "template",
+                "groq", null,
                 null,
                 new AiProviderProperties.Groq(apiKey, null, null));
         return new GroqAiClient(mock(RestClient.class), objectMapper, properties);

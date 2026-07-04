@@ -11,14 +11,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record AiProviderProperties(
         String provider,
         String fallbackProvider,
-        String finalFallback,
         Gemini gemini,
         Groq groq
 ) {
     public AiProviderProperties {
         provider = defaultIfBlank(provider, "template");
         fallbackProvider = defaultIfBlank(fallbackProvider, "groq");
-        finalFallback = defaultIfBlank(finalFallback, "template");
         gemini = gemini != null ? gemini : new Gemini(null, null, null);
         groq = groq != null ? groq : new Groq(null, null, null);
     }

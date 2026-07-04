@@ -70,8 +70,9 @@ public class GroqAiClient implements AiClient {
         } catch (AiClientException e) {
             throw e;
         } catch (Exception e) {
+            log.debug("Groq 호출 실패 상세: {}", e.toString());
             throw new AiClientException(AiProviderType.GROQ,
-                    "Groq 호출 실패: " + e.getClass().getSimpleName(), e);
+                    "Groq 호출 실패: " + e.getClass().getSimpleName());
         }
     }
 

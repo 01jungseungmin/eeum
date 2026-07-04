@@ -15,7 +15,7 @@ class GeminiAiClientTest {
 
     private GeminiAiClient createClient(String apiKey) {
         AiProviderProperties properties = new AiProviderProperties(
-                "gemini", "groq", "template",
+                "gemini", "groq",
                 new AiProviderProperties.Gemini(apiKey, null, null),
                 null);
         return new GeminiAiClient(mock(RestClient.class), objectMapper, properties);
