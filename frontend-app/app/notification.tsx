@@ -16,10 +16,8 @@ const NOTI_TABS = [
   { id: 'ORDER', name: '주문' },
   { id: 'RESERVATION', name: '예약' },
   { id: 'REVIEW', name: '리뷰' },
-  // { id: 'CHAT', name: '채팅' },
+  { id: 'SYSTEM', name: '문의/신고' },
   { id: 'COMMUNITY', name: '커뮤니티' },
-  // { id: 'PRODUCT', name: '상품' }, // 필요 시 주석 해제하여 추가
-  // { id: 'SYSTEM', name: '시스템' }
 ];
 
 export default function NotificationsScreen() {
@@ -59,6 +57,9 @@ export default function NotificationsScreen() {
 
     } catch (error) {
       console.error('전체 알림 로딩 에러:', error);
+      if (pageNum === 0) {
+        setNotifications([]);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -193,22 +194,27 @@ export default function NotificationsScreen() {
         </View>
       </View>
 
-      {/* 카테고리 필터 탭 바 */}
+      {/* 카테고리 필터 탭 바 (스크롤 가능하도록 처리) */}
       <View style={styles.tabBar}>
-        {NOTI_TABS.map(tab => (
-          <TouchableOpacity 
-            key={tab.id} 
-            style={[styles.tabItem, activeTab === tab.id && styles.activeTabItem]}
-            onPress={() => setActiveTab(tab.id)}
-          >
-            <Text 
-              fontWeight={activeTab === tab.id ? "bold" : "normal"}
-              style={[styles.tabText, activeTab === tab.id && styles.activeTabText]}
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={NOTI_TABS}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={[styles.tabItem, activeTab === item.id && styles.activeTabItem]}
+              onPress={() => setActiveTab(item.id)}
             >
-              {tab.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text 
+                fontWeight={activeTab === item.id ? "bold" : "normal"}
+                style={[styles.tabText, activeTab === item.id && styles.activeTabText]}
+              >
+                {item.name}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
       </View>
 
       {/* 리스트 영역 */}
@@ -254,8 +260,8 @@ const styles = StyleSheet.create({
   headerIcon: { marginLeft: 16, padding: 2 },
 
   // 탭 스타일
-  tabBar: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  tabItem: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   activeTabItem: { borderBottomColor: '#00A859' },
   tabText: { fontSize: 14, color: '#666' },
   activeTabText: { color: '#00A859' },

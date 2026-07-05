@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 import { useRouter, useFocusEffect } from 'expo-router';
 
-// 앞서 만든 알림 API 모듈을 불러옵니다.
 import { notificationApi, NotificationItem } from '../../api/notification'; 
 
 interface HomeHeaderProps {
@@ -46,7 +45,7 @@ export default function HomeHeader({
       const notiRes = await notificationApi.getNotifications();
       const notiList = notiRes?.data?.content || notiRes?.data || notiRes || [];
       
-      // 2. 채팅 카테고리가 아닌 일반 알림만 화면 목록에 표시하기 위해 걸러냅니다
+      // 2. 채팅 카테고리가 아닌 일반 알림(예약, 주문, 문의 등)만 화면 목록에 표시하기 위해 걸러냅니다
       const filteredNotiList = notiList.filter((noti: NotificationItem) => noti.type !== 'CHAT' && noti.refType !== 'CHAT');
       setNotifications(filteredNotiList);
 
@@ -80,7 +79,7 @@ export default function HomeHeader({
         // UI 즉각 반영을 위해 로컬 카운트 차감
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
-        console.log('읽음 처리 실패', error);
+        console.error('읽음 처리 실패', error);
       }
     }
 
