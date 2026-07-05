@@ -109,7 +109,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'chat',
         name: '채팅',
-        path: '/6',
+        path: '/chat',
         icon: <MessageSquare {...iconProps} />,
         subtitle: '고객과의 1:1 채팅을 관리하세요',
         countKey: 'chat',
@@ -173,12 +173,12 @@ export const OWNER_MENU_CONFIG = [
   {
     group: '설정',
     items: [
-      {
-        id: 'settings',
-        name: '상점 설정',
-        path: '/settings',
-        icon: <Settings {...iconProps} />, // lucide-react에서 Settings 추가 필요
-      },
+      // {
+      //   id: 'settings',
+      //   name: '상점 설정',
+      //   path: '/settings',
+      //   icon: <Settings {...iconProps} />, // lucide-react에서 Settings 추가 필요
+      // },
       {
         id: 'logout',
         name: '로그아웃',
