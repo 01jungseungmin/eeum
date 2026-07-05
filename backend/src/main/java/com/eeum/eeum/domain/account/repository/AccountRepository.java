@@ -25,6 +25,8 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
 
     boolean existsByNickname(String nickname);
 
+    boolean existsByAccountIdAndDeletedAtIsNull(Long accountId);
+
     Page<Account> findByStatus(AccountStatus status, Pageable pageable);
 
     Optional<Account> findByProviderAndProviderId(

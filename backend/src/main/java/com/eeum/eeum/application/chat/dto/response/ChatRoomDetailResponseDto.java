@@ -20,6 +20,7 @@ public class ChatRoomDetailResponseDto {
     private final boolean active;
     private final Long createdBy;
     private final LocalDateTime createdAt;
+    private final int participantCount;
     private final List<ChatParticipantResponseDto> participants;
 
     public static ChatRoomDetailResponseDto of(
@@ -33,6 +34,7 @@ public class ChatRoomDetailResponseDto {
                 .active(room.isActive())
                 .createdBy(room.getCreator().getAccountId())
                 .createdAt(room.getCreatedAt())
+                .participantCount(participants.size())
                 .participants(participants)
                 .build();
     }

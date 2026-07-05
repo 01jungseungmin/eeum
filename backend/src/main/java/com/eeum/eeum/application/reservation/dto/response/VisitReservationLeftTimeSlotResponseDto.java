@@ -1,84 +1,38 @@
 package com.eeum.eeum.application.reservation.dto.response;
 
-import com.eeum.eeum.domain.reservation.entity.VisitReservationTimeSlot;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalTime;
+import java.util.List;
 
 @Getter
 @Builder
+@Schema(description = "사장용 날짜별 시간대 예약 현황")
 public class VisitReservationLeftTimeSlotResponseDto {
-    private Long timeSlotId;
+
+    @Schema(description = "슬롯 시간")
     private LocalTime time;
 
-    private int maxTeams;
-    private int reservedTeams;
-    private int leftTeams;
+    @Schema(description = "예약 가능 여부 (활성 테이블이 1개 이상 남아 있으면 true)")
+    private boolean available;
 
-    private int maxPeople;
-    private int reservedPeople;
-    private int leftPeople;
+    @Schema(description = "예약 가능한 테이블 수")
+    private int availableTableCount;
 
-    // enabled=false이거나 팀·인원 정원 초과이면 true
-    private boolean closed;
+    @Schema(description = "전체 활성 테이블 수")
+    private int totalTableCount;
 
-    // 슬롯 활성화 여부 (false면 사장이 직접 비활성화한 슬롯)
-    private boolean enabled;
+    @Schema(description = "예약된 테이블 수")
+    private int reservedTableCount;
 
-    // @param timeSlotId DB 슬롯 ID @param enabled    슬롯 활성화 여부 — false이면 closed도 강제 true
-    public static VisitReservationLeftTimeSlotResponseDto of(
-            Long timeSlotId,
-            LocalTime time,
-            int maxTeams,
-            int reservedTeams,
-            int maxPeople,
-            int reservedPeople,
-            boolean enabled
-    ) {
-        int leftTeams  = Math.max(maxTeams  - reservedTeams,  0);
-        int leftPeople = Math.max(maxPeople - reservedPeople, 0);
+    @Schema(description = "예약 가능한 테이블 중 최소 수용 인원 (테이블 없으면 null)")
+    private Integer minAvailableCapacity;
 
-        boolean closed = !enabled || leftTeams <= 0 || leftPeople <= 0;
+    @Schema(description = "예약 가능한 테이블 중 최대 수용 인원 (테이블 없으면 null)")
+    private Integer maxAvailableCapacity;
 
-        return VisitReservationLeftTimeSlotResponseDto.builder()
-                .timeSlotId(timeSlotId)
-                .time(time)
-                .maxTeams(maxTeams)
-                .reservedTeams(reservedTeams)
-                .leftTeams(leftTeams)
-                .maxPeople(maxPeople)
-                .reservedPeople(reservedPeople)
-                .leftPeople(leftPeople)
-                .closed(closed)
-                .enabled(enabled)
-                .build();
-    }
-
-    public static VisitReservationLeftTimeSlotResponseDto from(
-            VisitReservationTimeSlot slot,
-            Integer reservedVisitorCount,
-            Long reservedTeamCount
-    ) {
-        int teams  = reservedTeamCount == null ? 0 : reservedTeamCount.intValue();
-        int people = reservedVisitorCount == null ? 0 : reservedVisitorCount;
-
-        int leftTeams  = Math.max(slot.getMaxTeamCount()    - teams,  0);
-        int leftPeople = Math.max(slot.getMaxVisitorCount() - people, 0);
-
-        boolean closed = !slot.isEnabled() || leftTeams <= 0 || leftPeople <= 0;
-
-        return VisitReservationLeftTimeSlotResponseDto.builder()
-                .timeSlotId(slot.getTimeSlotId())
-                .time(slot.getSlotTime())
-                .maxTeams(slot.getMaxTeamCount())
-                .reservedTeams(teams)
-                .leftTeams(leftTeams)
-                .maxPeople(slot.getMaxVisitorCount())
-                .reservedPeople(people)
-                .leftPeople(leftPeople)
-                .closed(closed)
-                .enabled(slot.isEnabled())
-                .build();
-    }
+    @Schema(description = "좌석 수별 잔여 테이블 수")
+    private List<TableAvailabilityResponseDto> tableAvailabilities;
 }

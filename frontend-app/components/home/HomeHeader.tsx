@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 import { useRouter, useFocusEffect } from 'expo-router';
 
-// ✨ 앞서 만든 알림 API 모듈을 불러옵니다. (경로는 프로젝트에 맞게 수정하세요)
 import { notificationApi, NotificationItem } from '../../api/notification'; 
 
 interface HomeHeaderProps {
@@ -27,13 +26,13 @@ export default function HomeHeader({
 }: HomeHeaderProps) {
   const router = useRouter();
 
-  // ✨ 알림 관련 상태 관리
+  // 알림 관련 상태 관리
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✨ 화면에 들어올 때마다 안 읽은 알림 숫자와 최근 알림 목록을 갱신합니다.
+  // 화면에 들어올 때마다 안 읽은 알림 숫자와 최근 알림 목록을 갱신합니다.
   useFocusEffect(
     useCallback(() => {
       fetchNotificationData();
@@ -42,16 +41,20 @@ export default function HomeHeader({
 
   const fetchNotificationData = async () => {
     try {
-      // 1. 안 읽은 알림 갯수 가져오기
-      const countRes = await notificationApi.getUnreadCount();
-      
-      const unreadCountValue = countRes?.data?.unreadCount ?? 0;
-      setUnreadCount(unreadCountValue);
-
-      // 2. 알림 목록 최신화
+      // 1. 알림 전체 목록 최신화
       const notiRes = await notificationApi.getNotifications();
       const notiList = notiRes?.data?.content || notiRes?.data || notiRes || [];
-      setNotifications(notiList);
+      
+      // 2. 채팅 카테고리가 아닌 일반 알림(예약, 주문, 문의 등)만 화면 목록에 표시하기 위해 걸러냅니다
+      const filteredNotiList = notiList.filter((noti: NotificationItem) => noti.type !== 'CHAT' && noti.refType !== 'CHAT');
+      setNotifications(filteredNotiList);
+
+      // 3. 일반 알림 중 안 읽은 것의 개수만 직접 셉니다!
+      const unreadCountValue = filteredNotiList.filter(
+        (noti: NotificationItem) => noti.Read === false || noti.Read === 0 || noti.Read === '0'
+      ).length;
+      setUnreadCount(unreadCountValue);
+
     } catch (error) {
       console.error('헤더 알림 데이터 로딩 에러:', error);
     }
@@ -65,7 +68,7 @@ export default function HomeHeader({
     setIsDropdownVisible(false);
   };
 
-  // ✨ 드롭다운 안에서 개별 알림을 클릭했을 때의 동작
+  // 드롭다운 안에서 개별 알림을 클릭했을 때의 동작
   const handlePressNotification = async (item: NotificationItem) => {
     handleCloseDropdown(); // 모달 닫기
     
@@ -76,7 +79,7 @@ export default function HomeHeader({
         // UI 즉각 반영을 위해 로컬 카운트 차감
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
-        console.log('읽음 처리 실패', error);
+        console.error('읽음 처리 실패', error);
       }
     }
 
@@ -117,7 +120,7 @@ export default function HomeHeader({
         </TouchableOpacity>
         
         <View style={styles.headerIcons}>
-          {/* ✨ 1. 알림 종 아이콘 및 빨간 뱃지 UI */}
+          {/* 1. 알림 종 아이콘 및 빨간 뱃지 UI */}
           <TouchableOpacity style={styles.iconWrapper} onPress={handleOpenDropdown}>
             <Ionicons name="notifications-outline" size={24} color="#333" />
             {unreadCount > 0 && (
@@ -135,7 +138,7 @@ export default function HomeHeader({
         </View>
       </View>
 
-      {/* ✨ 2. 투명 배경 모달을 활용한 알림 드롭다운 */}
+      {/* 2. 투명 배경 모달을 활용한 알림 드롭다운 */}
       <Modal 
         visible={isDropdownVisible} 
         transparent={true} 
@@ -160,7 +163,7 @@ export default function HomeHeader({
             ) : notifications.length === 0 ? (
               <Text style={styles.emptyText}>최근 알림이 없습니다.</Text>
             ) : (
-              // ✨ 최대 3개 높이(maxHeight) 지정 및 스크롤 지원
+              // 최대 3개 높이(maxHeight) 지정 및 스크롤 지원
               <FlatList
                 data={notifications}
                 keyExtractor={(item) => item.notificationId.toString()}
@@ -197,7 +200,6 @@ export default function HomeHeader({
 }
 
 const styles = StyleSheet.create({
-  // 기존 스타일 유지
   headerContainer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15, backgroundColor: '#fff', zIndex: 1 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   locationSelector: { flexDirection: 'row', alignItems: 'center' },
@@ -211,7 +213,7 @@ const styles = StyleSheet.create({
   searchBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 8 },
   searchText: { color: '#999', fontSize: 14 },
 
-  // ✨ 알림 뱃지 스타일
+  // 알림 뱃지 스타일
   iconWrapper: { marginRight: 15, position: 'relative' },
   badge: { 
     position: 'absolute', top: -4, right: -4, 
@@ -220,7 +222,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#fff', fontSize: 10 },
 
-  // ✨ 알림 모달(드롭다운) 스타일
+  // 알림 모달(드롭다운) 스타일
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)' },
   dropdownContainer: {
     position: 'absolute', top: 55, right: 20, // 헤더 아이콘들 바로 아래쪽에 오도록 위치 조정

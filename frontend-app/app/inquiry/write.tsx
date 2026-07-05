@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, StyleSheet, TextInput, TouchableOpacity, 
   Alert, ActivityIndicator, KeyboardAvoidingView, 
@@ -15,18 +15,42 @@ export default function InquiryWriteScreen() {
   const router = useRouter();
   const { storeId, type } = useLocalSearchParams(); 
 
-  const isAdminInquiry = type === 'ADMIN';
+  const safeType = typeof type === 'string' && type !== 'undefined' ? type : 'STORE';
+  const isAdminInquiry = safeType === 'ADMIN';
+
+  const adminOptions = [
+    { label: '계정/로그인', value: 'ACCOUNT' },
+    { label: '상점 관련', value: 'STORE' },
+    { label: '결제/환불', value: 'PAYMENT' },
+    { label: '신고', value: 'REPORT' },
+    { label: '기타', value: 'ETC' },
+  ];
+
+  const storeOptions = [
+    { label: '주문 문의', value: 'ORDER' },
+    { label: '예약 문의', value: 'RESERVATION' },
+    { label: '결제/환불', value: 'PAYMENT' },
+    { label: '상점 이용 문의', value: 'STORE' },
+    { label: '기타', value: 'ETC' },
+  ];
+
+  // 현재 타입에 맞는 옵션 배열 선택
+  const currentOptions = isAdminInquiry ? adminOptions : storeOptions;
 
   // 상태 관리
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSecret, setIsSecret] = useState(false);
-  // ✨ 이제 상점 문의도 유형 선택을 필수로 받기 위해 둘 다 초기값을 빈칸으로 설정합니다.
-  const [category, setCategory] = useState(''); 
+  
+  const [category, setCategory] = useState(currentOptions[0].value);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // isAdminInquiry 값이 혹시라도 늦게 변할 때를 대비한 동기화
+  useEffect(() => {
+    setCategory(isAdminInquiry ? 'ACCOUNT' : 'ORDER');
+  }, [isAdminInquiry]);
+
   const handleSubmit = async () => {
-    // 유효성 검사 (이제 상점 문의도 유형을 반드시 선택해야 넘어갑니다)
     if (!category) {
       Alert.alert('알림', '문의 유형을 선택해주세요.');
       return;
@@ -80,37 +104,30 @@ export default function InquiryWriteScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
             
-            {/* ✨ 공통 문의 유형 드롭다운 섹션 (상점/관리자에 따라 내용물 분기) */}
             <View style={styles.inputSection}>
               <Text fontWeight="bold" style={styles.label}>문의 유형 <Text style={{color: 'red'}}>*</Text></Text>
               <View style={styles.pickerContainer}>
+                
                 <Picker
                   selectedValue={category}
                   onValueChange={(itemValue) => setCategory(itemValue)}
                   style={styles.picker}
+                  dropdownIconColor="#333"
                 >
-                  <Picker.Item label="선택해주세요" value="" color="#999" />
+                  {/* 안내 문구는 가장 위에 고정 */}
+                  <Picker.Item label="문의 유형을 선택해주세요" value="" color="#999" />
                   
-                  {isAdminInquiry ? (
-                    // 🔵 관리자 문의일 때 나오는 선택지
-                    <>
-                      <Picker.Item label="계정/로그인" value="ACCOUNT" />
-                      <Picker.Item label="상점 관련" value="STORE" />
-                      <Picker.Item label="결제/환불" value="PAYMENT" />
-                      <Picker.Item label="신고" value="REPORT" />
-                      <Picker.Item label="기타" value="ETC" />
-                    </>
-                  ) : (
-                    // 🟢 상점 문의일 때 나오는 선택지
-                    <>
-                      <Picker.Item label="주문 문의" value="ORDER" />
-                      <Picker.Item label="예약 문의" value="RESERVATION" />
-                      <Picker.Item label="결제/환불" value="PAYMENT" />
-                      <Picker.Item label="상점 이용 문의" value="STORE" />
-                      <Picker.Item label="기타" value="ETC" />
-                    </>
-                  )}
+                  {/* 동적으로 옵션 렌더링 */}
+                  {currentOptions.map((option) => (
+                    <Picker.Item 
+                      key={option.value} 
+                      label={option.label} 
+                      value={option.value} 
+                      color="#333" 
+                    />
+                  ))}
                 </Picker>
+
               </View>
             </View>
 
@@ -119,6 +136,7 @@ export default function InquiryWriteScreen() {
               <TextInput
                 style={styles.titleInput}
                 placeholder="제목을 입력하세요"
+                placeholderTextColor="#999"
                 value={title}
                 onChangeText={setTitle}
                 maxLength={50}
@@ -130,6 +148,7 @@ export default function InquiryWriteScreen() {
               <TextInput
                 style={styles.contentInput}
                 placeholder="문의 내용을 자세히 입력해주세요"
+                placeholderTextColor="#999"
                 value={content}
                 onChangeText={setContent}
                 multiline
@@ -137,7 +156,6 @@ export default function InquiryWriteScreen() {
               />
             </View>
 
-            {/* 상점 문의일 때만 비밀글 옵션을 사용합니다 */}
             {!isAdminInquiry && (
               <TouchableOpacity 
                 style={styles.secretCheckbox} 
@@ -154,7 +172,6 @@ export default function InquiryWriteScreen() {
 
         <View style={styles.bottomBar}>
           <TouchableOpacity 
-            // ✨ 3가지(유형, 제목, 내용)가 모두 채워져야만 활성화되도록 로직 수정
             style={[
               styles.submitBtn, 
               (!title.trim() || !content.trim() || !category) && styles.submitBtnDisabled
@@ -185,7 +202,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 15, color: '#333', marginBottom: 10 },
   
   pickerContainer: { borderWidth: 1, borderColor: '#00A859', borderRadius: 4, overflow: 'hidden', backgroundColor: '#fff' },
-  picker: { height: 50, width: '100%' },
+  picker: { height: 50, width: '100%', color: '#333' },
 
   titleInput: { backgroundColor: '#fff', borderRadius: 4, paddingHorizontal: 15, paddingVertical: 12, fontSize: 15, color: '#333', borderWidth: 1, borderColor: '#DDD' },
   contentInput: { backgroundColor: '#fff', borderRadius: 4, padding: 15, fontSize: 15, color: '#333', minHeight: 180, borderWidth: 1, borderColor: '#DDD' },
