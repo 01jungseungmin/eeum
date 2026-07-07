@@ -16,13 +16,9 @@ import com.eeum.eeum.domain.ai.repository.AiOwnerMetricInputRepository;
 import com.eeum.eeum.domain.ai.repository.AiSavingPlanRepository;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
-import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
-import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.external.entity.ExternalEnergyUsageStat;
 import com.eeum.eeum.domain.external.repository.ExternalEnergyUsageStatRepository;
-import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.entity.Store;
-import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.infrastructure.external.PublicDataService;
@@ -55,8 +51,6 @@ public class AiOperationRiskService {
     private final AiInsightGenerator aiInsightGenerator;
     private final AiOwnerMetricInputRepository aiOwnerMetricInputRepository;
     private final AiSavingPlanRepository aiSavingPlanRepository;
-    private final StoreReviewRepository storeReviewRepository;
-    private final InquiryRepository inquiryRepository;
     private final AiOwnerMetricCommandExecutor ownerMetricCommandExecutor;
     private final AiSavingPlanCommandExecutor savingPlanCommandExecutor;
     private final PublicDataService publicDataService;
@@ -129,15 +123,15 @@ public class AiOperationRiskService {
 
         // 2차: 업종/지역 비교 — OpenAPI 우선, 없으면 파일 Import 데이터, 둘 다 없으면 null
         IndustryComparison comparison = buildIndustryComparison(store);
+        AiOwnerMetricSnapshot snapshot = AiOwnerMetricSnapshot.load(aiOwnerMetricInputRepository, storeId);
 
         return AiElectricityReportResponseDto.builder()
                 .monthlyUsages(monthlyUsages)
-                .equipmentShares(List.of()) // 설비별 계측 데이터 미보유 — 3차 계측 연동 시 제공
+                .equipmentShares(buildEquipmentShares(snapshot))
                 .keyDiagnosis(aiInsightGenerator.electricityDiagnosis(store.getName(), hasData))
                 .analysisPeriod(recentMonths.get(0) + " ~ " + recentMonths.get(recentMonths.size() - 1))
                 .industryComparison(comparison != null ? comparison.text() : null)
-                .estimatedSavingAmount(percentOf(
-                        findLatestMetricValue(storeId, AiMetricType.MONTHLY_POWER_BILL), 10))
+                .estimatedSavingAmount(percentOf(snapshot.monthlyPowerBill(), 10))
                 .sourceType(hasData ? AiDataSourceType.OWNER_INPUT
                         : comparison != null ? comparison.sourceType()
                         : AiDataSourceType.LOCAL_AVERAGE_ONLY)
@@ -145,6 +139,44 @@ public class AiOperationRiskService {
                 .emptyMessage(hasData || comparison != null
                         ? null : "실측값이 없습니다. 월 전력 사용량을 입력하면 리포트가 생성됩니다.")
                 .build();
+    }
+
+    // 설비 보유 대수 기반 전력 사용 비중 추정 — 실측 계측이 아니므로 냉방/냉장 설비만 상대 비중으로 근사한다.
+    // 설비 입력이 전혀 없으면 빈 리스트(실측 데이터 없음 — 기존 스키마 설명과 동일한 의미)
+    private List<AiElectricityReportResponseDto.EquipmentShareDto> buildEquipmentShares(AiOwnerMetricSnapshot snapshot) {
+        record WeightedEquipment(String name, BigDecimal count, int unitWeight) {
+            boolean isPresent() {
+                return count != null && count.compareTo(BigDecimal.ZERO) > 0;
+            }
+
+            BigDecimal weighted() {
+                return count.multiply(BigDecimal.valueOf(unitWeight));
+            }
+        }
+
+        List<WeightedEquipment> present = List.of(
+                        new WeightedEquipment("냉방·공조", snapshot.airConditionerCount(), 3),
+                        new WeightedEquipment("냉장·냉동", snapshot.refrigeratorCount(), 2))
+                .stream()
+                .filter(WeightedEquipment::isPresent)
+                .toList();
+        if (present.isEmpty()) {
+            return List.of();
+        }
+
+        BigDecimal totalWeighted = present.stream()
+                .map(WeightedEquipment::weighted)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return present.stream()
+                .map(equipment -> AiElectricityReportResponseDto.EquipmentShareDto.builder()
+                        .name(equipment.name())
+                        .ratio(equipment.weighted()
+                                .multiply(BigDecimal.valueOf(100))
+                                .divide(totalWeighted, 0, RoundingMode.HALF_UP)
+                                .intValue())
+                        .build())
+                .toList();
     }
 
     private record IndustryComparison(String text, AiDataSourceType sourceType) {
@@ -193,15 +225,26 @@ public class AiOperationRiskService {
 
     private AiOperationRiskResponseDto buildRiskResponse(Store store, boolean detail) {
         Long storeId = store.getStoreId();
-        boolean hasOwnerInput = aiOwnerMetricInputRepository.existsByStore_StoreId(storeId);
-        AiRiskLevel level = resolveRiskLevel(storeId);
+        AiOwnerMetricSnapshot snapshot = AiOwnerMetricSnapshot.load(aiOwnerMetricInputRepository, storeId);
+        // 실측 기반 여부는 존재 여부(existsByStore_StoreId)가 아니라 실제로 위험 판단에 쓰이는
+        // MONTHLY_POWER_KWH/MONTHLY_POWER_BILL 보유 여부로 판단한다 — 다른 지표만 입력된 경우를
+        // "실측 기반"으로 잘못 표시하지 않기 위함.
+        boolean hasPreciseData = snapshot.hasPreciseData();
         boolean hasSavedPlan = aiSavingPlanRepository.existsByStore_StoreIdAndStatus(storeId, AiSavingPlanStatus.SAVED);
 
-        AiDataSourceType sourceType = hasOwnerInput ? AiDataSourceType.OWNER_INPUT : AiDataSourceType.LOCAL_AVERAGE_ONLY;
+        AiDataSourceType sourceType = hasPreciseData ? AiDataSourceType.OWNER_INPUT : AiDataSourceType.LOCAL_AVERAGE_ONLY;
+
+        // 카드 4개를 각각 독립적으로 판단 — 위험도는 카드별로 다르게 나올 수 있다
+        AiRiskLevel energySignalLevel = resolveEnergySignalLevel(snapshot);
+        AiRiskLevel seasonalAlertLevel = resolveSeasonalAlertLevel(snapshot);
+        AiRiskLevel activityAnomalyLevel = resolveActivityAnomalyLevel(snapshot);
+        AiRiskLevel safetyCheckLevel = resolveSafetyCheckLevel(snapshot);
+        AiRiskLevel overallRiskLevel = maxLevel(
+                energySignalLevel, seasonalAlertLevel, activityAnomalyLevel, safetyCheckLevel);
 
         // 2차: 공공데이터 반영 (외부 장애 시 기존 문구로 fallback — 전체 API 실패로 이어지지 않음)
-        String energySignal = buildEnergySignal(store, hasOwnerInput);
-        String safetyCheck = buildSafetyCheck();
+        String energySignal = buildEnergySignalText(store, snapshot);
+        String safetyCheck = buildSafetyCheckText(snapshot);
         List<AiOperationRiskResponseDto.DataSourceDto> dataSources = new java.util.ArrayList<>();
         dataSources.add(AiOperationRiskResponseDto.DataSourceDto.from(sourceType));
         if (usedPublicData(energySignal, safetyCheck)) {
@@ -209,18 +252,20 @@ public class AiOperationRiskService {
         }
 
         AiOperationRiskResponseDto.AiOperationRiskResponseDtoBuilder builder = AiOperationRiskResponseDto.builder()
-                .overallRiskLevel(level)
+                .overallRiskLevel(overallRiskLevel)
                 .energySignal(energySignal)
-                .seasonalAlert(buildSeasonalAlert())
-                .activityAnomaly(level == AiRiskLevel.NORMAL
-                        ? "업종 활동에 특이 변화가 감지되지 않았습니다."
-                        : "미답변 리뷰/문의 증가 신호가 있습니다.")
+                .energySignalLevel(energySignalLevel)
+                .seasonalAlert(buildSeasonalAlertText(snapshot))
+                .seasonalAlertLevel(seasonalAlertLevel)
+                .activityAnomaly(buildActivityAnomalyText(activityAnomalyLevel, snapshot))
+                .activityAnomalyLevel(activityAnomalyLevel)
                 .safetyCheck(safetyCheck)
-                .aiJudgement(aiInsightGenerator.riskJudgement(store.getName(), level, hasOwnerInput))
+                .safetyCheckLevel(safetyCheckLevel)
+                .aiJudgement(aiInsightGenerator.riskJudgement(store.getName(), overallRiskLevel, hasPreciseData))
                 .dataSources(dataSources)
                 .sourceType(sourceType)
-                .hasPreciseData(hasOwnerInput)
-                .notice(hasOwnerInput
+                .hasPreciseData(hasPreciseData)
+                .notice(hasPreciseData
                         ? "사장님이 입력한 실측값 기반 분석입니다."
                         : "실시간 측정값이 아닌 추정 분석입니다.")
                 .hasSavedPlan(hasSavedPlan);
@@ -231,24 +276,66 @@ public class AiOperationRiskService {
         return builder.build();
     }
 
-    // 최근 2주 저평점 리뷰 + 미답변 문의 수 기반 위험 신호 판정
-    private AiRiskLevel resolveRiskLevel(Long storeId) {
-        List<StoreReview> recentReviews = storeReviewRepository
-                .findByStore_StoreIdAndCreatedAtAfter(storeId, LocalDateTime.now().minusWeeks(2));
-        long lowRatingCount = recentReviews.stream().filter(review -> review.getRating() <= 2).count();
-        long pendingInquiries = inquiryRepository.countByStore_StoreIdAndStatus(storeId, InquiryStatus.PENDING);
-
-        if (lowRatingCount >= 3) {
+    // 동네 에너지 경기 신호 — 월 전력 사용량(kWh) 기준
+    private AiRiskLevel resolveEnergySignalLevel(AiOwnerMetricSnapshot snapshot) {
+        BigDecimal kwh = snapshot.monthlyPowerKwh();
+        if (kwh == null) {
+            return AiRiskLevel.NORMAL;
+        }
+        if (kwh.compareTo(BigDecimal.valueOf(800)) >= 0) {
             return AiRiskLevel.WARNING;
         }
-        if (lowRatingCount >= 1 || pendingInquiries >= 3) {
+        if (kwh.compareTo(BigDecimal.valueOf(700)) >= 0) {
             return AiRiskLevel.CAUTION;
         }
         return AiRiskLevel.NORMAL;
     }
 
+    // 계절/시기 선제 알림 — 성수기(여름/겨울)에는 기본 CAUTION, 사용량까지 높으면 WARNING
+    private AiRiskLevel resolveSeasonalAlertLevel(AiOwnerMetricSnapshot snapshot) {
+        if (!isPeakSeason()) {
+            return AiRiskLevel.NORMAL;
+        }
+        BigDecimal kwh = snapshot.monthlyPowerKwh();
+        if (kwh != null && kwh.compareTo(BigDecimal.valueOf(750)) >= 0) {
+            return AiRiskLevel.WARNING;
+        }
+        return AiRiskLevel.CAUTION;
+    }
+
+    // 업종 활동 이상 변화 감지 — 동네 평균 대역(580~720kWh)을 벗어나면 CAUTION
+    private AiRiskLevel resolveActivityAnomalyLevel(AiOwnerMetricSnapshot snapshot) {
+        BigDecimal kwh = snapshot.monthlyPowerKwh();
+        if (kwh == null) {
+            return AiRiskLevel.NORMAL;
+        }
+        boolean withinNormalBand = kwh.compareTo(BigDecimal.valueOf(580)) >= 0
+                && kwh.compareTo(BigDecimal.valueOf(720)) <= 0;
+        return withinNormalBand ? AiRiskLevel.NORMAL : AiRiskLevel.CAUTION;
+    }
+
+    // 안전 리스크 체크 — 가스 설비를 사용 중이면 CAUTION
+    private AiRiskLevel resolveSafetyCheckLevel(AiOwnerMetricSnapshot snapshot) {
+        return snapshot.hasGasEquipment() ? AiRiskLevel.CAUTION : AiRiskLevel.NORMAL;
+    }
+
+    private AiRiskLevel maxLevel(AiRiskLevel... levels) {
+        AiRiskLevel max = AiRiskLevel.NORMAL;
+        for (AiRiskLevel level : levels) {
+            if (level.ordinal() > max.ordinal()) {
+                max = level;
+            }
+        }
+        return max;
+    }
+
+    private boolean isPeakSeason() {
+        int month = LocalDateTime.now().getMonthValue();
+        return (month >= 6 && month <= 8) || month == 12 || month <= 2;
+    }
+
     // 동네 에너지 경기 신호 — KPX 행정구역별 에너지사용량(공공데이터)이 있으면 반영, 실패 시 기존 문구
-    private String buildEnergySignal(Store store, boolean hasOwnerInput) {
+    private String buildEnergySignalText(Store store, AiOwnerMetricSnapshot snapshot) {
         try {
             List<RegionEnergyUsage> usages = publicDataService.getRegionEnergyUsages(resolveRegionKeyword(store));
             if (!usages.isEmpty()) {
@@ -261,24 +348,36 @@ public class AiOperationRiskService {
         } catch (Exception e) {
             log.warn("[AI-RISK] 지역 에너지 OpenAPI 조회 실패, 기존 문구로 fallback: {}", e.getMessage());
         }
-        return hasOwnerInput
+        return snapshot.monthlyPowerKwh() != null
                 ? "입력해주신 실측값 기준으로 분석 중입니다."
                 : "실측값 미입력 — 지역 평균 기반 추정 신호입니다.";
     }
 
-    // 안전 리스크 체크 — KGS 가스사고 현황(공공데이터)이 있으면 반영
-    private String buildSafetyCheck() {
+    // 안전 리스크 체크 — KGS 가스사고 현황(공공데이터)이 있으면 반영, 없으면 가스 설비 보유 여부에 맞춘 기본 문구
+    private String buildSafetyCheckText(AiOwnerMetricSnapshot snapshot) {
+        String fallback = snapshot.hasGasEquipment()
+                ? "가스 설비를 사용 중입니다. 밸브·호스 상태를 정기적으로 점검해주세요."
+                : "정기 안전 점검 체크리스트를 확인해주세요.";
         try {
             return publicDataService.getGasAccidentSummary()
                     .map(summary -> summary.topCause() != null
                             ? String.format("최근 가스사고 통계 %d건 중 '%s' 원인이 가장 많습니다. 관련 설비를 우선 점검하세요.",
                             summary.totalCount(), summary.topCause())
                             : String.format("최근 가스사고 통계 %d건이 확인됩니다. 정기 안전 점검을 권장드려요.", summary.totalCount()))
-                    .orElse("정기 안전 점검 체크리스트를 확인해주세요.");
+                    .orElse(fallback);
         } catch (Exception e) {
             log.warn("[AI-RISK] 가스사고 통계 OpenAPI 조회 실패, 기본 문구 반환: {}", e.getMessage());
-            return "정기 안전 점검 체크리스트를 확인해주세요.";
+            return fallback;
         }
+    }
+
+    private String buildActivityAnomalyText(AiRiskLevel level, AiOwnerMetricSnapshot snapshot) {
+        if (snapshot.monthlyPowerKwh() == null) {
+            return "전력 사용량 실측값이 없어 동네 평균 기준으로만 판단하고 있습니다.";
+        }
+        return level == AiRiskLevel.NORMAL
+                ? "업종 활동에 특이 변화가 감지되지 않았습니다."
+                : "평소 대비 전력 사용 패턴에 변화가 감지됐습니다. 운영 상황을 확인해보세요.";
     }
 
     private boolean usedPublicData(String energySignal, String safetyCheck) {
@@ -306,24 +405,20 @@ public class AiOperationRiskService {
         return String.format("%,.0f", usage);
     }
 
-    private String buildSeasonalAlert() {
+    // 여름철(6~8월)에는 냉방 설비 보유 시 점검 문구를 덧붙이고, 겨울철(12~2월)에는 난방/동파 문구를 안내한다
+    private String buildSeasonalAlertText(AiOwnerMetricSnapshot snapshot) {
         int month = LocalDateTime.now().getMonthValue();
         if (month >= 6 && month <= 8) {
-            return "여름철 냉방·냉장 부하가 커지는 시기입니다. 전기 사용량을 미리 점검하세요.";
+            String base = "여름철 냉방·냉장 부하가 커지는 시기입니다. 전기 사용량을 미리 점검하세요.";
+            if (snapshot.hasAirConditioner()) {
+                base += " 보유하신 냉방 설비 점검을 성수기 전에 마쳐두시길 권장드려요.";
+            }
+            return base;
         }
         if (month == 12 || month <= 2) {
             return "겨울철 난방·동파 위험이 커지는 시기입니다. 배관과 난방 설비를 점검하세요.";
         }
         return "계절 특이 위험 신호는 없습니다.";
-    }
-
-    private BigDecimal findLatestMetricValue(Long storeId, AiMetricType metricType) {
-        return aiOwnerMetricInputRepository
-                .findByStore_StoreIdAndMetricTypeAndYearMonth(storeId, metricType, YearMonth.now().toString())
-                .or(() -> aiOwnerMetricInputRepository.findByStore_StoreIdAndMetricTypeAndYearMonth(
-                        storeId, metricType, YearMonth.now().minusMonths(1).toString()))
-                .map(AiOwnerMetricInput::getValue)
-                .orElse(null);
     }
 
     private BigDecimal percentOf(BigDecimal base, int percent) {

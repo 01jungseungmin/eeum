@@ -30,7 +30,7 @@ public class AiOwnerMetricInput extends BaseEntity {
     private Store store;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "metric_type", nullable = false, length = 30)
+    @Column(name = "metric_type", nullable = false, length = 50)
     private AiMetricType metricType;
 
     @Column(name = "metric_value", nullable = false, precision = 12, scale = 2)

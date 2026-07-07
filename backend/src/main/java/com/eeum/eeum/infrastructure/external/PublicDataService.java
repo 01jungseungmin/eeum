@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,10 @@ public class PublicDataService {
 
     private static final long CACHE_TTL_SECONDS = 24 * 60 * 60; // 하루 캐싱
 
+    // 카페/음식점 업종과 가까운 산업분류명(중) 우선순위 — 동일 지역 내 복수 행이 있을 때 대표값으로 우선 채택
+    private static final List<String> PREFERRED_INDUSTRY_KEYWORDS =
+            List.of("음식점", "주점", "숙박 및 음식점업", "숙박");
+
     private final PublicDataApiClient apiClient;
     private final PublicDataProperties properties;
     private final RedisUtil redisUtil;
@@ -42,16 +47,40 @@ public class PublicDataService {
         this.objectMapper = objectMapper;
     }
 
-    // 산업분류별 법정동별 전력사용량 — 지역 키워드(시군구/법정동명 일부)로 필터
+    // 산업분류별 법정동별 전력사용량 — 지역 키워드(시군구)로 서버 측 조건 검색 후 클라이언트에서 한 번 더 검증
+    // (전체 55만 건 규모 데이터셋이라 조건 없이 perPage만 받으면 원하는 지역이 아예 안 들어올 수 있다)
     public List<RegionPowerUsage> getIndustryPowerUsages(String regionKeyword) {
         return cached("public-data:kepco-industry:" + safeKey(regionKeyword),
                 new TypeReference<List<RegionPowerUsage>>() {},
-                () -> apiClient.fetchRows(properties.kepcoIndustryUrl(), "KEPCO 산업분류별 전력사용량").stream()
-                        .filter(row -> matchesRegion(row, regionKeyword))
-                        .map(this::toPowerUsage)
-                        .filter(usage -> usage.usageKwh() != null)
-                        .limit(50)
-                        .toList());
+                () -> {
+                    boolean hasRegion = regionKeyword != null && !regionKeyword.isBlank();
+                    List<JsonNode> rawRows = hasRegion
+                            ? apiClient.fetchRows(properties.kepcoIndustryUrl(), "KEPCO 산업분류별 전력사용량",
+                                    PublicDataApiClient.RegionCondition.eq("시군구", regionKeyword))
+                            : apiClient.fetchRows(properties.kepcoIndustryUrl(), "KEPCO 산업분류별 전력사용량");
+
+                    List<RegionPowerUsage> usages = rawRows.stream()
+                            .filter(row -> matchesRegion(row, regionKeyword))
+                            .map(this::toPowerUsage)
+                            .filter(usage -> usage.usageKwh() != null)
+                            .sorted(Comparator.comparingInt(this::industryPreferenceRank))
+                            .limit(50)
+                            .toList();
+
+                    log.info("[PUBLIC-DATA][KEPCO] regionKeyword={}, matchedRows={}, firstRegion={}, firstIndustry={}",
+                            regionKeyword, usages.size(),
+                            usages.isEmpty() ? null : usages.get(0).region(),
+                            usages.isEmpty() ? null : usages.get(0).industry());
+                    return usages;
+                });
+    }
+
+    // 선호 업종(음식점/주점/숙박)을 우선 채택 — 순위가 낮을수록(0) 먼저 온다
+    private int industryPreferenceRank(RegionPowerUsage usage) {
+        if (usage.industry() == null) {
+            return 1;
+        }
+        return PREFERRED_INDUSTRY_KEYWORDS.stream().anyMatch(usage.industry()::contains) ? 0 : 1;
     }
 
     // 행정구역별 에너지사용량 — 지역 에너지 활동 보조 지표
@@ -138,9 +167,10 @@ public class PublicDataService {
         Long customerCount = firstLong(row, "고객호수", "custCnt", "cust_cnt", "호수");
         Double usage = firstDouble(row, "판매량", "사용량", "powerUsage", "usekwh", "use_kwh", "판매전력량");
         return new RegionPowerUsage(
-                firstText(row, "기준년월", "년월", "yearMonth", "baseYm", "기준일자", "연도"),
-                firstText(row, "법정동", "시군구", "시도", "지역", "cityNm", "행정구역"),
-                firstText(row, "산업분류", "업종", "계약종별", "industryNm", "산업분류명"),
+                firstText(row, "기준년월", "년월", "yearMonth", "baseYm", "기준일자", "연도", "년도"),
+                firstText(row, "법정동", "시군구", "시도", "지역", "cityNm", "행정구역", "읍면동(법정동)"),
+                // KEPCO 산업분류별 전력사용량은 "산업분류명(중)"/"산업분류명(대)"로 내려온다 — (중)이 더 구체적이라 우선
+                firstText(row, "산업분류명(중)", "산업분류명(대)", "산업분류", "업종", "계약종별", "industryNm", "산업분류명"),
                 customerCount,
                 usage,
                 firstDouble(row, "판매요금", "요금", "chargeAmt"),

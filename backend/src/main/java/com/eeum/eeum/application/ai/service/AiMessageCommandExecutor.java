@@ -10,14 +10,27 @@ import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.event.AiMessageSentEvent;
 import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
+import com.eeum.eeum.domain.inquiry.entity.Inquiry;
+import com.eeum.eeum.domain.inquiry.entity.InquiryAnswer;
+import com.eeum.eeum.domain.inquiry.enums.InquiryAnswerWriterType;
+import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
+import com.eeum.eeum.domain.inquiry.event.InquiryAnsweredEvent;
+import com.eeum.eeum.domain.inquiry.repository.InquiryAnswerRepository;
+import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.store.entity.StoreNotice;
+import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.entity.StoreReviewReply;
 import com.eeum.eeum.domain.store.enums.StoreNoticeType;
+import com.eeum.eeum.domain.store.event.StoreReviewReplyCreatedEvent;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
+import com.eeum.eeum.domain.store.repository.StoreReviewReplyRepository;
+import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +51,10 @@ public class AiMessageCommandExecutor {
     private final AiActionLogRepository aiActionLogRepository;
     private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
     private final StoreNoticeRepository storeNoticeRepository;
+    private final InquiryRepository inquiryRepository;
+    private final InquiryAnswerRepository inquiryAnswerRepository;
+    private final StoreReviewRepository storeReviewRepository;
+    private final StoreReviewReplyRepository storeReviewReplyRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -52,8 +69,84 @@ public class AiMessageCommandExecutor {
         AiGeneratedMessage message = supportService.getOwnedMessage(ownerId, messageId);
         validateNonNoticeMessageType(message.getType());
         message.send(LocalDateTime.now());
+        applyLinkedDomainSideEffect(message);
         publishSideEffects(message, AiActionType.MESSAGE_SENT, "메시지 발송 처리", false);
         return AiGeneratedMessageResponseDto.from(message);
+    }
+
+    // 메시지 타입에 따라 연결된 실제 도메인(문의/리뷰) 상태까지 반영 — AI 메시지 SENT 전이와 같은 트랜잭션에서 처리되어
+    // 도메인 반영이 실패하면 message.send()도 함께 롤백된다.
+    private void applyLinkedDomainSideEffect(AiGeneratedMessage message) {
+        switch (message.getType()) {
+            case INQUIRY_REPLY -> applyInquiryReply(message);
+            case REVIEW_REPLY -> applyReviewReply(message);
+            // CUSTOMER_CARE / COMPLAINT_REPLY — 1차 MVP에서는 연결된 발송 이력 테이블이 없어 SENT 처리 + 이벤트 발행만 수행
+            case CUSTOMER_CARE, COMPLAINT_REPLY -> {
+            }
+            // NOTICE / EVENT_MARKETING은 validateNonNoticeMessageType에서 이미 차단되어 이 경로에 도달하지 않는다.
+            case NOTICE, EVENT_MARKETING, LOCAL_MATCH, RISK_GUIDE, SAVING_PLAN -> {
+            }
+        }
+    }
+
+    // INQUIRY_REPLY 발송 → 문의 답변 등록 + PENDING → ANSWERED 전이 (OwnerInquiryService.answerInquiry와 동일한 정책)
+    private void applyInquiryReply(AiGeneratedMessage message) {
+        if (!"INQUIRY".equals(message.getTargetType()) || message.getTargetId() == null) {
+            throw new BusinessException(ErrorCode.AI_INVALID_TARGET);
+        }
+
+        Inquiry inquiry = inquiryRepository.findByInquiryIdAndStore_StoreId(
+                        message.getTargetId(), message.getStore().getStoreId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+
+        if (inquiry.getTargetType() != InquiryTargetType.STORE) {
+            throw new BusinessException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+        if (!inquiry.isAnswerable()) {
+            throw new BusinessException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+        }
+
+        InquiryAnswer answer = InquiryAnswer.create(
+                inquiry, message.getOwnerAccount(), InquiryAnswerWriterType.OWNER, message.getContent());
+        inquiryAnswerRepository.save(answer);
+        inquiry.markAnswered();
+
+        log.info("[AI-MESSAGE] 문의 답변 반영 messageId={}, type={}, targetType={}, targetId={}, status={}",
+                message.getAiGeneratedMessageId(), message.getType(), message.getTargetType(),
+                message.getTargetId(), message.getStatus());
+
+        eventPublisher.publishEvent(new InquiryAnsweredEvent(
+                inquiry.getInquiryId(), inquiry.getWriter().getAccountId(), inquiry.getTitle()));
+    }
+
+    // REVIEW_REPLY 발송 → 리뷰 답글 등록 (StoreReviewService.createReply와 동일한 정책 — 리뷰당 답글 1개)
+    private void applyReviewReply(AiGeneratedMessage message) {
+        if (!"STORE_REVIEW".equals(message.getTargetType()) || message.getTargetId() == null) {
+            throw new BusinessException(ErrorCode.AI_INVALID_TARGET);
+        }
+
+        StoreReview review = storeReviewRepository.findByStorereviewIdAndStore_StoreId(
+                        message.getTargetId(), message.getStore().getStoreId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
+
+        if (storeReviewReplyRepository.existsByStoreReview_StorereviewId(review.getStorereviewId())) {
+            throw new BusinessException(ErrorCode.STORE_REVIEW_REPLY_ALREADY_EXISTS);
+        }
+
+        StoreReviewReply reply = StoreReviewReply.create(review, message.getOwnerAccount(), message.getContent());
+        try {
+            storeReviewReplyRepository.saveAndFlush(reply);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.STORE_REVIEW_REPLY_ALREADY_EXISTS);
+        }
+
+        log.info("[AI-MESSAGE] 리뷰 답글 반영 messageId={}, type={}, targetType={}, targetId={}, status={}",
+                message.getAiGeneratedMessageId(), message.getType(), message.getTargetType(),
+                message.getTargetId(), message.getStatus());
+
+        eventPublisher.publishEvent(new StoreReviewReplyCreatedEvent(
+                review.getAccount().getAccountId(), review.getStore().getName(),
+                review.getStore().getStoreId(), review.getStorereviewId()));
     }
 
     @Transactional

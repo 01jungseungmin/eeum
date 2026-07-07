@@ -71,6 +71,18 @@ public class NotificationService {
      */
     @Transactional
     public NotificationResponseDto createNotification(NotificationCreateRequestDto request) {
+        return createNotification(request, true);
+    }
+
+    // FCM 이벤트 발행 없이 Notification만 생성 — 호출자가 이미 자체 채널(APP_PUSH/KAKAO_ALERT 등)로
+    // 실제 발송을 처리하는 경우, FCM 중복 발송 없이 알림함/unread/SSE만 동일하게 반영하고 싶을 때 사용
+    // (예: AiMessageDispatchService가 PushAdapter/AlimtalkAdapter로 직접 발송하면서 알림함 기록만 남기는 경우)
+    @Transactional
+    public NotificationResponseDto createNotificationWithoutPush(NotificationCreateRequestDto request) {
+        return createNotification(request, false);
+    }
+
+    private NotificationResponseDto createNotification(NotificationCreateRequestDto request, boolean triggerPush) {
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
@@ -102,12 +114,14 @@ public class NotificationService {
         // 4. SSE — 웹 클라이언트 배지 실시간 갱신
         sseEmitterManager.sendUnreadCount(account.getAccountId(), newCount);
 
-        // 5. FCM 푸시 이벤트 발행 (DND 비활성 + 토큰 있는 경우만)
-        boolean dndActive = settingsOpt.map(NotificationSettings::isDndActive).orElse(false);
-        if (!dndActive && account.getFcmToken() != null) {
-            publishPushEvent(account, request);
-        } else if (dndActive) {
-            log.debug("DND 활성 — 푸시 스킵: accountId={}", account.getAccountId());
+        // 5. FCM 푸시 이벤트 발행 (DND 비활성 + 토큰 있는 경우만) — 호출자가 자체 발송을 이미 처리하면 생략
+        if (triggerPush) {
+            boolean dndActive = settingsOpt.map(NotificationSettings::isDndActive).orElse(false);
+            if (!dndActive && account.getFcmToken() != null) {
+                publishPushEvent(account, request);
+            } else if (dndActive) {
+                log.debug("DND 활성 — 푸시 스킵: accountId={}", account.getAccountId());
+            }
         }
 
         log.debug("알림 생성: accountId={}, type={}", account.getAccountId(), request.getType());

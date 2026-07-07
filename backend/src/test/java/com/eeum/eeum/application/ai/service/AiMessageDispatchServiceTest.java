@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
+import com.eeum.eeum.application.notification.dto.request.NotificationCreateRequestDto;
+import com.eeum.eeum.application.notification.service.NotificationService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -11,11 +13,18 @@ import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.ai.repository.AiMessageDeliveryRepository;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
+import com.eeum.eeum.domain.inquiry.entity.Inquiry;
+import com.eeum.eeum.domain.inquiry.enums.InquiryCategory;
+import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
+import com.eeum.eeum.domain.notification.enums.NotificationType;
 import com.eeum.eeum.domain.notification.repository.NotificationSettingsRepository;
+import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.repository.CartRepository;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.infrastructure.alimtalk.AlimtalkAdapter;
 import com.eeum.eeum.infrastructure.alimtalk.AlimtalkProperties;
 import com.eeum.eeum.infrastructure.alimtalk.AlimtalkResult;
@@ -56,10 +65,12 @@ class AiMessageDispatchServiceTest {
     @Mock private AiMessageDeliveryRepository aiMessageDeliveryRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private NotificationSettingsRepository notificationSettingsRepository;
+    @Mock private NotificationService notificationService;
     @Mock private FavoriteRepository favoriteRepository;
     @Mock private OrderRepository orderRepository;
     @Mock private CartRepository cartRepository;
     @Mock private InquiryRepository inquiryRepository;
+    @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private PushAdapter pushAdapter;
     @Mock private AlimtalkAdapter alimtalkAdapter;
     @Mock private RedisLockService redisLockService;
@@ -81,15 +92,24 @@ class AiMessageDispatchServiceTest {
     }
 
     private AiGeneratedMessage createMessage(AiChannel channel, AiMessageType type) {
+        return createMessage(channel, type, null, null);
+    }
+
+    private AiGeneratedMessage createMessage(AiChannel channel, AiMessageType type, String targetType, Long targetId) {
         Store store = mock(Store.class);
         lenient().when(store.getStoreId()).thenReturn(1L);
         lenient().when(store.getName()).thenReturn("테스트 상점");
         Account owner = mock(Account.class);
         lenient().when(owner.getAccountId()).thenReturn(OWNER_ID);
         AiGeneratedMessage message = AiGeneratedMessage.createDraft(
-                store, owner, type, null, null, "제목", "본문", channel);
+                store, owner, type, targetType, targetId, "제목", "본문", channel);
         ReflectionTestUtils.setField(message, "aiGeneratedMessageId", MESSAGE_ID);
         return message;
+    }
+
+    private void stubNoExistingDelivery(AiGeneratedMessage message) {
+        when(aiGeneratedMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+        when(aiMessageDeliveryRepository.existsByMessage_AiGeneratedMessageId(MESSAGE_ID)).thenReturn(false);
     }
 
     private Account stubCustomer(String fcmToken) {
@@ -119,7 +139,7 @@ class AiMessageDispatchServiceTest {
     // ──────────────────── Tests ────────────────────
 
     @Test
-    void APP_PUSH_메시지_발송_시_FCM이_호출되고_SENT_기록이_저장된다() {
+    void APP_PUSH_메시지_발송_시_FCM이_호출되고_SENT_기록이_저장되고_알림함에도_생성된다() {
         // given
         stubLockPassThrough();
         AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.EVENT_MARKETING);
@@ -136,10 +156,17 @@ class AiMessageDispatchServiceTest {
         assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.SENT);
         assertThat(delivery.getTargetAccountId()).isEqualTo(CUSTOMER_ID);
         assertThat(delivery.getSentAt()).isNotNull();
+
+        ArgumentCaptor<NotificationCreateRequestDto> notificationCaptor =
+                ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
+        verify(notificationService).createNotificationWithoutPush(notificationCaptor.capture());
+        NotificationCreateRequestDto notification = notificationCaptor.getValue();
+        assertThat(notification.getAccountId()).isEqualTo(CUSTOMER_ID);
+        assertThat(notification.getType()).isEqualTo(NotificationType.MARKETING_EVENT);
     }
 
     @Test
-    void FCM_토큰이_없는_고객은_스킵되고_SKIPPED_NO_TOKEN으로_기록된다() {
+    void FCM_토큰이_없는_고객은_스킵되고_SKIPPED_NO_TOKEN으로_기록되지만_알림함에는_생성된다() {
         // given
         stubLockPassThrough();
         AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.EVENT_MARKETING);
@@ -152,6 +179,7 @@ class AiMessageDispatchServiceTest {
         // then
         verify(pushAdapter, never()).send(any());
         assertThat(capturedDelivery().getStatus()).isEqualTo(AiDeliveryStatus.SKIPPED_NO_TOKEN);
+        verify(notificationService).createNotificationWithoutPush(any());
     }
 
     @Test
@@ -172,7 +200,7 @@ class AiMessageDispatchServiceTest {
     }
 
     @Test
-    void 마케팅_수신_동의가_없는_고객은_발송에서_제외된다() {
+    void 마케팅_수신_동의가_없는_고객은_발송에서_제외되고_알림함에도_생성되지_않는다() {
         // given
         stubLockPassThrough();
         AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.EVENT_MARKETING);
@@ -185,6 +213,7 @@ class AiMessageDispatchServiceTest {
         // then
         verify(pushAdapter, never()).send(any());
         assertThat(capturedDelivery().getStatus()).isEqualTo(AiDeliveryStatus.SKIPPED_NO_CONSENT);
+        verify(notificationService, never()).createNotificationWithoutPush(any());
     }
 
     @Test
@@ -204,7 +233,7 @@ class AiMessageDispatchServiceTest {
     }
 
     @Test
-    void 발송_대상이_없으면_NO_TARGET으로_기록된다() {
+    void 발송_대상이_없으면_NO_TARGET으로_기록되고_알림함에도_생성되지_않는다() {
         // given
         stubLockPassThrough();
         AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.EVENT_MARKETING);
@@ -220,10 +249,11 @@ class AiMessageDispatchServiceTest {
         AiMessageDelivery delivery = capturedDelivery();
         assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.NO_TARGET);
         assertThat(delivery.getTargetAccountId()).isNull();
+        verify(notificationService, never()).createNotificationWithoutPush(any());
     }
 
     @Test
-    void KAKAO_ALERT_채널_메시지는_알림톡_Adapter로_발송된다() {
+    void KAKAO_ALERT_채널_메시지는_알림톡_Adapter로_발송되고_알림함에도_생성된다() {
         // given
         stubLockPassThrough();
         AiGeneratedMessage message = createMessage(AiChannel.KAKAO_ALERT, AiMessageType.EVENT_MARKETING);
@@ -238,6 +268,7 @@ class AiMessageDispatchServiceTest {
         verify(alimtalkAdapter).send(any());
         verify(pushAdapter, never()).send(any());
         assertThat(capturedDelivery().getStatus()).isEqualTo(AiDeliveryStatus.SENT);
+        verify(notificationService).createNotificationWithoutPush(any());
     }
 
     @Test
@@ -254,5 +285,181 @@ class AiMessageDispatchServiceTest {
         // then
         verify(pushAdapter, never()).send(any());
         verify(alimtalkAdapter, never()).send(any());
+    }
+
+    // ──────────────────── INQUIRY_REPLY / REVIEW_REPLY 발송 이력 ────────────────────
+
+    @Test
+    void INQUIRY_REPLY_발송_시_문의_작성자_accountId로_SENT_기록되고_재발송하지_않는다() {
+        // given
+        stubLockPassThrough();
+        Long inquiryId = 5L;
+        AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.INQUIRY_REPLY, "INQUIRY", inquiryId);
+        stubNoExistingDelivery(message);
+
+        Store store = message.getStore();
+        Account writer = mock(Account.class);
+        when(writer.getAccountId()).thenReturn(CUSTOMER_ID);
+        Inquiry inquiry = Inquiry.create(
+                writer, store, InquiryTargetType.STORE, InquiryCategory.STORE, "문의 제목", "문의 내용", false);
+        when(inquiryRepository.findByInquiryIdAndStore_StoreId(inquiryId, store.getStoreId()))
+                .thenReturn(Optional.of(inquiry));
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        AiMessageDelivery delivery = capturedDelivery();
+        assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.SENT);
+        assertThat(delivery.getTargetAccountId()).isEqualTo(CUSTOMER_ID);
+        verify(pushAdapter, never()).send(any());
+        verify(alimtalkAdapter, never()).send(any());
+        // 알림함 알림은 sendInTx 단계의 InquiryAnsweredEvent 경유로 이미 생성됨 — 여기서 중복 생성하지 않는다
+        verify(notificationService, never()).createNotificationWithoutPush(any());
+    }
+
+    @Test
+    void INQUIRY_REPLY_대상_문의를_찾지_못하면_NO_TARGET과_구체적인_사유가_기록된다() {
+        // given
+        stubLockPassThrough();
+        Long inquiryId = 5L;
+        AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.INQUIRY_REPLY, "INQUIRY", inquiryId);
+        stubNoExistingDelivery(message);
+        when(inquiryRepository.findByInquiryIdAndStore_StoreId(inquiryId, message.getStore().getStoreId()))
+                .thenReturn(Optional.empty());
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        AiMessageDelivery delivery = capturedDelivery();
+        assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.NO_TARGET);
+        assertThat(delivery.getTargetAccountId()).isNull();
+        assertThat(delivery.getFailedReason()).isEqualTo("문의 작성자 계정 없음");
+    }
+
+    @Test
+    void REVIEW_REPLY_발송_시_리뷰_작성자_accountId로_SENT_기록되고_재발송하지_않는다() {
+        // given
+        stubLockPassThrough();
+        Long reviewId = 7L;
+        AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.REVIEW_REPLY, "STORE_REVIEW", reviewId);
+        stubNoExistingDelivery(message);
+
+        Store store = message.getStore();
+        Account reviewer = mock(Account.class);
+        when(reviewer.getAccountId()).thenReturn(CUSTOMER_ID);
+        Order order = mock(Order.class);
+        StoreReview review = StoreReview.createForOrder(store, reviewer, order, 5, "좋아요");
+        ReflectionTestUtils.setField(review, "storereviewId", reviewId);
+        when(storeReviewRepository.findByStorereviewIdAndStore_StoreId(reviewId, store.getStoreId()))
+                .thenReturn(Optional.of(review));
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        AiMessageDelivery delivery = capturedDelivery();
+        assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.SENT);
+        assertThat(delivery.getTargetAccountId()).isEqualTo(CUSTOMER_ID);
+        verify(pushAdapter, never()).send(any());
+        verify(alimtalkAdapter, never()).send(any());
+        // 알림함 알림은 sendInTx 단계의 StoreReviewReplyCreatedEvent 경유로 이미 생성됨 — 여기서 중복 생성하지 않는다
+        verify(notificationService, never()).createNotificationWithoutPush(any());
+    }
+
+    @Test
+    void REVIEW_REPLY_대상_리뷰를_찾지_못하면_NO_TARGET과_구체적인_사유가_기록된다() {
+        // given
+        stubLockPassThrough();
+        Long reviewId = 7L;
+        AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.REVIEW_REPLY, "STORE_REVIEW", reviewId);
+        stubNoExistingDelivery(message);
+        when(storeReviewRepository.findByStorereviewIdAndStore_StoreId(reviewId, message.getStore().getStoreId()))
+                .thenReturn(Optional.empty());
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        AiMessageDelivery delivery = capturedDelivery();
+        assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.NO_TARGET);
+        assertThat(delivery.getTargetAccountId()).isNull();
+        assertThat(delivery.getFailedReason()).isEqualTo("리뷰 작성자 계정 없음");
+    }
+
+    @Test
+    void COMPLAINT_REPLY는_개별_수신자가_없어_구체적인_사유와_함께_NO_TARGET으로_기록된다() {
+        // given
+        stubLockPassThrough();
+        AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.COMPLAINT_REPLY, "COMPLAINT_KEYWORD", null);
+        stubNoExistingDelivery(message);
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        AiMessageDelivery delivery = capturedDelivery();
+        assertThat(delivery.getStatus()).isEqualTo(AiDeliveryStatus.NO_TARGET);
+        assertThat(delivery.getFailedReason()).isEqualTo("반복 불만 대응 문구는 개별 수신자 없음");
+        verify(notificationService, never()).createNotificationWithoutPush(any());
+    }
+
+    // ──────────────────── CUSTOMER_CARE 알림함 연동 ────────────────────
+
+    @Test
+    void CUSTOMER_CARE_발송_성공_시_알림함에도_MARKETING_EVENT로_생성된다() {
+        // given
+        stubLockPassThrough();
+        AiGeneratedMessage message = createMessage(AiChannel.APP_PUSH, AiMessageType.CUSTOMER_CARE, "CART_INTEREST", null);
+        when(aiGeneratedMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+        when(aiMessageDeliveryRepository.existsByMessage_AiGeneratedMessageId(MESSAGE_ID)).thenReturn(false);
+
+        com.eeum.eeum.domain.order.entity.Cart cart = mock(com.eeum.eeum.domain.order.entity.Cart.class);
+        Account customer = mock(Account.class);
+        lenient().when(customer.getAccountId()).thenReturn(CUSTOMER_ID);
+        lenient().when(customer.getFcmToken()).thenReturn("valid-token");
+        when(cart.getAccount()).thenReturn(customer);
+        when(cartRepository.findByStore_StoreId(anyLong())).thenReturn(List.of(cart));
+        when(notificationSettingsRepository.findMarketingEnabledAccountIds(anyList())).thenReturn(List.of(CUSTOMER_ID));
+        when(accountRepository.findAllById(any())).thenReturn(List.of(customer));
+        when(pushAdapter.send(any())).thenReturn(PushResult.success("fcm-id"));
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        assertThat(capturedDelivery().getStatus()).isEqualTo(AiDeliveryStatus.SENT);
+        ArgumentCaptor<NotificationCreateRequestDto> captor = ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
+        verify(notificationService).createNotificationWithoutPush(captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(NotificationType.MARKETING_EVENT);
+        assertThat(captor.getValue().getAccountId()).isEqualTo(CUSTOMER_ID);
+    }
+
+    @Test
+    void 알림함_content는_150자를_넘으면_말줄임으로_잘린다() {
+        // given
+        stubLockPassThrough();
+        String longContent = "가".repeat(200);
+        Store store = mock(Store.class);
+        lenient().when(store.getStoreId()).thenReturn(1L);
+        lenient().when(store.getName()).thenReturn("테스트 상점");
+        Account owner = mock(Account.class);
+        lenient().when(owner.getAccountId()).thenReturn(OWNER_ID);
+        AiGeneratedMessage message = AiGeneratedMessage.createDraft(
+                store, owner, AiMessageType.EVENT_MARKETING, null, null, "제목", longContent, AiChannel.APP_PUSH);
+        ReflectionTestUtils.setField(message, "aiGeneratedMessageId", MESSAGE_ID);
+        stubMarketingTargets(message, true);
+        stubCustomer("valid-token");
+        when(pushAdapter.send(any())).thenReturn(PushResult.success("fcm-id"));
+
+        // when
+        dispatchService.dispatch(MESSAGE_ID);
+
+        // then
+        ArgumentCaptor<NotificationCreateRequestDto> captor = ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
+        verify(notificationService).createNotificationWithoutPush(captor.capture());
+        assertThat(captor.getValue().getContent()).hasSize(153); // 150자 + "..."
+        assertThat(captor.getValue().getContent()).endsWith("...");
     }
 }

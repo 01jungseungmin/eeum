@@ -19,14 +19,26 @@ public class AiOperationRiskResponseDto {
     @Schema(description = "동네 에너지 경기 신호")
     private final String energySignal;
 
+    @Schema(description = "동네 에너지 경기 신호 카드의 위험도", example = "NORMAL")
+    private final AiRiskLevel energySignalLevel;
+
     @Schema(description = "계절/시기 선제 알림")
     private final String seasonalAlert;
+
+    @Schema(description = "계절/시기 선제 알림 카드의 위험도", example = "NORMAL")
+    private final AiRiskLevel seasonalAlertLevel;
 
     @Schema(description = "업종 활동 이상 변화 감지")
     private final String activityAnomaly;
 
+    @Schema(description = "업종 활동 이상 변화 감지 카드의 위험도", example = "NORMAL")
+    private final AiRiskLevel activityAnomalyLevel;
+
     @Schema(description = "안전 리스크 체크")
     private final String safetyCheck;
+
+    @Schema(description = "안전 리스크 체크 카드의 위험도", example = "NORMAL")
+    private final AiRiskLevel safetyCheckLevel;
 
     @Schema(description = "AI 판단")
     private final String aiJudgement;
