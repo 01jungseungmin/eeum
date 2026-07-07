@@ -9,6 +9,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class VisitReservationMapper {
     public VisitReservationResponseDto toVisitReservationResponseDto(VisitReservation reservation) {
+        return toVisitReservationResponseDto(reservation, false);
+    }
+
+    public VisitReservationResponseDto toVisitReservationResponseDto(VisitReservation reservation, boolean hasReview) {
         Store store = reservation.getStore();
         Account account = reservation.getAccount();
 
@@ -34,6 +38,7 @@ public class VisitReservationMapper {
                 .status(reservation.getStatus())
                 .createdAt(reservation.getCreatedAt())
                 .modifiedAt(reservation.getModifiedAt())
+                .hasReview(hasReview)
                 .build();
     }
 }
