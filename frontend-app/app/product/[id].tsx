@@ -88,14 +88,14 @@ export default function ProductDetailScreen() {
     }
   };
 
-  // 단체 채팅 입장 로직 (상점 상세 화면과 동일)
+  // 단체 채팅 입장 로직
   const handleGroupChat = async () => {
     if (!isVerified) {
       Alert.alert('동네 인증 필요', '이 상점의 단체 채팅방에 참여하려면 마이페이지에서 대표 동네를 인증해주세요.');
       return;
     }
 
-    // 상품 정보에 포함된 상점의 채팅방 ID를 찾습니다 (백엔드 응답 구조에 맞게 필드명 확인 필요)
+    // 상품 정보에 포함된 상점의 채팅방 ID를 찾습니다
     const roomId = productDetail?.chatRoomId || productDetail?.groupChatRoomId || productDetail?.shop?.chatRoomId; 
 
     if (!roomId) {
@@ -128,7 +128,6 @@ export default function ProductDetailScreen() {
   const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
 
   return (
-    // edges=['top'] 으로 설정하여 하단 영역 패딩을 직접 제어합니다.
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* 상단 헤더 */}
       <View style={styles.header}>
@@ -139,7 +138,7 @@ export default function ProductDetailScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* 하단 바가 높아졌으므로 ScrollView의 paddingBottom을 넉넉하게 160으로 늘려줍니다. */}
+      {/* 하단 바가 높아졌으므로 ScrollView의 paddingBottom을 넉넉하게 160으로 조절합니다. */}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
         {/* 상품 이미지 */}
         <Image source={{ uri: productImgUrl }} style={styles.productImg} />
@@ -192,10 +191,17 @@ export default function ProductDetailScreen() {
           <TouchableOpacity 
             style={styles.halfButton} 
             activeOpacity={0.7}
-            onPress={() => Alert.alert('안내', '문의하기 기능은 준비 중입니다.')}
+            onPress={() => {
+              const targetStoreId = productDetail?.storeId || productDetail?.shopId;
+              if (!targetStoreId) {
+                Alert.alert('알림', '상점 정보를 찾을 수 없습니다.');
+                return;
+              }
+              router.push(`/inquiry/write?storeId=${targetStoreId}` as any);
+            }}
           >
             <Ionicons name="chatbubble-outline" size={18} color="#00A859" style={{ marginRight: 6 }} />
-            <Text style={styles.halfButtonText}>문의하기</Text>
+            <Text style={styles.halfButtonText}>상품 문의</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -231,7 +237,6 @@ const styles = StyleSheet.create({
   qtyBtn: { backgroundColor: '#F5F5F5', padding: 10, justifyContent: 'center', alignItems: 'center' },
   qtyText: { paddingHorizontal: 15, fontSize: 15, color: '#333' },
   
-  // ✨ 바텀 바 및 버튼 스타일 업데이트
   bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   primaryBtnText: { color: '#fff', fontSize: 16 },

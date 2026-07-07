@@ -121,7 +121,6 @@ export default function ShopDetailScreen() {
   const isRestaurant = shopDetail.categoryId === 1 || shopDetail.categoryId === 2;
 
   return (
-    // SafeAreaView의 설정을 edges={['top']}으로 바꾸어 하단 영역은 직접 컨트롤합니다.
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }}>
         {/* 커버 이미지 */}
@@ -215,11 +214,11 @@ export default function ShopDetailScreen() {
 
       </ScrollView>
 
-      {/* 하단 고정 버튼 영역: insets.bottom을 더해서 시스템 내비게이션 바와 겹치지 않게 보호! */}
+      {/* 하단 고정 버튼 영역 */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 15) + 10 }]}>
         <View style={{ width: '100%' }}>
           
-          {/* 1. 상단 메인 액션 버튼 (업종에 따라 다름) */}
+          {/* 1. 상단 메인 액션 버튼 (업종에 따라 예약/장바구니) */}
           {isRestaurant ? (
             <TouchableOpacity
               style={styles.reserveButton}
@@ -240,7 +239,7 @@ export default function ShopDetailScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={styles.reserveButton} // 장바구니 버튼도 예약 버튼과 동일한 스타일 적용
+              style={styles.reserveButton}
               activeOpacity={0.8}
               onPress={() => {
                 if (!isVerified) {
@@ -255,12 +254,12 @@ export default function ShopDetailScreen() {
             </TouchableOpacity>
           )}
 
-            {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
-            <View style={styles.rowButtons}>
+          {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
+          <View style={styles.rowButtons}>
             <TouchableOpacity 
               style={styles.halfButton} 
               activeOpacity={0.7}
-              onPress={() => Alert.alert('안내', '문의하기 기능은 준비 중입니다.')}
+              onPress={() => router.push(`/inquiry/write?storeId=${shopIdNum}` as any)}
             >
               <Ionicons name="chatbubble-outline" size={18} color="#1B854A" style={{ marginRight: 6 }} />
               <Text style={styles.halfButtonText}>문의하기</Text>

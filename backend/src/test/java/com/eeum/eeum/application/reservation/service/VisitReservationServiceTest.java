@@ -23,6 +23,7 @@ import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,6 +58,7 @@ class VisitReservationServiceTest {
     @InjectMocks private VisitReservationService visitReservationService;
 
     @Mock private VisitReservationRepository visitReservationRepository;
+    @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private StoreRepository storeRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private StoreBusinessHourRepository storeBusinessHourRepository;
@@ -138,7 +141,8 @@ class VisitReservationServiceTest {
 
         when(visitReservationRepository.findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable))
                 .thenReturn(new PageImpl<>(List.of(reservation)));
-        when(visitReservationMapper.toVisitReservationResponseDto(reservation))
+        when(storeReviewRepository.findVisitReservationIdsWithReview(List.of(1L))).thenReturn(Set.of());
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false))
                 .thenReturn(mock(VisitReservationResponseDto.class));
 
         // when
@@ -146,6 +150,30 @@ class VisitReservationServiceTest {
 
         // then
         assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void 내_예약_목록_조회_시_리뷰가_있으면_hasReview가_true로_매핑된다() {
+        // given
+        Long accountId = 1L;
+        Account account = createAccount(accountId, "사용자", "user");
+        Store store = createStore(10L, account, StoreStatus.OPEN);
+        VisitReservation reservation = createReservation(1L, store, account,
+                VisitReservationStatus.PENDING, LocalDate.now().plusDays(3), LocalTime.of(10, 0));
+        PageRequest pageable = PageRequest.of(0, 10);
+
+        when(visitReservationRepository.findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable))
+                .thenReturn(new PageImpl<>(List.of(reservation)));
+        when(storeReviewRepository.findVisitReservationIdsWithReview(List.of(1L))).thenReturn(Set.of(1L));
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, true))
+                .thenReturn(mock(VisitReservationResponseDto.class));
+
+        // when
+        Page<VisitReservationResponseDto> result = visitReservationService.getMyReservations(accountId, pageable);
+
+        // then
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        verify(visitReservationMapper).toVisitReservationResponseDto(reservation, true);
     }
 
     // ──────────────── getMyReservationDetail ────────────────
@@ -161,7 +189,29 @@ class VisitReservationServiceTest {
         VisitReservationResponseDto dto = mock(VisitReservationResponseDto.class);
 
         when(visitReservationRepository.findByVisitReservationId(eq(10L))).thenReturn(Optional.of(reservation));
-        when(visitReservationMapper.toVisitReservationResponseDto(reservation)).thenReturn(dto);
+        when(storeReviewRepository.existsByVisitReservation_VisitReservationId(10L)).thenReturn(false);
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false)).thenReturn(dto);
+
+        // when
+        VisitReservationResponseDto result = visitReservationService.getMyReservationDetail(accountId, 10L);
+
+        // then
+        assertThat(result).isEqualTo(dto);
+    }
+
+    @Test
+    void 내_예약_상세_조회_시_리뷰가_있으면_hasReview_true로_매핑된다() {
+        // given
+        Long accountId = 1L;
+        Account account = createAccount(accountId, "사용자", "user");
+        Store store = createStore(10L, account, StoreStatus.OPEN);
+        VisitReservation reservation = createReservation(10L, store, account,
+                VisitReservationStatus.PENDING, LocalDate.now().plusDays(3), LocalTime.of(10, 0));
+        VisitReservationResponseDto dto = mock(VisitReservationResponseDto.class);
+
+        when(visitReservationRepository.findByVisitReservationId(eq(10L))).thenReturn(Optional.of(reservation));
+        when(storeReviewRepository.existsByVisitReservation_VisitReservationId(10L)).thenReturn(true);
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, true)).thenReturn(dto);
 
         // when
         VisitReservationResponseDto result = visitReservationService.getMyReservationDetail(accountId, 10L);
