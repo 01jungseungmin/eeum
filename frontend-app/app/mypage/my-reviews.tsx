@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
+import { 
+  View, StyleSheet, FlatList, TouchableOpacity, 
+  ActivityIndicator, Image, Alert, RefreshControl 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -16,26 +19,67 @@ const TABS: { id: ReviewType; name: string }[] = [
 
 export default function MyReviewsScreen() {
   const router = useRouter();
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ReviewType>('ALL');
 
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<ReviewType>('ALL');
+  
+  // 실제 백엔드 연동을 위한 상태 관리
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [page, setPage] = useState(0);
+  const [isLastPage, setIsLastPage] = useState(false);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+
+  // 탭이 변경되거나 화면에 포커스가 올 때 1페이지(0)부터 다시 로딩합니다.
   useFocusEffect(
     useCallback(() => {
-      fetchMyReviews(activeTab);
+      fetchMyReviews(activeTab, 0);
     }, [activeTab])
   );
 
-  const fetchMyReviews = async (type: ReviewType) => {
+  // 백엔드 API와 통신하여 데이터를 가져오고 페이징을 처리하는 핵심 함수
+  const fetchMyReviews = async (type: ReviewType, pageNum: number, isRefresh = false) => {
     try {
-      setIsLoading(true);
+      if (isRefresh) setIsRefreshing(true);
+      else if (pageNum === 0) setIsLoading(true);
+      else setIsFetchingMore(true);
+
       const apiType = type === 'ALL' ? undefined : type;
-      const data = await reviewApi.getMyReviews(apiType, 0, 20);
-      setReviews(data);
+      // 페이지 번호(pageNum)와 사이즈(20)를 백엔드에 넘겨줍니다.
+      const res = await reviewApi.getMyReviews(apiType, pageNum, 20);
+      
+      // 백엔드 응답(Page 객체)에서 실제 배열과 마지막 페이지 여부를 추출합니다.
+      const content = res?.data?.content || res?.content || res || [];
+      const last = res?.data?.last ?? res?.last ?? true;
+
+      if (pageNum === 0) {
+        setReviews(content); // 첫 페이지면 덮어쓰기
+      } else {
+        setReviews(prev => [...prev, ...content]); // 다음 페이지면 뒤에 이어붙이기
+      }
+
+      setIsLastPage(last);
+      setPage(pageNum);
+
     } catch (error) {
       console.error('내 리뷰 로딩 실패:', error);
+      if (pageNum === 0) setReviews([]); // 에러 시 잔상 방지
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
+      setIsFetchingMore(false);
+    }
+  };
+
+  // 당겨서 새로고침 기능
+  const handleRefresh = () => {
+    fetchMyReviews(activeTab, 0, true);
+  };
+
+  // 스크롤이 끝에 닿았을 때 다음 페이지 호출
+  const handleLoadMore = () => {
+    if (!isLastPage && !isFetchingMore && !isLoading) {
+      fetchMyReviews(activeTab, page + 1);
     }
   };
 
@@ -52,7 +96,8 @@ export default function MyReviewsScreen() {
             try {
               await reviewApi.deleteReview(storeId, reviewId);
               Alert.alert('알림', '리뷰가 삭제되었습니다.');
-              fetchMyReviews(activeTab); 
+              // 삭제 성공 후 현재 탭의 1페이지부터 다시 불러와서 목록 최신화
+              fetchMyReviews(activeTab, 0, true); 
             } catch (error) {
               Alert.alert('오류', '리뷰 삭제에 실패했습니다.');
             }
@@ -62,13 +107,12 @@ export default function MyReviewsScreen() {
     );
   };
 
-  // 수정 화면으로 이동하는 함수 추가
   const handleEditReview = (item: any) => {
     router.push({
       pathname: '/review/write',
       params: {
         storeId: item.storeId,
-        reviewId: item.storereviewId, // 리뷰 ID를 넘기면 수정 모드로 인식합니다
+        reviewId: item.storereviewId,
         initialRating: item.rating,
         initialContent: item.content,
         initialImageId: item.images && item.images.length > 0 ? item.images[0].imageId : '',
@@ -107,7 +151,6 @@ export default function MyReviewsScreen() {
               {item.createdAt ? item.createdAt.substring(0, 10) : ''}
             </Text>
 
-            {/* ✨ 수정 버튼 추가 */}
             <TouchableOpacity 
               style={{ marginLeft: 12 }}
               onPress={(e) => {
@@ -118,7 +161,6 @@ export default function MyReviewsScreen() {
               <Ionicons name="pencil-outline" size={16} color="#666" />
             </TouchableOpacity>
 
-            {/* 삭제 버튼 */}
             <TouchableOpacity 
               style={{ marginLeft: 12 }}
               onPress={(e) => {
@@ -188,13 +230,18 @@ export default function MyReviewsScreen() {
           renderItem={renderReview}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={['#1B854A']} />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={isFetchingMore ? <ActivityIndicator style={{ padding: 20 }} color="#1B854A" /> : null}
         />
       )}
     </SafeAreaView>
   );
 }
 
-// ... 스타일(styles)은 기존과 완전히 동일하게 유지 ...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
