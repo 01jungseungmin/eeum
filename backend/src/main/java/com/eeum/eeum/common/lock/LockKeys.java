@@ -74,4 +74,19 @@ public final class LockKeys {
     public static String aiSavingPlan(Long storeId) {
         return "lock:ai-saving-plan:store:" + storeId;
     }
+
+    // AI 메시지 수신자 발송(디스패치) 락 — 중복 발송 방지
+    public static String aiMessageDispatch(Long messageId) {
+        return "lock:ai-message-dispatch:" + messageId;
+    }
+
+    // 예약 발송 스케줄러 중복 실행 방지 락
+    public static String aiScheduledMessageJob() {
+        return "lock:ai-scheduler:scheduled-message";
+    }
+
+    // AI 플랜 결제 처리 락 (Webhook/검증 멱등)
+    public static String aiPlanPayment(String paymentId) {
+        return "lock:ai-plan-payment:" + paymentId;
+    }
 }

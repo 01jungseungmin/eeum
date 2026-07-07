@@ -7,6 +7,8 @@ import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
 import com.eeum.eeum.domain.ai.enums.AiCareType;
 import com.eeum.eeum.domain.ai.enums.AiMessageStatus;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
+import com.eeum.eeum.domain.ai.enums.AiConversionType;
+import com.eeum.eeum.domain.ai.repository.AiConversionEventRepository;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
@@ -25,6 +27,7 @@ public class AiActivityService {
     private final AiManagerSupportService supportService;
     private final AiInsightGenerator aiInsightGenerator;
     private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
+    private final AiConversionEventRepository aiConversionEventRepository;
     private final InquiryRepository inquiryRepository;
 
     @Transactional(readOnly = true)
@@ -62,8 +65,13 @@ public class AiActivityService {
                 .inactiveAlertCount(inactiveAlerts)
                 .draftCount(draftCount)
                 .sentCount(sentCount)
-                .revisitAfterMessageCount(null) // 재방문 추적 미연동 — 2차에서 제공
-                .orderConversionAfterEventCount(null) // 알림-주문 연결 추적 미연동 — 2차에서 제공
+                // 2차: AiConversionEvent 기반 전환 추적 반영 (발송 후 7일 이내 예약/주문)
+                .revisitAfterMessageCount(aiConversionEventRepository
+                        .countByStore_StoreIdAndConversionTypeAndConvertedAtAfter(
+                                storeId, AiConversionType.RESERVATION, monthAgo))
+                .orderConversionAfterEventCount(aiConversionEventRepository
+                        .countByStore_StoreIdAndConversionTypeAndConvertedAtAfter(
+                                storeId, AiConversionType.ORDER, monthAgo))
                 .unansweredInquiryRemainingCount(
                         inquiryRepository.countByStore_StoreIdAndStatus(storeId, InquiryStatus.PENDING))
                 .highlight(aiInsightGenerator.activityHighlight(store.getName(), draftCount, sentCount))

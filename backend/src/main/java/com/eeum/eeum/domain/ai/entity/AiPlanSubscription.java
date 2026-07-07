@@ -48,8 +48,21 @@ public class AiPlanSubscription extends BaseEntity {
         return subscription;
     }
 
+    // 결제 기반 구독 — 결제 기간 종료일(expiredAt)을 함께 저장, 만료 스케줄러가 비활성화 처리
+    public static AiPlanSubscription createWithPeriod(
+            Store store, AiPlanType planType, LocalDateTime startedAt, LocalDateTime expiredAt) {
+        AiPlanSubscription subscription = create(store, planType, startedAt);
+        subscription.expiredAt = expiredAt;
+        return subscription;
+    }
+
     public void deactivate(LocalDateTime expiredAt) {
         this.active = false;
         this.expiredAt = expiredAt;
+    }
+
+    // 만료일 도래 시 비활성화 (expiredAt은 유지)
+    public void expire() {
+        this.active = false;
     }
 }

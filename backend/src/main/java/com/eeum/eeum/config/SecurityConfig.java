@@ -39,7 +39,8 @@ public class SecurityConfig {
             "/products/**",
             "/regions/search",
             "/regions/nearby",
-            "/event-products/**"
+            "/event-products/**",
+            "/ai-exposures/stores"
     };
 
     // ===================== 인증 없이 허용할 POST 경로 =====================
@@ -57,7 +58,8 @@ public class SecurityConfig {
             "/auth/password/reset",
             "/auth/business/verify",
             "/admin/locations/sync",
-            "/payments/webhook"
+            "/payments/webhook",
+            "/ai-exposures/*/click"
     };
 
     private static final String[] SWAGGER_PATHS = {

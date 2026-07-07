@@ -23,9 +23,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleBusinessException(BusinessException e) {
         log.warn("[BusinessException] code={}, message={}", e.getErrorCode().getCode(), e.getMessage());
 
+        ApiResponse<?> body = e.getData() != null
+                ? ApiResponse.fail(e.getErrorCode().getCode(), e.getMessage(), e.getData())
+                : ApiResponse.fail(e.getErrorCode().getCode(), e.getMessage());
+
         return ResponseEntity
                 .status(e.getErrorCode().getHttpStatus())
-                .body(ApiResponse.fail(e.getErrorCode().getCode(), e.getMessage()));
+                .body(body);
     }
 
     // ===================== 입력값 검증 예외 =====================

@@ -20,4 +20,15 @@ public class AiCustomerCareDraftRequestDto {
     @Size(max = 100)
     @Schema(description = "문구에 반영할 힌트 (예: 대표 메뉴명)", example = "김치찌개 세트")
     private String contextHint;
+
+    @Schema(
+            description = "초안 보관 개수 캡 초과 시 가장 오래된 초안을 삭제하고 진행할지 여부",
+            example = "false",
+            defaultValue = "false"
+    )
+    private Boolean confirmDelete;
+
+    public boolean confirmDeleteOrFalse() {
+        return Boolean.TRUE.equals(confirmDelete);
+    }
 }

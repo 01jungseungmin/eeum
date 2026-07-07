@@ -89,12 +89,13 @@ public class AiReviewInquiryService {
     }
 
     @Transactional
-    public AiGeneratedMessageResponseDto createReviewReplyDraft(Long ownerId, Long reviewId) {
+    public AiGeneratedMessageResponseDto createReviewReplyDraft(Long ownerId, Long reviewId, boolean confirmDelete) {
         Store store = supportService.getOwnerStore(ownerId);
         StoreReview review = storeReviewRepository
                 .findByStorereviewIdAndStore_StoreId(reviewId, store.getStoreId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
 
+        supportService.enforceDraftCapacity(store, AiMessageType.REVIEW_REPLY, confirmDelete);
         supportService.consumeGeneration(store, ownerId, AiFeature.REVIEW_REPLY_DRAFT, AiUsageType.REVIEW_REPLY_DRAFT);
 
         AiText text = aiTextGenerator.reviewReply(store.getName(), review.getRating(), review.getContent());
@@ -102,11 +103,12 @@ public class AiReviewInquiryService {
     }
 
     @Transactional
-    public AiGeneratedMessageResponseDto createInquiryReplyDraft(Long ownerId, Long inquiryId) {
+    public AiGeneratedMessageResponseDto createInquiryReplyDraft(Long ownerId, Long inquiryId, boolean confirmDelete) {
         Store store = supportService.getOwnerStore(ownerId);
         Inquiry inquiry = inquiryRepository.findByInquiryIdAndStore_StoreId(inquiryId, store.getStoreId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
 
+        supportService.enforceDraftCapacity(store, AiMessageType.INQUIRY_REPLY, confirmDelete);
         supportService.consumeGeneration(store, ownerId, AiFeature.INQUIRY_REPLY_DRAFT, AiUsageType.INQUIRY_REPLY_DRAFT);
 
         AiText text = aiTextGenerator.inquiryReply(store.getName(), inquiry.getTitle());
@@ -116,6 +118,7 @@ public class AiReviewInquiryService {
     @Transactional
     public AiGeneratedMessageResponseDto createComplaintDraft(Long ownerId, AiComplaintDraftRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
+        supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, request.isConfirmDelete());
         supportService.consumeGeneration(store, ownerId, AiFeature.COMPLAINT_DRAFT, AiUsageType.COMPLAINT_DRAFT);
 
         AiText text = aiTextGenerator.complaintReply(store.getName(), request.getKeyword());

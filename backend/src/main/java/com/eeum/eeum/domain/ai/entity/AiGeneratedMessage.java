@@ -78,6 +78,10 @@ public class AiGeneratedMessage extends BaseEntity {
     @Column(name = "version", nullable = false, columnDefinition = "BIGINT NOT NULL DEFAULT 0")
     private Long version;
 
+    // 예약 발송 스케줄러 재시도 횟수 — 최대 재시도 초과 시 FAILED 처리
+    @Column(name = "retry_count", nullable = false, columnDefinition = "INT NOT NULL DEFAULT 0")
+    private int retryCount;
+
     public static AiGeneratedMessage createDraft(
             Store store,
             Account ownerAccount,
@@ -139,6 +143,23 @@ public class AiGeneratedMessage extends BaseEntity {
         validateTransitable();
         this.status = AiMessageStatus.CANCELLED;
         this.scheduledAt = null;
+    }
+
+    // 예약 발송 실패 시 재시도 카운트 증가 — 최대치 초과 여부는 스케줄러가 판단
+    public void increaseRetryCount() {
+        this.retryCount++;
+    }
+
+    // 최대 재시도 초과 등 발송 불가 확정 시 FAILED 전이
+    public void markFailed() {
+        this.status = AiMessageStatus.FAILED;
+    }
+
+    // 예약 발송 가능 여부 — SCHEDULED 상태이면서 예약 시각이 지난 경우만
+    public boolean isDispatchable(LocalDateTime now) {
+        return this.status == AiMessageStatus.SCHEDULED
+                && this.scheduledAt != null
+                && !this.scheduledAt.isAfter(now);
     }
 
     public boolean isOwnedBy(Long accountId) {

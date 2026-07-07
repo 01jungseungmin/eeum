@@ -88,10 +88,10 @@ class AiFcmTestServiceTest {
     }
 
     @Test
-    void Rate_Limit_초과_시_AUTH_RATE_LIMITED_예외가_발생하고_발송하지_않는다() {
+    void Rate_Limit_초과_시_AI_RATE_LIMITED_예외가_발생하고_발송하지_않는다() {
         // given — fcmToken @NotBlank는 컨트롤러 @Valid로 처리. 서비스는 Rate Limit을 검사한다.
         stubStore();
-        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.AUTH_RATE_LIMITED))
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.AI_RATE_LIMITED))
                 .when(rateLimitService).checkCooldown(anyString(), any(), any());
 
         // when & then
@@ -99,7 +99,7 @@ class AiFcmTestServiceTest {
                 OWNER_ID, new AiFcmTestSendRequestDto(null, "device-token", "제목", "본문")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.AUTH_RATE_LIMITED);
+                .isEqualTo(ErrorCode.AI_RATE_LIMITED);
         verify(pushAdapter, never()).send(any());
     }
 

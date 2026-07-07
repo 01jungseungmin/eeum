@@ -62,6 +62,7 @@ public class AiCustomerCareService {
     @Transactional
     public AiGeneratedMessageResponseDto createDraft(Long ownerId, AiCareType careType, AiCustomerCareDraftRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
+        supportService.enforceDraftCapacity(store, AiMessageType.CUSTOMER_CARE, request != null && request.confirmDeleteOrFalse());
         supportService.consumeGeneration(store, ownerId, AiFeature.CUSTOMER_CARE_DRAFT, AiUsageType.CUSTOMER_CARE_DRAFT);
 
         String contextHint = request != null ? request.getContextHint() : null;

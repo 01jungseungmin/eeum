@@ -11,7 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,8 +45,8 @@ class AiEventPerformanceServiceTest {
     void 이벤트가_없으면_빈_응답을_반환한다() {
         // given
         stubStore();
-        when(eventProductRepository.findByProduct_Store_StoreIdOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(List.of());
+        when(eventProductRepository.findFirstByProduct_Store_StoreIdOrderByCreatedAtDesc(STORE_ID))
+                .thenReturn(Optional.empty());
         when(aiInsightGenerator.eventPerformanceSummary(any(), anyLong(), any(), any()))
                 .thenReturn("이벤트를 등록해보세요.");
         when(aiInsightGenerator.nextEventReason(any(), any(), any()))

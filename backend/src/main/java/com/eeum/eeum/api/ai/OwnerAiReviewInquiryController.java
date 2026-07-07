@@ -39,27 +39,40 @@ public class OwnerAiReviewInquiryController {
         return ResponseEntity.ok(ApiResponse.success(aiReviewInquiryService.getOverview(ownerId)));
     }
 
-    @Operation(summary = "리뷰 답글 초안 생성", description = "리뷰 평점에 맞는 답글 초안을 생성합니다. (Basic 이상, 월 사용량 카운트)")
+    @Operation(summary = "리뷰 답글 초안 생성",
+            description = "리뷰 평점에 맞는 답글 초안을 생성합니다. (Basic 이상, 월 사용량 카운트)"
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/reviews/{reviewId}/reply-draft")
     public ResponseEntity<ApiResponse<AiGeneratedMessageResponseDto>> createReviewReplyDraft(
-            @Parameter(description = "리뷰 ID") @PathVariable Long reviewId
+            @Parameter(description = "리뷰 ID") @PathVariable Long reviewId,
+            @Parameter(description = "초안 보관 개수 캡 초과 시 가장 오래된 초안을 삭제하고 진행할지 여부")
+            @RequestParam(defaultValue = "false") boolean confirmDelete
     ) {
         Long ownerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(aiReviewInquiryService.createReviewReplyDraft(ownerId, reviewId)));
+                .body(ApiResponse.success(aiReviewInquiryService.createReviewReplyDraft(ownerId, reviewId, confirmDelete)));
     }
 
-    @Operation(summary = "문의 답변 초안 생성", description = "내 가게 문의에 대한 답변 초안을 생성합니다. (Basic 이상, 월 사용량 카운트)")
+    @Operation(summary = "문의 답변 초안 생성",
+            description = "내 가게 문의에 대한 답변 초안을 생성합니다. (Basic 이상, 월 사용량 카운트)"
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/inquiries/{inquiryId}/reply-draft")
     public ResponseEntity<ApiResponse<AiGeneratedMessageResponseDto>> createInquiryReplyDraft(
-            @Parameter(description = "문의 ID") @PathVariable Long inquiryId
+            @Parameter(description = "문의 ID") @PathVariable Long inquiryId,
+            @Parameter(description = "초안 보관 개수 캡 초과 시 가장 오래된 초안을 삭제하고 진행할지 여부")
+            @RequestParam(defaultValue = "false") boolean confirmDelete
     ) {
         Long ownerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(aiReviewInquiryService.createInquiryReplyDraft(ownerId, inquiryId)));
+                .body(ApiResponse.success(aiReviewInquiryService.createInquiryReplyDraft(ownerId, inquiryId, confirmDelete)));
     }
 
-    @Operation(summary = "반복 불만 대응 문구 생성", description = "반복 불만 키워드에 대한 대응 문구를 생성합니다. (Basic 이상, 월 사용량 카운트)")
+    @Operation(summary = "반복 불만 대응 문구 생성",
+            description = "반복 불만 키워드에 대한 대응 문구를 생성합니다. (Basic 이상, 월 사용량 카운트)"
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/review-inquiries/complaint-draft")
     public ResponseEntity<ApiResponse<AiGeneratedMessageResponseDto>> createComplaintDraft(
             @Valid @RequestBody AiComplaintDraftRequestDto request
@@ -70,7 +83,9 @@ public class OwnerAiReviewInquiryController {
     }
 
     @Operation(summary = "리뷰/문의 기반 공지 초안 생성",
-            description = "공지 등록용 초안을 생성합니다. 발송 채널은 KAKAO_ALERT / APP_PUSH / STORE_NOTICE 3종만 허용됩니다.")
+            description = "공지 등록용 초안을 생성합니다. 발송 채널은 KAKAO_ALERT / APP_PUSH / STORE_NOTICE 3종만 허용됩니다."
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/review-inquiries/notice-draft")
     public ResponseEntity<ApiResponse<AiMarketingDraftResponseDto>> createNoticeDraft(
             @Valid @RequestBody AiMarketingDraftRequestDto request

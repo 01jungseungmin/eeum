@@ -127,6 +127,8 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 물리 삭제
 - `OrderExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 주문 만료 처리
 - `NotificationCleanupScheduler` — 매일 03:00 6개월 이전 알림 삭제 / 5분 주기 Redis unread 카운트 ↔ DB 정합성 보정
+- `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
+- `AiPlanExpirationScheduler` — 매일 03:30, 만료일 지난 AI 플랜 구독 비활성화 (이후 FREE 처리)
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:

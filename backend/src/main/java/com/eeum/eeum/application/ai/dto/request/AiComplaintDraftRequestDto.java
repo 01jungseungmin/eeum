@@ -18,4 +18,7 @@ public class AiComplaintDraftRequestDto {
     @Size(max = 50)
     @Schema(description = "대응할 불만 키워드", example = "포장 지연")
     private String keyword;
+
+    @Schema(description = "초안 보관 개수 캡 초과 시 가장 오래된 초안을 삭제하고 진행할지 여부", example = "false")
+    private boolean confirmDelete;
 }

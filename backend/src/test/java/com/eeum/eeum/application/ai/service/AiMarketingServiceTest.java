@@ -69,7 +69,7 @@ class AiMarketingServiceTest {
         Store store = mock(Store.class);
         when(supportService.getOwnerStore(OWNER_ID)).thenReturn(store);
         AiMarketingDraftRequestDto request = new AiMarketingDraftRequestDto(
-                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.SNS_CARD), "키워드");
+                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.SNS_CARD), "키워드", false);
 
         // when & then
         assertThatThrownBy(() -> aiMarketingService.createNoticeDraft(OWNER_ID, request))
@@ -83,7 +83,7 @@ class AiMarketingServiceTest {
         // given
         Store store = stubStore();
         AiMarketingDraftRequestDto request = new AiMarketingDraftRequestDto(
-                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.APP_PUSH), "키워드");
+                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.APP_PUSH), "키워드", false);
 
         when(aiTextGenerator.marketingCopy(any(), any(), any(), any()))
                 .thenReturn(new AiText("제목", "내용"));
@@ -108,7 +108,7 @@ class AiMarketingServiceTest {
         // given
         Store store = stubStore();
         AiMarketingDraftRequestDto request = new AiMarketingDraftRequestDto(
-                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.SNS_CARD), "키워드");
+                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.SNS_CARD), "키워드", false);
 
         when(aiTextGenerator.marketingCopy(any(), any(), any(), any()))
                 .thenReturn(new AiText("제목", "내용"));

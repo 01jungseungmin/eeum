@@ -195,4 +195,55 @@ class AiManagerSupportServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_MESSAGE_NOT_FOUND);
     }
+
+    @Test
+    void 타입별_DRAFT가_캡_미만이면_초안_보관_캡_검증을_통과한다() {
+        // given
+        Store store = createStore();
+        when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
+                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
+                .thenReturn(19L);
+
+        // when & then
+        supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, false);
+        verify(aiGeneratedMessageRepository, org.mockito.Mockito.never())
+                .findFirstByStore_StoreIdAndTypeAndStatusOrderByCreatedAtAsc(any(), any(), any());
+    }
+
+    @Test
+    void 캡_초과_confirmDelete_false면_AI_DRAFT_LIMIT_EXCEEDED_예외와_상세정보가_함께_던져진다() {
+        // given
+        Store store = createStore();
+        when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
+                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
+                .thenReturn(20L);
+
+        // when & then
+        assertThatThrownBy(() -> supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_DRAFT_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    void 캡_초과_confirmDelete_true면_가장_오래된_DRAFT가_삭제되고_예외는_발생하지_않는다() {
+        // given
+        Store store = createStore();
+        Account ownerAccount = mock(Account.class);
+        AiGeneratedMessage oldestDraft = AiGeneratedMessage.createDraft(
+                store, ownerAccount, AiMessageType.COMPLAINT_REPLY,
+                "COMPLAINT_KEYWORD", null, "제목", "내용", AiChannel.APP_PUSH);
+        when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
+                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
+                .thenReturn(20L);
+        when(aiGeneratedMessageRepository.findFirstByStore_StoreIdAndTypeAndStatusOrderByCreatedAtAsc(
+                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
+                .thenReturn(Optional.of(oldestDraft));
+
+        // when
+        supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, true);
+
+        // then
+        verify(aiGeneratedMessageRepository).delete(oldestDraft);
+    }
 }

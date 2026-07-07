@@ -38,12 +38,13 @@ public class AiEventPerformanceService {
         supportService.validateFeature(store, AiFeature.EVENT_PERFORMANCE_VIEW);
         Long storeId = store.getStoreId();
 
-        List<EventProduct> events = eventProductRepository.findByProduct_Store_StoreIdOrderByCreatedAtDesc(storeId);
-        if (events.isEmpty()) {
+        EventProduct latestEvent = eventProductRepository
+                .findFirstByProduct_Store_StoreIdOrderByCreatedAtDesc(storeId)
+                .orElse(null);
+        if (latestEvent == null) {
             return emptyResponse(store);
         }
 
-        EventProduct latestEvent = events.get(0);
         List<Order> eventOrders = orderRepository.findByStore_StoreIdAndStatusAndCreatedAtBetween(
                 storeId, OrderStatus.COMPLETED, latestEvent.getStartAt(), latestEvent.getEndAt());
         List<Order> allCompleted = orderRepository.findByStore_StoreIdAndStatus(storeId, OrderStatus.COMPLETED);
@@ -51,13 +52,20 @@ public class AiEventPerformanceService {
         Double newCustomerRatio = calculateNewCustomerRatio(eventOrders, allCompleted, latestEvent.getStartAt());
         long regularReorderCount = countRegularReorders(eventOrders, allCompleted);
 
+        // 2차: 상품 상세 조회수(중복 방지 적용) 기반 전환율 계산 — 조회 0이면 null 유지
+        Integer viewCount = latestEvent.getProduct().getViewCount();
+        Long productViewCount = viewCount != null ? viewCount.longValue() : null;
+        Double conversionRate = (productViewCount != null && productViewCount > 0)
+                ? (double) eventOrders.size() / productViewCount
+                : null;
+
         String summary = aiInsightGenerator.eventPerformanceSummary(
-                store.getName(), eventOrders.size(), null, newCustomerRatio);
+                store.getName(), eventOrders.size(), conversionRate, newCustomerRatio);
 
         return AiEventPerformanceResponseDto.builder()
-                .productViewCount(null) // 상품 조회수 필드 미보유 — 2차에서 수집
+                .productViewCount(productViewCount)
                 .eventOrderCount(eventOrders.size())
-                .orderConversionRate(null) // 조회수가 없어 전환율 계산 불가
+                .orderConversionRate(conversionRate)
                 .newCustomerRatio(newCustomerRatio)
                 .regularReorderCount(regularReorderCount)
                 .aiSummary(summary)

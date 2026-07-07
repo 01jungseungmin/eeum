@@ -11,7 +11,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableScheduling
 @EnableJpaAuditing
-@EnableConfigurationProperties({PortOneProperties.class, AiProviderProperties.class})
+@EnableConfigurationProperties({
+		PortOneProperties.class,
+		AiProviderProperties.class,
+		com.eeum.eeum.infrastructure.alimtalk.AlimtalkProperties.class,
+		com.eeum.eeum.infrastructure.external.config.PublicDataProperties.class
+})
 public class EeumApplication {
 
 	public static void main(String[] args) {

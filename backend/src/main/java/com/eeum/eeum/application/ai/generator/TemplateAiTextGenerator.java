@@ -3,10 +3,12 @@ package com.eeum.eeum.application.ai.generator;
 import com.eeum.eeum.domain.ai.enums.AiCareType;
 import com.eeum.eeum.domain.ai.enums.AiNoticeType;
 import com.eeum.eeum.domain.ai.enums.AiTone;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 // 1차 MVP: 실제 LLM 호출 없이 템플릿 기반으로 문구 생성
 @Component
+@Slf4j
 public class TemplateAiTextGenerator implements AiTextGenerator {
 
     @Override
@@ -43,6 +45,8 @@ public class TemplateAiTextGenerator implements AiTextGenerator {
 
     @Override
     public AiText complaintReply(String storeName, String keyword) {
+        log.info("[AI-GENERATOR] TemplateAiTextGenerator.complaintReply 호출 storeName={}, keyword={}",
+                storeName, keyword);
         return AiText.content("최근 '" + keyword + "' 관련 말씀을 여러 번 들었습니다. 불편을 드려 죄송하며, 즉시 개선 조치를 진행하고 있습니다. 소중한 의견 감사합니다.");
     }
 

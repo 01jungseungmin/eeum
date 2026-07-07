@@ -49,6 +49,7 @@ public class PaymentService {
     private final PortOnePaymentClient portOnePaymentClient;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
@@ -154,6 +155,12 @@ public class PaymentService {
                 .orElse(null);
 
         if (foundPayment == null) {
+            // AI 플랜 구독 결제(ai-plan- prefix)는 AI 플랜 서비스로 위임
+            if (request.getPaymentId() != null && request.getPaymentId()
+                    .startsWith(com.eeum.eeum.application.ai.service.AiPlanSubscriptionService.AI_PLAN_PAYMENT_PREFIX)) {
+                aiPlanSubscriptionService.handleWebhook(request.getPaymentId());
+                return;
+            }
             log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}",
                     request.getPaymentId());
             return;

@@ -113,7 +113,7 @@ class AiReviewInquiryServiceTest {
                 .thenReturn(java.util.Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> aiReviewInquiryService.createInquiryReplyDraft(OWNER_ID, 10L))
+        assertThatThrownBy(() -> aiReviewInquiryService.createInquiryReplyDraft(OWNER_ID, 10L, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INQUIRY_NOT_FOUND);
@@ -136,7 +136,7 @@ class AiReviewInquiryServiceTest {
         when(aiGeneratedMessageRepository.save(any())).thenReturn(savedMessage);
 
         // when
-        AiGeneratedMessageResponseDto result = aiReviewInquiryService.createReviewReplyDraft(OWNER_ID, 1L);
+        AiGeneratedMessageResponseDto result = aiReviewInquiryService.createReviewReplyDraft(OWNER_ID, 1L, false);
 
         // then
         assertThat(result.getContent()).isEqualTo("답글 내용");

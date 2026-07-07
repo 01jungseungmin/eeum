@@ -57,7 +57,7 @@ public class AiExposureCommandExecutor {
     @Transactional
     public AiExposureStatus stopExposureInTx(Store store, Long ownerAccountId) {
         AiExposureStatus status = aiExposureStatusRepository.findByStore_StoreId(store.getStoreId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.AI_INVALID_STATUS));
+                .orElseThrow(() -> new BusinessException(ErrorCode.AI_EXPOSURE_NOT_FOUND));
         status.stop(LocalDateTime.now());
         Account owner = accountRepository.getReferenceById(ownerAccountId);
         aiActionLogRepository.save(AiActionLog.record(

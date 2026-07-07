@@ -17,6 +17,8 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     List<EventProduct> findByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
 
+    Optional<EventProduct> findFirstByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
+
     boolean existsByProduct_ProductIdAndStatusAndEndAtAfter(Long productId, EventProductStatus eventProductStatus, LocalDateTime now);
 
 

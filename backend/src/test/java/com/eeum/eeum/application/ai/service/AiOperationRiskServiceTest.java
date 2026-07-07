@@ -6,12 +6,10 @@ import com.eeum.eeum.application.ai.dto.response.AiSavingPlanResponseDto;
 import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.entity.AiOwnerMetricInput;
-import com.eeum.eeum.domain.ai.entity.AiSavingPlan;
 import com.eeum.eeum.domain.ai.enums.AiDataSourceType;
 import com.eeum.eeum.domain.ai.enums.AiMetricType;
 import com.eeum.eeum.domain.ai.enums.AiRiskLevel;
 import com.eeum.eeum.domain.ai.enums.AiSavingPlanStatus;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiOwnerMetricInputRepository;
 import com.eeum.eeum.domain.ai.repository.AiSavingPlanRepository;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
@@ -28,7 +26,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,7 +47,6 @@ class AiOperationRiskServiceTest {
     @Mock private AiManagerSupportService supportService;
     @Mock private AiOwnerMetricInputRepository aiOwnerMetricInputRepository;
     @Mock private AiSavingPlanRepository aiSavingPlanRepository;
-    @Mock private AiActionLogRepository aiActionLogRepository;
     @Mock private AiOwnerMetricCommandExecutor ownerMetricCommandExecutor;
     @Mock private AiSavingPlanCommandExecutor savingPlanCommandExecutor;
     @Mock private com.eeum.eeum.common.service.RedisLockService redisLockService;
@@ -159,19 +155,23 @@ class AiOperationRiskServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void 절감_계획_저장_후_운영_위험_조회의_hasSavedPlan이_true가_된다() {
         // given
         Store store = stubStore();
         stubNormalSignals();
-        AiSavingPlan plan = AiSavingPlan.create(store, "이번 달 전력 절감 계획", null);
-        when(aiSavingPlanRepository.findFirstByStore_StoreIdOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.of(plan));
+        AiSavingPlanResponseDto mockSaved = mock(AiSavingPlanResponseDto.class);
+        when(mockSaved.getStatus()).thenReturn(AiSavingPlanStatus.SAVED);
+        when(redisLockService.executeWithLock(anyString(), any(java.time.Duration.class), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> ((java.util.function.Supplier<Object>) invocation.getArgument(2)).get());
+        when(savingPlanCommandExecutor.savePlanInTx(store, OWNER_ID, null)).thenReturn(mockSaved);
 
         // when
         AiSavingPlanResponseDto saved = operationRiskService.saveSavingPlan(OWNER_ID, null);
 
         // then
         assertThat(saved.getStatus()).isEqualTo(AiSavingPlanStatus.SAVED);
+        verify(savingPlanCommandExecutor).savePlanInTx(store, OWNER_ID, null);
 
         // 저장 이후 조회 시 hasSavedPlan = true
         when(aiOwnerMetricInputRepository.existsByStore_StoreId(STORE_ID)).thenReturn(false);
@@ -181,11 +181,14 @@ class AiOperationRiskServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void 생성된_절감_계획이_없을_때_저장하면_AI_SAVING_PLAN_NOT_FOUND_예외가_발생한다() {
         // given
-        stubStore();
-        when(aiSavingPlanRepository.findFirstByStore_StoreIdOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.empty());
+        Store store = stubStore();
+        when(redisLockService.executeWithLock(anyString(), any(java.time.Duration.class), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> ((java.util.function.Supplier<Object>) invocation.getArgument(2)).get());
+        when(savingPlanCommandExecutor.savePlanInTx(store, OWNER_ID, null))
+                .thenThrow(new BusinessException(ErrorCode.AI_SAVING_PLAN_NOT_FOUND));
 
         // when & then
         assertThatThrownBy(() -> operationRiskService.saveSavingPlan(OWNER_ID, null))

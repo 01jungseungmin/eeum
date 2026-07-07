@@ -45,7 +45,7 @@ public class AiMarketingService {
     @Transactional(readOnly = true)
     public List<AiMarketingDraftResponseDto.ChannelReachDto> getChannelReaches(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
-        supportService.validateFeature(store, AiFeature.REVIEW_INQUIRY_VIEW);
+        supportService.validateFeature(store, AiFeature.MARKETING_VIEW);
         return estimateReaches(store.getStoreId(), List.of(AiChannel.values()));
     }
 
@@ -74,11 +74,13 @@ public class AiMarketingService {
         if (noticeChannelOnly && request.getChannels().stream().anyMatch(channel -> !channel.isNoticeSendable())) {
             throw new BusinessException(ErrorCode.AI_INVALID_CHANNEL);
         }
-        supportService.consumeGeneration(store, ownerId, feature, usageType);
+        supportService.enforceDraftCapacity(store, messageType, request.isConfirmDelete());
 
+        // LLM 호출 성공 후 쿼터 차감 — LLM 장애 시 쿼터가 소진되지 않도록 순서를 역전
         AiText text = messageType == AiMessageType.NOTICE
                 ? aiTextGenerator.noticeCopy(store.getName(), request.getNoticeType(), request.getTone(), request.getKeyword())
                 : aiTextGenerator.marketingCopy(store.getName(), request.getNoticeType(), request.getTone(), request.getKeyword());
+        supportService.consumeGeneration(store, ownerId, feature, usageType);
 
         // 대표 채널 하나를 메시지에 저장 — 발송 시 채널별 분기는 2차에서 처리
         AiChannel primaryChannel = request.getChannels().get(0);

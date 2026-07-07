@@ -9,14 +9,17 @@ import com.eeum.eeum.domain.ai.enums.AiChannel;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.event.AiMessageSentEvent;
 import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
+import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.store.entity.StoreNotice;
 import com.eeum.eeum.domain.store.enums.StoreNoticeType;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -28,10 +31,12 @@ import java.time.LocalDateTime;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AiMessageCommandExecutor {
 
     private final AiManagerSupportService supportService;
     private final AiActionLogRepository aiActionLogRepository;
+    private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
     private final StoreNoticeRepository storeNoticeRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -96,6 +101,13 @@ public class AiMessageCommandExecutor {
         message.schedule(scheduledAt, LocalDateTime.now());
         publishSideEffects(message, AiActionType.MESSAGE_SCHEDULED, "공지 예약 등록", true);
         return AiGeneratedMessageResponseDto.from(message);
+    }
+
+    // 디스패치 실패 시 FAILED 상태로 전이 — REQUIRES_NEW로 본 TX와 독립적으로 커밋
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markFailedInTx(Long messageId) {
+        aiGeneratedMessageRepository.findById(messageId)
+                .ifPresent(AiGeneratedMessage::markFailed);
     }
 
     private void validateNoticeChannel(AiChannel channel) {

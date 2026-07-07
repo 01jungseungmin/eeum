@@ -50,7 +50,11 @@ public class GeminiAiClient implements AiClient {
                         "parts", List.of(Map.of("text", mergedPrompt)))),
                 "generationConfig", Map.of(
                         "temperature", request.temperature() != null ? request.temperature() : 0.7,
-                        "maxOutputTokens", request.maxOutputTokens() != null ? request.maxOutputTokens() : 512)
+                        "maxOutputTokens", request.maxOutputTokens() != null ? request.maxOutputTokens() : 512,
+                        "thinkingConfig", Map.of(
+                                "thinkingBudget", 0
+                        )
+                )
         );
 
         try {
@@ -77,9 +81,16 @@ public class GeminiAiClient implements AiClient {
     String extractText(String rawResponse) {
         try {
             JsonNode root = objectMapper.readTree(rawResponse);
+            JsonNode candidate = root.path("candidates").path(0);
+            String finishReason = candidate.path("finishReason").asText(null);
+
             JsonNode textNode = root.path("candidates").path(0)
                     .path("content").path("parts").path(0).path("text");
             String text = textNode.asText(null);
+            log.info("[AI-CLIENT][GEMINI] finishReason={}, contentLength={}, text={}",
+                    finishReason,
+                    text != null ? text.length() : 0,
+                    text);
             if (text == null || text.isBlank()) {
                 throw new AiClientException(AiProviderType.GEMINI, "Gemini 응답이 비어 있습니다");
             }

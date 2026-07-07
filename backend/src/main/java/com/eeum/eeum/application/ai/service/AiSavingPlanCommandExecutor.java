@@ -1,14 +1,21 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiSavingPlanResponseDto;
+import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiOwnerMetricInput;
 import com.eeum.eeum.domain.ai.entity.AiSavingPlan;
 import com.eeum.eeum.domain.ai.entity.AiSavingPlanItem;
+import com.eeum.eeum.domain.ai.enums.AiActionType;
 import com.eeum.eeum.domain.ai.enums.AiMetricType;
 import com.eeum.eeum.domain.ai.enums.AiSavingPlanStatus;
+import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiOwnerMetricInputRepository;
 import com.eeum.eeum.domain.ai.repository.AiSavingPlanRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +36,8 @@ public class AiSavingPlanCommandExecutor {
 
     private final AiOwnerMetricInputRepository aiOwnerMetricInputRepository;
     private final AiSavingPlanRepository aiSavingPlanRepository;
+    private final AiActionLogRepository aiActionLogRepository;
+    private final AccountRepository accountRepository;
 
     @Transactional
     public AiSavingPlanResponseDto createSavingPlanInTx(Store store) {
@@ -51,6 +60,20 @@ public class AiSavingPlanCommandExecutor {
         AiSavingPlan saved = aiSavingPlanRepository.save(plan);
 
         return AiSavingPlanResponseDto.from(saved, "이번 주부터 순차 실행 권장");
+    }
+
+    @Transactional
+    public AiSavingPlanResponseDto savePlanInTx(Store store, Long ownerAccountId, Long savingPlanId) {
+        AiSavingPlan plan = (savingPlanId != null
+                ? aiSavingPlanRepository.findByAiSavingPlanIdAndStore_StoreId(savingPlanId, store.getStoreId())
+                : aiSavingPlanRepository.findFirstByStore_StoreIdOrderByCreatedAtDesc(store.getStoreId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.AI_SAVING_PLAN_NOT_FOUND));
+        plan.save();
+        Account owner = accountRepository.getReferenceById(ownerAccountId);
+        aiActionLogRepository.save(AiActionLog.record(
+                store, owner, AiActionType.SAVING_PLAN_SAVED,
+                "AI_SAVING_PLAN", plan.getAiSavingPlanId(), "절감 계획 저장"));
+        return AiSavingPlanResponseDto.from(plan, "이번 주부터 순차 실행 권장");
     }
 
     private BigDecimal findLatestMetricValue(Long storeId, AiMetricType metricType) {

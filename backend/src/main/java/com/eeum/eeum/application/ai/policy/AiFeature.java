@@ -15,6 +15,7 @@ public enum AiFeature {
     // 조회성 기능
     DASHBOARD(AiPlanType.FREE, false),
     CUSTOMER_CARE_VIEW(AiPlanType.FREE, false),
+    MARKETING_VIEW(AiPlanType.FREE, false),
     REVIEW_INQUIRY_VIEW(AiPlanType.FREE, false),
     EVENT_PERFORMANCE_VIEW(AiPlanType.FREE, false),
     GENERATED_MESSAGE_MANAGE(AiPlanType.FREE, false),

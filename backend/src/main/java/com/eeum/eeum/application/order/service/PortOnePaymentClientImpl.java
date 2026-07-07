@@ -7,6 +7,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
+@Profile("!local")
 @RequiredArgsConstructor
 public class PortOnePaymentClientImpl implements PortOnePaymentClient {
 

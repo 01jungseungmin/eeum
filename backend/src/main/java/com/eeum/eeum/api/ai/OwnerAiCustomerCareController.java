@@ -48,7 +48,9 @@ public class OwnerAiCustomerCareController {
     }
 
     @Operation(summary = "AI 고객 케어 메시지 초안 생성",
-            description = "케어 유형별 메시지 초안을 생성해 AiGeneratedMessage로 저장합니다. (Basic 이상, 월 사용량 카운트)")
+            description = "케어 유형별 메시지 초안을 생성해 AiGeneratedMessage로 저장합니다. (Basic 이상, 월 사용량 카운트)"
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/{careType}/draft")
     public ResponseEntity<ApiResponse<AiGeneratedMessageResponseDto>> createDraft(
             @Parameter(description = "케어 유형") @PathVariable AiCareType careType,

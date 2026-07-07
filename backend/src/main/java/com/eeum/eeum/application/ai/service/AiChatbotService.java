@@ -106,25 +106,25 @@ public class AiChatbotService {
     }
 
     private AiChatResponseDto answerInScope(Store store, Long ownerId, String input) {
-        // 생성성 답변 — 월 사용량 카운트 대상
+        // 생성성 답변 — LLM 호출 성공 후 쿼터 차감 (LLM 장애 시 쿼터 소진 방지)
         if (input.contains("공지")) {
-            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             AiText text = aiTextGenerator.noticeCopy(store.getName(), AiNoticeType.EVENT, AiTone.FRIENDLY, null);
+            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             return generated(text.content(), AiChatActionType.OPEN_NOTICE_REGISTER, "공지 등록으로 이동");
         }
         if (input.contains("단골") || input.contains("고객 메시지")) {
-            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             AiText text = aiTextGenerator.customerCareMessage(AiCareType.INACTIVE_REGULAR, store.getName(), null);
+            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             return generated(text.content(), AiChatActionType.SEND_MESSAGE, "이 메시지 발송하기");
         }
         if (input.contains("문의")) {
-            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             AiText text = aiTextGenerator.inquiryReply(store.getName(), "미답변 문의");
+            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             return generated(text.content(), AiChatActionType.OPEN_REVIEW_DRAFT, "문의 답변 초안으로 이동");
         }
         if (input.contains("답글")) {
-            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             AiText text = aiTextGenerator.reviewReply(store.getName(), 5, null);
+            supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
             return generated(text.content(), AiChatActionType.OPEN_REVIEW_DRAFT, "리뷰 답글 초안으로 이동");
         }
 

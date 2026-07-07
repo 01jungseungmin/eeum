@@ -88,10 +88,13 @@ public class AiModelRouter {
         if (providerName == null) {
             return;
         }
-        switch (providerName.toLowerCase()) {
-            case "gemini" -> chain.add(geminiAiClient);
-            case "groq" -> chain.add(groqAiClient);
-            default -> { /* template/mock 등은 별도 처리 */ }
+        AiClient client = switch (providerName.toLowerCase()) {
+            case "gemini" -> geminiAiClient;
+            case "groq" -> groqAiClient;
+            default -> null; // template/mock 등은 별도 처리
+        };
+        if (client != null && !chain.contains(client)) {
+            chain.add(client);
         }
     }
 

@@ -37,7 +37,6 @@ public class AiFcmTestService {
     // 외부 발송 호출 중 DB 커넥션을 점유하지 않도록 트랜잭션 없이 처리
     public AiFcmTestSendResponseDto sendTestPush(Long ownerId, AiFcmTestSendRequestDto request) {
         supportService.getOwnerStore(ownerId); // owner/store 검증
-        rateLimitService.checkCooldown(RateLimitKeys.fcmTest(ownerId), FCM_TEST_COOLDOWN, ErrorCode.AUTH_RATE_LIMITED);
 
         String title;
         String content;
@@ -53,6 +52,9 @@ public class AiFcmTestService {
         if (content == null || content.isBlank()) {
             throw new BusinessException(ErrorCode.VALIDATION_INVALID_INPUT, "발송할 본문이 없습니다");
         }
+
+        // 콘텐츠 유효성 확인 이후에 Rate Limit 검사 — 유효하지 않은 요청에는 쿨다운 소진 불필요
+        rateLimitService.checkCooldown(RateLimitKeys.fcmTest(ownerId), FCM_TEST_COOLDOWN, ErrorCode.AI_RATE_LIMITED);
 
         PushResult result = pushAdapter.send(PushMessage.builder()
                 .fcmToken(request.fcmToken())

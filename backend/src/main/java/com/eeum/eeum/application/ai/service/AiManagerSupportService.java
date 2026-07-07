@@ -1,11 +1,14 @@
 package com.eeum.eeum.application.ai.service;
 
+import com.eeum.eeum.application.ai.dto.response.AiDraftCapacityExceededResponseDto;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.application.ai.policy.AiPlanPolicy;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
+import com.eeum.eeum.domain.ai.enums.AiMessageStatus;
+import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
@@ -30,6 +33,9 @@ import java.time.YearMonth;
 public class AiManagerSupportService {
 
     private static final Duration USAGE_LOCK_LEASE = Duration.ofSeconds(5);
+
+    // 초안 보관 개수 캡 — AI 생성 횟수(월 사용량)와는 별개로 타입별 DRAFT 보관 개수를 제한
+    private static final int DRAFT_LIMIT_PER_TYPE = 20;
 
     private final StoreRepository storeRepository;
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
@@ -79,6 +85,33 @@ public class AiManagerSupportService {
 
     public long getMonthlyUsage(Long storeId) {
         return aiUsageLogRepository.countByStore_StoreIdAndYearMonth(storeId, YearMonth.now().toString());
+    }
+
+    // 초안 보관 개수 캡 — 타입별 DRAFT가 캡 이상이면 confirmDelete가 false일 때 확인을 요구하고,
+    // true로 재요청하면 가장 오래된 DRAFT를 하드 삭제한 뒤 새 초안 저장을 진행시킨다.
+    //
+    // 동시성 주의(운영 전 점검 필요): 캡 조회 → 삭제 → 새 초안 저장이 하나의 락으로 묶여 있지 않다.
+    // 같은 store+type에 빠른 연속 요청이 오면 캡을 살짝 넘기거나(카운트 미반영 상태에서 둘 다 통과)
+    // 오래된 초안이 중복 삭제될 수 있다. 필요 시 store+type 단위 Redis 락
+    // (예: LockKeys.aiDraftCapacity(storeId, type))으로 캡 검증~저장 구간을 감싸는 것을 권장한다.
+    public void enforceDraftCapacity(Store store, AiMessageType type, boolean confirmDelete) {
+        long draftCount = aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
+                store.getStoreId(), type, AiMessageStatus.DRAFT);
+        if (draftCount < DRAFT_LIMIT_PER_TYPE) {
+            return;
+        }
+        if (!confirmDelete) {
+            throw new BusinessException(ErrorCode.AI_DRAFT_LIMIT_EXCEEDED,
+                    AiDraftCapacityExceededResponseDto.builder()
+                            .type(type)
+                            .limit(DRAFT_LIMIT_PER_TYPE)
+                            .currentCount(draftCount)
+                            .deletePolicy("OLDEST_DRAFT")
+                            .build());
+        }
+        aiGeneratedMessageRepository
+                .findFirstByStore_StoreIdAndTypeAndStatusOrderByCreatedAtAsc(store.getStoreId(), type, AiMessageStatus.DRAFT)
+                .ifPresent(aiGeneratedMessageRepository::delete);
     }
 
     // 메시지 조회 + 소유자 검증 — 다른 사장의 메시지 접근 시 AI_FORBIDDEN

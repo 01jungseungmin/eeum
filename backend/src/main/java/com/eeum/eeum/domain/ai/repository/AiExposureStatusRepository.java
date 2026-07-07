@@ -8,4 +8,7 @@ import java.util.Optional;
 public interface AiExposureStatusRepository extends JpaRepository<AiExposureStatus, Long> {
 
     Optional<AiExposureStatus> findByStore_StoreId(Long storeId);
+
+    // 사용자 노출 API — 노출 진행 중인 가게만
+    java.util.List<AiExposureStatus> findByActiveTrue();
 }

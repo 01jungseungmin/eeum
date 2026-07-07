@@ -38,7 +38,9 @@ public class OwnerAiMarketingController {
     }
 
     @Operation(summary = "마케팅 문구 초안 생성",
-            description = "공지 유형/톤/채널 기반으로 홍보 문구를 생성합니다. 채널 4종(SNS_CARD 포함) 지원. (Basic 이상, 월 사용량 카운트)")
+            description = "공지 유형/톤/채널 기반으로 홍보 문구를 생성합니다. 채널 4종(SNS_CARD 포함) 지원. (Basic 이상, 월 사용량 카운트)"
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/marketing/draft")
     public ResponseEntity<ApiResponse<AiMarketingDraftResponseDto>> createMarketingDraft(
             @Valid @RequestBody AiMarketingDraftRequestDto request
@@ -49,7 +51,9 @@ public class OwnerAiMarketingController {
     }
 
     @Operation(summary = "공지 등록용 초안 생성",
-            description = "공지 발송 채널은 KAKAO_ALERT / APP_PUSH / STORE_NOTICE 3종만 허용됩니다. SNS_CARD 포함 시 AI_INVALID_CHANNEL 예외.")
+            description = "공지 발송 채널은 KAKAO_ALERT / APP_PUSH / STORE_NOTICE 3종만 허용됩니다. SNS_CARD 포함 시 AI_INVALID_CHANNEL 예외."
+                    + " 타입별 초안 보관 개수 캡 초과 시 409(AI_015)를 반환하며, confirmDelete=true로 재요청하면"
+                    + " 가장 오래된 초안을 삭제하고 진행합니다.")
     @PostMapping("/notices/draft")
     public ResponseEntity<ApiResponse<AiMarketingDraftResponseDto>> createNoticeDraft(
             @Valid @RequestBody AiMarketingDraftRequestDto request

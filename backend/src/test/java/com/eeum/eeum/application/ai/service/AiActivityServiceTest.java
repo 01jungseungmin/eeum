@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.ai.enums.AiCareType;
 import com.eeum.eeum.domain.ai.enums.AiChannel;
 import com.eeum.eeum.domain.ai.enums.AiMessageStatus;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
+import com.eeum.eeum.domain.ai.repository.AiConversionEventRepository;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
@@ -38,6 +39,7 @@ class AiActivityServiceTest {
     @Mock private AiManagerSupportService supportService;
     @Mock private AiInsightGenerator aiInsightGenerator;
     @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
+    @Mock private AiConversionEventRepository aiConversionEventRepository;
     @Mock private InquiryRepository inquiryRepository;
 
     private static final Long STORE_ID = 1L;

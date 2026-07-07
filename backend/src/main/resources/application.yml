@@ -64,6 +64,9 @@ portone:
   api-secret: ${PORTONE_API_SECRET}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
   webhook-secret: ${PORTONE_WEBHOOK_SECRET}
+  mock:
+    status: PAID
+    amount: 19000
 
 fcm:
   project-id: ${FCM_PROJECT_ID}
@@ -91,3 +94,22 @@ ai:
     models:
       fast: llama-3.1-8b-instant
       quality: llama-3.3-70b-versatile
+
+public-data:
+  # data.go.kr 계정당 일반 인증키 1개로 3종 API 공유 (Decoding 키 권장)
+  service-key: ${NTS_BUSINESS_SERVICE_KEY:}
+  # 각 API 상세페이지의 오픈API 엔드포인트 URL (미설정 시 해당 데이터만 fallback)
+  kepco-industry-url: ${KEPCO_INDUSTRY_API_URL:}
+  kpx-region-energy-url: ${KPX_REGION_ENERGY_API_URL:}
+  kgs-gas-accident-url: ${KGS_GAS_ACCIDENT_API_URL:}
+
+alimtalk:
+  provider: ${ALIMTALK_PROVIDER:mock}
+  api-key: ${ALIMTALK_API_KEY:}
+  api-secret: ${ALIMTALK_API_SECRET:}
+  sender-key: ${ALIMTALK_SENDER_KEY:}
+  base-url: ${ALIMTALK_BASE_URL:}
+  templates:
+    customer-care: ${ALIMTALK_TEMPLATE_CUSTOMER_CARE:}
+    marketing: ${ALIMTALK_TEMPLATE_MARKETING:}
+    notice: ${ALIMTALK_TEMPLATE_NOTICE:}
