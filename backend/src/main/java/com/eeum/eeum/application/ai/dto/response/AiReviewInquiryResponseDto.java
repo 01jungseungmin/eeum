@@ -35,30 +35,4 @@ public class AiReviewInquiryResponseDto {
 
     @Schema(description = "데이터 없음 안내 문구")
     private final String emptyMessage;
-
-    @Getter
-    @Builder
-    @Schema(description = "미답변 리뷰 요약")
-    public static class UnansweredReviewDto {
-        @Schema(description = "리뷰 ID")
-        private final Long reviewId;
-        @Schema(description = "평점 (1~5)")
-        private final int rating;
-        @Schema(description = "리뷰 내용")
-        private final String content;
-        @Schema(description = "작성 시각")
-        private final LocalDateTime createdAt;
-    }
-
-    @Getter
-    @Builder
-    @Schema(description = "미답변 문의 요약")
-    public static class UnansweredInquiryDto {
-        @Schema(description = "문의 ID")
-        private final Long inquiryId;
-        @Schema(description = "문의 제목")
-        private final String title;
-        @Schema(description = "작성 시각")
-        private final LocalDateTime createdAt;
-    }
 }

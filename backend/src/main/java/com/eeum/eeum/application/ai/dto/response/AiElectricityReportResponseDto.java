@@ -39,24 +39,4 @@ public class AiElectricityReportResponseDto {
 
     @Schema(description = "데이터 없음 안내 문구")
     private final String emptyMessage;
-
-    @Getter
-    @Builder
-    @Schema(description = "월별 사용량")
-    public static class MonthlyUsageDto {
-        @Schema(description = "연월", example = "2026-07")
-        private final String yearMonth;
-        @Schema(description = "사용량 (kWh)")
-        private final BigDecimal kwh;
-    }
-
-    @Getter
-    @Builder
-    @Schema(description = "설비별 사용 비중")
-    public static class EquipmentShareDto {
-        @Schema(description = "설비명", example = "냉방·공조")
-        private final String name;
-        @Schema(description = "비중 (%)", example = "38")
-        private final int ratio;
-    }
 }

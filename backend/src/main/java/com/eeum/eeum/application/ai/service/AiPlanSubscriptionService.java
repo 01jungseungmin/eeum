@@ -57,6 +57,14 @@ public class AiPlanSubscriptionService {
         if (planType == null || planType == AiPlanType.FREE) {
             throw new BusinessException(ErrorCode.VALIDATION_INVALID_INPUT, "구독할 플랜은 BASIC 또는 PRO여야 합니다");
         }
+
+        // 이미 같은 플랜을 활성 구독 중이면 재결제를 막는다 — 남은 구독 기간을 날리고 중복 결제되는 것을 방지
+        aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(store.getStoreId())
+                .filter(subscription -> subscription.getPlanType() == planType)
+                .ifPresent(subscription -> {
+                    throw new BusinessException(ErrorCode.AI_PLAN_ALREADY_SUBSCRIBED);
+                });
+
         String paymentId = AI_PLAN_PAYMENT_PREFIX + store.getStoreId() + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
         AiPlanPayment payment = aiPlanPaymentRepository.save(

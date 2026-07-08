@@ -3,6 +3,7 @@ package com.eeum.eeum.api.ai;
 import com.eeum.eeum.application.ai.dto.request.AiMarketingDraftRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiEventPerformanceResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiMarketingDraftResponseDto;
+import com.eeum.eeum.application.ai.dto.response.ChannelReachDto;
 import com.eeum.eeum.application.ai.service.AiEventPerformanceService;
 import com.eeum.eeum.application.ai.service.AiMarketingService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -32,7 +33,7 @@ public class OwnerAiMarketingController {
 
     @Operation(summary = "마케팅 자동화 개요 조회", description = "채널별 예상 도달 수를 조회합니다. 데이터가 없으면 채널별 0을 반환합니다.")
     @GetMapping("/marketing")
-    public ResponseEntity<ApiResponse<List<AiMarketingDraftResponseDto.ChannelReachDto>>> getMarketingOverview() {
+    public ResponseEntity<ApiResponse<List<ChannelReachDto>>> getMarketingOverview() {
         Long ownerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(aiMarketingService.getChannelReaches(ownerId)));
     }

@@ -75,6 +75,16 @@ public class PublicDataApiClient {
                     apiName, root.path("currentCount").asInt(-1), root.path("totalCount").asInt(-1));
             List<JsonNode> rows = new ArrayList<>();
             data.forEach(rows::add);
+
+            // 기관마다 실제 응답 컬럼명이 달라 매핑이 어긋나기 쉽다 — 첫 행의 필드명만 info로,
+            // 행 전체(고객/문의 본문 등 민감정보 포함 가능성)는 debug로만 남긴다.
+            if (!rows.isEmpty()) {
+                JsonNode first = rows.get(0);
+                List<String> fieldNames = new ArrayList<>();
+                first.fieldNames().forEachRemaining(fieldNames::add);
+                log.info("[PUBLIC-DATA][{}] firstRowFields={}", apiName, fieldNames);
+                log.debug("[PUBLIC-DATA][{}] firstRow={}", apiName, first);
+            }
             return rows;
         } catch (Exception e) {
             // 응답 전문/키를 남기지 않도록 예외 요약만 기록 (인코딩 수정 이후로는 key가 메시지에 섞일 일이 없다)

@@ -35,14 +35,4 @@ public class AiMarketingDraftResponseDto {
 
     @Schema(description = "채널별 도달 추정치")
     private final List<ChannelReachDto> channelReaches;
-
-    @Getter
-    @Builder
-    @Schema(description = "채널별 도달 추정치")
-    public static class ChannelReachDto {
-        @Schema(description = "채널", example = "KAKAO_ALERT")
-        private final AiChannel channel;
-        @Schema(description = "추정 도달 수", example = "120")
-        private final long estimatedReach;
-    }
 }

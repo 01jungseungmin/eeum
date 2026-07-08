@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiEventPerformanceResponseDto;
+import com.eeum.eeum.application.ai.dto.response.NextEventRecommendationDto;
 import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.enums.AiDiscountType;
@@ -83,7 +84,7 @@ public class AiEventPerformanceService {
                 .newCustomerRatio(null)
                 .regularReorderCount(0)
                 .aiSummary(aiInsightGenerator.eventPerformanceSummary(store.getName(), 0, null, null))
-                .nextEventRecommendation(AiEventPerformanceResponseDto.NextEventRecommendationDto.builder()
+                .nextEventRecommendation(NextEventRecommendationDto.builder()
                         .matchBasedExposure(false)
                         .reason(aiInsightGenerator.nextEventReason(store.getName(), null, DEFAULT_TIME_RANGE))
                         .build())
@@ -122,7 +123,7 @@ public class AiEventPerformanceService {
     }
 
     // 직전 이벤트 상품/할인율 기반 프리필 데이터
-    private AiEventPerformanceResponseDto.NextEventRecommendationDto buildRecommendation(Store store, EventProduct latestEvent) {
+    private NextEventRecommendationDto buildRecommendation(Store store, EventProduct latestEvent) {
         BigDecimal originalPrice = latestEvent.getProduct().getPrice();
         Integer discountRate = null;
         if (originalPrice != null && originalPrice.compareTo(BigDecimal.ZERO) > 0) {
@@ -132,7 +133,7 @@ public class AiEventPerformanceService {
                     .setScale(0, RoundingMode.HALF_UP)
                     .intValue();
         }
-        return AiEventPerformanceResponseDto.NextEventRecommendationDto.builder()
+        return NextEventRecommendationDto.builder()
                 .recommendedProductId(latestEvent.getProduct().getProductId())
                 .recommendedProductName(latestEvent.getProduct().getName())
                 .discountType(AiDiscountType.PERCENT)

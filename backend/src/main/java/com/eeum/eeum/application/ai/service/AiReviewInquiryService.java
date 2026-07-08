@@ -3,6 +3,8 @@ package com.eeum.eeum.application.ai.service;
 import com.eeum.eeum.application.ai.dto.request.AiComplaintDraftRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiGeneratedMessageResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiReviewInquiryResponseDto;
+import com.eeum.eeum.application.ai.dto.response.UnansweredInquiryDto;
+import com.eeum.eeum.application.ai.dto.response.UnansweredReviewDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
@@ -66,7 +68,7 @@ public class AiReviewInquiryService {
                 .unansweredReviewCount(unansweredReviews.size())
                 .unansweredInquiryCount(unansweredInquiries.size())
                 .unansweredReviews(unansweredReviews.stream()
-                        .map(review -> AiReviewInquiryResponseDto.UnansweredReviewDto.builder()
+                        .map(review -> UnansweredReviewDto.builder()
                                 .reviewId(review.getStorereviewId())
                                 .rating(review.getRating())
                                 .content(review.getContent())
@@ -74,7 +76,7 @@ public class AiReviewInquiryService {
                                 .build())
                         .toList())
                 .unansweredInquiries(unansweredInquiries.stream()
-                        .map(inquiry -> AiReviewInquiryResponseDto.UnansweredInquiryDto.builder()
+                        .map(inquiry -> UnansweredInquiryDto.builder()
                                 .inquiryId(inquiry.getInquiryId())
                                 .title(inquiry.getTitle())
                                 .createdAt(inquiry.getCreatedAt())

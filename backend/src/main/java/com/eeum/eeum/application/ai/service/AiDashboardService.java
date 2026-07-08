@@ -7,6 +7,11 @@ import com.eeum.eeum.application.ai.dto.response.AiLocalMatchResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiManagerDashboardResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiOperationRiskResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiReviewInquiryResponseDto;
+import com.eeum.eeum.application.ai.dto.response.ActivitySummaryDto;
+import com.eeum.eeum.application.ai.dto.response.CustomerCareSummaryDto;
+import com.eeum.eeum.application.ai.dto.response.EventPerformanceSummaryDto;
+import com.eeum.eeum.application.ai.dto.response.OperationRiskSummaryDto;
+import com.eeum.eeum.application.ai.dto.response.ReviewInquirySummaryDto;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -49,19 +54,19 @@ public class AiDashboardService {
             localMatchScore = localMatch.getTotalScore();
         }
 
-        AiManagerDashboardResponseDto.OperationRiskSummaryDto riskSummary = null;
+        OperationRiskSummaryDto riskSummary = null;
         if (plan.isAtLeast(AiPlanType.BASIC)) {
             AiOperationRiskResponseDto risk = operationRiskService.getRisks(ownerId);
-            riskSummary = AiManagerDashboardResponseDto.OperationRiskSummaryDto.builder()
+            riskSummary = OperationRiskSummaryDto.builder()
                     .riskLevel(risk.getOverallRiskLevel())
                     .headline(risk.getAiJudgement())
                     .build();
         }
 
-        AiManagerDashboardResponseDto.ActivitySummaryDto activitySummary = null;
+        ActivitySummaryDto activitySummary = null;
         if (plan.isAtLeast(AiPlanType.BASIC)) {
             AiActivitySummaryResponseDto activity = activityService.getActivitySummary(ownerId);
-            activitySummary = AiManagerDashboardResponseDto.ActivitySummaryDto.builder()
+            activitySummary = ActivitySummaryDto.builder()
                     .draftCount(activity.getDraftCount())
                     .sentCount(activity.getSentCount())
                     .highlight(activity.getHighlight())
@@ -77,18 +82,18 @@ public class AiDashboardService {
                 .todoCount(todoCount)
                 .privacyNotice(PRIVACY_NOTICE)
                 .customerCareSummaries(careCards.stream()
-                        .map(card -> AiManagerDashboardResponseDto.CustomerCareSummaryDto.builder()
+                        .map(card -> CustomerCareSummaryDto.builder()
                                 .careType(card.getCareType().name())
                                 .title(card.getTitle())
                                 .targetCustomerCount(card.getTargetCustomerCount())
                                 .build())
                         .toList())
-                .reviewInquirySummary(AiManagerDashboardResponseDto.ReviewInquirySummaryDto.builder()
+                .reviewInquirySummary(ReviewInquirySummaryDto.builder()
                         .unansweredReviewCount(reviewInquiry.getUnansweredReviewCount())
                         .unansweredInquiryCount(reviewInquiry.getUnansweredInquiryCount())
                         .complaintKeywordCount(reviewInquiry.getComplaintKeywords().size())
                         .build())
-                .eventPerformanceSummary(AiManagerDashboardResponseDto.EventPerformanceSummaryDto.builder()
+                .eventPerformanceSummary(EventPerformanceSummaryDto.builder()
                         .productViewCount(eventPerformance.getProductViewCount())
                         .orderConversionRate(eventPerformance.getOrderConversionRate())
                         .newCustomerRatio(eventPerformance.getNewCustomerRatio())

@@ -86,7 +86,9 @@ class AiPlanSubscriptionServiceTest {
     @Test
     void BASIC_플랜_구독_요청_시_PENDING_결제가_생성된다() {
         // given
-        stubStore();
+        Store store = stubStore();
+        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
+                .thenReturn(Optional.empty());
         when(aiPlanPaymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -98,6 +100,41 @@ class AiPlanSubscriptionServiceTest {
         assertThat(response.paymentId()).startsWith("ai-plan-");
         assertThat(response.amount()).isEqualByComparingTo(new BigDecimal("19000"));
         verify(aiPlanSubscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void 이미_같은_플랜을_활성_구독_중이면_재결제_요청을_막는다() {
+        // given — 이미 BASIC을 활성 구독 중인데 BASIC을 또 결제하려는 상황 (버그 리포트 재현)
+        Store store = stubStore();
+        AiPlanSubscription activeBasic = AiPlanSubscription.create(store, AiPlanType.BASIC, LocalDateTime.now());
+        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
+                .thenReturn(Optional.of(activeBasic));
+
+        // when & then
+        assertThatThrownBy(() -> subscriptionService.requestSubscription(
+                OWNER_ID, new AiPlanSubscribeRequestDto(AiPlanType.BASIC)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_PLAN_ALREADY_SUBSCRIBED);
+        verify(aiPlanPaymentRepository, never()).save(any());
+    }
+
+    @Test
+    void 다른_플랜으로_업그레이드_요청은_허용된다() {
+        // given — BASIC 활성 구독 중 PRO로 업그레이드 요청 (정상 플로우 — 막으면 안 됨)
+        Store store = stubStore();
+        AiPlanSubscription activeBasic = AiPlanSubscription.create(store, AiPlanType.BASIC, LocalDateTime.now());
+        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
+                .thenReturn(Optional.of(activeBasic));
+        when(aiPlanPaymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        AiPlanSubscribeResponseDto response = subscriptionService.requestSubscription(
+                OWNER_ID, new AiPlanSubscribeRequestDto(AiPlanType.PRO));
+
+        // then
+        assertThat(response.status()).isEqualTo(AiPlanPaymentStatus.PENDING);
+        assertThat(response.amount()).isEqualByComparingTo(new BigDecimal("39000"));
     }
 
     @Test

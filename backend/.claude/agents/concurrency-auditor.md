@@ -6,7 +6,7 @@ description: >
   예약, 채팅방 생성, 좋아요/조회수/카운터 증감처럼 동시성이 중요한 코드를 작성하거나 수정했을 때 사용한다.
   "동시성 점검", "race condition 확인", "멱등성 검토", "중복 처리 확인" 요청 시 사용한다.
 tools: Read, Grep, Glob
-model: fable
+model: opus
 ------------
 
 당신은 이음(Eeum) 프로젝트의 동시성 전문 감사관입니다.

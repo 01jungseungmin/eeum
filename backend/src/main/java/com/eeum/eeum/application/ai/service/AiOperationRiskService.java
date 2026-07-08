@@ -5,6 +5,10 @@ import com.eeum.eeum.application.ai.dto.request.AiSavingPlanSaveRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiElectricityReportResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiOperationRiskResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiSavingPlanResponseDto;
+import com.eeum.eeum.application.ai.dto.response.DataSourceDto;
+import com.eeum.eeum.application.ai.dto.response.EquipmentShareDto;
+import com.eeum.eeum.application.ai.dto.response.GasSafetyInsightDto;
+import com.eeum.eeum.application.ai.dto.response.MonthlyUsageDto;
 import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.entity.AiOwnerMetricInput;
@@ -18,7 +22,11 @@ import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.external.entity.ExternalEnergyUsageStat;
 import com.eeum.eeum.domain.external.repository.ExternalEnergyUsageStatRepository;
+import com.eeum.eeum.domain.inquiry.entity.Inquiry;
+import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.infrastructure.external.PublicDataService;
@@ -32,8 +40,11 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -46,6 +57,39 @@ public class AiOperationRiskService {
     private static final Duration METRIC_LOCK_LEASE = Duration.ofSeconds(5);
     private static final Duration SAVING_LOCK_LEASE = Duration.ofSeconds(5);
 
+    // 리뷰/문의에서 가스 안전 관련 신호를 잡아내기 위한 키워드 — 최근 2주 텍스트 대상으로 검사
+    private static final Duration SAFETY_KEYWORD_LOOKBACK = Duration.ofDays(14);
+    private static final List<String> SAFETY_KEYWORDS =
+            List.of("냄새", "연기", "가스", "탄 냄새", "환기", "매캐", "불", "화기", "누설", "폭발");
+    // 이 조합이 동시에 감지되면 매칭 건수와 무관하게 즉시 WARNING (누출 의심 신호)
+    private static final List<String> SEVERE_KEYWORD_COMBO = List.of("가스", "냄새", "누설");
+
+    // 주요 사고 원인별 맞춤 대응 체크리스트 (제14회 산업통상부 공공데이터 공모전 — KGS 가스사고 현황 활용)
+    private static final List<String> DEFAULT_SAFETY_ACTIONS = List.of(
+            "영업 전 가스 밸브·호스 점검",
+            "주방 환기팬 작동·필터 상태 확인",
+            "화기 주변 정리 및 소화기 점검");
+    private static final List<String> USER_MISHANDLING_ACTIONS = List.of(
+            "영업 전 가스 밸브 잠금 상태 확인",
+            "조리 중 자리 비움 방지",
+            "마감 전 중간밸브·메인밸브 재확인");
+    private static final List<String> FACILITY_DEFICIENCY_ACTIONS = List.of(
+            "가스 호스 균열·꺾임 여부 확인",
+            "주방 환기팬 작동 상태 확인",
+            "노후 배관·연결부 누설 여부 점검");
+    private static final List<String> AGING_EQUIPMENT_ACTIONS = List.of(
+            "노후 가스기기 교체 시점 확인",
+            "버너 점화 상태 확인",
+            "정기 점검 예약");
+    private static final List<String> SUPPLIER_MISHANDLING_ACTIONS = List.of(
+            "가스 공급 설비 연결부 이상 여부 확인",
+            "정기 점검 이력 확인",
+            "이상 냄새 발생 시 공급 업체 문의");
+    private static final List<String> THIRD_PARTY_CONSTRUCTION_ACTIONS = List.of(
+            "매장 주변 공사 일정 확인",
+            "가스 배관 인접 작업 여부 확인",
+            "공사 후 가스 냄새·누설 여부 점검");
+
     private final AiManagerSupportService supportService;
     private final RedisLockService redisLockService;
     private final AiInsightGenerator aiInsightGenerator;
@@ -55,6 +99,8 @@ public class AiOperationRiskService {
     private final AiSavingPlanCommandExecutor savingPlanCommandExecutor;
     private final PublicDataService publicDataService;
     private final ExternalEnergyUsageStatRepository externalEnergyUsageStatRepository;
+    private final StoreReviewRepository storeReviewRepository;
+    private final InquiryRepository inquiryRepository;
 
     public AiOperationRiskResponseDto getRisks(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
@@ -114,8 +160,8 @@ public class AiOperationRiskService {
                 .collect(Collectors.toMap(AiOwnerMetricInput::getYearMonth, Function.identity()));
 
         boolean hasData = !inputsByMonth.isEmpty();
-        List<AiElectricityReportResponseDto.MonthlyUsageDto> monthlyUsages = recentMonths.stream()
-                .map(month -> AiElectricityReportResponseDto.MonthlyUsageDto.builder()
+        List<MonthlyUsageDto> monthlyUsages = recentMonths.stream()
+                .map(month -> MonthlyUsageDto.builder()
                         .yearMonth(month)
                         .kwh(inputsByMonth.containsKey(month) ? inputsByMonth.get(month).getValue() : null)
                         .build())
@@ -143,7 +189,7 @@ public class AiOperationRiskService {
 
     // 설비 보유 대수 기반 전력 사용 비중 추정 — 실측 계측이 아니므로 냉방/냉장 설비만 상대 비중으로 근사한다.
     // 설비 입력이 전혀 없으면 빈 리스트(실측 데이터 없음 — 기존 스키마 설명과 동일한 의미)
-    private List<AiElectricityReportResponseDto.EquipmentShareDto> buildEquipmentShares(AiOwnerMetricSnapshot snapshot) {
+    private List<EquipmentShareDto> buildEquipmentShares(AiOwnerMetricSnapshot snapshot) {
         record WeightedEquipment(String name, BigDecimal count, int unitWeight) {
             boolean isPresent() {
                 return count != null && count.compareTo(BigDecimal.ZERO) > 0;
@@ -169,7 +215,7 @@ public class AiOperationRiskService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return present.stream()
-                .map(equipment -> AiElectricityReportResponseDto.EquipmentShareDto.builder()
+                .map(equipment -> EquipmentShareDto.builder()
                         .name(equipment.name())
                         .ratio(equipment.weighted()
                                 .multiply(BigDecimal.valueOf(100))
@@ -234,21 +280,25 @@ public class AiOperationRiskService {
 
         AiDataSourceType sourceType = hasPreciseData ? AiDataSourceType.OWNER_INPUT : AiDataSourceType.LOCAL_AVERAGE_ONLY;
 
+        // 안전 리스크 체크에 쓰일 공공데이터(KGS 가스사고)와 리뷰/문의 키워드 신호를 한 번만 계산해 재사용
+        Optional<PublicDataService.GasAccidentSummary> gasSummary = fetchGasAccidentSummary();
+        SafetyKeywordSignal keywordSignal = detectSafetyKeywords(storeId);
+
         // 카드 4개를 각각 독립적으로 판단 — 위험도는 카드별로 다르게 나올 수 있다
         AiRiskLevel energySignalLevel = resolveEnergySignalLevel(snapshot);
         AiRiskLevel seasonalAlertLevel = resolveSeasonalAlertLevel(snapshot);
         AiRiskLevel activityAnomalyLevel = resolveActivityAnomalyLevel(snapshot);
-        AiRiskLevel safetyCheckLevel = resolveSafetyCheckLevel(snapshot);
+        AiRiskLevel safetyCheckLevel = resolveSafetyCheckLevel(snapshot, keywordSignal);
         AiRiskLevel overallRiskLevel = maxLevel(
                 energySignalLevel, seasonalAlertLevel, activityAnomalyLevel, safetyCheckLevel);
 
         // 2차: 공공데이터 반영 (외부 장애 시 기존 문구로 fallback — 전체 API 실패로 이어지지 않음)
         String energySignal = buildEnergySignalText(store, snapshot);
-        String safetyCheck = buildSafetyCheckText(snapshot);
-        List<AiOperationRiskResponseDto.DataSourceDto> dataSources = new java.util.ArrayList<>();
-        dataSources.add(AiOperationRiskResponseDto.DataSourceDto.from(sourceType));
-        if (usedPublicData(energySignal, safetyCheck)) {
-            dataSources.add(AiOperationRiskResponseDto.DataSourceDto.from(AiDataSourceType.PUBLIC_DATA));
+        String safetyCheck = buildSafetyCheckText(snapshot, gasSummary, keywordSignal);
+        List<DataSourceDto> dataSources = new java.util.ArrayList<>();
+        dataSources.add(DataSourceDto.from(sourceType));
+        if (usedPublicData(energySignal, gasSummary)) {
+            dataSources.add(DataSourceDto.from(AiDataSourceType.PUBLIC_DATA));
         }
 
         AiOperationRiskResponseDto.AiOperationRiskResponseDtoBuilder builder = AiOperationRiskResponseDto.builder()
@@ -265,6 +315,7 @@ public class AiOperationRiskService {
                 .dataSources(dataSources)
                 .sourceType(sourceType)
                 .hasPreciseData(hasPreciseData)
+                .gasSafetyInsight(buildGasSafetyInsight(snapshot, gasSummary, keywordSignal))
                 .notice(hasPreciseData
                         ? "사장님이 입력한 실측값 기반 분석입니다."
                         : "실시간 측정값이 아닌 추정 분석입니다.")
@@ -314,9 +365,107 @@ public class AiOperationRiskService {
         return withinNormalBand ? AiRiskLevel.NORMAL : AiRiskLevel.CAUTION;
     }
 
-    // 안전 리스크 체크 — 가스 설비를 사용 중이면 CAUTION
-    private AiRiskLevel resolveSafetyCheckLevel(AiOwnerMetricSnapshot snapshot) {
-        return snapshot.hasGasEquipment() ? AiRiskLevel.CAUTION : AiRiskLevel.NORMAL;
+    // 안전 리스크 체크 — 가스 설비 보유 또는 리뷰/문의 키워드 감지 시 CAUTION, 키워드 3건 이상이면 WARNING
+    private AiRiskLevel resolveSafetyCheckLevel(AiOwnerMetricSnapshot snapshot, SafetyKeywordSignal keywordSignal) {
+        AiRiskLevel level = snapshot.hasGasEquipment() ? AiRiskLevel.CAUTION : AiRiskLevel.NORMAL;
+        if (!keywordSignal.detectedKeywords().isEmpty()) {
+            level = maxLevel(level, AiRiskLevel.CAUTION);
+        }
+        // 키워드가 반복(3건 이상)되거나 "가스+냄새+누설" 조합이 동시에 감지되면 누출 의심 — 즉시 WARNING
+        boolean severeCombo = keywordSignal.detectedKeywords().containsAll(SEVERE_KEYWORD_COMBO);
+        if (keywordSignal.matchedTextCount() >= 3 || severeCombo) {
+            level = AiRiskLevel.WARNING;
+        }
+        return level;
+    }
+
+    // KGS 가스사고 현황 — 하위 레이어(PublicDataApiClient)가 이미 실패를 빈 리스트로 흡수하지만,
+    // 방어적으로 한 번 더 감싸 예외가 전체 API 실패로 번지지 않게 한다.
+    private Optional<PublicDataService.GasAccidentSummary> fetchGasAccidentSummary() {
+        try {
+            return publicDataService.getGasAccidentSummary();
+        } catch (Exception e) {
+            log.warn("[AI-RISK] 가스사고 통계 조회 실패, 기본 문구로 fallback: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    // 최근 2주 리뷰/문의 텍스트에서 안전 관련 키워드를 감지 — 매칭된 "건수"(텍스트 단위) 기준으로 신호 강도를 판단
+    private SafetyKeywordSignal detectSafetyKeywords(Long storeId) {
+        LocalDateTime since = LocalDateTime.now().minus(SAFETY_KEYWORD_LOOKBACK);
+
+        List<String> texts = new java.util.ArrayList<>();
+        for (StoreReview review : storeReviewRepository.findByStore_StoreIdAndCreatedAtAfter(storeId, since)) {
+            texts.add(review.getContent());
+        }
+        for (Inquiry inquiry : inquiryRepository.findByStore_StoreIdAndCreatedAtAfter(storeId, since)) {
+            texts.add((inquiry.getTitle() != null ? inquiry.getTitle() : "")
+                    + " " + (inquiry.getContent() != null ? inquiry.getContent() : ""));
+        }
+
+        Set<String> detectedKeywords = new LinkedHashSet<>();
+        int matchedTextCount = 0;
+        for (String text : texts) {
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            boolean matched = false;
+            for (String keyword : SAFETY_KEYWORDS) {
+                if (text.contains(keyword)) {
+                    detectedKeywords.add(keyword);
+                    matched = true;
+                }
+            }
+            if (matched) {
+                matchedTextCount++;
+            }
+        }
+        return new SafetyKeywordSignal(List.copyOf(detectedKeywords), matchedTextCount);
+    }
+
+    // 리뷰/문의 감지 결과 — detectedKeywords: 감지된 키워드 종류, matchedTextCount: 키워드가 감지된 리뷰/문의 "건수"
+    private record SafetyKeywordSignal(List<String> detectedKeywords, int matchedTextCount) {
+    }
+
+    // 원인별 맞춤 대응 체크리스트 — 매칭되는 원인이 없으면 기본 체크리스트
+    private List<String> recommendedActionsFor(String topCause) {
+        if (topCause == null) {
+            return DEFAULT_SAFETY_ACTIONS;
+        }
+        if (topCause.contains("사용자") && topCause.contains("취급")) {
+            return USER_MISHANDLING_ACTIONS;
+        }
+        if (topCause.contains("공급자") && topCause.contains("취급")) {
+            return SUPPLIER_MISHANDLING_ACTIONS;
+        }
+        if (topCause.contains("시설미비")) {
+            return FACILITY_DEFICIENCY_ACTIONS;
+        }
+        if (topCause.contains("노후")) {
+            return AGING_EQUIPMENT_ACTIONS;
+        }
+        if (topCause.contains("타공사")) {
+            return THIRD_PARTY_CONSTRUCTION_ACTIONS;
+        }
+        return DEFAULT_SAFETY_ACTIONS;
+    }
+
+    // 가스 안전 인사이트 — KGS 공공데이터 + 사장님 입력값(GAS_EQUIPMENT_COUNT) + 리뷰/문의 키워드를 하나로 결합
+    private GasSafetyInsightDto buildGasSafetyInsight(
+            AiOwnerMetricSnapshot snapshot,
+            Optional<PublicDataService.GasAccidentSummary> gasSummary,
+            SafetyKeywordSignal keywordSignal
+    ) {
+        String topCause = gasSummary.map(PublicDataService.GasAccidentSummary::topCause).orElse(null);
+        return GasSafetyInsightDto.builder()
+                .publicAccidentCount(gasSummary.map(PublicDataService.GasAccidentSummary::totalCount).orElse(null))
+                .topCause(topCause)
+                .topCauseRatio(gasSummary.map(PublicDataService.GasAccidentSummary::topCauseRatio).orElse(null))
+                .gasEquipmentCount(snapshot.gasEquipmentCount() != null ? snapshot.gasEquipmentCount().intValue() : null)
+                .detectedKeywords(keywordSignal.detectedKeywords())
+                .recommendedActions(recommendedActionsFor(topCause))
+                .sourceType(gasSummary.isPresent() ? AiDataSourceType.PUBLIC_DATA : AiDataSourceType.LOCAL_AVERAGE_ONLY)
+                .build();
     }
 
     private AiRiskLevel maxLevel(AiRiskLevel... levels) {
@@ -353,22 +502,50 @@ public class AiOperationRiskService {
                 : "실측값 미입력 — 지역 평균 기반 추정 신호입니다.";
     }
 
-    // 안전 리스크 체크 — KGS 가스사고 현황(공공데이터)이 있으면 반영, 없으면 가스 설비 보유 여부에 맞춘 기본 문구
-    private String buildSafetyCheckText(AiOwnerMetricSnapshot snapshot) {
-        String fallback = snapshot.hasGasEquipment()
-                ? "가스 설비를 사용 중입니다. 밸브·호스 상태를 정기적으로 점검해주세요."
-                : "정기 안전 점검 체크리스트를 확인해주세요.";
-        try {
-            return publicDataService.getGasAccidentSummary()
-                    .map(summary -> summary.topCause() != null
-                            ? String.format("최근 가스사고 통계 %d건 중 '%s' 원인이 가장 많습니다. 관련 설비를 우선 점검하세요.",
-                            summary.totalCount(), summary.topCause())
-                            : String.format("최근 가스사고 통계 %d건이 확인됩니다. 정기 안전 점검을 권장드려요.", summary.totalCount()))
-                    .orElse(fallback);
-        } catch (Exception e) {
-            log.warn("[AI-RISK] 가스사고 통계 OpenAPI 조회 실패, 기본 문구 반환: {}", e.getMessage());
-            return fallback;
+    // 안전 리스크 체크 — KGS 가스사고 현황(주요 원인) + 가스 설비 보유 여부 + 리뷰/문의 키워드를 결합한 문구
+    private String buildSafetyCheckText(
+            AiOwnerMetricSnapshot snapshot,
+            Optional<PublicDataService.GasAccidentSummary> gasSummary,
+            SafetyKeywordSignal keywordSignal
+    ) {
+        boolean hasGasEquipment = snapshot.hasGasEquipment();
+        boolean hasKeywords = !keywordSignal.detectedKeywords().isEmpty();
+        String keywordPhrase = hasKeywords ? String.join("·", keywordSignal.detectedKeywords()) : null;
+
+        boolean hasTopCause = gasSummary.isPresent() && gasSummary.get().topCause() != null
+                && gasSummary.get().topCauseRatio() > 0;
+        if (hasTopCause) {
+            String topCause = gasSummary.get().topCause();
+            String ratioText = formatRatio(gasSummary.get().topCauseRatio());
+            StringBuilder text = new StringBuilder(String.format(
+                    "최근 가스사고 통계에서 %s가 주요 원인으로 확인됩니다(약 %s%%).", topCause, ratioText));
+            if (hasGasEquipment) {
+                text.append(" 우리 가게는 가스 설비를 사용 중이므로 밸브·호스·환기 상태를 우선 점검하세요.");
+            } else if (hasKeywords) {
+                text.append(" 최근 리뷰/문의에서 ").append(keywordPhrase)
+                        .append(" 키워드가 감지되어 환기 상태를 점검해보시길 권해드립니다.");
+            } else {
+                text.append(" 관련 설비를 우선 점검하세요.");
+            }
+            return text.toString();
         }
+
+        if (gasSummary.isPresent()) {
+            return String.format("최근 공개 가스사고 데이터 %d건 기준으로 확인됩니다. 정기 안전 점검을 권장드려요.", gasSummary.get().totalCount());
+        }
+
+        // KGS 데이터 자체를 못 가져온 경우 — 가스 설비/키워드 신호만으로 fallback 문구 구성
+        if (hasGasEquipment && hasKeywords) {
+            return String.format("가스 설비를 사용 중이고 최근 리뷰/문의에서 %s 키워드가 감지되었습니다. 밸브·호스·환기 상태를 점검해주세요.",
+                    keywordPhrase);
+        }
+        if (hasGasEquipment) {
+            return "가스 설비를 사용 중입니다. 밸브·호스 상태를 정기적으로 점검해주세요.";
+        }
+        if (hasKeywords) {
+            return String.format("최근 리뷰/문의에서 %s 키워드가 감지되었습니다. 환기 상태를 점검해보시길 권해드립니다.", keywordPhrase);
+        }
+        return "정기 안전 점검 체크리스트를 확인해주세요.";
     }
 
     private String buildActivityAnomalyText(AiRiskLevel level, AiOwnerMetricSnapshot snapshot) {
@@ -380,8 +557,13 @@ public class AiOperationRiskService {
                 : "평소 대비 전력 사용 패턴에 변화가 감지됐습니다. 운영 상황을 확인해보세요.";
     }
 
-    private boolean usedPublicData(String energySignal, String safetyCheck) {
-        return energySignal.startsWith("공공데이터") || safetyCheck.contains("가스사고 통계");
+    private boolean usedPublicData(String energySignal, Optional<PublicDataService.GasAccidentSummary> gasSummary) {
+        return energySignal.startsWith("공공데이터") || gasSummary.isPresent();
+    }
+
+    // 소수 첫째 자리까지 표기 (예: 32.5, 30.0)
+    private String formatRatio(double ratio) {
+        return String.format("%.1f", ratio);
     }
 
     // 주소에서 시군구 키워드 추출 (예: "서울시 마포구 ..." → "마포구")

@@ -261,6 +261,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     AI_RATE_LIMITED("AI_014", "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요", HttpStatus.TOO_MANY_REQUESTS),
     AI_DRAFT_LIMIT_EXCEEDED("AI_015", "저장 가능한 초안 개수를 초과했습니다. 가장 오래된 초안을 삭제하고 새 초안을 생성할까요?", HttpStatus.CONFLICT),
     AI_INVALID_TARGET("AI_016", "AI 메시지의 대상 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    AI_PLAN_ALREADY_SUBSCRIBED("AI_017", "이미 구독 중인 플랜입니다", HttpStatus.CONFLICT),
 
     // ===================== 입력값 검증 (VALIDATION) =====================
     VALIDATION_INVALID_INPUT("VALIDATION_001", "입력값이 올바르지 않습니다", HttpStatus.BAD_REQUEST);

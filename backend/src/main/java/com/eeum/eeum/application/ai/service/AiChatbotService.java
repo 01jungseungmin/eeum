@@ -3,6 +3,7 @@ package com.eeum.eeum.application.ai.service;
 import com.eeum.eeum.application.ai.dto.request.AiChatMessageRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiChatQuickQuestionDto;
 import com.eeum.eeum.application.ai.dto.response.AiChatResponseDto;
+import com.eeum.eeum.application.ai.dto.response.ChatActionDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
@@ -166,8 +167,8 @@ public class AiChatbotService {
         return AiChatResponseDto.builder()
                 .text(text)
                 .actions(List.of(
-                        AiChatResponseDto.ChatActionDto.of(label, actionType),
-                        AiChatResponseDto.ChatActionDto.of("다시 생성", AiChatActionType.REGENERATE)))
+                        ChatActionDto.of(label, actionType),
+                        ChatActionDto.of("다시 생성", AiChatActionType.REGENERATE)))
                 .outOfScope(false)
                 .usageCounted(true)
                 .build();
@@ -176,7 +177,7 @@ public class AiChatbotService {
     private AiChatResponseDto informational(String text, AiChatActionType actionType, String label) {
         return AiChatResponseDto.builder()
                 .text(text)
-                .actions(List.of(AiChatResponseDto.ChatActionDto.of(label, actionType)))
+                .actions(List.of(ChatActionDto.of(label, actionType)))
                 .outOfScope(false)
                 .usageCounted(false)
                 .build();

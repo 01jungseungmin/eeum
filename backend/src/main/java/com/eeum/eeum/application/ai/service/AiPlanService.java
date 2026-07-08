@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiPlanResponseDto;
+import com.eeum.eeum.application.ai.dto.response.PlanInfoDto;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.application.ai.policy.AiPlanPolicy;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
@@ -25,8 +26,8 @@ public class AiPlanService {
         supportService.validateFeature(store, AiFeature.PLAN_VIEW);
 
         AiPlanType currentPlan = supportService.getPlanType(store.getStoreId());
-        List<AiPlanResponseDto.PlanInfoDto> plans = Arrays.stream(AiPlanType.values())
-                .map(planType -> AiPlanResponseDto.PlanInfoDto.builder()
+        List<PlanInfoDto> plans = Arrays.stream(AiPlanType.values())
+                .map(planType -> PlanInfoDto.builder()
                         .planType(planType)
                         .displayName(planType.getDisplayName())
                         .monthlyPrice(planType.getMonthlyPrice())

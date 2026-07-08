@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiPlanResponseDto;
+import com.eeum.eeum.application.ai.dto.response.PlanInfoDto;
 import com.eeum.eeum.application.ai.policy.AiPlanPolicy;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -91,7 +92,7 @@ class AiPlanServiceTest {
 
         // then
         assertThat(result.getPlans())
-                .extracting(AiPlanResponseDto.PlanInfoDto::getPlanType)
+                .extracting(PlanInfoDto::getPlanType)
                 .containsExactlyInAnyOrder(AiPlanType.values());
     }
 }

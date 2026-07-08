@@ -2,6 +2,7 @@ package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.request.AiMarketingDraftRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiMarketingDraftResponseDto;
+import com.eeum.eeum.application.ai.dto.response.ChannelReachDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
@@ -43,7 +44,7 @@ public class AiMarketingService {
 
     // 마케팅 개요 — 채널별 도달 추정치 (문구 생성 전 미리보기용)
     @Transactional(readOnly = true)
-    public List<AiMarketingDraftResponseDto.ChannelReachDto> getChannelReaches(Long ownerId) {
+    public List<ChannelReachDto> getChannelReaches(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.MARKETING_VIEW);
         return estimateReaches(store.getStoreId(), List.of(AiChannel.values()));
@@ -94,9 +95,9 @@ public class AiMarketingService {
                 messageType.name(), message.getAiGeneratedMessageId(),
                 messageType == AiMessageType.NOTICE ? "공지 문구 초안 생성" : "마케팅 문구 초안 생성"));
 
-        List<AiMarketingDraftResponseDto.ChannelReachDto> reaches =
+        List<ChannelReachDto> reaches =
                 estimateReaches(store.getStoreId(), request.getChannels());
-        long totalReach = reaches.stream().mapToLong(AiMarketingDraftResponseDto.ChannelReachDto::getEstimatedReach).sum();
+        long totalReach = reaches.stream().mapToLong(ChannelReachDto::getEstimatedReach).sum();
 
         return AiMarketingDraftResponseDto.builder()
                 .messageId(message.getAiGeneratedMessageId())
@@ -111,10 +112,10 @@ public class AiMarketingService {
     }
 
     // 채널별 도달 추정 — 실제 데이터 기반, 없으면 0
-    private List<AiMarketingDraftResponseDto.ChannelReachDto> estimateReaches(Long storeId, List<AiChannel> channels) {
+    private List<ChannelReachDto> estimateReaches(Long storeId, List<AiChannel> channels) {
         return channels.stream()
                 .distinct()
-                .map(channel -> AiMarketingDraftResponseDto.ChannelReachDto.builder()
+                .map(channel -> ChannelReachDto.builder()
                         .channel(channel)
                         .estimatedReach(estimateReach(storeId, channel))
                         .build())

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiSavingPlanResponseDto;
+import com.eeum.eeum.application.ai.dto.response.SavingPlanItemDto;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.ai.entity.AiOwnerMetricInput;
 import com.eeum.eeum.domain.ai.entity.AiSavingPlan;
@@ -66,7 +67,7 @@ class AiSavingPlanCommandExecutorTest {
         return AiOwnerMetricInput.create(store, type, value, YearMonth.now().toString());
     }
 
-    private AiSavingPlanResponseDto.SavingPlanItemDto findItem(AiSavingPlanResponseDto response, String title) {
+    private SavingPlanItemDto findItem(AiSavingPlanResponseDto response, String title) {
         return response.getItems().stream()
                 .filter(item -> item.getTitle().equals(title))
                 .findFirst()
@@ -109,7 +110,7 @@ class AiSavingPlanCommandExecutorTest {
         var equipment = findItem(response, "고효율 설비 교체 검토");
         assertThat(equipment.getExpectedMonthlySavingAmount()).isEqualByComparingTo("8000"); // 8%
         assertThat(response.getItems())
-                .extracting(AiSavingPlanResponseDto.SavingPlanItemDto::getTitle)
+                .extracting(SavingPlanItemDto::getTitle)
                 .doesNotContain("냉장 설비 점검");
         assertThat(response.getTotalExpectedSavingAmount()).isEqualByComparingTo("13000");
     }
@@ -179,7 +180,7 @@ class AiSavingPlanCommandExecutorTest {
 
         // then
         assertThat(response.getItems())
-                .extracting(AiSavingPlanResponseDto.SavingPlanItemDto::getTitle)
+                .extracting(SavingPlanItemDto::getTitle)
                 .contains("피크 시간대 전력 사용 분산");
     }
 
@@ -199,7 +200,7 @@ class AiSavingPlanCommandExecutorTest {
 
         // then
         assertThat(response.getItems())
-                .extracting(AiSavingPlanResponseDto.SavingPlanItemDto::getTitle)
+                .extracting(SavingPlanItemDto::getTitle)
                 .doesNotContain("이전 항목");
     }
 }

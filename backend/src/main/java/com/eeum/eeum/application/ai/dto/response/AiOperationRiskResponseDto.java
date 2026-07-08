@@ -61,23 +61,6 @@ public class AiOperationRiskResponseDto {
     @Schema(description = "저장된 절감 계획 존재 여부", example = "false")
     private final boolean hasSavedPlan;
 
-    @Getter
-    @Builder
-    @Schema(description = "데이터 출처")
-    public static class DataSourceDto {
-        @Schema(description = "출처 타입", example = "OWNER_INPUT")
-        private final AiDataSourceType sourceType;
-        @Schema(description = "출처 라벨", example = "사장님 입력값")
-        private final String sourceLabel;
-        @Schema(description = "설명")
-        private final String description;
-
-        public static DataSourceDto from(AiDataSourceType type) {
-            return DataSourceDto.builder()
-                    .sourceType(type)
-                    .sourceLabel(type.getSourceLabel())
-                    .description(type.getDescription())
-                    .build();
-        }
-    }
+    @Schema(description = "가스 안전 인사이트 (KGS 가스사고 공공데이터 + 가게 입력값 + 리뷰/문의 키워드 결합)")
+    private final GasSafetyInsightDto gasSafetyInsight;
 }

@@ -24,17 +24,5 @@ public class AiChatResponseDto {
     @Schema(description = "이번 답변의 사용량 카운트 여부", example = "true")
     private final boolean usageCounted;
 
-    @Getter
-    @Builder
-    @Schema(description = "챗봇 액션 카드")
-    public static class ChatActionDto {
-        @Schema(description = "버튼 라벨", example = "이벤트 등록으로 이동")
-        private final String label;
-        @Schema(description = "액션 타입", example = "OPEN_EVENT_REGISTER")
-        private final AiChatActionType actionType;
 
-        public static ChatActionDto of(String label, AiChatActionType actionType) {
-            return ChatActionDto.builder().label(label).actionType(actionType).build();
-        }
-    }
 }

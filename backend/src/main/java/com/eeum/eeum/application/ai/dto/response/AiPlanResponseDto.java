@@ -24,18 +24,4 @@ public class AiPlanResponseDto {
 
     @Schema(description = "월 AI 추천 제한 (무제한이면 null)", example = "30")
     private final Integer monthlyLimit;
-
-    @Getter
-    @Builder
-    @Schema(description = "플랜 정보")
-    public static class PlanInfoDto {
-        @Schema(description = "플랜 타입", example = "BASIC")
-        private final AiPlanType planType;
-        @Schema(description = "플랜명", example = "AI Basic")
-        private final String displayName;
-        @Schema(description = "월 가격", example = "19000")
-        private final BigDecimal monthlyPrice;
-        @Schema(description = "기능 목록")
-        private final List<String> features;
-    }
 }

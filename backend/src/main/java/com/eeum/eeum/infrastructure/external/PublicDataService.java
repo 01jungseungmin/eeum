@@ -3,7 +3,6 @@ package com.eeum.eeum.infrastructure.external;
 import com.eeum.eeum.common.util.RedisUtil;
 import com.eeum.eeum.infrastructure.external.client.PublicDataApiClient;
 import com.eeum.eeum.infrastructure.external.config.PublicDataProperties;
-import com.eeum.eeum.infrastructure.external.dto.GasAccidentStat;
 import com.eeum.eeum.infrastructure.external.dto.RegionEnergyUsage;
 import com.eeum.eeum.infrastructure.external.dto.RegionPowerUsage;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -14,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -95,35 +95,87 @@ public class PublicDataService {
                         .toList());
     }
 
-    // 가스사고 현황 — 안전 조기경보용 (지역 무관 전국 통계)
-    public List<GasAccidentStat> getGasAccidentStats() {
+    // KGS 가스사고 현황은 "행 = 사고원인"이 아니라 "행(기간) = 원인별 건수 컬럼들"인 wide-format 응답이다.
+    // (예: 한 행에 공급자취급부주의/사용자취급부주의/시설미비/... 컬럼이 각각 숫자로 존재)
+    private static final List<String> AGING_CAUSE_FIELD_ALIASES = List.of("제품노후(고장)", "제품노후", "제품노후고장");
+    private static final List<String> OTHER_CAUSE_FIELD_ALIASES = List.of("기타(1-3급)", "기타");
+
+    // 가스사고 현황 원본 행 — 지역 무관 전국 통계, wide-format 그대로 캐싱
+    private List<JsonNode> getGasAccidentRows() {
         return cached("public-data:kgs-accident",
-                new TypeReference<List<GasAccidentStat>>() {},
-                () -> apiClient.fetchRows(properties.kgsGasAccidentUrl(), "KGS 가스사고 현황").stream()
-                        .map(this::toGasAccident)
-                        .limit(100)
-                        .toList());
+                new TypeReference<List<JsonNode>>() {},
+                () -> apiClient.fetchRows(properties.kgsGasAccidentUrl(), "KGS 가스사고 현황"));
     }
 
-    // 가스사고 요약 — 총 건수 + 최다 원인 (없으면 empty)
+    // 가스사고 요약 — 공개 데이터 건수(publicAccidentCount 근거) + 원인별 집계 + 최다 원인/비율 (없으면 empty)
     public Optional<GasAccidentSummary> getGasAccidentSummary() {
-        List<GasAccidentStat> stats = getGasAccidentStats();
-        if (stats.isEmpty()) {
+        List<JsonNode> rows = getGasAccidentRows();
+        if (rows.isEmpty()) {
             return Optional.empty();
         }
-        int total = stats.stream().mapToInt(GasAccidentStat::accidentCount).sum();
-        String topCause = stats.stream()
-                .filter(stat -> stat.cause() != null && !stat.cause().isBlank())
-                .collect(java.util.stream.Collectors.groupingBy(GasAccidentStat::cause,
-                        java.util.stream.Collectors.summingInt(GasAccidentStat::accidentCount)))
-                .entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse(null);
-        return Optional.of(new GasAccidentSummary(total, topCause));
+        return Optional.of(buildGasAccidentInsight(rows));
     }
 
-    public record GasAccidentSummary(int totalCount, String topCause) {
+    private GasAccidentSummary buildGasAccidentInsight(List<JsonNode> rows) {
+        Map<String, Integer> causeSums = new LinkedHashMap<>();
+        causeSums.put("공급자취급부주의", sumCause(rows, "공급자취급부주의"));
+        causeSums.put("사용자취급부주의", sumCause(rows, "사용자취급부주의"));
+        causeSums.put("시설미비", sumCause(rows, "시설미비"));
+        causeSums.put("제품노후(고장)", sumCause(rows, AGING_CAUSE_FIELD_ALIASES.toArray(new String[0])));
+        causeSums.put("타공사", sumCause(rows, "타공사"));
+        causeSums.put("교통사고", sumCause(rows, "교통사고"));
+        causeSums.put("기타", sumCause(rows, OTHER_CAUSE_FIELD_ALIASES.toArray(new String[0])));
+
+        int totalCauseCount = causeSums.values().stream().mapToInt(Integer::intValue).sum();
+
+        Map.Entry<String, Integer> top = causeSums.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .max(Map.Entry.comparingByValue())
+                .orElse(null);
+
+        String topCause = top != null ? top.getKey() : null;
+        int topCauseCount = top != null ? top.getValue() : 0;
+        double topCauseRatio = (top != null && totalCauseCount > 0)
+                ? Math.round(topCauseCount * 1000.0 / totalCauseCount) / 10.0 // 소수 첫째 자리 반올림
+                : 0.0;
+
+        // publicAccidentCount 근거는 rows.size()(공개 데이터 건수) — 원인별 합계(totalCauseCount)와는 별개 지표
+        log.info("[PUBLIC-DATA][KGS] accidentCount={}, causeSums={}, topCause={}, topCauseRatio={}",
+                rows.size(), causeSums, topCause, topCauseRatio);
+
+        return new GasAccidentSummary(rows.size(), causeSums, topCause, topCauseCount, topCauseRatio);
+    }
+
+    private int sumCause(List<JsonNode> rows, String... fieldNames) {
+        return rows.stream().mapToInt(row -> readInt(row, fieldNames)).sum();
+    }
+
+    // 숫자/문자열("1,234", "-", 공백, null) 어떤 형태로 와도 안전하게 정수로 변환 — 실패 시 0
+    private int readInt(JsonNode row, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            JsonNode value = row.get(fieldName);
+            if (value == null || value.isNull()) {
+                continue;
+            }
+            if (value.isNumber()) {
+                return value.asInt();
+            }
+            String text = value.asText();
+            if (text == null || text.isBlank() || "-".equals(text.trim())) {
+                return 0;
+            }
+            try {
+                return Integer.parseInt(text.replace(",", "").trim());
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    // publicAccidentCount(rows.size() 기준 공개 데이터 건수) + 원인별 집계 + 최다 원인/비율
+    public record GasAccidentSummary(int totalCount, Map<String, Integer> causeBreakdown,
+                                      String topCause, int topCauseCount, double topCauseRatio) {
     }
 
     // ===================== 내부 유틸 =====================
@@ -185,15 +237,6 @@ public class PublicDataService {
                 firstDouble(row, "사용량", "에너지사용량", "usage", "전기사용량"));
     }
 
-    private GasAccidentStat toGasAccident(JsonNode row) {
-        Integer count = firstInt(row, "사고건수", "건수", "count", "accidentCount");
-        return new GasAccidentStat(
-                firstText(row, "기준년월", "발생년월", "연도", "년도", "발생일자"),
-                firstText(row, "사고원인", "원인", "cause"),
-                firstText(row, "가스종류", "가스명", "gasType"),
-                count != null ? count : 1); // 건 단위 목록형 데이터면 행당 1건으로 집계
-    }
-
     private String firstText(JsonNode row, String... keys) {
         for (String key : keys) {
             JsonNode node = row.get(key);
@@ -219,11 +262,6 @@ public class PublicDataService {
     private Long firstLong(JsonNode row, String... keys) {
         Double value = firstDouble(row, keys);
         return value != null ? value.longValue() : null;
-    }
-
-    private Integer firstInt(JsonNode row, String... keys) {
-        Double value = firstDouble(row, keys);
-        return value != null ? value.intValue() : null;
     }
 
     private String safeKey(String keyword) {

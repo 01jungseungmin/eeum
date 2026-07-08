@@ -103,6 +103,10 @@ public-data:
   kpx-region-energy-url: ${KPX_REGION_ENERGY_API_URL:}
   kgs-gas-accident-url: ${KGS_GAS_ACCIDENT_API_URL:}
 
+kepco-bigdata:
+  api-key: ${KEPCO_BIGDATA_API_KEY:}
+  business-type-usage-url: ${KEPCO_BUSINESS_TYPE_USAGE_API_URL:}
+
 alimtalk:
   provider: ${ALIMTALK_PROVIDER:mock}
   api-key: ${ALIMTALK_API_KEY:}
