@@ -4,18 +4,21 @@ import {
   Dimensions, ActivityIndicator, Alert 
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text } from '../../components/CustomText';
 import { shopApi } from '../../api/shop';
 import { regionApi } from '../../api/region';
+import { chatApi } from '../../api/chat';
 
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id, isRestaurant } = useLocalSearchParams();
+  
+  const insets = useSafeAreaInsets(); 
 
   const [isLoading, setIsLoading] = useState(true);
   const [productDetail, setProductDetail] = useState<any>(null);
@@ -41,10 +44,15 @@ export default function ProductDetailScreen() {
 
         // 상품(또는 해당 상점)의 regionId가 유저의 인증된 동네 목록에 있는지 검사
         if (regionsRes?.data && productData) {
+          const primaryRegion = regionsRes.data.find((r: any) => r.isPrimary === true);
+          const isPrimaryVerified = primaryRegion?.verified === true || primaryRegion?.isVerified === true;
+          
+          const targetRegionId = productData.regionId || productData.shop?.regionId;
           const isStoreRegionVerified = regionsRes.data.some(
-            (r: any) => r.regionId === productData.regionId && r.verified === true
+            (r: any) => r.regionId === targetRegionId && (r.verified === true || r.isVerified === true)
           );
-          setIsVerified(isStoreRegionVerified);
+          
+          setIsVerified(isPrimaryVerified || isStoreRegionVerified);
         }
 
       } catch (e) {
@@ -80,6 +88,33 @@ export default function ProductDetailScreen() {
     }
   };
 
+  // 단체 채팅 입장 로직
+  const handleGroupChat = async () => {
+    if (!isVerified) {
+      Alert.alert('동네 인증 필요', '이 상점의 단체 채팅방에 참여하려면 마이페이지에서 대표 동네를 인증해주세요.');
+      return;
+    }
+
+    // 상품 정보에 포함된 상점의 채팅방 ID를 찾습니다
+    const roomId = productDetail?.chatRoomId || productDetail?.groupChatRoomId || productDetail?.shop?.chatRoomId; 
+
+    if (!roomId) {
+      Alert.alert('알림', '아직 이 상점의 단체 채팅방이 개설되지 않았습니다.');
+      return;
+    }
+
+    try {
+      await chatApi.joinRoom(roomId); 
+      router.push(`/chat/${roomId}` as any); 
+    } catch (error: any) {
+      if (error.response?.status === 409 || error.response?.status === 400) {
+        router.push(`/chat/${roomId}` as any);
+      } else {
+        Alert.alert('오류', '단체 채팅방에 입장할 수 없습니다.');
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.centerLoading}>
@@ -93,7 +128,7 @@ export default function ProductDetailScreen() {
   const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* 상단 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -103,7 +138,8 @@ export default function ProductDetailScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      {/* 하단 바가 높아졌으므로 ScrollView의 paddingBottom을 넉넉하게 160으로 조절합니다. */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
         {/* 상품 이미지 */}
         <Image source={{ uri: productImgUrl }} style={styles.productImg} />
 
@@ -141,13 +177,42 @@ export default function ProductDetailScreen() {
         )}
       </ScrollView>
 
-      {/* 하단 구매 / 장바구니 버튼 바 */}
-      <View style={styles.bottomBar}>
+      {/* 하단 구매 / 채팅 버튼 바 (안전 영역 패딩 적용) */}
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 15) + 10 }]}>
+        {/* 1. 메인 액션 버튼 (장바구니 / 메뉴 선택) */}
         <TouchableOpacity style={styles.primaryBtn} onPress={handleAction}>
           <Text fontWeight="bold" style={styles.primaryBtnText}>
             {isRestaurantProd ? '메뉴 선택하기' : '장바구니 담기'}
           </Text>
         </TouchableOpacity>
+
+        {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
+        <View style={styles.rowButtons}>
+          <TouchableOpacity 
+            style={styles.halfButton} 
+            activeOpacity={0.7}
+            onPress={() => {
+              const targetStoreId = productDetail?.storeId || productDetail?.shopId;
+              if (!targetStoreId) {
+                Alert.alert('알림', '상점 정보를 찾을 수 없습니다.');
+                return;
+              }
+              router.push(`/inquiry/write?storeId=${targetStoreId}` as any);
+            }}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color="#00A859" style={{ marginRight: 6 }} />
+            <Text style={styles.halfButtonText}>상품 문의</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.halfButton} 
+            activeOpacity={0.7} 
+            onPress={handleGroupChat}
+          >
+            <Ionicons name="chatbubbles-outline" size={18} color="#00A859" style={{ marginRight: 6 }} />
+            <Text style={styles.halfButtonText}>단체 채팅</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -171,7 +236,12 @@ const styles = StyleSheet.create({
   quantityController: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 4, overflow: 'hidden' },
   qtyBtn: { backgroundColor: '#F5F5F5', padding: 10, justifyContent: 'center', alignItems: 'center' },
   qtyText: { paddingHorizontal: 15, fontSize: 15, color: '#333' },
-  bottomBar: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
-  primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  primaryBtnText: { color: '#fff', fontSize: 16 }
+  
+  bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
+  primaryBtn: { backgroundColor: '#00A859', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  primaryBtnText: { color: '#fff', fontSize: 16 },
+  
+  rowButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+  halfButton: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#00A859', paddingVertical: 12, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
+  halfButtonText: { color: '#00A859', fontSize: 14 },
 });

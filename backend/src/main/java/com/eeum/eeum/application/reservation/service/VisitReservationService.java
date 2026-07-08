@@ -30,6 +30,7 @@ import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +55,7 @@ import java.util.stream.Collectors;
 public class VisitReservationService {
 
     private final VisitReservationRepository visitReservationRepository;
+    private final StoreReviewRepository storeReviewRepository;
     private final StoreRepository storeRepository;
     private final AccountRepository accountRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
@@ -87,9 +89,18 @@ public class VisitReservationService {
 
     @Transactional(readOnly = true)
     public Page<VisitReservationResponseDto> getMyReservations(Long accountId, Pageable pageable) {
-        return visitReservationRepository
-                .findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable)
-                .map(visitReservationMapper::toVisitReservationResponseDto);
+        Page<VisitReservation> reservations = visitReservationRepository
+                .findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable);
+
+        List<Long> reservationIds = reservations.getContent().stream()
+                .map(VisitReservation::getVisitReservationId)
+                .toList();
+        Set<Long> reviewedReservationIds = reservationIds.isEmpty()
+                ? Set.of()
+                : storeReviewRepository.findVisitReservationIdsWithReview(reservationIds);
+
+        return reservations.map(reservation -> visitReservationMapper.toVisitReservationResponseDto(
+                reservation, reviewedReservationIds.contains(reservation.getVisitReservationId())));
     }
 
     @Transactional(readOnly = true)
@@ -98,7 +109,8 @@ public class VisitReservationService {
         if (!reservation.getAccount().getAccountId().equals(accountId)) {
             throw new BusinessException(ErrorCode.RESERVATION_ACCESS_DENIED);
         }
-        return visitReservationMapper.toVisitReservationResponseDto(reservation);
+        boolean hasReview = storeReviewRepository.existsByVisitReservation_VisitReservationId(reservationId);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation, hasReview);
     }
 
     @Transactional

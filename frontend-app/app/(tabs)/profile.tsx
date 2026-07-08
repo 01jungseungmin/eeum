@@ -146,6 +146,16 @@ export default function ProfileScreen() {
           <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/mypage/change-password' as any)} />
           <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => router.push('/mypage/notification-setting' as any)} />
           <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/mypage/withdraw' as any)} />
+          <MenuItem 
+            title="관리자에게 문의하기" 
+            iconName="headset-outline" 
+            onPress={() => router.push('/inquiry/write?type=ADMIN' as any)} 
+          />
+          <MenuItem 
+            title="내 문의 내역" 
+            iconName="chatbubbles-outline" 
+            onPress={() => router.push('/inquiry' as any)} 
+          />
         </View>
 
         <View style={styles.divider} />

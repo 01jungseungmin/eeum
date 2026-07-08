@@ -30,6 +30,7 @@ module.exports = {
         backgroundColor: "#E6F4FE",
         foregroundImage: "./assets/images/android-icon-foreground.png"
       },
+      "softwareKeyboardLayoutMode": "resize",
       package: "com.eeum.app",
       googleServicesFile: "./google-services.json"
     },

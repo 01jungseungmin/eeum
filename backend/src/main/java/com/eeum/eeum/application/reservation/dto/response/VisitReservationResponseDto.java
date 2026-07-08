@@ -39,4 +39,6 @@ public class VisitReservationResponseDto {
 
     private LocalDateTime createdAt;
     private LocalDateTime modifiedAt;
+
+    private boolean hasReview;
 }
