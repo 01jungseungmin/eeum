@@ -77,9 +77,8 @@ export default function InquiryManagement() {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 💡 2. 채팅방 존재 여부 및 개설 상태 관리 State 추가
+  // 채팅방 존재 여부 및 개설 상태 관리 State 추가
   const [myRoomId, setMyRoomId] = useState(() => {
-    // 예시로 로컬스토리지나 프로젝트 세션에 방 번호가 이미 있는지 확인하는 로직 (프로젝트 환경에 맞게 커스텀)
     return localStorage.getItem('my_shop_room_id') || null;
   });
 

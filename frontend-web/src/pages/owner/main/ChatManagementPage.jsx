@@ -16,7 +16,7 @@ const PageContainer = styled.div`
   flex: 1;
   padding: 20px;
   background-color: #f8f9fa;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 160px);
   display: flex;
   flex-direction: column;
   font-family: 'Noto Sans KR', sans-serif;
@@ -43,6 +43,7 @@ const ChatHeader = styled.div`
   position: relative; /* 팝업 기준점 */
   background-color: #ffffff;
   border-bottom: 1px solid #eaeaea;
+  position: relative; /* 팝업 기준점 */
 `;
 
 const UserProfile = styled.div`
@@ -61,13 +62,7 @@ const Avatar = styled.div`
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 16px;
   overflow: hidden;
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
 `;
 
 const UserInfo = styled.div`
@@ -198,43 +193,6 @@ const MessageArea = styled.div`
   flex-direction: column;
   gap: 18px;
 `;
-
-const MessageRow = styled.div`
-  display: flex;
-  justify-content: ${({ isMe }) => (isMe ? 'flex-end' : 'flex-start')};
-  align-items: flex-end;
-  gap: 8px;
-`;
-
-const BubbleWrap = styled.div`
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  max-width: 65%;
-  flex-direction: ${({ isMe }) => (isMe ? 'row-reverse' : 'row')};
-`;
-
-const ChatBubble = styled.div`
-  padding: 12px 18px;
-  border-radius: ${({ isMe }) =>
-    isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
-  background-color: ${({ isMe }) => (isMe ? '#42a574' : '#ffffff')};
-  color: ${({ isMe }) => (isMe ? '#ffffff' : '#333333')};
-  font-size: 14px;
-  line-height: 1.6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-  white-space: pre-wrap;
-  font-style: ${({ isDeleted }) => (isDeleted ? 'italic' : 'normal')};
-  color: ${({ isDeleted, isMe }) =>
-    isDeleted ? '#bbb' : isMe ? '#ffffff' : '#333333'};
-`;
-
-const TimeStamp = styled.span`
-  font-size: 11px;
-  color: #aaa;
-  white-space: nowrap;
-`;
-
 const InputBarContainer = styled.div`
   padding: 20px 24px;
   background-color: #ffffff;
@@ -246,8 +204,7 @@ const InputFieldWrapper = styled.div`
   background-color: #ffffff;
   border: 1px solid #e0e0e0;
   border-radius: 28px;
-  padding: 8px 10px 8px 20px;
-
+  padding: 8px 10px 8px 14px;
   &:focus-within {
     border-color: #42a574;
     box-shadow: 0 0 0 1px #42a574;
@@ -374,12 +331,60 @@ const ConfirmButton = styled.button`
   transition: all 0.2s;
 
   &:hover {
-    background-color: #42a574;
-    color: #ffffff;
+    background-color: #fff5f5;
   }
-
+`;
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vw;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+`;
+const ModalContent = styled.div`
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+`;
+const ModalTitle = styled.h3`
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+`;
+const ModalActionRow = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+`;
+const CancelButton = styled.button`
+  background: #f1f3f5;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+`;
+const ConfirmButton = styled.button`
+  background: ${({ $isDelete }) => ($isDelete ? '#e03131' : '#00a651')};
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
   &:disabled {
-    color: #ccc;
+    background: #cbd5e1;
     cursor: not-allowed;
   }
 `;
@@ -457,6 +462,17 @@ export default function ShopChatManagement() {
     }
   };
 
+  // 채팅방 입장 시 읽음 처리
+  const markAsRead = async () => {
+    try {
+      await chatApi.markRoomAsRead(ROOM_ID);
+      refetch();
+    } catch (error) {
+      console.error('읽음 처리 실패:', error);
+    }
+  };
+
+  // 2. 채팅방 진입 시 읽음 처리 수행
   useEffect(() => {
     initChat();
   }, [ROOM_ID]);
@@ -590,41 +606,17 @@ export default function ShopChatManagement() {
 
         <MessageArea>
           {loading ? (
-            <LoadingText>채팅 내역을 불러오는 중입니다...</LoadingText>
+            <div style={{ textAlign: 'center', color: '#888' }}>
+              채팅 내역 로드 중...
+            </div>
           ) : (
-            messages.map((msg) => {
-              const isMe = msg.senderAccountId === MY_ACCOUNT_ID;
-
-              return (
-                <MessageRow key={msg.messageId} isMe={isMe}>
-                  {!isMe && (
-                    <Avatar
-                      style={{
-                        width: '34px',
-                        height: '34px',
-                        fontSize: '13px',
-                        marginRight: '4px',
-                      }}
-                    >
-                      {msg.senderProfileImageUrl ? (
-                        <img
-                          src={msg.senderProfileImageUrl}
-                          alt={msg.senderName}
-                        />
-                      ) : (
-                        msg.senderName?.charAt(0) || '고'
-                      )}
-                    </Avatar>
-                  )}
-                  <BubbleWrap isMe={isMe}>
-                    <ChatBubble isMe={isMe} isDeleted={msg.deleted}>
-                      {msg.deleted ? '삭제된 메시지입니다' : msg.content}
-                    </ChatBubble>
-                    <TimeStamp>{formatTime(msg.sentAt)}</TimeStamp>
-                  </BubbleWrap>
-                </MessageRow>
-              );
-            })
+            messages.map((msg, index) => (
+              <ChatMessageItem
+                key={`msg-${msg.messageId || index}`}
+                msg={msg}
+                onContextMenu={handleContextMenu}
+              />
+            ))
           )}
           <div ref={scrollRef} />
         </MessageArea>
