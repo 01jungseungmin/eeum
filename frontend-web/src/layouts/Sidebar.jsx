@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../api/authApi';
-import axios from 'axios';
+import { useNotificationCounts } from '../hooks/useNotificationCounts';
 
 const SideContainer = styled.div`
   width: 260px;
@@ -130,16 +130,7 @@ function Sidebar({ approvalStatus }) {
   const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
 
   const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
-
-  const counts = {
-    orders: 3,
-    reviews: 2,
-    chat: 5,
-    qna: 3,
-    alerts: 8,
-    adminApproval: 12,
-    adminReports: 5,
-  };
+  const counts = useNotificationCounts();
 
   const handleMenuClick = async (item, isItemDisabled) => {
     // 접근 차단 대상인 메뉴인 경우 라우팅 및 액션을 차단

@@ -77,9 +77,8 @@ export default function InquiryManagement() {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 💡 2. 채팅방 존재 여부 및 개설 상태 관리 State 추가
+  // 채팅방 존재 여부 및 개설 상태 관리 State 추가
   const [myRoomId, setMyRoomId] = useState(() => {
-    // 예시로 로컬스토리지나 프로젝트 세션에 방 번호가 이미 있는지 확인하는 로직 (프로젝트 환경에 맞게 커스텀)
     return localStorage.getItem('my_shop_room_id') || null;
   });
 
@@ -88,6 +87,7 @@ export default function InquiryManagement() {
   const [statusFilter, setStatusFilter] = useState('전체');
   const [typeFilter, setTypeFilter] = useState('전체 유형');
 
+  // 문의 내역 로드 함수
   const loadInquiries = async () => {
     try {
       const res = await inquiryApi.getStoreInquiries({ page: 0, size: 50 });
@@ -105,7 +105,7 @@ export default function InquiryManagement() {
     loadInquiries();
   }, []);
 
-  // 💡 3. 사장님 대표 단톡방 개설 핸들러 함수
+  // 사장님 대표 단톡방 개설 핸들러 함수
   const handleCreateShopChat = async () => {
     try {
       const requestBody = {

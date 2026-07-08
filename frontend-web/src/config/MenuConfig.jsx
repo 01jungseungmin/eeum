@@ -92,13 +92,6 @@ export const OWNER_MENU_CONFIG = [
         subtitle: '우리 가게 단골 손님을 관리하세요',
       },
       {
-        id: 'wishlist',
-        name: '관심 고객',
-        path: '/4',
-        icon: <Heart {...iconProps} />,
-        subtitle: '상점을 찜한 고객 리스트입니다',
-      },
-      {
         id: 'reviews',
         name: '리뷰 관리',
         path: '/reviews',

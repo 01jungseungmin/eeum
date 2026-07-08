@@ -1,15 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+} from 'react';
 import styled from 'styled-components';
 import { chatApi } from '../../../api/owner/chatApi';
+import useChatSocket from '../../../hooks/useChatSocket';
+import ImageUploaderGrid from '../../../components/common/ImageUploaderGrid';
+import ChatMessageItem from '../../../components/owner/chat/ChatMessageItem';
+import { useNotificationCounts } from '../../../hooks/useNotificationCounts';
 
-// -------------------------------------------------------------
-// 스타일 컴포넌트 영역 (기존 UI 유지)
-// -------------------------------------------------------------
 const PageContainer = styled.div`
   flex: 1;
   padding: 20px;
   background-color: #f8f9fa;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 160px);
   display: flex;
   flex-direction: column;
   font-family: 'Noto Sans KR', sans-serif;
@@ -24,6 +31,7 @@ const ChatWrapper = styled.div`
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #eaeaea;
+  position: relative;
 `;
 
 const ChatHeader = styled.div`
@@ -31,8 +39,8 @@ const ChatHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   padding: 18px 24px;
-  background-color: #ffffff;
   border-bottom: 1px solid #eaeaea;
+  position: relative; /* 팝업 기준점 */
 `;
 
 const UserProfile = styled.div`
@@ -51,13 +59,7 @@ const Avatar = styled.div`
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 16px;
   overflow: hidden;
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
 `;
 
 const UserInfo = styled.div`
@@ -65,10 +67,34 @@ const UserInfo = styled.div`
   flex-direction: column;
 `;
 
+const TitleRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
 const UserName = styled.span`
   font-size: 16px;
   font-weight: bold;
   color: #333;
+`;
+
+const ParticipantCountBadge = styled.button`
+  background: #edf2f7;
+  border: none;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #4a5568;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.2s;
+  &:hover {
+    background: #e2e8f0;
+  }
 `;
 
 const ShopBadge = styled.span`
@@ -82,18 +108,79 @@ const StatusIndicator = styled.div`
   align-items: center;
   gap: 6px;
   font-size: 14px;
-  color: #42a574;
+  color: ${({ $connected }) => ($connected ? '#42a574' : '#e03131')};
   font-weight: 500;
-
   &::before {
     content: '';
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background-color: #42a574;
+    background-color: ${({ $connected }) =>
+      $connected ? '#42a574' : '#e03131'};
   }
 `;
 
+/* 참여자 목록 드롭다운 팝업 */
+const ParticipantsDropdown = styled.div`
+  position: absolute;
+  top: 70px;
+  left: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  width: 220px;
+  padding: 12px;
+`;
+
+const DropdownTitle = styled.div`
+  font-size: 12px;
+  font-weight: bold;
+  color: #a0aec0;
+  margin-bottom: 8px;
+  padding-left: 4px;
+`;
+
+const ParticipantList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+`;
+
+const ParticipantItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+`;
+
+const MiniAvatar = styled.img`
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e2e8f0;
+`;
+
+const ParticipantName = styled.span`
+  font-size: 14px;
+  color: #2d3748;
+  font-weight: 500;
+`;
+
+const MeTag = styled.span`
+  font-size: 10px;
+  color: #42a574;
+  background: #e6f6ec;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: auto;
+`;
+
+/* 나머지 레이아웃 스타일 컴포넌트 생략 (이전과 동일) */
 const MessageArea = styled.div`
   flex: 1;
   padding: 24px;
@@ -103,63 +190,41 @@ const MessageArea = styled.div`
   flex-direction: column;
   gap: 18px;
 `;
-
-const MessageRow = styled.div`
-  display: flex;
-  justify-content: ${({ isMe }) => (isMe ? 'flex-end' : 'flex-start')};
-  align-items: flex-end;
-  gap: 8px;
-`;
-
-const BubbleWrap = styled.div`
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  max-width: 65%;
-  flex-direction: ${({ isMe }) => (isMe ? 'row-reverse' : 'row')};
-`;
-
-const ChatBubble = styled.div`
-  padding: 12px 18px;
-  border-radius: ${({ isMe }) =>
-    isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
-  background-color: ${({ isMe }) => (isMe ? '#42a574' : '#ffffff')};
-  color: ${({ isMe }) => (isMe ? '#ffffff' : '#333333')};
-  font-size: 14px;
-  line-height: 1.6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-  white-space: pre-wrap;
-  font-style: ${({ isDeleted }) => (isDeleted ? 'italic' : 'normal')};
-  color: ${({ isDeleted, isMe }) =>
-    isDeleted ? '#bbb' : isMe ? '#ffffff' : '#333333'};
-`;
-
-const TimeStamp = styled.span`
-  font-size: 11px;
-  color: #aaa;
-  white-space: nowrap;
-`;
-
 const InputBarContainer = styled.div`
   padding: 20px 24px;
   background-color: #ffffff;
   border-top: 1px solid #eaeaea;
 `;
-
 const InputFieldWrapper = styled.div`
   display: flex;
   align-items: center;
   background-color: #ffffff;
   border: 1px solid #e0e0e0;
   border-radius: 28px;
-  padding: 8px 10px 8px 20px;
-
+  padding: 8px 10px 8px 14px;
   &:focus-within {
     border-color: #42a574;
     box-shadow: 0 0 0 1px #42a574;
   }
 `;
-
+const PlusButton = styled.button`
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #f1f3f5;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 400;
+  color: #666;
+  margin-right: 10px;
+  &:hover {
+    background-color: #e9ecef;
+  }
+`;
 const MessageInput = styled.input`
   flex: 1;
   border: none;
@@ -167,7 +232,6 @@ const MessageInput = styled.input`
   font-size: 15px;
   color: #333;
 `;
-
 const SendIconButton = styled.button`
   width: 40px;
   height: 40px;
@@ -179,180 +243,342 @@ const SendIconButton = styled.button`
   align-items: center;
   justify-content: center;
   color: #42a574;
-  transition: all 0.2s;
-
+`;
+const ContextMenu = styled.div`
+  position: absolute;
+  top: ${({ $y }) => `${$y}px`};
+  left: ${({ $x }) => `${$x}px`};
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 2000;
+  padding: 4px;
+  width: 110px;
+`;
+const MenuButton = styled.button`
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  color: #e03131;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   &:hover {
-    background-color: #42a574;
-    color: #ffffff;
+    background-color: #fff5f5;
   }
-
+`;
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vw;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+`;
+const ModalContent = styled.div`
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+`;
+const ModalTitle = styled.h3`
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+`;
+const ModalActionRow = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+`;
+const CancelButton = styled.button`
+  background: #f1f3f5;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+`;
+const ConfirmButton = styled.button`
+  background: ${({ $isDelete }) => ($isDelete ? '#e03131' : '#00a651')};
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
   &:disabled {
-    color: #ccc;
+    background: #cbd5e1;
     cursor: not-allowed;
   }
 `;
 
-const LoadingText = styled.div`
-  text-align: center;
-  padding: 20px;
-  color: #888;
-`;
-
-// -------------------------------------------------------------
-// 컴포넌트 본문
-// -------------------------------------------------------------
 export default function ShopChatManagement() {
-  // 개설된 상점 방 번호 (문의 관리 배너 등에서 받아온 ID 혹은 로컬스토리지를 연동합니다)
   const roomKey = localStorage.getItem('my_shop_room_id') || '1';
   const ROOM_ID = parseInt(roomKey, 10);
+  const MY_ACCOUNT_ID = Number(localStorage.getItem('accountId')) || 4;
 
-  // 사장님 본인 계정 ID (나/상대방 구별용)
-  const MY_ACCOUNT_ID = 1004;
+  // 채팅방 세부 정보 상태 추가
+  const [roomInfo, setRoomInfo] = useState({
+    name: '실시간 고객 문의 상담방',
+    participantCount: 0,
+    participants: [],
+  });
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
-  const [sending, setSending] = useState(false); // 💡 메시지 전송 중 잠금 상태 State
+  const [showParticipants, setShowParticipants] = useState(false); // 팝업 열림 상태
+
+  const [uploadImages, setUploadImages] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [selectedMessageId, setSelectedMessageId] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
   const scrollRef = useRef(null);
+  const chatWrapperRef = useRef(null);
 
-  const formatTime = (isoString) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
+  const { refetch } = useNotificationCounts();
 
-  // 1. 초기 메시지 목록 불러오기
-  const loadChatMessages = async () => {
+  // 채팅 내역 및 방 상세 정보 불러오기
+  const loadChatData = async () => {
     try {
+      setLoading(true);
+
+      // 방 상세 조회
+      const roomRes = await chatApi.getRoomDetail(ROOM_ID);
+      if (roomRes.data.success && roomRes.data.data) {
+        setRoomInfo({
+          name: roomRes.data.data.name,
+          participantCount: roomRes.data.data.participantCount,
+          participants: roomRes.data.data.participants || [],
+        });
+      }
+
+      // 메시지 내역 조회
       const res = await chatApi.getMessages(ROOM_ID);
       if (res.data.success && res.data.data.content) {
-        const sortedMessages = [...res.data.data.content].reverse();
-        setMessages(sortedMessages);
+        const formatted = [...res.data.data.content].reverse().map((msg) => ({
+          ...msg,
+          isMe: msg.senderAccountId === MY_ACCOUNT_ID,
+          isDeleted: msg.deleted || false,
+        }));
+        setMessages(formatted);
       }
     } catch (error) {
-      console.error('메시지 로드 실패:', error);
+      console.error('데이터 로드 실패:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  // 채팅방 입장 시 읽음 처리
+  const markAsRead = async () => {
+    try {
+      await chatApi.markRoomAsRead(ROOM_ID);
+      refetch();
+    } catch (error) {
+      console.error('읽음 처리 실패:', error);
+    }
+  };
+
+  // 2. 채팅방 진입 시 읽음 처리 수행
   useEffect(() => {
-    loadChatMessages();
+    markAsRead();
+    loadChatData();
+  }, [ROOM_ID]);
+
+  // 바깥쪽 클릭 시 컨텍스트 메뉴 및 참여자 드롭다운 닫기
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setContextMenu(null);
+      setShowParticipants(false);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  // 대화 목록 갱신 시 최하단 자동 스크롤
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const handleIncomingMessage = useCallback((newMsg) => {
+    setMessages((prev) => [...prev, newMsg]);
+  }, []);
 
-  // 💡 2. 텍스트 메시지 발송 핸들러
-  const handleSendMessage = async () => {
-    if (!inputValue.trim() || sending) return;
+  const { connected, sendMessage } = useChatSocket(
+    ROOM_ID,
+    handleIncomingMessage,
+    MY_ACCOUNT_ID,
+  );
 
-    setSending(true);
+  useLayoutEffect(() => {
+    if (messages.length === 0) return;
+    scrollRef.current?.scrollIntoView({
+      behavior: loading || connected ? 'auto' : 'smooth',
+    });
+  }, [messages, loading, connected]);
 
-    // 고유한 클라이언트 메시지 아이디 생성 (UUID 규격 혹은 고유 문자열 대체)
-    const clientMsgId = crypto.randomUUID
-      ? crypto.randomUUID()
-      : `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const handleSend = () => {
+    if (!inputValue || !inputValue.trim()) return;
+    if (sendMessage(inputValue.trim())) setInputValue('');
+  };
 
+  const handleContextMenu = (e, msg) => {
+    if (!msg.isMe || msg.isDeleted) return;
+    e.preventDefault();
+    if (!chatWrapperRef.current) return;
+    const rect = chatWrapperRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    setContextMenu({
+      x: clickX + 110 > rect.width ? clickX - 110 : clickX,
+      y: clickY,
+    });
+    setSelectedMessageId(msg.messageId);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedMessageId) return;
     try {
-      const requestBody = {
-        content: inputValue,
-        clientMessageId: clientMsgId,
-      };
-
-      // 💡 Swagger 스펙 POST /chat/rooms/{roomId}/messages API 전송
-      const res = await chatApi.sendMessage(ROOM_ID, requestBody);
-
-      if (res.data.success && res.data.data) {
-        // 백엔드에서 리턴한 가공된 정식 메시지 객체 취득
-        const sentMessageData = res.data.data;
-
-        // 기존 화면 메시지 배열의 끝에 추가해 줌으로써 즉각 화면 랜더링
-        setMessages((prev) => [...prev, sentMessageData]);
-        setInputValue(''); // 인풋창 초기화
-      }
+      await chatApi.deleteMessage(selectedMessageId);
+      setIsDeleteModalOpen(false);
+      loadChatData();
     } catch (error) {
-      console.error('메시지 전송 실패:', error);
-      alert('메시지 전송에 실패했습니다. 다시 시도해 주세요.');
+      console.error(error);
+      alert('메시지 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleImagesSubmit = async () => {
+    if (uploadImages.length === 0) return;
+    setIsUploading(true);
+    try {
+      for (const imgObj of uploadImages) {
+        if (imgObj.file) {
+          const localBlobUrl = URL.createObjectURL(imgObj.file);
+          await chatApi.sendImageMessage(ROOM_ID, {
+            imageUrl: localBlobUrl,
+            clientMessageId: `img-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          });
+        }
+      }
+      setUploadImages([]);
+      setIsModalOpen(false);
+      loadChatData();
+    } catch (error) {
+      console.error(error);
     } finally {
-      setSending(false);
+      setIsUploading(false);
     }
   };
 
   return (
     <PageContainer>
-      <ChatWrapper>
-        <ChatHeader>
+      <ChatWrapper ref={chatWrapperRef}>
+        <ChatHeader onClick={(e) => e.stopPropagation()}>
           <UserProfile>
-            <Avatar>이</Avatar>
+            <Avatar>문의</Avatar>
             <UserInfo>
-              <UserName>실시간 고객 문의 상담방</UserName>
+              <TitleRow>
+                <UserName>{roomInfo.name}</UserName>
+                <ParticipantCountBadge
+                  onClick={() => setShowParticipants(!showParticipants)}
+                >
+                  👥 {roomInfo.participantCount}
+                </ParticipantCountBadge>
+              </TitleRow>
               <ShopBadge>🏠 맛있는 반찬가게 · 마포구</ShopBadge>
             </UserInfo>
           </UserProfile>
-          <StatusIndicator>실시간 연결됨</StatusIndicator>
+          <StatusIndicator $connected={connected}>
+            {connected ? '실시간 연결됨' : '연결 끊김'}
+          </StatusIndicator>
+
+          {/* 👥 누르면 열리는 참여자 목록 레이어 */}
+          {showParticipants && (
+            <ParticipantsDropdown>
+              <DropdownTitle>
+                대화 상대 ({roomInfo.participantCount})
+              </DropdownTitle>
+              <ParticipantList>
+                {roomInfo.participants.map((user) => (
+                  <ParticipantItem key={user.accountId}>
+                    <MiniAvatar
+                      src={user.profileImageUrl || '/default-profile.png'}
+                      alt={user.name}
+                    />
+                    <ParticipantName>
+                      {user.name} ({user.nickname})
+                    </ParticipantName>
+                    {user.accountId === MY_ACCOUNT_ID && <MeTag>나</MeTag>}
+                  </ParticipantItem>
+                ))}
+              </ParticipantList>
+            </ParticipantsDropdown>
+          )}
         </ChatHeader>
 
         <MessageArea>
           {loading ? (
-            <LoadingText>채팅 내역을 불러오는 중입니다...</LoadingText>
+            <div style={{ textAlign: 'center', color: '#888' }}>
+              채팅 내역 로드 중...
+            </div>
           ) : (
-            messages.map((msg) => {
-              const isMe = msg.senderAccountId === MY_ACCOUNT_ID;
-
-              return (
-                <MessageRow key={msg.messageId} isMe={isMe}>
-                  {!isMe && (
-                    <Avatar
-                      style={{
-                        width: '34px',
-                        height: '34px',
-                        fontSize: '13px',
-                        marginRight: '4px',
-                      }}
-                    >
-                      {msg.senderProfileImageUrl ? (
-                        <img
-                          src={msg.senderProfileImageUrl}
-                          alt={msg.senderName}
-                        />
-                      ) : (
-                        msg.senderName?.charAt(0) || '고'
-                      )}
-                    </Avatar>
-                  )}
-                  <BubbleWrap isMe={isMe}>
-                    <ChatBubble isMe={isMe} isDeleted={msg.deleted}>
-                      {msg.deleted ? '삭제된 메시지입니다' : msg.content}
-                    </ChatBubble>
-                    <TimeStamp>{formatTime(msg.sentAt)}</TimeStamp>
-                  </BubbleWrap>
-                </MessageRow>
-              );
-            })
+            messages.map((msg, index) => (
+              <ChatMessageItem
+                key={`msg-${msg.messageId || index}`}
+                msg={msg}
+                onContextMenu={handleContextMenu}
+              />
+            ))
           )}
           <div ref={scrollRef} />
         </MessageArea>
 
+        {contextMenu && (
+          <ContextMenu $x={contextMenu.x} $y={contextMenu.y}>
+            <MenuButton
+              onClick={() => {
+                setIsDeleteModalOpen(true);
+                setContextMenu(null);
+              }}
+            >
+              🗑️ 삭제하기
+            </MenuButton>
+          </ContextMenu>
+        )}
+
+        {/* 하단 인풋 바 및 모달 영역은 그대로 유지 */}
         <InputBarContainer>
           <InputFieldWrapper>
+            <PlusButton type="button" onClick={() => setIsModalOpen(true)}>
+              +
+            </PlusButton>
             <MessageInput
-              placeholder={
-                sending ? '전송 중...' : '고객에게 보낼 메시지를 입력하세요...'
-              }
+              placeholder="고객에게 보낼 메시지를 입력하세요..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              disabled={sending} // 전송 중일 때는 일시 비활성화해 연타 방지
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                  handleSend();
+              }}
             />
-            <SendIconButton
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || sending}
-            >
+            <SendIconButton onClick={handleSend} disabled={!inputValue.trim()}>
               <svg
                 width="20"
                 height="20"
@@ -368,6 +594,8 @@ export default function ShopChatManagement() {
           </InputFieldWrapper>
         </InputBarContainer>
       </ChatWrapper>
+
+      {/* 모달 생략 - 이전과 동일 */}
     </PageContainer>
   );
 }
