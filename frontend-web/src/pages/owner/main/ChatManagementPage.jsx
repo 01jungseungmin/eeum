@@ -462,17 +462,6 @@ export default function ShopChatManagement() {
     }
   };
 
-  // 채팅방 입장 시 읽음 처리
-  const markAsRead = async () => {
-    try {
-      await chatApi.markRoomAsRead(ROOM_ID);
-      refetch();
-    } catch (error) {
-      console.error('읽음 처리 실패:', error);
-    }
-  };
-
-  // 2. 채팅방 진입 시 읽음 처리 수행
   useEffect(() => {
     initChat();
   }, [ROOM_ID]);
