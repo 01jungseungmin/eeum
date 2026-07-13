@@ -55,6 +55,7 @@ public class AdminAccountService {
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
+    private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
@@ -146,6 +147,12 @@ public class AdminAccountService {
 
         if (target.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
+
+        // 사장 계정이면 상점/상품/이벤트 상품을 비활성화 — AccountService.withdraw와 동일하게 처리해야
+        // 강제 탈퇴한 사장의 상점이 사용자 화면에 계속 노출되고 주문/예약이 들어오는 것을 막는다.
+        if (target.getRole() == AccountRole.ROLE_OWNER) {
+            ownerStoreWithdrawalService.deactivateForWithdrawal(targetAccountId);
         }
 
         target.withdraw();

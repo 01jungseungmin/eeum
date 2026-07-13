@@ -107,7 +107,8 @@ public class CommunityLikeService {
             throw new ConflictException(ErrorCode.COMMUNITY_COMMENT_LIKE_ALREADY_EXISTS);
         }
 
-        comment.increaseLikeCount();
+        // 원자적 UPDATE — 엔티티 메모리 증감은 동시 좋아요 시 lost update로 카운트와 실제 like 행 수가 어긋난다.
+        commentRepository.increaseLikeCount(comment.getCommentId());
     }
 
     @Transactional
@@ -122,7 +123,7 @@ public class CommunityLikeService {
         validateSameRegion(comment.getPost(), account);
 
         commentLikeRepository.delete(like);
-        comment.decreaseLikeCount();
+        commentRepository.decreaseLikeCount(comment.getCommentId());
     }
 
     private Account getAccountOrThrow(Long accountId) {

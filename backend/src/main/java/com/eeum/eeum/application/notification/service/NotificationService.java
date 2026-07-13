@@ -23,6 +23,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -71,6 +74,18 @@ public class NotificationService {
      */
     @Transactional
     public NotificationResponseDto createNotification(NotificationCreateRequestDto request) {
+        return createNotification(request, true);
+    }
+
+    // FCM 이벤트 발행 없이 Notification만 생성 — 호출자가 이미 자체 채널(APP_PUSH/KAKAO_ALERT 등)로
+    // 실제 발송을 처리하는 경우, FCM 중복 발송 없이 알림함/unread/SSE만 동일하게 반영하고 싶을 때 사용
+    // (예: AiMessageDispatchService가 PushAdapter/AlimtalkAdapter로 직접 발송하면서 알림함 기록만 남기는 경우)
+    @Transactional
+    public NotificationResponseDto createNotificationWithoutPush(NotificationCreateRequestDto request) {
+        return createNotification(request, false);
+    }
+
+    private NotificationResponseDto createNotification(NotificationCreateRequestDto request, boolean triggerPush) {
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
@@ -96,18 +111,20 @@ public class NotificationService {
         );
         notificationRepository.save(notification);
 
-        // 3. Redis unread 카운트 증가
-        long newCount = incrementUnreadCount(account.getAccountId());
+        // 3~4. Redis unread 증가 + SSE 배지 갱신은 커밋 후에 수행한다 — 트랜잭션 중간에 하면
+        // 이후 롤백(배치 발송 중 특정 계정 예외 등) 시 저장되지 않은 알림의 unread/배지가 남아 DB와 어긋난다.
+        Long targetAccountId = account.getAccountId();
+        runAfterCommit(() -> sseEmitterManager.sendUnreadCount(
+                targetAccountId, incrementUnreadCount(targetAccountId)));
 
-        // 4. SSE — 웹 클라이언트 배지 실시간 갱신
-        sseEmitterManager.sendUnreadCount(account.getAccountId(), newCount);
-
-        // 5. FCM 푸시 이벤트 발행 (DND 비활성 + 토큰 있는 경우만)
-        boolean dndActive = settingsOpt.map(NotificationSettings::isDndActive).orElse(false);
-        if (!dndActive && account.getFcmToken() != null) {
-            publishPushEvent(account, request);
-        } else if (dndActive) {
-            log.debug("DND 활성 — 푸시 스킵: accountId={}", account.getAccountId());
+        // 5. FCM 푸시 이벤트 발행 (DND 비활성 + 토큰 있는 경우만) — 호출자가 자체 발송을 이미 처리하면 생략
+        if (triggerPush) {
+            boolean dndActive = settingsOpt.map(NotificationSettings::isDndActive).orElse(false);
+            if (!dndActive && account.getFcmToken() != null) {
+                publishPushEvent(account, request);
+            } else if (dndActive) {
+                log.debug("DND 활성 — 푸시 스킵: accountId={}", account.getAccountId());
+            }
         }
 
         log.debug("알림 생성: accountId={}, type={}", account.getAccountId(), request.getType());
@@ -251,18 +268,35 @@ public class NotificationService {
         return val != null ? val : 0L;
     }
 
+    // 0보다 클 때만 DECR — GET→검사→DECR로 나누면 동시 읽음 처리 시 둘 다 검사를 통과해 -1이 될 수 있으므로
+    // Lua로 원자적으로 처리한다.
+    private static final DefaultRedisScript<Long> DECR_IF_POSITIVE = new DefaultRedisScript<>(
+            "local v = tonumber(redis.call('get', KEYS[1]) or '0') "
+                    + "if v > 0 then return redis.call('decr', KEYS[1]) else return 0 end",
+            Long.class);
+
     // Redis DECR 후 현재 값 반환 (0 미만으로 내려가지 않음)
     private long decrementUnreadCount(Long accountId) {
         String key = UNREAD_KEY_PREFIX + accountId;
-        String val = redisTemplate.opsForValue().get(key);
-        if (val != null && Long.parseLong(val) > 0) {
-            Long result = redisTemplate.opsForValue().decrement(key);
-            return result != null ? result : 0L;
-        }
-        return 0L;
+        Long result = redisTemplate.execute(DECR_IF_POSITIVE, List.of(key));
+        return result != null ? result : 0L;
     }
 
     private void clearUnreadCount(Long accountId) {
         redisTemplate.delete(UNREAD_KEY_PREFIX + accountId);
+    }
+
+    // 트랜잭션이 있으면 커밋 후 실행, 없으면 즉시 실행
+    private void runAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 }

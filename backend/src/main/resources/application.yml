@@ -64,7 +64,56 @@ portone:
   api-secret: ${PORTONE_API_SECRET}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
   webhook-secret: ${PORTONE_WEBHOOK_SECRET}
+  mock:
+    status: PAID
+    amount: 19000
 
 fcm:
   project-id: ${FCM_PROJECT_ID}
   service-account-key-path: ${FCM_SERVICE_ACCOUNT_KEY_PATH}
+  # 발표/시연 시 실제 FCM 발송이 필요하면 --spring.profiles.active=demo 로 기동
+  # demo 프로필: FcmPushAdapter(실제 발송) + FCM 단건 테스트 API(/owner/ai-manager/test/fcm) 모두 활성
+
+ai:
+  provider: gemini
+  fallback-provider: groq
+  # final-fallback은 Generator(GeminiAiTextGenerator 등)에서 고정 template으로 처리
+
+  gemini:
+    enabled: true
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    models:
+      flash-lite: gemini-2.5-flash-lite
+      flash: gemini-2.5-flash
+
+  groq:
+    enabled: true
+    api-key: ${GROQ_API_KEY:}
+    base-url: https://api.groq.com/openai/v1
+    models:
+      fast: llama-3.1-8b-instant
+      quality: llama-3.3-70b-versatile
+
+public-data:
+  # data.go.kr 계정당 일반 인증키 1개로 3종 API 공유 (Decoding 키 권장)
+  service-key: ${NTS_BUSINESS_SERVICE_KEY:}
+  # 각 API 상세페이지의 오픈API 엔드포인트 URL (미설정 시 해당 데이터만 fallback)
+  kepco-industry-url: ${KEPCO_INDUSTRY_API_URL:}
+  kpx-region-energy-url: ${KPX_REGION_ENERGY_API_URL:}
+  kgs-gas-accident-url: ${KGS_GAS_ACCIDENT_API_URL:}
+
+kepco-bigdata:
+  api-key: ${KEPCO_BIGDATA_API_KEY:}
+  business-type-usage-url: ${KEPCO_BUSINESS_TYPE_USAGE_API_URL:}
+
+alimtalk:
+  provider: ${ALIMTALK_PROVIDER:mock}
+  api-key: ${ALIMTALK_API_KEY:}
+  api-secret: ${ALIMTALK_API_SECRET:}
+  sender-key: ${ALIMTALK_SENDER_KEY:}
+  base-url: ${ALIMTALK_BASE_URL:}
+  templates:
+    customer-care: ${ALIMTALK_TEMPLATE_CUSTOMER_CARE:}
+    marketing: ${ALIMTALK_TEMPLATE_MARKETING:}
+    notice: ${ALIMTALK_TEMPLATE_NOTICE:}

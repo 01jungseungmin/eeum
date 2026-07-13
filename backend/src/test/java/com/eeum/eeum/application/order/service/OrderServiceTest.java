@@ -268,7 +268,7 @@ class OrderServiceTest {
         when(orderItem.getQuantity()).thenReturn(3);
 
         when(orderItemRepository.findByOrder_OrderId(orderId)).thenReturn(List.of(orderItem));
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
 
         // when
         orderService.restoreStockForOrder(orderId);
@@ -293,7 +293,7 @@ class OrderServiceTest {
         when(orderItem.getProductId()).thenReturn(productId);
 
         when(orderItemRepository.findByOrder_OrderId(orderId)).thenReturn(List.of(orderItem));
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
 
         // when
         orderService.restoreStockForOrder(orderId);

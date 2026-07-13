@@ -115,17 +115,22 @@ public class StoreService {
                 .map(StoreImage::getImageUrl)
                 .orElse(null);
 
+        // 매출은 결제 완료 후 전이된 상태까지 포함해야 실제 매출과 일치한다 (PAID만 합산하면 사장이
+        // 주문을 확인/준비완료 처리하는 순간 매출에서 누락됨).
+        List<OrderStatus> revenueStatuses = List.of(
+                OrderStatus.PAID, OrderStatus.CONFIRMED, OrderStatus.READY, OrderStatus.COMPLETED);
+
         long todayOrderCount = orderRepository
                 .countByStore_StoreIdAndCreatedAtBetween(store.getStoreId(), todayStart, now);
 
         BigDecimal todayRevenue = orderRepository
-                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), todayStart, now, OrderStatus.PAID);
+                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), todayStart, now, revenueStatuses);
 
         long monthOrderCount = orderRepository
                 .countByStore_StoreIdAndCreatedAtBetween(store.getStoreId(), monthStart, now);
 
         BigDecimal monthRevenue = orderRepository
-                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), monthStart, now, OrderStatus.PAID);
+                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), monthStart, now, revenueStatuses);
 
         long pendingOrderCount = orderRepository
                 .countByStore_StoreIdAndStatus(store.getStoreId(), OrderStatus.PENDING);

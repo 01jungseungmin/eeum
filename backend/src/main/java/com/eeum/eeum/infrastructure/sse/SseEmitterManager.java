@@ -33,18 +33,20 @@ public class SseEmitterManager {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
 
-        // 연결 종료/에러 시 맵에서 제거
+        // 연결 종료/에러 시 맵에서 제거 — 반드시 "이 emitter가 아직 매핑돼 있을 때만" 제거한다.
+        // 무조건 remove(accountId)하면 재연결로 교체된 새 emitter가 지워져(기존 emitter의 onCompletion이
+        // 늦게 실행되는 경우) 연결은 살아있는데 unread 이벤트를 못 받는 상태가 된다.
         emitter.onCompletion(() -> {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 연결 종료: accountId={}", accountId);
         });
         emitter.onTimeout(() -> {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 연결 타임아웃: accountId={}", accountId);
             emitter.complete();
         });
         emitter.onError(e -> {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 연결 에러: accountId={}, error={}", accountId, e.getMessage());
         });
 
@@ -79,7 +81,7 @@ public class SseEmitterManager {
                             .data(data)
             );
         } catch (IOException e) {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 이벤트 전송 실패 — emitter 제거: accountId={}", accountId);
         }
     }

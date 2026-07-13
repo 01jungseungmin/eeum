@@ -40,60 +40,16 @@ Hibernate flush/clear 시점, FK 제약, 실제 쿼리 결과처럼 **실제 DB 
 4. 신호별로 시나리오를 도출하고, 아래 컨벤션으로 테스트를 작성한다.
 5. Docker가 없는 환경에서도 빌드가 깨지지 않도록 `@EnabledIfDockerAvailable`을 반드시 붙인다.
 
-## 작성 컨벤션 (기존 통합 테스트와 동일하게)
+## 작성 컨벤션
 
-```java
-@SpringBootTest
-@Testcontainers
-@EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
-@RequiredArgsConstructor
-class XxxIntegrationTest {
+절차 3에서 읽은 `EventProductConcurrencyIntegrationTest`의 어노테이션, 컨테이너 설정,
+주입 방식을 그대로 따른다 (이 파일이 컨벤션의 단일 기준이다). 핵심 요건만 요약하면:
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
-    // Redis를 안 쓰는 도메인이면 redis Container와 관련 설정은 생성하지 않는다.
-
-    private final XxxService xxxService;
-    private final XxxRepository xxxRepository;
-    // 테스트에 필요한 Repository만 주입한다
-
-    @BeforeEach
-    void setUp() {
-        // 실제 repository.save(...)로 선행 데이터 생성 — Mock 금지
-    }
-
-    @AfterEach
-    void tearDown() {
-        // FK 자식 → 부모 순서로 deleteAll()
-    }
-
-    @Test
-    void 댓글_수정_시_DB에_반영된다() {
-        // when: Service 메서드를 실제로 호출
-        // then: 같은 Repository로 재조회해서 실제 DB 값을 assertThat으로 검증
-        //       (Service 반환값만 검증하면 영속성 컨텍스트 문제를 못 잡으므로 반드시 재조회한다)
-    }
-}
-```
+- `@EnabledIfDockerAvailable` 필수 — Docker 없는 환경에서 빌드가 깨지지 않게 한다.
+- Testcontainers MySQL은 필수, Redis 컨테이너는 해당 도메인이 Redis를 쓸 때만 추가한다.
+- 테스트에 필요한 Service/Repository만 주입한다.
+- `@BeforeEach`에서 실제 `repository.save(...)`로 선행 데이터를 만들고,
+  `@AfterEach`에서 FK 자식 → 부모 순서로 정리한다.
 
 ## 검증 원칙 (가장 중요)
 
