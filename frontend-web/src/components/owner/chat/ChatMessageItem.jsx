@@ -85,6 +85,14 @@ const TimeStamp = styled.span`
   white-space: nowrap;
 `;
 
+const UnreadBadge = styled.span`
+  font-size: 10px;
+  color: #42a574;
+  font-weight: bold;
+  margin-right: 6px;
+  margin-bottom: 2px;
+`;
+
 export default function ChatMessageItem({ msg, onContextMenu }) {
   const isMe = msg.isMe;
   const isDeleted = msg.isDeleted || msg.deleted;
@@ -118,6 +126,10 @@ export default function ChatMessageItem({ msg, onContextMenu }) {
         </Avatar>
       )}
       <BubbleWrap $isMe={isMe}>
+        {/* 💡 내가 보낸 메시지일 때만 안 읽은 사람 수 표시 */}
+        {isMe && msg.unreadCount > 0 && (
+          <UnreadBadge>{msg.unreadCount}</UnreadBadge>
+        )}
         {isImage ? (
           <ChatImage
             src={msg.imageUrl}

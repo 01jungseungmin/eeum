@@ -358,14 +358,24 @@ export default function ShopChatManagement() {
 
   const { refetch } = useNotificationCounts();
 
-  // 채팅 내역 및 방 상세 정보 불러오기
-  const loadChatData = async () => {
+  // 데이터 로드 및 읽음 처리 통합
+  const initChat = async () => {
     try {
       setLoading(true);
 
-      // 방 상세 조회
-      const roomRes = await chatApi.getRoomDetail(ROOM_ID);
-      if (roomRes.data.success && roomRes.data.data) {
+      // 1. 읽음 처리 먼저 수행
+      await chatApi.markRoomAsRead(ROOM_ID);
+
+      // 2. 읽음 처리 후 카운트 갱신 (사이드바용)
+      refetch();
+
+      // 3. 병렬로 방 정보와 메시지 조회
+      const [roomRes, msgRes] = await Promise.all([
+        chatApi.getRoomDetail(ROOM_ID),
+        chatApi.getMessages(ROOM_ID),
+      ]);
+
+      if (roomRes.data.success) {
         setRoomInfo({
           name: roomRes.data.data.name,
           participantCount: roomRes.data.data.participantCount,
@@ -373,37 +383,27 @@ export default function ShopChatManagement() {
         });
       }
 
-      // 메시지 내역 조회
-      const res = await chatApi.getMessages(ROOM_ID);
-      if (res.data.success && res.data.data.content) {
-        const formatted = [...res.data.data.content].reverse().map((msg) => ({
-          ...msg,
-          isMe: msg.senderAccountId === MY_ACCOUNT_ID,
-          isDeleted: msg.deleted || false,
-        }));
+      if (msgRes.data.success && msgRes.data.data.content) {
+        const formatted = [...msgRes.data.data.content]
+          .reverse()
+          .map((msg) => ({
+            ...msg,
+            isMe: msg.senderAccountId === MY_ACCOUNT_ID,
+            isDeleted: msg.deleted || false,
+            // 💡 서버에서 내려주는 unreadCount를 그대로 가져옵니다.
+            unreadCount: msg.unreadCount || 0,
+          }));
         setMessages(formatted);
       }
     } catch (error) {
-      console.error('데이터 로드 실패:', error);
+      console.error('채팅 초기화 실패:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // 채팅방 입장 시 읽음 처리
-  const markAsRead = async () => {
-    try {
-      await chatApi.markRoomAsRead(ROOM_ID);
-      refetch();
-    } catch (error) {
-      console.error('읽음 처리 실패:', error);
-    }
-  };
-
-  // 2. 채팅방 진입 시 읽음 처리 수행
   useEffect(() => {
-    markAsRead();
-    loadChatData();
+    initChat();
   }, [ROOM_ID]);
 
   // 바깥쪽 클릭 시 컨텍스트 메뉴 및 참여자 드롭다운 닫기
