@@ -68,19 +68,21 @@ class AiScheduledMessageSchedulerTest {
     }
 
     @Test
-    void 예약_시간이_지난_메시지는_SENT_전이_후_발송된다() {
+    void 예약_시간이_지난_메시지는_발송_성공_후_SENT로_확정된다() {
         // given
         stubLockPassThrough();
         AiGeneratedMessage message = scheduledMessage(1L);
         when(aiGeneratedMessageRepository.findByStatusAndScheduledAtLessThanEqualOrderByScheduledAtAsc(
                 eq(AiMessageStatus.SCHEDULED), any(), any())).thenReturn(List.of(message));
-        when(processor.transitionToSent(eq(1L), any())).thenReturn(true);
+        when(processor.isDispatchable(eq(1L), any())).thenReturn(true);
 
         // when
         scheduler.dispatchScheduledMessages();
 
-        // then
-        verify(dispatchService).dispatch(1L);
+        // then — dispatch가 먼저, markSent(SENT 확정)는 그 이후
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(dispatchService, processor);
+        inOrder.verify(dispatchService).dispatch(1L);
+        inOrder.verify(processor).markSent(eq(1L), any());
     }
 
     @Test
@@ -90,32 +92,56 @@ class AiScheduledMessageSchedulerTest {
         AiGeneratedMessage message = scheduledMessage(1L);
         when(aiGeneratedMessageRepository.findByStatusAndScheduledAtLessThanEqualOrderByScheduledAtAsc(
                 eq(AiMessageStatus.SCHEDULED), any(), any())).thenReturn(List.of(message));
-        when(processor.transitionToSent(eq(1L), any())).thenReturn(false);
+        when(processor.isDispatchable(eq(1L), any())).thenReturn(false);
 
         // when
         scheduler.dispatchScheduledMessages();
 
         // then
         verify(dispatchService, never()).dispatch(anyLong());
+        verify(processor, never()).markSent(anyLong(), any());
     }
 
     @Test
-    void 발송_실패_시_재시도_기록이_남고_다른_메시지_처리는_계속된다() {
-        // given
+    void 발송_실패_시_SENT로_전이되지_않고_재시도_기록이_남으며_다른_메시지_처리는_계속된다() {
+        // given — dispatch() 자체가 예외를 던지는 상황(치명적 실패). transitionToSent가 먼저 SENT로 바꿔버리면
+        // recordFailure가 상태 가드에 막혀 무시되던 버그를 재현/검증한다.
         stubLockPassThrough();
         AiGeneratedMessage failing = scheduledMessage(1L);
         AiGeneratedMessage next = scheduledMessage(2L);
         when(aiGeneratedMessageRepository.findByStatusAndScheduledAtLessThanEqualOrderByScheduledAtAsc(
                 eq(AiMessageStatus.SCHEDULED), any(), any())).thenReturn(List.of(failing, next));
-        when(processor.transitionToSent(eq(1L), any())).thenThrow(new RuntimeException("DB 오류"));
-        when(processor.transitionToSent(eq(2L), any())).thenReturn(true);
+        when(processor.isDispatchable(eq(1L), any())).thenReturn(true);
+        when(processor.isDispatchable(eq(2L), any())).thenReturn(true);
+        doThrow(new RuntimeException("DB 오류")).when(dispatchService).dispatch(1L);
+
+        // when
+        scheduler.dispatchScheduledMessages();
+
+        // then — 실패한 메시지는 SENT로 전이되지 않고(markSent 미호출) 재시도 카운트만 증가, 다음 메시지는 정상 처리
+        verify(processor, never()).markSent(eq(1L), any());
+        verify(processor).recordFailure(1L, 3);
+        verify(dispatchService).dispatch(2L);
+        verify(processor).markSent(eq(2L), any());
+    }
+
+    @Test
+    void 메시지별_발송_락_경합은_재시도_카운트를_소진시키지_않는다() {
+        // given — dispatchService.dispatch()가 (메시지 단위) 락 경합으로 LOCK_ACQUIRE_FAILED를 던지는 상황.
+        // 이건 실제 발송 실패가 아니라 일시적 경합이므로 recordFailure로 재시도 카운트를 깎으면 안 된다.
+        stubLockPassThrough();
+        AiGeneratedMessage message = scheduledMessage(1L);
+        when(aiGeneratedMessageRepository.findByStatusAndScheduledAtLessThanEqualOrderByScheduledAtAsc(
+                eq(AiMessageStatus.SCHEDULED), any(), any())).thenReturn(List.of(message));
+        when(processor.isDispatchable(eq(1L), any())).thenReturn(true);
+        doThrow(new BusinessException(ErrorCode.LOCK_ACQUIRE_FAILED)).when(dispatchService).dispatch(1L);
 
         // when
         scheduler.dispatchScheduledMessages();
 
         // then
-        verify(processor).recordFailure(1L, 3);
-        verify(dispatchService).dispatch(2L);
+        verify(processor, never()).markSent(eq(1L), any());
+        verify(processor, never()).recordFailure(anyLong(), anyInt());
     }
 
     @Test
@@ -126,7 +152,7 @@ class AiScheduledMessageSchedulerTest {
 
         // when & then — 예외가 전파되지 않아야 한다
         assertThatCode(() -> scheduler.dispatchScheduledMessages()).doesNotThrowAnyException();
-        verify(processor, never()).transitionToSent(anyLong(), any());
+        verify(processor, never()).isDispatchable(anyLong(), any());
     }
 }
 
@@ -150,39 +176,49 @@ class AiScheduledMessageProcessorTest {
     }
 
     @Test
-    void 예약_시간이_지난_SCHEDULED_메시지는_SENT로_전이된다() {
+    void 예약_시간이_지난_SCHEDULED_메시지는_발송_가능으로_판정된다() {
         // given
         AiGeneratedMessage target = message(AiMessageStatus.SCHEDULED, LocalDateTime.now().minusMinutes(1));
         when(aiGeneratedMessageRepository.findById(1L)).thenReturn(Optional.of(target));
 
-        // when
-        boolean transitioned = processor.transitionToSent(1L, LocalDateTime.now());
-
-        // then
-        assertThat(transitioned).isTrue();
-        assertThat(target.getStatus()).isEqualTo(AiMessageStatus.SENT);
-        verify(aiActionLogRepository).save(any());
+        // when & then — isDispatchable은 상태를 바꾸지 않는다
+        assertThat(processor.isDispatchable(1L, LocalDateTime.now())).isTrue();
+        assertThat(target.getStatus()).isEqualTo(AiMessageStatus.SCHEDULED);
     }
 
     @Test
-    void 예약_시간이_아직_안_된_메시지는_발송하지_않는다() {
+    void 예약_시간이_아직_안_된_메시지는_발송_불가로_판정된다() {
         // given
         AiGeneratedMessage target = message(AiMessageStatus.SCHEDULED, LocalDateTime.now().plusHours(1));
         when(aiGeneratedMessageRepository.findById(1L)).thenReturn(Optional.of(target));
 
         // when & then
-        assertThat(processor.transitionToSent(1L, LocalDateTime.now())).isFalse();
+        assertThat(processor.isDispatchable(1L, LocalDateTime.now())).isFalse();
         assertThat(target.getStatus()).isEqualTo(AiMessageStatus.SCHEDULED);
     }
 
     @Test
-    void 이미_취소된_메시지는_발송하지_않는다() {
+    void 이미_취소된_메시지는_발송_불가로_판정된다() {
         // given
         AiGeneratedMessage target = message(AiMessageStatus.CANCELLED, LocalDateTime.now().minusMinutes(1));
         when(aiGeneratedMessageRepository.findById(1L)).thenReturn(Optional.of(target));
 
         // when & then
-        assertThat(processor.transitionToSent(1L, LocalDateTime.now())).isFalse();
+        assertThat(processor.isDispatchable(1L, LocalDateTime.now())).isFalse();
+    }
+
+    @Test
+    void markSent_호출_시_SENT로_전이되고_액션_로그가_기록된다() {
+        // given — 발송(dispatch) 성공 후 스케줄러가 호출하는 경로
+        AiGeneratedMessage target = message(AiMessageStatus.SCHEDULED, LocalDateTime.now().minusMinutes(1));
+        when(aiGeneratedMessageRepository.findById(1L)).thenReturn(Optional.of(target));
+
+        // when
+        processor.markSent(1L, LocalDateTime.now());
+
+        // then
+        assertThat(target.getStatus()).isEqualTo(AiMessageStatus.SENT);
+        verify(aiActionLogRepository).save(any());
     }
 
     @Test

@@ -61,6 +61,17 @@ class StoreOrderServiceTest {
     private static final Long OWNER_ID = 200L;
     private static final Long CUSTOMER_ID = 300L;
 
+    // approveRefund/rejectOrder가 감싸는 분산 락 — Runnable을 그대로 실행하도록 스텁 (개별 테스트가
+    // doThrow로 재정의하면 그 테스트에서는 그쪽이 우선한다)
+    @org.junit.jupiter.api.BeforeEach
+    void stubOrderLock() {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(3).run();
+            return null;
+        }).when(redisLockService).executeWithLock(
+                anyString(), any(Duration.class), any(ErrorCode.class), any(Runnable.class));
+    }
+
     // ──────────────────── Helpers ────────────────────
 
     private Store createStore(Account ownerAccount) {

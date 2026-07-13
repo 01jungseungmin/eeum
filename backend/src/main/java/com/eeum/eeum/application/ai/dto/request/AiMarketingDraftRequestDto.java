@@ -6,6 +6,7 @@ import com.eeum.eeum.domain.ai.enums.AiTone;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -31,6 +32,7 @@ public class AiMarketingDraftRequestDto {
     @Schema(description = "채널 목록", example = "[\"APP_PUSH\", \"KAKAO_ALERT\"]")
     private List<AiChannel> channels;
 
+    @Size(max = 100)
     @Schema(description = "문구에 반영할 키워드 (예: 상품명)", example = "여름 냉면")
     private String keyword;
 

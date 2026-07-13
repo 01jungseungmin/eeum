@@ -323,7 +323,7 @@ class CommunityLikeServiceTest {
 
         // then
         verify(commentLikeRepository).saveAndFlush(any(CommunityCommentLike.class));
-        assertThat(comment.getLikeCount()).isEqualTo(1);
+        verify(commentRepository).increaseLikeCount(commentId);
     }
 
     @Test
@@ -432,7 +432,7 @@ class CommunityLikeServiceTest {
 
         // then
         verify(commentLikeRepository).delete(like);
-        assertThat(comment.getLikeCount()).isEqualTo(0);
+        verify(commentRepository).decreaseLikeCount(commentId);
     }
 
     @Test

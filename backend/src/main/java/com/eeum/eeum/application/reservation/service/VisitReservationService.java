@@ -447,7 +447,7 @@ public class VisitReservationService {
         LocalDateTime startAt = LocalDateTime.of(request.getVisitDate(), request.getVisitTime());
         LocalDateTime endAt = startAt.plusMinutes(setting.getSlotIntervalMinutes());
 
-        validateSlotInterval(request.getVisitTime(), setting.getStartTime(), setting.getSlotIntervalMinutes());
+        validateSlotInterval(request.getVisitTime(), setting.getStartTime(), setting.getEndTime(), setting.getSlotIntervalMinutes());
         validateBusinessHours(store, request.getVisitDate(), request.getVisitTime(), endAt.toLocalTime());
         validateSlotEnabled(storeId, request.getVisitDate(), request.getVisitTime());
         validateDuplicateMyReservation(accountId, store, request.getVisitDate(), request.getVisitTime());
@@ -587,9 +587,15 @@ public class VisitReservationService {
                 });
     }
 
-    private void validateSlotInterval(LocalTime visitTime, LocalTime startTime, int slotIntervalMinutes) {
+    private void validateSlotInterval(LocalTime visitTime, LocalTime startTime, LocalTime endTime, int slotIntervalMinutes) {
         long diffMinutes = Duration.between(startTime, visitTime).toMinutes();
         if (diffMinutes < 0 || diffMinutes % slotIntervalMinutes != 0) {
+            throw new BusinessException(ErrorCode.RESERVATION_INVALID_SLOT_TIME);
+        }
+        // 슬롯 상한 검증 — visitTime + interval(슬롯 종료 시각)이 예약 설정 endTime을 넘으면
+        // getAvailableTimeSlots가 노출하지 않는 시간이므로 예약을 차단한다 (사장 설정 우회 방지).
+        long endDiffMinutes = Duration.between(startTime, endTime).toMinutes();
+        if (diffMinutes + slotIntervalMinutes > endDiffMinutes) {
             throw new BusinessException(ErrorCode.RESERVATION_INVALID_SLOT_TIME);
         }
     }
@@ -637,12 +643,16 @@ public class VisitReservationService {
 
     private List<LocalTime> generateSlotTimes(StoreVisitReservationSetting setting) {
         List<LocalTime> times = new ArrayList<>();
-        LocalTime current = setting.getStartTime();
-        LocalTime end = setting.getEndTime();
         int interval = setting.getSlotIntervalMinutes();
-        while (!current.plusMinutes(interval).isAfter(end)) {
-            times.add(current);
-            current = current.plusMinutes(interval);
+        if (interval <= 0) {
+            return times;
+        }
+        // 하루 분(minute) 단위 정수로 순회 — LocalTime.plusMinutes의 자정 랩어라운드로 인한 무한 루프를 방지한다.
+        // current + interval(슬롯 종료 시각)이 endMinute를 넘지 않는 슬롯만 생성.
+        int startMinute = setting.getStartTime().toSecondOfDay() / 60;
+        int endMinute = setting.getEndTime().toSecondOfDay() / 60;
+        for (int minute = startMinute; minute + interval <= endMinute; minute += interval) {
+            times.add(LocalTime.ofSecondOfDay(minute * 60L));
         }
         return times;
     }

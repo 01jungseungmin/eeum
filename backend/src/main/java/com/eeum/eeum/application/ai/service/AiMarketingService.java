@@ -6,14 +6,10 @@ import com.eeum.eeum.application.ai.dto.response.ChannelReachDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
-import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
-import com.eeum.eeum.domain.ai.enums.AiActionType;
 import com.eeum.eeum.domain.ai.enums.AiChannel;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
-import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
@@ -36,8 +32,7 @@ public class AiMarketingService {
 
     private final AiManagerSupportService supportService;
     private final AiTextGenerator aiTextGenerator;
-    private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
-    private final AiActionLogRepository aiActionLogRepository;
+    private final AiDraftPersistenceExecutor draftPersistenceExecutor;
     private final FavoriteRepository favoriteRepository;
     private final OrderRepository orderRepository;
     private final ChatParticipantRepository chatParticipantRepository;
@@ -50,19 +45,19 @@ public class AiMarketingService {
         return estimateReaches(store.getStoreId(), List.of(AiChannel.values()));
     }
 
-    @Transactional
     public AiMarketingDraftResponseDto createMarketingDraft(Long ownerId, AiMarketingDraftRequestDto request) {
         return createDraft(ownerId, request, AiMessageType.EVENT_MARKETING,
                 AiFeature.MARKETING_DRAFT, AiUsageType.MARKETING_DRAFT, false);
     }
 
     // 공지 등록 화면용 초안 — SNS_CARD는 발송 채널로 사용 불가
-    @Transactional
     public AiMarketingDraftResponseDto createNoticeDraft(Long ownerId, AiMarketingDraftRequestDto request) {
         return createDraft(ownerId, request, AiMessageType.NOTICE,
                 AiFeature.NOTICE_DRAFT, AiUsageType.NOTICE_DRAFT, true);
     }
 
+    // @Transactional을 두지 않는다 — LLM 호출(외부 HTTP)이 DB 트랜잭션을 오래 붙잡지 않도록,
+    // 생성은 트랜잭션 밖에서 하고 저장만 draftPersistenceExecutor의 짧은 트랜잭션에 위임한다.
     private AiMarketingDraftResponseDto createDraft(
             Long ownerId,
             AiMarketingDraftRequestDto request,
@@ -77,23 +72,19 @@ public class AiMarketingService {
         }
         supportService.enforceDraftCapacity(store, messageType, request.isConfirmDelete());
 
-        // LLM 호출 성공 후 쿼터 차감 — LLM 장애 시 쿼터가 소진되지 않도록 순서를 역전
+        // 생성 시도 = 사용량 차감 — 플랜/한도 초과 사용자가 LLM 호출(비용 발생) 전에 걸러지도록 먼저 차감한다
+        supportService.consumeGeneration(store, ownerId, feature, usageType);
         AiText text = messageType == AiMessageType.NOTICE
                 ? aiTextGenerator.noticeCopy(store.getName(), request.getNoticeType(), request.getTone(), request.getKeyword())
                 : aiTextGenerator.marketingCopy(store.getName(), request.getNoticeType(), request.getTone(), request.getKeyword());
-        supportService.consumeGeneration(store, ownerId, feature, usageType);
 
         // 대표 채널 하나를 메시지에 저장 — 발송 시 채널별 분기는 2차에서 처리
         AiChannel primaryChannel = request.getChannels().get(0);
-        AiGeneratedMessage message = aiGeneratedMessageRepository.save(
-                AiGeneratedMessage.createDraft(
-                        store, store.getAccount(), messageType,
-                        request.getNoticeType().name(), null, text.title(), text.content(), primaryChannel));
-
-        aiActionLogRepository.save(AiActionLog.record(
-                store, store.getAccount(), AiActionType.DRAFT_CREATED,
-                messageType.name(), message.getAiGeneratedMessageId(),
-                messageType == AiMessageType.NOTICE ? "공지 문구 초안 생성" : "마케팅 문구 초안 생성"));
+        AiGeneratedMessage message = draftPersistenceExecutor.saveDraftInTx(
+                store, store.getAccount(), messageType, request.getNoticeType().name(), null,
+                text.title(), text.content(), primaryChannel, messageType.name(),
+                messageType == AiMessageType.NOTICE ? "공지 문구 초안 생성" : "마케팅 문구 초안 생성");
+        supportService.healDraftCapacity(store, messageType);
 
         List<ChannelReachDto> reaches =
                 estimateReaches(store.getStoreId(), request.getChannels());

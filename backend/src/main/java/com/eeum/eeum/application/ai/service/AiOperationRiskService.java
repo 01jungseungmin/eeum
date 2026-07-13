@@ -9,7 +9,7 @@ import com.eeum.eeum.application.ai.dto.response.DataSourceDto;
 import com.eeum.eeum.application.ai.dto.response.EquipmentShareDto;
 import com.eeum.eeum.application.ai.dto.response.GasSafetyInsightDto;
 import com.eeum.eeum.application.ai.dto.response.MonthlyUsageDto;
-import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
+import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.entity.AiOwnerMetricInput;
 import com.eeum.eeum.domain.ai.enums.AiDataSourceType;
@@ -34,6 +34,7 @@ import com.eeum.eeum.infrastructure.external.dto.RegionEnergyUsage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -92,7 +93,8 @@ public class AiOperationRiskService {
 
     private final AiManagerSupportService supportService;
     private final RedisLockService redisLockService;
-    private final AiInsightGenerator aiInsightGenerator;
+    // 대시보드/분석용 텍스트는 항상 템플릿만 사용 — 조회(GET) API에서 실제 LLM(Gemini 등)이 호출되는 것을 방지한다.
+    private final TemplateAiInsightGenerator aiInsightGenerator;
     private final AiOwnerMetricInputRepository aiOwnerMetricInputRepository;
     private final AiSavingPlanRepository aiSavingPlanRepository;
     private final AiOwnerMetricCommandExecutor ownerMetricCommandExecutor;
@@ -102,12 +104,14 @@ public class AiOperationRiskService {
     private final StoreReviewRepository storeReviewRepository;
     private final InquiryRepository inquiryRepository;
 
+    @Transactional(readOnly = true)
     public AiOperationRiskResponseDto getRisks(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.OPERATION_RISK_SUMMARY);
         return buildRiskResponse(store, false);
     }
 
+    @Transactional(readOnly = true)
     public AiOperationRiskResponseDto getRiskDetail(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.OPERATION_RISK_DETAIL);
@@ -145,6 +149,7 @@ public class AiOperationRiskService {
                 () -> savingPlanCommandExecutor.savePlanInTx(store, ownerId, savingPlanId));
     }
 
+    @Transactional(readOnly = true)
     public AiElectricityReportResponseDto getElectricityReport(Long ownerId) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.ELECTRICITY_REPORT);

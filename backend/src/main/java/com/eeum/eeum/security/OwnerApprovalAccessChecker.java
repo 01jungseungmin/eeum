@@ -1,7 +1,5 @@
 package com.eeum.eeum.security;
 
-import com.eeum.eeum.domain.account.entity.OwnerInfo;
-import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -25,13 +23,6 @@ public class OwnerApprovalAccessChecker {
 
         Long accountId = userDetails.getAccountId();
 
-        return ownerInfoRepository.findByAccount_AccountId(accountId)
-                .map(this::isApprovalAccessible)
-                .orElse(false);
-    }
-
-    private boolean isApprovalAccessible(OwnerInfo ownerInfo) {
-        return ownerInfo.getApprovalStatus() == ApprovalStatus.PENDING
-                || ownerInfo.getApprovalStatus() == ApprovalStatus.REJECTED;
+        return ownerInfoRepository.findByAccount_AccountId(accountId).isPresent();
     }
 }

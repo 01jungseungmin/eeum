@@ -2,6 +2,7 @@ package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.application.ai.policy.AiPlanPolicy;
+import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
@@ -26,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,9 +35,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +56,7 @@ class AiManagerSupportServiceTest {
     @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
     @Mock private RedisLockService redisLockService;
     @Mock private AiUsageRecorder aiUsageRecorder;
+    @Mock private AiDraftCapacityRecorder draftCapacityRecorder;
     @Spy private AiPlanPolicy aiPlanPolicy = new AiPlanPolicy();
 
     private static final Long STORE_ID = 1L;
@@ -60,15 +66,15 @@ class AiManagerSupportServiceTest {
 
     private Store createStore() {
         Store store = mock(Store.class);
-        when(store.getStoreId()).thenReturn(STORE_ID);
+        lenient().when(store.getStoreId()).thenReturn(STORE_ID);
         return store;
     }
 
     private void stubPlan(AiPlanType planType) {
         Store store = mock(Store.class);
         AiPlanSubscription subscription = AiPlanSubscription.create(store, planType, LocalDateTime.now());
-        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.of(subscription));
+        when(aiPlanSubscriptionRepository.findCurrentActivePlans(eq(STORE_ID), any(), any()))
+                .thenReturn(List.of(subscription));
     }
 
     private void stubLockPassThrough() {
@@ -142,8 +148,8 @@ class AiManagerSupportServiceTest {
     @Test
     void 구독_정보가_없으면_기본_플랜은_FREE다() {
         // given
-        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.empty());
+        when(aiPlanSubscriptionRepository.findCurrentActivePlans(eq(STORE_ID), any(), any()))
+                .thenReturn(List.of());
 
         // when
         AiPlanType planType = supportService.getPlanType(STORE_ID);
@@ -156,8 +162,8 @@ class AiManagerSupportServiceTest {
     void 구독_미존재_사장이_생성_기능_호출_시_AI_PLAN_REQUIRED_예외가_발생한다() {
         // given
         Store store = createStore();
-        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.empty());
+        when(aiPlanSubscriptionRepository.findCurrentActivePlans(eq(STORE_ID), any(), any()))
+                .thenReturn(List.of());
 
         // when & then
         assertThatThrownBy(() -> supportService.consumeGeneration(
@@ -196,27 +202,29 @@ class AiManagerSupportServiceTest {
                 .isEqualTo(ErrorCode.AI_MESSAGE_NOT_FOUND);
     }
 
+    // enforceDraftCapacity(사전 검증, 퇴거 없음)와 healDraftCapacity(저장 성공 후 자기치유 퇴거)의
+    // 실제 판정/퇴거 로직은 AiDraftCapacityRecorder로 위임된다 — 여기서는 위임 자체만 검증한다.
+    // 판정/퇴거 로직 자체는 AiDraftCapacityRecorderTest에서 검증한다.
+
     @Test
-    void 타입별_DRAFT가_캡_미만이면_초안_보관_캡_검증을_통과한다() {
+    void 초안_보관_캡_사전_검증은_락_없이_draftCapacityRecorder에_위임된다() {
         // given
         Store store = createStore();
-        when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
-                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
-                .thenReturn(19L);
 
-        // when & then
+        // when
         supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, false);
-        verify(aiGeneratedMessageRepository, org.mockito.Mockito.never())
-                .findFirstByStore_StoreIdAndTypeAndStatusOrderByCreatedAtAsc(any(), any(), any());
+
+        // then — 퇴거가 없는 순수 검증이라 락이 필요 없다
+        verify(draftCapacityRecorder).validate(store, AiMessageType.COMPLAINT_REPLY, false);
+        verify(redisLockService, never()).executeWithLock(anyString(), any(Duration.class), any(Runnable.class));
     }
 
     @Test
-    void 캡_초과_confirmDelete_false면_AI_DRAFT_LIMIT_EXCEEDED_예외와_상세정보가_함께_던져진다() {
+    void draftCapacityRecorder가_던진_AI_DRAFT_LIMIT_EXCEEDED_예외가_그대로_전파된다() {
         // given
         Store store = createStore();
-        when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
-                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
-                .thenReturn(20L);
+        doThrow(new BusinessException(ErrorCode.AI_DRAFT_LIMIT_EXCEEDED))
+                .when(draftCapacityRecorder).validate(store, AiMessageType.COMPLAINT_REPLY, false);
 
         // when & then
         assertThatThrownBy(() -> supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, false))
@@ -226,24 +234,29 @@ class AiManagerSupportServiceTest {
     }
 
     @Test
-    void 캡_초과_confirmDelete_true면_가장_오래된_DRAFT가_삭제되고_예외는_발생하지_않는다() {
+    void confirmDelete_true는_draftCapacityRecorder에도_그대로_전달된다() {
         // given
         Store store = createStore();
-        Account ownerAccount = mock(Account.class);
-        AiGeneratedMessage oldestDraft = AiGeneratedMessage.createDraft(
-                store, ownerAccount, AiMessageType.COMPLAINT_REPLY,
-                "COMPLAINT_KEYWORD", null, "제목", "내용", AiChannel.APP_PUSH);
-        when(aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatus(
-                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
-                .thenReturn(20L);
-        when(aiGeneratedMessageRepository.findFirstByStore_StoreIdAndTypeAndStatusOrderByCreatedAtAsc(
-                STORE_ID, AiMessageType.COMPLAINT_REPLY, com.eeum.eeum.domain.ai.enums.AiMessageStatus.DRAFT))
-                .thenReturn(Optional.of(oldestDraft));
 
         // when
         supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, true);
 
         // then
-        verify(aiGeneratedMessageRepository).delete(oldestDraft);
+        verify(draftCapacityRecorder).validate(store, AiMessageType.COMPLAINT_REPLY, true);
+    }
+
+    @Test
+    void healDraftCapacity는_store_단위_락_안에서_evictExcessInTx에_위임된다() {
+        // given — 새 초안 저장 성공 "후"에만 호출되는 자기치유 단계
+        Store store = createStore();
+        stubLockPassThrough();
+
+        // when
+        supportService.healDraftCapacity(store, AiMessageType.COMPLAINT_REPLY);
+
+        // then
+        verify(redisLockService).executeWithLock(
+                eq(LockKeys.aiDraftCapacity(STORE_ID, AiMessageType.COMPLAINT_REPLY.name())), any(Duration.class), any(Runnable.class));
+        verify(draftCapacityRecorder).evictExcessInTx(store, AiMessageType.COMPLAINT_REPLY);
     }
 }

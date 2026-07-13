@@ -6,8 +6,6 @@ import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
-import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -33,6 +31,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,8 +42,7 @@ class AiReviewInquiryServiceTest {
 
     @Mock private AiManagerSupportService supportService;
     @Mock private AiTextGenerator aiTextGenerator;
-    @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
-    @Mock private AiActionLogRepository aiActionLogRepository;
+    @Mock private AiDraftPersistenceExecutor draftPersistenceExecutor;
     @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private StoreReviewReplyRepository storeReviewReplyRepository;
     @Mock private InquiryRepository inquiryRepository;
@@ -133,12 +131,16 @@ class AiReviewInquiryServiceTest {
                 store, store.getAccount(), com.eeum.eeum.domain.ai.enums.AiMessageType.REVIEW_REPLY,
                 "STORE_REVIEW", 1L, "제목", "답글 내용",
                 com.eeum.eeum.domain.ai.enums.AiChannel.APP_PUSH);
-        when(aiGeneratedMessageRepository.save(any())).thenReturn(savedMessage);
+        when(draftPersistenceExecutor.saveDraftInTx(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(savedMessage);
 
         // when
         AiGeneratedMessageResponseDto result = aiReviewInquiryService.createReviewReplyDraft(OWNER_ID, 1L, false);
 
         // then
         assertThat(result.getContent()).isEqualTo("답글 내용");
+        // 저장 성공 후에만 자기치유 퇴거를 호출해야 한다 (M-2: 미리 퇴거하면 생성 실패 시 데이터 손실)
+        verify(supportService).healDraftCapacity(store, com.eeum.eeum.domain.ai.enums.AiMessageType.REVIEW_REPLY);
     }
 }

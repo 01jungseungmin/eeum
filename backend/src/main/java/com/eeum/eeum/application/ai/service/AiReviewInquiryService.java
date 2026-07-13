@@ -8,14 +8,10 @@ import com.eeum.eeum.application.ai.dto.response.UnansweredReviewDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
-import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
-import com.eeum.eeum.domain.ai.enums.AiActionType;
 import com.eeum.eeum.domain.ai.enums.AiChannel;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
-import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.inquiry.entity.Inquiry;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
@@ -44,8 +40,7 @@ public class AiReviewInquiryService {
 
     private final AiManagerSupportService supportService;
     private final AiTextGenerator aiTextGenerator;
-    private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
-    private final AiActionLogRepository aiActionLogRepository;
+    private final AiDraftPersistenceExecutor draftPersistenceExecutor;
     private final StoreReviewRepository storeReviewRepository;
     private final StoreReviewReplyRepository storeReviewReplyRepository;
     private final InquiryRepository inquiryRepository;
@@ -90,7 +85,8 @@ public class AiReviewInquiryService {
                 .build();
     }
 
-    @Transactional
+    // @Transactional을 두지 않는다 — LLM 호출(외부 HTTP)이 DB 트랜잭션을 오래 붙잡지 않도록,
+    // 생성은 트랜잭션 밖에서 하고 저장만 saveDraft(draftPersistenceExecutor)의 짧은 트랜잭션에 위임한다.
     public AiGeneratedMessageResponseDto createReviewReplyDraft(Long ownerId, Long reviewId, boolean confirmDelete) {
         Store store = supportService.getOwnerStore(ownerId);
         StoreReview review = storeReviewRepository
@@ -104,7 +100,6 @@ public class AiReviewInquiryService {
         return saveDraft(store, AiMessageType.REVIEW_REPLY, "STORE_REVIEW", reviewId, text, "리뷰 답글 초안 생성");
     }
 
-    @Transactional
     public AiGeneratedMessageResponseDto createInquiryReplyDraft(Long ownerId, Long inquiryId, boolean confirmDelete) {
         Store store = supportService.getOwnerStore(ownerId);
         Inquiry inquiry = inquiryRepository.findByInquiryIdAndStore_StoreId(inquiryId, store.getStoreId())
@@ -117,7 +112,6 @@ public class AiReviewInquiryService {
         return saveDraft(store, AiMessageType.INQUIRY_REPLY, "INQUIRY", inquiryId, text, "문의 답변 초안 생성");
     }
 
-    @Transactional
     public AiGeneratedMessageResponseDto createComplaintDraft(Long ownerId, AiComplaintDraftRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.enforceDraftCapacity(store, AiMessageType.COMPLAINT_REPLY, request.isConfirmDelete());
@@ -154,13 +148,10 @@ public class AiReviewInquiryService {
 
     private AiGeneratedMessageResponseDto saveDraft(
             Store store, AiMessageType type, String targetType, Long targetId, AiText text, String description) {
-        AiGeneratedMessage message = aiGeneratedMessageRepository.save(
-                AiGeneratedMessage.createDraft(
-                        store, store.getAccount(), type, targetType, targetId,
-                        text.title(), text.content(), AiChannel.APP_PUSH));
-        aiActionLogRepository.save(AiActionLog.record(
-                store, store.getAccount(), AiActionType.DRAFT_CREATED,
-                targetType, message.getAiGeneratedMessageId(), description));
+        AiGeneratedMessage message = draftPersistenceExecutor.saveDraftInTx(
+                store, store.getAccount(), type, targetType, targetId,
+                text.title(), text.content(), AiChannel.APP_PUSH, targetType, description);
+        supportService.healDraftCapacity(store, type);
         return AiGeneratedMessageResponseDto.from(message);
     }
 }

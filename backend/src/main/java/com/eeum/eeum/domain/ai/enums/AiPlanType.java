@@ -9,8 +9,8 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public enum AiPlanType {
     FREE("Free", BigDecimal.ZERO),
-    BASIC("AI Basic", new BigDecimal("19000")),
-    PRO("AI Pro", new BigDecimal("39000"));
+    BASIC("AI Basic", new BigDecimal("9900")),
+    PRO("AI Pro", new BigDecimal("19900"));
 
     private final String displayName;
     private final BigDecimal monthlyPrice;

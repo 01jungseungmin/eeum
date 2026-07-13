@@ -7,14 +7,12 @@ import com.eeum.eeum.application.ai.dto.response.ChatActionDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
-import com.eeum.eeum.domain.ai.entity.AiChatMessage;
 import com.eeum.eeum.domain.ai.enums.AiCareType;
 import com.eeum.eeum.domain.ai.enums.AiChatActionType;
 import com.eeum.eeum.domain.ai.enums.AiChatRole;
 import com.eeum.eeum.domain.ai.enums.AiNoticeType;
 import com.eeum.eeum.domain.ai.enums.AiTone;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
-import com.eeum.eeum.domain.ai.repository.AiChatMessageRepository;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -24,7 +22,6 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,7 +53,7 @@ public class AiChatbotService {
 
     private final AiManagerSupportService supportService;
     private final AiTextGenerator aiTextGenerator;
-    private final AiChatMessageRepository aiChatMessageRepository;
+    private final AiChatMessageRecorder chatMessageRecorder;
     private final StoreReviewRepository storeReviewRepository;
     private final InquiryRepository inquiryRepository;
 
@@ -64,13 +61,14 @@ public class AiChatbotService {
         return QUICK_QUESTIONS;
     }
 
-    @Transactional
+    // @Transactional을 두지 않는다 — 사용자/어시스턴트 메시지 저장 사이에 LLM 호출(외부 HTTP)이 끼어 있어
+    // DB 트랜잭션을 오래 붙잡지 않도록, 각 저장을 chatMessageRecorder의 짧은 트랜잭션에 위임한다.
     public AiChatResponseDto answer(Long ownerId, AiChatMessageRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.validateFeature(store, AiFeature.CHATBOT);
 
         String input = resolveInput(request);
-        aiChatMessageRepository.save(AiChatMessage.create(store, store.getAccount(), AiChatRole.USER, input));
+        chatMessageRecorder.record(store, store.getAccount(), AiChatRole.USER, input);
 
         AiChatResponseDto response = isOutOfScope(input)
                 ? AiChatResponseDto.builder()
@@ -81,8 +79,7 @@ public class AiChatbotService {
                         .build()
                 : answerInScope(store, ownerId, input);
 
-        aiChatMessageRepository.save(
-                AiChatMessage.create(store, store.getAccount(), AiChatRole.ASSISTANT, response.getText()));
+        chatMessageRecorder.record(store, store.getAccount(), AiChatRole.ASSISTANT, response.getText());
         return response;
     }
 
@@ -94,10 +91,10 @@ public class AiChatbotService {
                     .filter(quick -> quick.getId() == request.getQuickQuestionId())
                     .findFirst()
                     .map(AiChatQuickQuestionDto::getQuestion)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.AI_CHATBOT_INVALID_INPUT));
         }
         if (request.getText() == null || request.getText().isBlank()) {
-            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+            throw new BusinessException(ErrorCode.AI_CHATBOT_INVALID_INPUT);
         }
         return request.getText();
     }
@@ -107,25 +104,25 @@ public class AiChatbotService {
     }
 
     private AiChatResponseDto answerInScope(Store store, Long ownerId, String input) {
-        // 생성성 답변 — LLM 호출 성공 후 쿼터 차감 (LLM 장애 시 쿼터 소진 방지)
+        // 생성성 답변 — 생성 시도 = 사용량 차감. 플랜/한도 초과 사용자가 LLM 호출(비용 발생) 전에 걸러지도록 먼저 차감한다.
         if (input.contains("공지")) {
-            AiText text = aiTextGenerator.noticeCopy(store.getName(), AiNoticeType.EVENT, AiTone.FRIENDLY, null);
             supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
+            AiText text = aiTextGenerator.noticeCopy(store.getName(), AiNoticeType.EVENT, AiTone.FRIENDLY, null);
             return generated(text.content(), AiChatActionType.OPEN_NOTICE_REGISTER, "공지 등록으로 이동");
         }
         if (input.contains("단골") || input.contains("고객 메시지")) {
-            AiText text = aiTextGenerator.customerCareMessage(AiCareType.INACTIVE_REGULAR, store.getName(), null);
             supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
+            AiText text = aiTextGenerator.customerCareMessage(AiCareType.INACTIVE_REGULAR, store.getName(), null);
             return generated(text.content(), AiChatActionType.SEND_MESSAGE, "이 메시지 발송하기");
         }
         if (input.contains("문의")) {
-            AiText text = aiTextGenerator.inquiryReply(store.getName(), "미답변 문의");
             supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
+            AiText text = aiTextGenerator.inquiryReply(store.getName(), "미답변 문의");
             return generated(text.content(), AiChatActionType.OPEN_REVIEW_DRAFT, "문의 답변 초안으로 이동");
         }
         if (input.contains("답글")) {
-            AiText text = aiTextGenerator.reviewReply(store.getName(), 5, null);
             supportService.consumeGeneration(store, ownerId, AiFeature.CHATBOT_GENERATION, AiUsageType.CHATBOT_GENERATION);
+            AiText text = aiTextGenerator.reviewReply(store.getName(), 5, null);
             return generated(text.content(), AiChatActionType.OPEN_REVIEW_DRAFT, "리뷰 답글 초안으로 이동");
         }
 

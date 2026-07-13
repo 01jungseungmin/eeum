@@ -5,16 +5,14 @@ import com.eeum.eeum.application.ai.dto.response.AiCustomerCareCardDto;
 import com.eeum.eeum.application.ai.dto.response.AiGeneratedMessageResponseDto;
 import com.eeum.eeum.application.ai.generator.AiText;
 import com.eeum.eeum.application.ai.generator.AiTextGenerator;
+import com.eeum.eeum.application.ai.generator.TemplateAiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
-import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
-import com.eeum.eeum.domain.ai.enums.AiActionType;
 import com.eeum.eeum.domain.ai.enums.AiCareType;
 import com.eeum.eeum.domain.ai.enums.AiChannel;
 import com.eeum.eeum.domain.ai.enums.AiMessageStatus;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
@@ -35,8 +33,9 @@ public class AiCustomerCareService {
 
     private final AiManagerSupportService supportService;
     private final AiTextGenerator aiTextGenerator;
+    private final TemplateAiTextGenerator templateGenerator;
+    private final AiDraftPersistenceExecutor draftPersistenceExecutor;
     private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
-    private final AiActionLogRepository aiActionLogRepository;
     private final CartRepository cartRepository;
     private final OrderRepository orderRepository;
     private final InquiryRepository inquiryRepository;
@@ -59,7 +58,8 @@ public class AiCustomerCareService {
         return buildCard(store, careType);
     }
 
-    @Transactional
+    // @Transactional을 두지 않는다 — LLM 호출(외부 HTTP)이 DB 트랜잭션을 오래 붙잡지 않도록,
+    // 생성은 트랜잭션 밖에서 하고 저장만 draftPersistenceExecutor의 짧은 트랜잭션에 위임한다.
     public AiGeneratedMessageResponseDto createDraft(Long ownerId, AiCareType careType, AiCustomerCareDraftRequestDto request) {
         Store store = supportService.getOwnerStore(ownerId);
         supportService.enforceDraftCapacity(store, AiMessageType.CUSTOMER_CARE, request != null && request.confirmDeleteOrFalse());
@@ -69,14 +69,10 @@ public class AiCustomerCareService {
         AiChannel channel = request != null && request.getChannel() != null ? request.getChannel() : AiChannel.APP_PUSH;
 
         AiText text = aiTextGenerator.customerCareMessage(careType, store.getName(), contextHint);
-        AiGeneratedMessage message = aiGeneratedMessageRepository.save(
-                AiGeneratedMessage.createDraft(
-                        store, store.getAccount(), AiMessageType.CUSTOMER_CARE,
-                        careType.name(), null, text.title(), text.content(), channel));
-
-        aiActionLogRepository.save(AiActionLog.record(
-                store, store.getAccount(), AiActionType.DRAFT_CREATED,
-                careType.name(), message.getAiGeneratedMessageId(), "고객 케어 초안 생성"));
+        AiGeneratedMessage message = draftPersistenceExecutor.saveDraftInTx(
+                store, store.getAccount(), AiMessageType.CUSTOMER_CARE, careType.name(), null,
+                text.title(), text.content(), channel, careType.name(), "고객 케어 초안 생성");
+        supportService.healDraftCapacity(store, AiMessageType.CUSTOMER_CARE);
 
         return AiGeneratedMessageResponseDto.from(message);
     }
@@ -93,7 +89,9 @@ public class AiCustomerCareService {
         int excludedCount = (int) aiGeneratedMessageRepository.countByStore_StoreIdAndTypeAndStatusAndSentAtAfter(
                 storeId, AiMessageType.CUSTOMER_CARE, AiMessageStatus.SENT, LocalDateTime.now().minusDays(7));
 
-        AiText prepared = aiTextGenerator.customerCareMessage(careType, store.getName(), null);
+        // 조회 API — 실제 LLM(aiTextGenerator)이 아니라 고정 템플릿으로만 미리보기 문구를 생성한다.
+        // 대시보드/카드 목록 조회만으로 외부 AI API가 호출되는 것을 방지 (실제 생성은 POST /draft에서만)
+        AiText prepared = templateGenerator.customerCareMessage(careType, store.getName(), null);
 
         return AiCustomerCareCardDto.builder()
                 .careType(careType)

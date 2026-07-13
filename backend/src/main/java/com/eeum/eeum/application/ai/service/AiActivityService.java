@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiActivitySummaryResponseDto;
-import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
+import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
 import com.eeum.eeum.domain.ai.enums.AiCareType;
@@ -25,7 +25,8 @@ import java.util.List;
 public class AiActivityService {
 
     private final AiManagerSupportService supportService;
-    private final AiInsightGenerator aiInsightGenerator;
+    // 대시보드/분석용 텍스트는 항상 템플릿만 사용 — 조회(GET) API에서 실제 LLM(Gemini 등)이 호출되는 것을 방지한다.
+    private final TemplateAiInsightGenerator aiInsightGenerator;
     private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
     private final AiConversionEventRepository aiConversionEventRepository;
     private final InquiryRepository inquiryRepository;

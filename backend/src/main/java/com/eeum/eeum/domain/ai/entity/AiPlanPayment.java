@@ -63,7 +63,12 @@ public class AiPlanPayment extends BaseEntity {
         this.paidAt = paidAt;
     }
 
+    // PENDING일 때만 FAILED로 전이 — 만료 스케줄러와 결제 완료가 경합할 때 이미 PAID된 결제를
+    // FAILED로 덮어써 "결제됐고 구독도 있는데 기록은 FAILED"가 되는 불일치를 방지한다.
     public void markFailed() {
+        if (this.status != AiPlanPaymentStatus.PENDING) {
+            return;
+        }
         this.status = AiPlanPaymentStatus.FAILED;
     }
 

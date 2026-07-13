@@ -7,6 +7,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus; //HTTP 상태 코드
 import org.springframework.http.ResponseEntity; //응답 객체 생성
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException; //@Valid 검증 실패를 처리하기 위한 클래스
 import org.springframework.web.bind.annotation.ExceptionHandler; //특정 예외 타입을 처리하는 메서드 지정
 import org.springframework.web.bind.annotation.RestControllerAdvice; //모든 Controller에서 발생한 예외를 잡는 클래스
@@ -92,6 +93,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
+    }
+
+    // ===================== 권한 거부 (@PreAuthorize 등 메서드 시큐리티) =====================
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<?>> handleAccessDenied(AccessDeniedException e) {
+        log.warn("[AccessDenied] message={}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail(ErrorCode.COMMON_FORBIDDEN));
     }
 
     // ===================== 서버 오류 =====================

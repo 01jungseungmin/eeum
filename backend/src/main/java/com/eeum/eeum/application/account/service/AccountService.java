@@ -14,6 +14,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.AccountRole;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -161,9 +162,17 @@ public class AccountService {
 
         String normalizedBusinessNumber = normalizeBusinessNumber(request.getBusinessNumber());
 
-        if (normalizedBusinessNumber != null
-                && !normalizedBusinessNumber.equals(ownerInfo.getBusinessNumber())
-                && ownerInfoRepository.existsByBusinessNumber(normalizedBusinessNumber)) {
+        boolean businessNumberChanged = normalizedBusinessNumber != null
+                && !normalizedBusinessNumber.equals(ownerInfo.getBusinessNumber());
+
+        // 승인 완료(APPROVED) 후 사업자번호 변경 차단 — OwnerApprovalService.validateReviewEditable와 동일 정책.
+        // 허용하면 OwnerInfo는 PENDING으로 돌아가지만 Account는 ROLE_OWNER로 남아, 미검증 사업자번호로
+        // /owner/** 영업을 지속할 수 있다(재심사 없이 권한 유지).
+        if (businessNumberChanged && ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
+        if (businessNumberChanged && ownerInfoRepository.existsByBusinessNumber(normalizedBusinessNumber)) {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
         }
 

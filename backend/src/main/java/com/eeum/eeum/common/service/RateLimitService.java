@@ -46,6 +46,20 @@ public class RateLimitService {
         }
     }
 
+    // 카운터형 — window 동안 누적 호출 횟수가 maxRequests를 초과하면 차단 (공개 API 스팸/과호출 방지 등).
+    // checkNotBlocked와 달리 이 메서드 자체가 호출마다 카운트를 증가시킨다(선-검증 후 별도 기록이 필요 없음).
+    public void checkAndIncrement(String key, int maxRequests, Duration window, ErrorCode errorCode) {
+        Long count = redisTemplate.opsForValue().increment(key);
+
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, window);
+        }
+
+        if (count != null && count > maxRequests) {
+            throw new BusinessException(errorCode);
+        }
+    }
+
     // 실패 1회 기록 — 최초 실패(count == 1) 시에만 TTL 설정
     public void recordFailure(String key, Duration window) {
         Long count = redisTemplate.opsForValue().increment(key);

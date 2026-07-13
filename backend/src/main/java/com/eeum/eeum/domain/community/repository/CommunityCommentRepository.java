@@ -21,6 +21,20 @@ public interface CommunityCommentRepository extends JpaRepository<CommunityComme
     @EntityGraph(attributePaths = "account")
     Page<CommunityComment> findByAccount_AccountIdAndDeletedFalseOrderByCreatedAtDesc(Long accountId, Pageable pageable);
 
+    // 좋아요 수 원자적 증감 — 엔티티 메모리 증감(read-modify-write)은 동시 요청 시 lost update가 발생하므로
+    // 게시글(CommunityPostRepository)과 동일하게 DB UPDATE로 처리한다.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE CommunityComment c SET c.likeCount = c.likeCount + 1 WHERE c.commentId = :commentId")
+    void increaseLikeCount(@Param("commentId") Long commentId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+        UPDATE CommunityComment c
+        SET c.likeCount = CASE WHEN c.likeCount > 0 THEN c.likeCount - 1 ELSE 0 END
+        WHERE c.commentId = :commentId
+    """)
+    void decreaseLikeCount(@Param("commentId") Long commentId);
+
     // 게시글 hard-delete 시 대댓글 우선 삭제 — parent_comment_id 자기참조 FK 위반 방지
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM CommunityComment c WHERE c.post.postId = :postId AND c.parentComment IS NOT NULL")

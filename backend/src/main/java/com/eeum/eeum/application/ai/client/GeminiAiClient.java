@@ -87,10 +87,10 @@ public class GeminiAiClient implements AiClient {
             JsonNode textNode = root.path("candidates").path(0)
                     .path("content").path("parts").path(0).path("text");
             String text = textNode.asText(null);
-            log.info("[AI-CLIENT][GEMINI] finishReason={}, contentLength={}, text={}",
-                    finishReason,
-                    text != null ? text.length() : 0,
-                    text);
+            // 고객 리뷰 답변/문의 답변/마케팅 문구 등 실제 생성 문구 전문은 로그에 남기지 않는다.
+            log.info("[AI-CLIENT][GEMINI] finishReason={}, contentLength={}",
+                    finishReason, text != null ? text.length() : 0);
+            log.debug("[AI-CLIENT][GEMINI] responsePreview={}", preview(text));
             if (text == null || text.isBlank()) {
                 throw new AiClientException(AiProviderType.GEMINI, "Gemini 응답이 비어 있습니다");
             }
@@ -100,6 +100,14 @@ public class GeminiAiClient implements AiClient {
         } catch (Exception e) {
             throw new AiClientException(AiProviderType.GEMINI, "Gemini 응답 파싱 실패", e);
         }
+    }
+
+    // 디버그 로그용 미리보기 — 전문을 남기지 않도록 앞부분만 자른다
+    private String preview(String text) {
+        if (text == null) {
+            return null;
+        }
+        return text.length() <= 40 ? text : text.substring(0, 40) + "...";
     }
 
     private String mergePrompts(String systemPrompt, String userPrompt) {

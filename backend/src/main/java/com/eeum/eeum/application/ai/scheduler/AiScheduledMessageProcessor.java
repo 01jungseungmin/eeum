@@ -22,18 +22,26 @@ public class AiScheduledMessageProcessor {
     private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
     private final AiActionLogRepository aiActionLogRepository;
 
-    // 발송 전 상태 재확인 후 SENT 전이 — 전이했으면 true
+    // 발송 가능 여부만 확인 — 상태는 바꾸지 않는다 (취소/수정/이미 처리된 메시지는 건너뛰기 위한 재확인용)
+    @Transactional(readOnly = true)
+    public boolean isDispatchable(Long messageId, LocalDateTime now) {
+        return aiGeneratedMessageRepository.findById(messageId)
+                .map(message -> message.isDispatchable(now))
+                .orElse(false);
+    }
+
+    // 실제 발송(dispatchService.dispatch)이 "성공적으로 끝난 뒤"에만 호출 — SCHEDULED 상태를 발송 성공 확정 전까지
+    // 유지해야 dispatch 실패 시 recordFailure의 재시도 카운트 증가가 정상 동작한다(SENT면 상태 가드에 막혀 무시됨).
     @Transactional
-    public boolean transitionToSent(Long messageId, LocalDateTime now) {
+    public void markSent(Long messageId, LocalDateTime now) {
         AiGeneratedMessage message = aiGeneratedMessageRepository.findById(messageId).orElse(null);
-        if (message == null || !message.isDispatchable(now)) {
-            return false; // 취소/수정/이미 발송된 메시지는 건너뜀
+        if (message == null) {
+            return;
         }
         message.send(now);
         aiActionLogRepository.save(AiActionLog.record(
                 message.getStore(), message.getOwnerAccount(), AiActionType.MESSAGE_SENT,
                 message.getType().name(), messageId, "예약 발송 처리 (스케줄러)"));
-        return true;
     }
 
     // 발송 실패 시 재시도 카운트 증가, 최대 재시도 초과 시 FAILED 확정

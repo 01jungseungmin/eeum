@@ -150,8 +150,12 @@ public class AiGeneratedMessage extends BaseEntity {
         this.retryCount++;
     }
 
-    // 최대 재시도 초과 등 발송 불가 확정 시 FAILED 전이
+    // 최대 재시도 초과 등 발송 불가 확정 시 FAILED 전이.
+    // 이미 SENT/CANCELLED로 확정된 메시지는 지연된 실패 기록으로 되돌리지 않는다(동시성 경합 방지).
     public void markFailed() {
+        if (this.status == AiMessageStatus.SENT || this.status == AiMessageStatus.CANCELLED) {
+            return;
+        }
         this.status = AiMessageStatus.FAILED;
     }
 

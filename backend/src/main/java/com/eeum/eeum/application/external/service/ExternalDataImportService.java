@@ -58,6 +58,7 @@ public class ExternalDataImportService {
     private final ExternalEnergyUsageStatRepository energyUsageStatRepository;
     private final ExternalBuildingEnergyStatRepository buildingEnergyStatRepository;
     private final ExternalDataImportHistoryRepository importHistoryRepository;
+    private final ExternalImportFailureRecorder failureRecorder;
 
     @Transactional(readOnly = true)
     public Page<ExternalDataImportHistory> getImportHistory(Pageable pageable) {
@@ -150,14 +151,16 @@ public class ExternalDataImportService {
 
     // ===================== 내부 유틸 =====================
 
+    // 실패 이력은 REQUIRES_NEW로 즉시 커밋한다 — 이 메서드 직후 던지는 예외로 호출부 트랜잭션이 롤백되어도
+    // "적재 실패했다"는 감사 이력 자체는 남아 있어야 한다.
     private void validateAnySuccess(CsvContent csv, int successRows, String dataName,
                                     MultipartFile file, LocalDate sourceUpdatedAt, int failedRows) {
         if (successRows == 0) {
-            saveHistory(dataName, dataName.equals(ELECTRIC_USAGE_NAME) ? ELECTRIC_USAGE_SOURCE_ID : BUILDING_ENERGY_SOURCE_ID,
-                    file, sourceUpdatedAt, csv.rows().size(), 0, failedRows,
-                    "필수 컬럼(기준년월/사용량)을 찾을 수 없거나 유효한 행이 없습니다");
-            throw new BusinessException(ErrorCode.VALIDATION_INVALID_INPUT,
-                    "필수 컬럼(기준년월/사용량)을 찾을 수 없거나 유효한 행이 없습니다");
+            String failureReason = "필수 컬럼(기준년월/사용량)을 찾을 수 없거나 유효한 행이 없습니다";
+            failureRecorder.recordFailure(
+                    dataName, dataName.equals(ELECTRIC_USAGE_NAME) ? ELECTRIC_USAGE_SOURCE_ID : BUILDING_ENERGY_SOURCE_ID,
+                    file, sourceUpdatedAt, csv.rows().size(), failedRows, failureReason);
+            throw new BusinessException(ErrorCode.VALIDATION_INVALID_INPUT, failureReason);
         }
     }
 

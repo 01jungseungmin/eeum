@@ -3,7 +3,7 @@ package com.eeum.eeum.application.ai.service;
 import com.eeum.eeum.application.ai.dto.request.AiLocalMatchConditionRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiExposureStatusResponseDto;
 import com.eeum.eeum.application.ai.dto.response.AiLocalMatchResponseDto;
-import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
+import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -35,7 +35,8 @@ public class AiLocalMatchService {
     private static final Duration EXPOSURE_LOCK_LEASE = Duration.ofSeconds(5);
 
     private final AiManagerSupportService supportService;
-    private final AiInsightGenerator aiInsightGenerator;
+    // 대시보드/분석용 텍스트는 항상 템플릿만 사용 — 조회(GET) API에서 실제 LLM(Gemini 등)이 호출되는 것을 방지한다.
+    private final TemplateAiInsightGenerator aiInsightGenerator;
     private final AiExposureStatusRepository aiExposureStatusRepository;
     private final OrderRepository orderRepository;
     private final FavoriteRepository favoriteRepository;

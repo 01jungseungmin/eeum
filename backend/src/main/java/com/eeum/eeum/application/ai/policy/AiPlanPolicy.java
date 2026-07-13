@@ -11,7 +11,9 @@ import java.util.List;
 @Component
 public class AiPlanPolicy {
 
-    private static final int BASIC_MONTHLY_LIMIT = 30;
+    private static final int FREE_MONTHLY_LIMIT = 5;
+    private static final int BASIC_MONTHLY_LIMIT = 50;
+    private static final int PRO_MONTHLY_LIMIT = 200;
 
     public void validateAccess(AiPlanType plan, AiFeature feature) {
         if (!plan.isAtLeast(feature.getRequiredPlan())) {
@@ -26,9 +28,9 @@ public class AiPlanPolicy {
     // null이면 무제한 (Pro)
     public Integer monthlyLimit(AiPlanType plan) {
         return switch (plan) {
-            case FREE -> 0;
+            case FREE -> FREE_MONTHLY_LIMIT;
             case BASIC -> BASIC_MONTHLY_LIMIT;
-            case PRO -> null;
+            case PRO -> PRO_MONTHLY_LIMIT;
         };
     }
 
@@ -37,16 +39,20 @@ public class AiPlanPolicy {
             case FREE -> List.of(
                     "기본 상품·이벤트 관리",
                     "대시보드·고객 케어 카드 조회",
-                    "공지 직접 작성·등록"
+                    "공지 직접 작성·등록",
+                    "AI 문구 생성 월 5회 체험"
             );
             case BASIC -> List.of(
                     "AI 추천 월 " + BASIC_MONTHLY_LIMIT + "회",
-                    "이벤트 추천·홍보 문구 생성",
+                    "상품 설명·이벤트 홍보 문구 생성",
+                    "리뷰 답글 초안 생성",
                     "기본 생활권 매칭 분석",
+                    "절감 계획·전력 사용 리포트",
                     "운영 위험 조기정보 요약",
                     "AI 챗봇"
             );
             case PRO -> List.of(
+                    "AI 추천 월 200회",
                     "AI 고객 케어 고급 분석",
                     "생활권 매칭 우선 노출",
                     "리뷰/문의 위험 신호 분석",

@@ -52,7 +52,7 @@ class AiPlanServiceTest {
     }
 
     @Test
-    void BASIC_플랜은_월_한도가_30이다() {
+    void BASIC_플랜은_월_한도가_50이다() {
         // given
         stubStore();
         when(supportService.getPlanType(STORE_ID)).thenReturn(AiPlanType.BASIC);
@@ -62,12 +62,12 @@ class AiPlanServiceTest {
         AiPlanResponseDto result = aiPlanService.getPlans(OWNER_ID);
 
         // then
-        assertThat(result.getMonthlyLimit()).isEqualTo(30);
+        assertThat(result.getMonthlyLimit()).isEqualTo(50);
         assertThat(result.getCurrentUsage()).isEqualTo(5);
     }
 
     @Test
-    void PRO_플랜은_월_한도가_null이다() {
+    void PRO_플랜은_월_한도가_200이다() {
         // given
         stubStore();
         when(supportService.getPlanType(STORE_ID)).thenReturn(AiPlanType.PRO);
@@ -77,7 +77,7 @@ class AiPlanServiceTest {
         AiPlanResponseDto result = aiPlanService.getPlans(OWNER_ID);
 
         // then
-        assertThat(result.getMonthlyLimit()).isNull();
+        assertThat(result.getMonthlyLimit()).isEqualTo(200);
     }
 
     @Test

@@ -36,23 +36,30 @@ public class AiAdExposureService {
         List<AiExposureStatus> activeExposures = aiExposureStatusRepository.findByActiveTrue();
         String requestId = UUID.randomUUID().toString();
 
-        List<AiExposedStoreDto> exposedStores = activeExposures.stream()
+        List<AiExposureStatus> matched = activeExposures.stream()
                 .filter(exposure -> matchesRegion(exposure, regionKeyword))
-                .map(exposure -> {
-                    // 노출 로그 — viewer는 로그인 사용자만 기록 (개인정보 최소화)
-                    aiAdExposureLogRepository.save(AiAdExposureLog.record(
-                            exposure.getStore(), exposure.getAiExposureStatusId(),
-                            viewerAccountId, "LOCAL_MATCH", requestId));
-                    return AiExposedStoreDto.from(exposure, requestId);
-                })
                 .toList();
-        return exposedStores;
+
+        // 노출 로그 — viewer는 로그인 사용자만 기록 (개인정보 최소화 + 비인증 IP 로테이션으로 인한
+        // 로그 테이블 무한 증가/지표 오염 방지). 건별 save() 대신 saveAll()로 일괄 저장.
+        if (viewerAccountId != null && !matched.isEmpty()) {
+            aiAdExposureLogRepository.saveAll(matched.stream()
+                    .map(exposure -> AiAdExposureLog.record(
+                            exposure.getStore(), exposure.getAiExposureStatusId(),
+                            viewerAccountId, "LOCAL_MATCH", requestId))
+                    .toList());
+        }
+
+        return matched.stream()
+                .map(exposure -> AiExposedStoreDto.from(exposure, requestId))
+                .toList();
     }
 
     @Transactional
     public void recordClick(Long exposureStatusId, Long viewerAccountId, String requestId) {
         AiExposureStatus exposure = aiExposureStatusRepository.findById(exposureStatusId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+                .filter(AiExposureStatus::isActive)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AI_EXPOSURE_NOT_FOUND));
         aiAdClickLogRepository.save(AiAdClickLog.record(
                 exposure.getStore(), exposureStatusId, viewerAccountId, requestId));
     }

@@ -9,6 +9,11 @@ public final class LockKeys {
         return "lock:order:" + orderId;
     }
 
+    // 상품별 이벤트 등록 락 — 동일 상품 ACTIVE 이벤트 중복 생성 방지
+    public static String eventProductCreate(Long productId) {
+        return "lock:event-product-create:" + productId;
+    }
+
     public static String orderNumber(String orderNumber) {
         return "lock:order-number:" + orderNumber;
     }
@@ -88,5 +93,16 @@ public final class LockKeys {
     // AI 플랜 결제 처리 락 (Webhook/검증 멱등)
     public static String aiPlanPayment(String paymentId) {
         return "lock:ai-plan-payment:" + paymentId;
+    }
+
+    // AI 플랜 구독 요청(결제 생성) 락 — 동일 store의 중복 요청으로 인한 이중 결제 방지
+    public static String aiPlanSubscriptionRequest(Long storeId) {
+        return "lock:ai-plan-subscription-request:store:" + storeId;
+    }
+
+    // 초안 보관 캡 검증~퇴거 락 — 동시 요청으로 인한 캡 초과/오래된 초안 중복 퇴거 방지
+    // common 모듈이 domain을 의존하지 않도록 enum 대신 String(예: type.name())을 받는다
+    public static String aiDraftCapacity(Long storeId, String type) {
+        return "lock:ai-draft-capacity:" + storeId + ":" + type;
     }
 }

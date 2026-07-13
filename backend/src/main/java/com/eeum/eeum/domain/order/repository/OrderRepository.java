@@ -82,6 +82,21 @@ public interface OrderRepository extends JpaRepository<Order, Long>, OrderReposi
             @Param("status") OrderStatus status
     );
 
+    // 매출 집계 — 결제 완료 후 전이된 상태(CONFIRMED/READY/COMPLETED)까지 포함해야 실제 매출과 일치한다.
+    @Query("""
+    SELECT COALESCE(SUM(o.totalPrice), 0)
+    FROM Order o
+    WHERE o.store.storeId = :storeId
+      AND o.createdAt BETWEEN :from AND :to
+      AND o.status IN :statuses
+""")
+    BigDecimal sumTotalPriceByStoreAndCreatedAtBetween(
+            @Param("storeId") Long storeId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") Collection<OrderStatus> statuses
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         SELECT o

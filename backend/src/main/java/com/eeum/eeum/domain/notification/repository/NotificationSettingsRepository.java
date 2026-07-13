@@ -22,4 +22,7 @@ public interface NotificationSettingsRepository extends JpaRepository<Notificati
     @Query("SELECT s.account.accountId FROM NotificationSettings s "
             + "WHERE s.marketingEnabled = true AND s.account.accountId IN :accountIds")
     List<Long> findMarketingEnabledAccountIds(List<Long> accountIds);
+
+    //AI 메시지 발송 대상의 DND(방해 금지) 설정 배치 조회 — isDndActive()는 현재 시각 기준이라 엔티티 단위로 판단
+    List<NotificationSettings> findByAccount_AccountIdIn(List<Long> accountIds);
 }

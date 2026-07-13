@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiEventPerformanceResponseDto;
-import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
+import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
@@ -26,7 +27,7 @@ class AiEventPerformanceServiceTest {
     private AiEventPerformanceService aiEventPerformanceService;
 
     @Mock private AiManagerSupportService supportService;
-    @Mock private AiInsightGenerator aiInsightGenerator;
+    @Spy private TemplateAiInsightGenerator aiInsightGenerator = new TemplateAiInsightGenerator();
     @Mock private EventProductRepository eventProductRepository;
     @Mock private OrderRepository orderRepository;
 

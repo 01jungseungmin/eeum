@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.ai.dto.response.AiActivitySummaryResponseDto;
-import com.eeum.eeum.application.ai.generator.AiInsightGenerator;
+import com.eeum.eeum.application.ai.generator.TemplateAiInsightGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
 import com.eeum.eeum.domain.ai.enums.AiCareType;
@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -37,7 +38,7 @@ class AiActivityServiceTest {
     private AiActivityService aiActivityService;
 
     @Mock private AiManagerSupportService supportService;
-    @Mock private AiInsightGenerator aiInsightGenerator;
+    @Spy private TemplateAiInsightGenerator aiInsightGenerator = new TemplateAiInsightGenerator();
     @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
     @Mock private AiConversionEventRepository aiConversionEventRepository;
     @Mock private InquiryRepository inquiryRepository;

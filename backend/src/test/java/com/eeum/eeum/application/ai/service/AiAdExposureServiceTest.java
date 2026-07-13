@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.ai.repository.AiAdExposureLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiExposureStatusRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -54,13 +56,13 @@ class AiAdExposureServiceTest {
         AiExposureStatus exposure = activeExposure(1L, "서울 마포구 서교동");
         when(aiExposureStatusRepository.findByActiveTrue()).thenReturn(List.of(exposure));
 
-        // when
-        List<AiExposedStoreDto> stores = exposureService.getExposedStores(null, null);
+        // when — 로그인 사용자(non-null)만 노출 로그가 기록된다
+        List<AiExposedStoreDto> stores = exposureService.getExposedStores(100L, null);
 
         // then
         assertThat(stores).hasSize(1);
         assertThat(stores.get(0).getStoreId()).isEqualTo(1L);
-        verify(aiAdExposureLogRepository).save(any());
+        verify(aiAdExposureLogRepository).saveAll(anyList());
     }
 
     @Test
@@ -74,7 +76,7 @@ class AiAdExposureServiceTest {
 
         // then
         assertThat(stores).isEmpty();
-        verify(aiAdExposureLogRepository, never()).save(any());
+        verify(aiAdExposureLogRepository, never()).saveAll(anyList());
     }
 
     @Test
@@ -100,12 +102,32 @@ class AiAdExposureServiceTest {
     }
 
     @Test
-    void 존재하지_않는_노출_ID_클릭은_예외가_발생한다() {
+    void 존재하지_않는_노출_ID_클릭은_AI_EXPOSURE_NOT_FOUND_예외가_발생한다() {
         // given
         when(aiExposureStatusRepository.findById(99L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> exposureService.recordClick(99L, null, null))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_EXPOSURE_NOT_FOUND);
+    }
+
+    @Test
+    void 중지된_노출의_클릭은_AI_EXPOSURE_NOT_FOUND_예외가_발생하고_기록되지_않는다() {
+        // given — 노출은 존재하지만 사장이 이미 중지(active=false)한 상태
+        Store store = mock(Store.class);
+        AiExposureStatus stoppedExposure = AiExposureStatus.init(store);
+        stoppedExposure.start(LocalDateTime.now(), 10);
+        stoppedExposure.stop(LocalDateTime.now());
+        ReflectionTestUtils.setField(stoppedExposure, "aiExposureStatusId", 1L);
+        when(aiExposureStatusRepository.findById(1L)).thenReturn(Optional.of(stoppedExposure));
+
+        // when & then
+        assertThatThrownBy(() -> exposureService.recordClick(1L, null, "req-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_EXPOSURE_NOT_FOUND);
+        verify(aiAdClickLogRepository, never()).save(any());
     }
 }

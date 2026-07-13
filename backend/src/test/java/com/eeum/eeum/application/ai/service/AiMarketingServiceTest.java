@@ -8,10 +8,9 @@ import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
 import com.eeum.eeum.domain.ai.enums.AiChannel;
+import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.ai.enums.AiNoticeType;
 import com.eeum.eeum.domain.ai.enums.AiTone;
-import com.eeum.eeum.domain.ai.repository.AiActionLogRepository;
-import com.eeum.eeum.domain.ai.repository.AiGeneratedMessageRepository;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
@@ -33,8 +32,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,8 +47,7 @@ class AiMarketingServiceTest {
 
     @Mock private AiManagerSupportService supportService;
     @Mock private AiTextGenerator aiTextGenerator;
-    @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
-    @Mock private AiActionLogRepository aiActionLogRepository;
+    @Mock private AiDraftPersistenceExecutor draftPersistenceExecutor;
     @Mock private FavoriteRepository favoriteRepository;
     @Mock private OrderRepository orderRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
@@ -56,7 +57,7 @@ class AiMarketingServiceTest {
 
     private Store stubStore() {
         Store store = mock(Store.class);
-        when(store.getStoreId()).thenReturn(STORE_ID);
+        lenient().when(store.getStoreId()).thenReturn(STORE_ID);
         lenient().when(store.getName()).thenReturn("테스트 가게");
         lenient().when(store.getAccount()).thenReturn(mock(Account.class));
         when(supportService.getOwnerStore(OWNER_ID)).thenReturn(store);
@@ -88,8 +89,10 @@ class AiMarketingServiceTest {
         when(aiTextGenerator.marketingCopy(any(), any(), any(), any()))
                 .thenReturn(new AiText("제목", "내용"));
         AiGeneratedMessage savedMessage = AiGeneratedMessage.createDraft(
-                store, store.getAccount(), null, null, null, "제목", "내용", AiChannel.APP_PUSH);
-        when(aiGeneratedMessageRepository.save(any())).thenReturn(savedMessage);
+                store, store.getAccount(), AiMessageType.EVENT_MARKETING, null, null, "제목", "내용", AiChannel.APP_PUSH);
+        when(draftPersistenceExecutor.saveDraftInTx(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(savedMessage);
         when(favoriteRepository.findAccountIdsByRefTypeAndRefId(FavoriteRefType.STORE, STORE_ID))
                 .thenReturn(List.of(1L, 2L, 3L));
 
@@ -101,6 +104,27 @@ class AiMarketingServiceTest {
         assertThat(result.getContent()).isEqualTo("내용");
         assertThat(result.getChannelReaches()).hasSize(1);
         assertThat(result.getEstimatedReach()).isEqualTo(3);
+        // 저장 성공 후에만 자기치유 퇴거를 호출해야 한다 (M-2: 미리 퇴거하면 생성 실패 시 데이터 손실)
+        verify(supportService).healDraftCapacity(store, AiMessageType.EVENT_MARKETING);
+    }
+
+    @Test
+    void 사용량_초과로_consumeGeneration이_실패하면_LLM은_호출되지_않는다() {
+        // given — 플랜/한도 초과 사용자가 실제 LLM 비용을 발생시키기 전에 걸러져야 한다
+        stubStore();
+        AiMarketingDraftRequestDto request = new AiMarketingDraftRequestDto(
+                AiNoticeType.EVENT, AiTone.FRIENDLY, List.of(AiChannel.APP_PUSH), "키워드", false);
+        doThrow(new BusinessException(ErrorCode.AI_USAGE_LIMIT_EXCEEDED))
+                .when(supportService).consumeGeneration(any(), any(), any(), any());
+
+        // when & then
+        assertThatThrownBy(() -> aiMarketingService.createMarketingDraft(OWNER_ID, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
+        verify(aiTextGenerator, never()).marketingCopy(any(), any(), any(), any());
+        verify(draftPersistenceExecutor, never()).saveDraftInTx(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -113,8 +137,10 @@ class AiMarketingServiceTest {
         when(aiTextGenerator.marketingCopy(any(), any(), any(), any()))
                 .thenReturn(new AiText("제목", "내용"));
         AiGeneratedMessage savedMessage = AiGeneratedMessage.createDraft(
-                store, store.getAccount(), null, null, null, "제목", "내용", AiChannel.SNS_CARD);
-        when(aiGeneratedMessageRepository.save(any())).thenReturn(savedMessage);
+                store, store.getAccount(), AiMessageType.EVENT_MARKETING, null, null, "제목", "내용", AiChannel.SNS_CARD);
+        when(draftPersistenceExecutor.saveDraftInTx(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(savedMessage);
 
         // when
         AiMarketingDraftResponseDto result = aiMarketingService.createMarketingDraft(OWNER_ID, request);

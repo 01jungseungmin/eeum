@@ -57,7 +57,6 @@ public class SecurityConfig {
             "/auth/password/verify",
             "/auth/password/reset",
             "/auth/business/verify",
-            "/admin/locations/sync",
             "/payments/webhook",
             "/ai-exposures/*/click"
     };

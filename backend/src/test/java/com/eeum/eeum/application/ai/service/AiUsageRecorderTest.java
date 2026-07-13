@@ -50,10 +50,10 @@ class AiUsageRecorderTest {
     }
 
     @Test
-    void Basic_플랜_월_30회_초과_시_AI_USAGE_LIMIT_EXCEEDED_예외가_발생한다() {
+    void Basic_플랜_월_50회_초과_시_AI_USAGE_LIMIT_EXCEEDED_예외가_발생한다() {
         // given
         Store store = stubStore();
-        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(30L);
+        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(50L);
 
         // when & then
         assertThatThrownBy(() -> aiUsageRecorder.checkAndRecord(
@@ -78,38 +78,67 @@ class AiUsageRecorderTest {
     }
 
     @Test
-    void Pro_플랜은_카운트_조회_없이_사용량_로그만_저장된다() {
-        // given
+    void Pro_플랜도_월_사용량을_카운트하며_한도_이내면_로그가_저장된다() {
+        // given — PRO도 월 200회 한도가 있어 카운트를 확인한다
         Store store = stubStore();
+        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(10L);
 
         // when
         aiUsageRecorder.checkAndRecord(store, OWNER_ID, AiPlanType.PRO, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
 
         // then
-        verify(aiUsageLogRepository, never()).countByStore_StoreIdAndYearMonth(anyLong(), anyString());
+        verify(aiUsageLogRepository).countByStore_StoreIdAndYearMonth(anyLong(), anyString());
         verify(aiUsageLogRepository).save(any());
     }
 
     @Test
-    void Free_플랜은_AI_PLAN_REQUIRED_예외가_발생한다() {
-        // given — FREE 플랜 limit=0이므로 카운트 조회 없이 즉시 거부되어야 한다
+    void Pro_플랜_월_200회_초과_시_AI_USAGE_LIMIT_EXCEEDED_예외가_발생한다() {
+        // given
         Store store = stubStore();
+        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(200L);
+
+        // when & then
+        assertThatThrownBy(() -> aiUsageRecorder.checkAndRecord(
+                store, OWNER_ID, AiPlanType.PRO, AiUsageType.MARKETING_DRAFT, YEAR_MONTH))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
+        verify(aiUsageLogRepository, never()).save(any());
+    }
+
+    @Test
+    void Free_플랜_월_5회_초과_시_AI_USAGE_LIMIT_EXCEEDED_예외가_발생한다() {
+        // given — FREE 플랜도 월 5회 체험 한도가 있어, 초과 시 거부된다
+        Store store = stubStore();
+        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(5L);
 
         // when & then
         assertThatThrownBy(() -> aiUsageRecorder.checkAndRecord(
                 store, OWNER_ID, AiPlanType.FREE, AiUsageType.MARKETING_DRAFT, YEAR_MONTH))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.AI_PLAN_REQUIRED);
-        verify(aiUsageLogRepository, never()).countByStore_StoreIdAndYearMonth(anyLong(), anyString());
+                .isEqualTo(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
         verify(aiUsageLogRepository, never()).save(any());
     }
 
     @Test
-    void Basic_플랜_29회_사용_시_30번째_요청은_성공한다() {
+    void Free_플랜_한도_이내면_사용량_로그가_저장된다() {
         // given
         Store store = stubStore();
-        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(29L);
+        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(2L);
+
+        // when
+        aiUsageRecorder.checkAndRecord(store, OWNER_ID, AiPlanType.FREE, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);
+
+        // then
+        verify(aiUsageLogRepository).save(any());
+    }
+
+    @Test
+    void Basic_플랜_49회_사용_시_50번째_요청은_성공한다() {
+        // given
+        Store store = stubStore();
+        when(aiUsageLogRepository.countByStore_StoreIdAndYearMonth(anyLong(), anyString())).thenReturn(49L);
 
         // when
         aiUsageRecorder.checkAndRecord(store, OWNER_ID, AiPlanType.BASIC, AiUsageType.MARKETING_DRAFT, YEAR_MONTH);

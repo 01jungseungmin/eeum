@@ -19,6 +19,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -35,6 +36,7 @@ class ExternalDataImportServiceTest {
     @Mock private ExternalEnergyUsageStatRepository energyUsageStatRepository;
     @Mock private ExternalBuildingEnergyStatRepository buildingEnergyStatRepository;
     @Mock private ExternalDataImportHistoryRepository importHistoryRepository;
+    @Mock private ExternalImportFailureRecorder failureRecorder;
 
     private MockMultipartFile csv(String name, String content) {
         return new MockMultipartFile("file", name, "text/csv", content.getBytes(StandardCharsets.UTF_8));
@@ -68,12 +70,12 @@ class ExternalDataImportServiceTest {
                 이름,주소
                 가게,서울
                 """);
-        when(importHistoryRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         // when & then
         assertThatThrownBy(() -> importService.importElectricUsageType(file, null))
                 .isInstanceOf(BusinessException.class);
-        verify(importHistoryRepository).save(any()); // FAILED 이력 저장
+        // FAILED 이력은 REQUIRES_NEW 커밋 전용 recorder를 통해 남는다 (호출부 롤백과 무관하게 남아야 함)
+        verify(failureRecorder).recordFailure(anyString(), anyString(), any(), any(), anyInt(), anyInt(), anyString());
         verify(energyUsageStatRepository, never()).saveAll(anyList());
     }
 

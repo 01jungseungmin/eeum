@@ -6,10 +6,11 @@ import com.eeum.eeum.application.ai.generator.TemplateAiTextGenerator;
 import com.eeum.eeum.application.ai.policy.AiFeature;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.enums.AiUsageType;
-import com.eeum.eeum.domain.ai.repository.AiChatMessageRepository;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,8 +21,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -36,7 +39,7 @@ class AiChatbotServiceTest {
     private AiChatbotService chatbotService;
 
     @Mock private AiManagerSupportService supportService;
-    @Mock private AiChatMessageRepository aiChatMessageRepository;
+    @Mock private AiChatMessageRecorder chatMessageRecorder;
     @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private InquiryRepository inquiryRepository;
     @Spy private TemplateAiTextGenerator aiTextGenerator = new TemplateAiTextGenerator();
@@ -88,6 +91,23 @@ class AiChatbotServiceTest {
     }
 
     @Test
+    void 사용량_초과로_consumeGeneration이_실패하면_LLM은_호출되지_않는다() {
+        // given — 플랜/한도 초과 사용자가 실제 LLM 비용을 발생시키기 전에 걸러져야 한다
+        stubStore();
+        doThrow(new BusinessException(ErrorCode.AI_USAGE_LIMIT_EXCEEDED))
+                .when(supportService).consumeGeneration(any(), any(), any(), any());
+
+        // when — 고정 질문 2번: "오늘 공지 문구 써줘"
+        assertThatThrownBy(() -> chatbotService.answer(OWNER_ID, new AiChatMessageRequestDto(2, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_USAGE_LIMIT_EXCEEDED);
+
+        // then
+        verify(aiTextGenerator, never()).noticeCopy(any(), any(), any(), any());
+    }
+
+    @Test
     void 챗봇_조회성_답변은_사용량에_카운트되지_않는다() {
         // given
         stubStore();
@@ -126,7 +146,7 @@ class AiChatbotServiceTest {
         chatbotService.answer(OWNER_ID, new AiChatMessageRequestDto(null, "장사 잘 되게 도와줘"));
 
         // then
-        verify(aiChatMessageRepository, times(2)).save(any());
+        verify(chatMessageRecorder, times(2)).record(any(), any(), any(), any());
     }
 
     @Test
@@ -137,5 +157,29 @@ class AiChatbotServiceTest {
         // then
         assertThat(questions).hasSize(8);
         assertThat(questions).extracting("question").contains("이번 주 이벤트 뭐 할까요?", "답글 초안 써줘");
+    }
+
+    @Test
+    void 존재하지_않는_quickQuestionId는_AI_CHATBOT_INVALID_INPUT_예외가_발생한다() {
+        // given
+        stubStore();
+
+        // when & then
+        assertThatThrownBy(() -> chatbotService.answer(OWNER_ID, new AiChatMessageRequestDto(99, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_CHATBOT_INVALID_INPUT);
+    }
+
+    @Test
+    void 빈_텍스트_입력은_AI_CHATBOT_INVALID_INPUT_예외가_발생한다() {
+        // given
+        stubStore();
+
+        // when & then
+        assertThatThrownBy(() -> chatbotService.answer(OWNER_ID, new AiChatMessageRequestDto(null, "  ")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_CHATBOT_INVALID_INPUT);
     }
 }
