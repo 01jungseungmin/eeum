@@ -210,10 +210,12 @@ export default function ReservationPage() {
   const [filter, setFilter] = useState('전체');
   const [isOrdersLoading, setIsOrdersLoading] = useState(false);
 
+  // 기본 설정과 시간대 현황 조회
   const fetchSettings = async () => {
     try {
       const response = await reservationApi.getVisitSettings();
       if (response.data && response.data.success) {
+        console.log('기본 설정 로드 성공:', response.data.data);
         setSettings({ ...response.data.data });
         fetchTimeSlots(selectedDate);
       }
@@ -222,6 +224,7 @@ export default function ReservationPage() {
     }
   };
 
+  // 특정 날짜의 시간대 현황 조회
   const fetchTimeSlots = useCallback(async (date) => {
     try {
       const response = await reservationApi.getDateTimeSlots(date);
@@ -235,6 +238,7 @@ export default function ReservationPage() {
     }
   }, []);
 
+  // 특정 날짜의 예약 목록 조회
   const fetchOrders = useCallback(async () => {
     setIsOrdersLoading(true);
     try {
