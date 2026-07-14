@@ -512,18 +512,20 @@ export default function ShopChatManagement() {
     setSelectedMessageId(msg.messageId);
   };
 
+  // 채팅 삭제
   const handleConfirmDelete = async () => {
     if (!selectedMessageId) return;
     try {
       await chatApi.deleteMessage(selectedMessageId);
+      await initChat();
       setIsDeleteModalOpen(false);
-      loadChatData();
     } catch (error) {
       console.error(error);
       alert('메시지 삭제에 실패했습니다.');
     }
   };
 
+  // 이미지 업로드 후 전송
   const handleImagesSubmit = async () => {
     if (uploadImages.length === 0) return;
     setIsUploading(true);
@@ -537,9 +539,9 @@ export default function ShopChatManagement() {
           });
         }
       }
+      await initChat();
       setUploadImages([]);
       setIsModalOpen(false);
-      loadChatData();
     } catch (error) {
       console.error(error);
     } finally {
@@ -656,6 +658,56 @@ export default function ShopChatManagement() {
       </ChatWrapper>
 
       {/* 모달 생략 - 이전과 동일 */}
+      {isModalOpen && (
+        <ModalOverlay onClick={() => !isUploading && setIsModalOpen(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalTitle>전송할 이미지 선택 (최대 5장)</ModalTitle>
+            <ImageUploaderGrid
+              variant="product"
+              images={uploadImages}
+              onChange={setUploadImages}
+              maxCount={5}
+            />
+            <ModalActionRow>
+              <CancelButton
+                disabled={isUploading}
+                onClick={() => setIsModalOpen(false)}
+              >
+                취소
+              </CancelButton>
+              <ConfirmButton
+                disabled={isUploading || uploadImages.length === 0}
+                onClick={handleImagesSubmit}
+              >
+                {isUploading
+                  ? '전송 중...'
+                  : `${uploadImages.length}장의 사진 전송`}
+              </ConfirmButton>
+            </ModalActionRow>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {isDeleteModalOpen && (
+        <ModalOverlay onClick={() => setIsDeleteModalOpen(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalTitle>🚨 메시지 삭제</ModalTitle>
+            <div style={{ fontSize: '14px', color: '#555', lineHeight: '1.5' }}>
+              정말로 이 메시지를 삭제하시겠습니까?
+              <br />
+              삭제된 대화는 복구할 수 없으며 대화창 전체에 반영됩니다.
+            </div>
+            <ModalActionRow>
+              <CancelButton onClick={() => setIsDeleteModalOpen(false)}>
+                취소
+              </CancelButton>
+              <ConfirmButton $isDelete={true} onClick={handleConfirmDelete}>
+                정말 삭제
+              </ConfirmButton>
+            </ModalActionRow>
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </PageContainer>
   );
 }
