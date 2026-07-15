@@ -11,6 +11,7 @@ import { Text } from '../../components/CustomText';
 import { shopApi } from '../../api/shop';
 import { regionApi } from '../../api/region';
 import { chatApi } from '../../api/chat';
+import { cartApi } from '../../api/cart';
 
 const { width } = Dimensions.get('window');
 
@@ -68,7 +69,7 @@ export default function ProductDetailScreen() {
   }, [productIdNum]);
 
   // 장바구니 담기 / 주문하기 핸들러 (방어벽 작동)
-  const handleAction = () => {
+  const handleAction = async () => { // ✨ async 추가
     if (!isVerified) {
       Alert.alert(
         '동네 인증 필요', 
@@ -79,12 +80,22 @@ export default function ProductDetailScreen() {
 
     if (isRestaurantProd) {
       Alert.alert('성공', '메뉴 선택이 완료되었습니다. 주문 화면으로 이동합니다.');
-      // router.push('/order'); // 추후 주문 페이지 구현 시 활성화
+      router.push(`/order/${productIdNum}` as any);
     } else {
-      Alert.alert('장바구니 담기 성공', `${productDetail?.name} ${quantity}개가 장바구니에 담겼습니다.`, [
-        { text: '쇼핑 계속하기', style: 'cancel' },
-        { text: '장바구니 보기', onPress: () => router.push('/cart') }
-      ]);
+      try {
+        await cartApi.addCartItem({ 
+          productId: productIdNum, 
+          quantity: quantity 
+        });
+      
+        Alert.alert('장바구니 담기 성공', `${productDetail?.name} ${quantity}개가 장바구니에 담겼습니다.`, [
+          { text: '쇼핑 계속하기', style: 'cancel' },
+          { text: '장바구니 보기', onPress: () => router.push('/cart') }
+        ]);
+      } catch (error) {
+        console.error("장바구니 담기 오류:", error);
+        Alert.alert('오류', '장바구니에 상품을 담는데 실패했습니다.');
+      }
     }
   };
 
