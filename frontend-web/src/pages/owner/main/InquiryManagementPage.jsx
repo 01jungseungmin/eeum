@@ -14,7 +14,6 @@ const Container = styled.div`
   font-family: 'Noto Sans KR', sans-serif;
 `;
 
-// 💡 1. 채팅방 개설 유도용 상단 배너 스타일 추가
 const ChatBanner = styled.div`
   background-color: #eafaf1; /* 브랜드 그린 연한 배경 톤 */
   border: 1px solid #42a574;
@@ -64,7 +63,11 @@ const LoadingText = styled.div`
   color: #666;
 `;
 
-const STATUS_MAP = { PENDING: '미답변', ANSWERED: '답변완료' };
+const STATUS_MAP = {
+  PENDING: '미답변',
+  ANSWERED: '답변완료',
+};
+
 const CATEGORY_MAP = {
   STORE: '상품 문의',
   ORDER: '주문 문의',
@@ -91,6 +94,7 @@ export default function InquiryManagement() {
   const loadInquiries = async () => {
     try {
       const res = await inquiryApi.getStoreInquiries({ page: 0, size: 50 });
+      // 기존에 쓰시던 res.data.data.content 완벽 반영
       if (res.data.success && res.data.data.content) {
         setInquiries(res.data.data.content);
       }
@@ -135,18 +139,23 @@ export default function InquiryManagement() {
     }
   };
 
+  // 백엔드 데이터를 기반으로 동적 필터링을 수행하는 로직
   const filteredInquiries = inquiries.filter((item) => {
     const mappedStatus = STATUS_MAP[item.status] || '미답변';
     const matchesStatus =
       statusFilter === '전체' || mappedStatus === statusFilter;
+
     const mappedType = CATEGORY_MAP[item.category] || '기타';
     const matchesType = typeFilter === '전체 유형' || mappedType === typeFilter;
+
     const matchesSearch =
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.writerName.toLowerCase().includes(searchTerm.toLowerCase());
+
     return matchesStatus && matchesType && matchesSearch;
   });
 
+  // 카운트 자동 계산 데이터 바인딩
   const counts = {
     total: inquiries.length,
     pending: inquiries.filter((i) => i.status === 'PENDING').length,
