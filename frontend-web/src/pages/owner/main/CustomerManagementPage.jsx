@@ -48,47 +48,69 @@ export default function CustomerManagementPage() {
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchCustomers = async () => {
+  // 💡 요약 통계 데이터를 저장할 상태 추가
+  const [summary, setSummary] = useState({
+    totalCustomerCount: 0,
+    regularCustomerCount: 0,
+    normalCustomerCount: 0,
+    newCustomerCount: 0,
+    potentialCustomerCount: 0,
+    favoriteCustomerCount: 0,
+    chatParticipantCustomerCount: 0,
+    totalSalesAmount: 0,
+  });
+
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await customerApi.getCustomers();
 
-      // 백엔드 구조에 맞춰 response.data.success 체크
-      if (response?.data?.success) {
-        console.log('백엔드 실 데이터 내용:', response.data.data.content);
+      // 두 API를 병렬(Promise.all)로 호출하여 지연 속도 최적화
+      const [customersResponse, summaryResponse] = await Promise.all([
+        customerApi.getCustomers(),
+        customerApi.getCustomerSummary(),
+      ]);
 
-        // 💡 핵심 수정: response.data.content가 아니라 response.data.data.content 입니다!
-        setCustomers(response.data.data.content || []);
+      // 고객 목록 데이터 셋팅
+      if (customersResponse?.data?.success) {
+        setCustomers(customersResponse.data.data.content || []);
+      }
+
+      // 요약 통계 데이터 셋팅
+      if (summaryResponse?.data?.success) {
+        setSummary(summaryResponse.data.data);
       }
     } catch (error) {
-      console.error('고객 목록 로드 실패:', error);
+      console.error('고객 관리 데이터 로드 실패:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCustomers();
+    fetchData();
   }, []);
 
-  // 어떤 상황에서도 에러가 나지 않도록 배열 보장
-  const safeCustomers = customers || [];
-
+  // 💡 API 명세를 기반으로 가공된 대시보드 stats 구조 매핑
   const stats = {
-    totalCount: safeCustomers.length,
-    vipCount: safeCustomers.filter(
-      (c) => c.customerType === 'REGULAR' || c.customerType === 'NORMAL',
-    ).length,
-    newCount: safeCustomers.filter((c) => c.customerType === 'NEW').length,
-    favCount: safeCustomers.filter((c) => c.favorite).length,
-    alertCount: safeCustomers.filter((c) => c.chatParticipant).length,
-    totalSales: (
-      safeCustomers.reduce((sum, c) => sum + (c.totalOrderAmount || 0), 0) /
-      10000
-    ).toFixed(0),
+    // 전체 고객 수
+    totalCount: summary.totalCustomerCount,
+    // 단골 고객 수: regularCustomerCount + normalCustomerCount
+    vipCount: summary.regularCustomerCount + summary.normalCustomerCount,
+    // 신규 고객 수
+    newCount: summary.newCustomerCount,
+    // 즐겨찾기 수
+    favCount: summary.favoriteCustomerCount,
+    // 알림 신청 수 (채팅 참여자 수)
+    alertCount: summary.chatParticipantCustomerCount,
+    // 총 매출액 (만원 단위 변환)
+    totalSales: summary.totalSalesAmount
+      ? (Number(summary.totalSalesAmount) / 10000).toFixed(0)
+      : '0',
   };
 
-  // 💡 핵심 수정: customers 대신 안전이 보장된 safeCustomers 기반으로 필터링 진행
+  const safeCustomers = customers || [];
+
+  // 클라이언트 사이드 검색 및 탭 필터링 로직
   const filteredCustomers = safeCustomers.filter((customer) => {
     const nameMatch = customer.maskedName?.includes(searchTerm);
     const phoneMatch = customer.maskedPhone?.includes(searchTerm);

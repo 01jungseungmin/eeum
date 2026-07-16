@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Heart, Bell, Star, ChevronDown, ChevronUp } from 'lucide-react';
+import { customerApi } from '../../../api/owner/customerApi'; // 경로를 프로젝트 구조에 맞춰 유지해주세요.
 
 const Tr = styled.tr`
   border-bottom: ${(props) => (props.$isOpen ? 'none' : '1px solid #f1f5f9')};
@@ -120,8 +121,6 @@ const HistoryTitle = styled.div`
   color: #475569;
   margin-bottom: 10px;
 `;
-
-// 💡 에러 원인이었던 스타일 컴포넌트들을 명확히 선언했습니다.
 const HistoryList = styled.div`
   display: flex;
   flex-direction: column;
@@ -142,7 +141,7 @@ const HistoryItem = styled.div`
 const HistoryDate = styled.span`
   font-size: 13px;
   color: #94a3b8;
-  width: 100px;
+  width: 140px;
 `;
 const HistoryMenu = styled.span`
   font-size: 13px;
@@ -163,12 +162,50 @@ const StatusBadge = styled.span`
   font-size: 11px;
   font-weight: 600;
   background-color: ${(props) =>
-    props.$status === '완료' ? '#e6f4ea' : '#fce8e6'};
-  color: ${(props) => (props.$status === '완료' ? '#137333' : '#d93025')};
+    props.$status === 'COMPLETED'
+      ? '#e6f4ea'
+      : props.$status === 'CANCELLED'
+        ? '#fce8e6'
+        : '#fff3cd'};
+  color: ${(props) =>
+    props.$status === 'COMPLETED'
+      ? '#137333'
+      : props.$status === 'CANCELLED'
+        ? '#d93025'
+        : '#856404'};
 `;
 
 export default function CustomerRow({ customer }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
+  // 1. 아코디언 토글 및 이력 API 조회 핸들러
+  const handleToggle = async (e) => {
+    e.stopPropagation();
+
+    const nextState = !isOpen;
+    setIsOpen(nextState);
+
+    // 열릴 때만 비동기로 API에서 주문 이력 조회 수행
+    if (nextState) {
+      try {
+        setLoadingOrders(true);
+        const response = await customerApi.getCustomerOrders(
+          customer.customerId,
+        ); //
+
+        if (response?.data?.success) {
+          // 백엔드 pageable 데이터 구조(content 내부 배열) 매핑
+          setOrders(response.data.data.content || []);
+        }
+      } catch (error) {
+        console.error('고객별 주문 내역 조회 실패:', error);
+      } finally {
+        setLoadingOrders(false);
+      }
+    }
+  };
 
   const getTypeText = (type) => {
     if (type === 'REGULAR' || type === 'NORMAL') return '단골';
@@ -176,9 +213,38 @@ export default function CustomerRow({ customer }) {
     return '일반';
   };
 
+  // 2. 주문이 완료(COMPLETED)/취소(CANCELLED) 등 한글 상태 맵핑용 함수
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'COMPLETED':
+        return '완료';
+      case 'CANCELLED':
+        return '취소';
+      case 'PENDING':
+        return '대기';
+      default:
+        return '진행중';
+    }
+  };
+
+  // 3. API 응답의 여러 아이템 목록을 가공해서 보여주는 헬퍼 (예: '아메리카노 외 2건' 또는 '스프가 맛있는 우유 x2')
+  const getOrderMenuName = (items = []) => {
+    if (items.length === 0) return '주문 항목 없음';
+    const firstItem = items[0];
+    const firstItemText = `${firstItem.productName} x${firstItem.quantity}`;
+    if (items.length === 1) return firstItemText;
+    return `${firstItemText} 외 ${items.length - 1}건`;
+  };
+
+  // 4. 날짜 문자열 포맷 간소화 (2026-07-16T09:54:18 ➡️ 2026-07-16 09:54)
+  const formatDate = (isoString) => {
+    if (!isoString) return '-';
+    return isoString.replace('T', ' ').substring(0, 16);
+  };
+
   return (
     <>
-      <Tr $isOpen={isOpen} onClick={() => setIsOpen(!isOpen)}>
+      <Tr $isOpen={isOpen} onClick={handleToggle}>
         <Td style={{ paddingLeft: '24px' }}>
           <UserFlex>
             <Avatar>
@@ -232,13 +298,7 @@ export default function CustomerRow({ customer }) {
           {customer.lastOrderDate || '-'}
         </Td>
         <Td style={{ paddingRight: '24px', textAlign: 'center' }}>
-          <DetailButton
-            $isOpen={isOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(!isOpen);
-            }}
-          >
+          <DetailButton $isOpen={isOpen} onClick={handleToggle}>
             주문 이력{' '}
             {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </DetailButton>
@@ -248,18 +308,29 @@ export default function CustomerRow({ customer }) {
       {isOpen && (
         <HistoryRow>
           <HistoryTd colSpan={7}>
-            <HistoryTitle>
-              주문 이력 ({customer.history?.length || 0}건)
-            </HistoryTitle>
+            <HistoryTitle>주문 이력 ({orders.length}건)</HistoryTitle>
             <HistoryList>
-              {customer.history && customer.history.length > 0 ? (
-                customer.history.map((item, idx) => (
-                  <HistoryItem key={idx}>
-                    <HistoryDate>{item.date}</HistoryDate>
-                    <HistoryMenu>{item.menu}</HistoryMenu>
-                    <HistoryPrice>{item.price.toLocaleString()}원</HistoryPrice>
-                    <StatusBadge $status={item.status}>
-                      {item.status}
+              {loadingOrders ? (
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: '#64748b',
+                    padding: '8px',
+                    textAlign: 'center',
+                  }}
+                >
+                  주문 목록을 불러오는 중...
+                </div>
+              ) : orders.length > 0 ? (
+                orders.map((order, idx) => (
+                  <HistoryItem key={order.orderId || idx}>
+                    <HistoryDate>{formatDate(order.createdAt)}</HistoryDate>
+                    <HistoryMenu>{getOrderMenuName(order.items)}</HistoryMenu>
+                    <HistoryPrice>
+                      {(order.totalPrice || 0).toLocaleString()}원
+                    </HistoryPrice>
+                    <StatusBadge $status={order.orderStatus}>
+                      {getStatusText(order.orderStatus)}
                     </StatusBadge>
                   </HistoryItem>
                 ))
@@ -267,7 +338,7 @@ export default function CustomerRow({ customer }) {
                 <div
                   style={{ fontSize: '13px', color: '#94a3b8', padding: '8px' }}
                 >
-                  최근 주문 정보가 없습니다. (추후 상세 API 연동 예정)
+                  주문 기록이 존재하지 않습니다.
                 </div>
               )}
             </HistoryList>
