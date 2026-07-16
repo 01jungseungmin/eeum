@@ -26,6 +26,7 @@ const iconProps = { size: 20, strokeWidth: 1.5 };
 
 // 사장님 전용 메뉴
 export const OWNER_MENU_CONFIG = [
+  // export const OWNER_MENU_CONFIG = (hasChatRoom) => [
   {
     group: '메뉴',
     items: [
@@ -104,9 +105,20 @@ export const OWNER_MENU_CONFIG = [
         name: '채팅',
         path: '/chat',
         icon: <MessageSquare {...iconProps} />,
-        subtitle: '고객과의 1:1 채팅을 관리하세요',
+        subtitle: '고객과 실시간으로 소통하세요',
         countKey: 'chat',
       },
+      // ...(hasChatRoom
+      //   ? [
+      //       {
+      //         id: 'chat',
+      //         name: '채팅',
+      //         path: '/chat',
+      //         icon: <MessageSquare {...iconProps} />,
+      //         countKey: 'chat',
+      //       },
+      //     ]
+      //   : []),
     ],
   },
   {
@@ -264,7 +276,10 @@ export const ADMIN_MENU_CONFIG = [
 
 export const findMenuByPath = (path, role) => {
   const targetConfig =
-    role === 'ROLE_OWNER' ? OWNER_MENU_CONFIG : ADMIN_MENU_CONFIG;
+    role === 'ROLE_ADMIN' ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
+
+  if (!Array.isArray(targetConfig)) return null;
+
   for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;

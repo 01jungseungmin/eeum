@@ -6,6 +6,7 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [accessToken, setAccessToken] = useState(null);
+  const [hasChatRoom, setHasChatRoom] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Strict Mode 등으로 인해 restoreSession이 동시에 두 번 호출되는 것을 막는 잠금(Lock) 변수
@@ -60,6 +61,15 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('role', role);
   };
 
+  // const login = (token, role, rfToken, hasChatRoom) => {
+  //   // 💡 인자 추가
+  //   setAccessToken(token);
+  //   setHasChatRoom(hasChatRoom); // 💡 상태 저장
+  //   localStorage.setItem('refreshToken', rfToken);
+  //   localStorage.setItem('role', role);
+  //   localStorage.setItem('hasChatRoom', hasChatRoom); // 💡 영속화
+  // };
+
   const logout = () => {
     setAccessToken(null);
     localStorage.clear();
@@ -67,7 +77,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ accessToken, login, logout, isLoading }}>
+    <AuthContext.Provider
+      value={{ accessToken, login, logout, isLoading, hasChatRoom }}
+    >
       {!isLoading && children}
     </AuthContext.Provider>
   );

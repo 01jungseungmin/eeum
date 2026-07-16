@@ -388,6 +388,21 @@ const ConfirmButton = styled.button`
     cursor: not-allowed;
   }
 `;
+const LeaveButton = styled.button`
+  padding: 6px 12px;
+  background-color: #fff1f0;
+  color: #e03131;
+  border: 1px solid #ffc9c9;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #ffe3e3;
+  }
+`;
 
 export default function ShopChatManagement() {
   const roomKey = localStorage.getItem('my_shop_room_id') || '1';
@@ -549,6 +564,21 @@ export default function ShopChatManagement() {
     }
   };
 
+  // 채팅방 나가기
+  const handleLeaveRoom = async () => {
+    if (!window.confirm('정말로 이 채팅방을 나가시겠습니까?')) return;
+
+    try {
+      await chatApi.leaveRoom(ROOM_ID);
+      alert('채팅방에서 나갔습니다.');
+      // setHasChatRoom(false);
+      navigate('/inquiry');
+    } catch (error) {
+      console.error('채팅방 나가기 실패:', error);
+      alert('채팅방 나가기에 실패했습니다.');
+    }
+  };
+
   return (
     <PageContainer>
       <ChatWrapper ref={chatWrapperRef}>
@@ -567,10 +597,12 @@ export default function ShopChatManagement() {
               <ShopBadge>🏠 맛있는 반찬가게 · 마포구</ShopBadge>
             </UserInfo>
           </UserProfile>
-          <StatusIndicator $connected={connected}>
-            {connected ? '실시간 연결됨' : '연결 끊김'}
-          </StatusIndicator>
-
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <StatusIndicator $connected={connected}>
+              {connected ? '실시간 연결됨' : '연결 끊김'}
+            </StatusIndicator>
+            <LeaveButton onClick={handleLeaveRoom}>방 나가기</LeaveButton>
+          </div>
           {/* 👥 누르면 열리는 참여자 목록 레이어 */}
           {showParticipants && (
             <ParticipantsDropdown>

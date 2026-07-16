@@ -116,10 +116,12 @@ const StatusBadge = styled.span`
 function Sidebar({ approvalStatus }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, hasChatRoom } = useAuth();
 
   const role = localStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
+  const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG; // 💡 hasChatRoom 상태를 기반으로 메뉴 구성 선택
+  // : OWNER_MENU_CONFIG(hasChatRoom);
 
   // 알림 수량 실시간 상태
   const [counts, setCounts] = useState({
