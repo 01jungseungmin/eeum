@@ -64,9 +64,6 @@ portone:
   api-secret: ${PORTONE_API_SECRET}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
   webhook-secret: ${PORTONE_WEBHOOK_SECRET}
-  mock:
-    status: PAID
-    amount: 19000
 
 fcm:
   project-id: ${FCM_PROJECT_ID}

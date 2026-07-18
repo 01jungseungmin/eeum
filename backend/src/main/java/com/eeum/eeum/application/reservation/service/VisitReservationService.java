@@ -17,6 +17,7 @@ import com.eeum.eeum.domain.reservation.entity.VisitReservation;
 import com.eeum.eeum.domain.reservation.entity.VisitReservationTimeSlot;
 import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
 import com.eeum.eeum.domain.reservation.event.ReservationApprovedEvent;
+import com.eeum.eeum.domain.reservation.event.ReservationCancelledEvent;
 import com.eeum.eeum.domain.reservation.event.ReservationCreatedEvent;
 import com.eeum.eeum.domain.reservation.event.ReservationRejectedEvent;
 import com.eeum.eeum.domain.reservation.repository.ReservationOccupancyProjection;
@@ -135,6 +136,15 @@ public class VisitReservationService {
         }
         reservation.cancel();
         log.info("방문 예약 취소: accountId={}, reservationId={}", accountId, reservationId);
+
+        eventPublisher.publishEvent(new ReservationCancelledEvent(
+                reservation.getStore().getAccount().getAccountId(),
+                reservation.getAccount().getName(),
+                reservation.getStore().getName(),
+                reservation.getVisitDate(),
+                reservation.getVisitTime(),
+                reservation.getVisitReservationId()
+        ));
     }
 
     // 사용자용 — 날짜 및 인원 수 기준 예약 가능 슬롯 조회
