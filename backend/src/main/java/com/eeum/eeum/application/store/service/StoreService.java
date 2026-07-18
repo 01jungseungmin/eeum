@@ -12,6 +12,9 @@ import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
@@ -56,6 +59,7 @@ public class StoreService {
     private final ProductRepository productRepository;
     private final StoreImageRepository storeImageRepository;
     private final VisitReservationRepository visitReservationRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final StoreMapper storeMapper;
 
     // ===================== 상점 조회/수정 =====================
@@ -144,6 +148,11 @@ public class StoreService {
         long soldOutProductCount = productRepository
                 .countByStore_StoreIdAndStatus(store.getStoreId(), ProductStatus.SOLD_OUT);
 
+        ChatRoom storeChatRoom = chatRoomRepository
+                .findByRefTypeAndRefId(ChatRoomRefType.STORE, store.getStoreId())
+                .filter(ChatRoom::isActive)
+                .orElse(null);
+
         return toDashboardDto(
                 store,
                 thumbnailUrl,
@@ -154,7 +163,8 @@ public class StoreService {
                 pendingOrderCount,
                 pendingReservationCount,
                 totalProductCount,
-                soldOutProductCount
+                soldOutProductCount,
+                storeChatRoom
         );
     }
     // ===================== 영업시간 관리 =====================
@@ -370,7 +380,8 @@ public class StoreService {
             long pendingOrderCount,
             long pendingReservationCount,
             long totalProductCount,
-            long soldOutProductCount
+            long soldOutProductCount,
+            ChatRoom storeChatRoom
     ) {
         return StoreDashboardResponseDto.builder()
                 .storeId(store.getStoreId())
@@ -388,6 +399,8 @@ public class StoreService {
                 .soldOutProductCount(soldOutProductCount)
                 .averageRating(store.getRating() != null ? store.getRating() : 0.0)
                 .totalReviewCount(store.getReviewCount() != null ? store.getReviewCount() : 0)
+                .storeChatRoomCreated(storeChatRoom != null)
+                .storeChatRoomId(storeChatRoom != null ? storeChatRoom.getChatroomId() : null)
                 .build();
     }
 

@@ -35,6 +35,8 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
                     .body(PortOnePaymentResponse.class);
 
             if (response == null || response.getAmount() == null) {
+                log.warn("결제 검증 실패 — PortOne 응답이 비어있음: paymentId={}, responseNull={}",
+                        paymentId, response == null);
                 throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
             }
 

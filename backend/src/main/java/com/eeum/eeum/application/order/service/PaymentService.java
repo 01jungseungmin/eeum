@@ -269,11 +269,14 @@ public class PaymentService {
             PortOnePaymentInfo paymentInfo
     ) {
         if (paymentInfo == null) {
+            log.warn("결제 검증 실패 — PortOne 조회 결과 없음: orderNumber={}", order.getOrderNumber());
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
 
         if (paymentInfo.getAmount() == null
                 || paymentInfo.getAmount().compareTo(order.getTotalPrice()) != 0) {
+            log.warn("결제 검증 실패 — 금액 불일치: orderNumber={}, 주문금액={}, 실결제금액={}",
+                    order.getOrderNumber(), order.getTotalPrice(), paymentInfo.getAmount());
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
     }
@@ -303,6 +306,8 @@ public class PaymentService {
         }
 
         if (payment.getStatus() != PaymentStatus.PENDING) {
+            log.warn("결제 검증 실패 — Payment 상태가 PENDING이 아님: orderNumber={}, paymentStatus={}",
+                    order.getOrderNumber(), payment.getStatus());
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
 
@@ -311,6 +316,8 @@ public class PaymentService {
         // 다른 주문에 붙여 결제 완료 처리하는 도용이 가능하다(금액 일치만으로는 막지 못함).
         if (payment.getPortonePaymentId() == null
                 || !payment.getPortonePaymentId().equals(request.getPaymentId())) {
+            log.warn("결제 검증 실패 — paymentId 불일치: orderNumber={}, 발급된 paymentId={}, 요청 paymentId={}",
+                    order.getOrderNumber(), payment.getPortonePaymentId(), request.getPaymentId());
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
 
@@ -320,6 +327,8 @@ public class PaymentService {
         validatePaymentAmount(order, paymentInfo);
 
          if (!"PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
+             log.warn("결제 검증 실패 — PortOne 결제 상태가 PAID가 아님: orderNumber={}, portoneStatus={}",
+                     order.getOrderNumber(), paymentInfo.getStatus());
              // 여기서 payment.fail()/expirePendingOrder()를 호출해도, 아래 throw로 본 트랜잭션이
              // 전부 롤백되어 효과가 없다(게다가 order/payment 행에 비관적 락을 쥔 채라 별도 트랜잭션으로
              // 분리하면 같은 행에서 락 대기 데드락이 난다). 결제 미완료 주문의 만료는 PENDING 15분 경과 시

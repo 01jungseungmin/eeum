@@ -4,6 +4,7 @@ import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequest
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationSettingUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationTimeSlotUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
+import com.eeum.eeum.application.reservation.dto.response.StoreTableSummaryResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationSettingResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.VisitReservationTimeSlotResponseDto;
 import com.eeum.eeum.application.reservation.service.StoreTableService;
@@ -87,6 +88,13 @@ public class OwnerVisitReservationSettingController {
     public ResponseEntity<ApiResponse<List<StoreTableResponseDto>>> getTables() {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(storeTableService.getTables(accountId)));
+    }
+
+    @Operation(summary = "테이블 구성 요약 조회", description = "현재 상점의 활성 테이블 기준 수용 인원별 테이블 개수와 총 개수를 반환합니다.")
+    @GetMapping("/tables/summary")
+    public ResponseEntity<ApiResponse<StoreTableSummaryResponseDto>> getTableSummary() {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(storeTableService.getTableSummary(accountId)));
     }
 
     @Operation(summary = "테이블 구성 저장", description = "기존 테이블 비활성화 후 새 테이블 생성. capacity 기준 가장 작은 테이블 자동 배정.")
