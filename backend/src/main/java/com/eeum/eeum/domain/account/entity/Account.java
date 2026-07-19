@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
         name = "account",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_account_email", columnNames = "email"),
-                @UniqueConstraint(name = "uk_account_nickname", columnNames = "nickname")
+                @UniqueConstraint(name = "uk_account_nickname", columnNames = "nickname"),
+                // OAuth 계정 중복 생성 방지 — LOCAL 계정은 provider_id가 null이라 (MySQL은 NULL을 중복 허용) 영향 없음
+                @UniqueConstraint(name = "uk_account_provider", columnNames = {"provider", "provider_id"})
         },
         indexes = { //인덱스 primary_region_id 컬럼으로 검색할 일이 있을 때 더 빠르게 찾기 위한 설정
                 @Index(name = "idx_account_primary_region", columnList = "primary_region_id")

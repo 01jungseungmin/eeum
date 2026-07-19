@@ -310,8 +310,8 @@ class AuthServiceTokenCleanupTest {
 
         when(accountRepository.existsByNickname(any())).thenReturn(false);
 
-        // save()의 반환값은 oauthComplete에서 사용하지 않음 (로컬 account 변수를 그대로 사용)
-        when(accountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // saveAndFlush()의 반환값은 oauthComplete에서 사용하지 않음 (로컬 account 변수를 그대로 사용)
+        when(accountRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         when(jwtProvider.generateAccessToken(any(), any())).thenReturn("access");
         when(jwtProvider.generateRefreshToken(any())).thenReturn("refresh");

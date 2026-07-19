@@ -3,7 +3,9 @@ package com.eeum.eeum.domain.notification.repository;
 import com.eeum.eeum.application.notification.dto.request.NotificationAdminSearchDto;
 import com.eeum.eeum.domain.notification.entity.Notification;
 import com.eeum.eeum.domain.notification.entity.QNotification;
+import com.eeum.eeum.domain.notification.enums.NotificationCategory;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
+import com.querydsl.core.Tuple;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +15,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 @Repository
 @RequiredArgsConstructor
@@ -21,6 +25,32 @@ public class NotificationRepositoryImpl implements NotificationRepositoryCustom 
 
     private final JPAQueryFactory queryFactory;
     private final QNotification notification = QNotification.notification;
+
+    @Override
+    public Map<NotificationCategory, Long> countUnreadByCategory(Long accountId) {
+        List<Tuple> rows = queryFactory
+                .select(notification.type, notification.count())
+                .from(notification)
+                .where(
+                        notification.account.accountId.eq(accountId),
+                        notification.isRead.isFalse()
+                )
+                .groupBy(notification.type)
+                .fetch();
+
+        // 모든 카테고리를 0으로 초기화 — 클라이언트가 누락 키 처리를 하지 않아도 되도록
+        Map<NotificationCategory, Long> result = new EnumMap<>(NotificationCategory.class);
+        for (NotificationCategory category : NotificationCategory.values()) {
+            result.put(category, 0L);
+        }
+        for (Tuple row : rows) {
+            NotificationType type = row.get(notification.type);
+            Long count = row.get(notification.count());
+            if (type == null || count == null) continue;
+            result.merge(type.getCategory(), count, Long::sum);
+        }
+        return result;
+    }
 
     @Override
     public Page<Notification> searchAdminNotifications(

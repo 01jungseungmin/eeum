@@ -3,7 +3,7 @@ name: sdd-domain-extractor
 description: SDD 원문(../docs/sdd/full.md)을 도메인별 md 파일로 분리한다. 최초 1회 또는 SDD 원문 갱신 시에만 사용.
 tools: Read, Write, Edit
 model: sonnet
--------------
+---
 
 너는 이음(Eeum) 프로젝트의 SDD 원문을 도메인 단위로 분리하는 역할이다.
 

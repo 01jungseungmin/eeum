@@ -2,6 +2,7 @@ package com.eeum.eeum.application.reservation.service;
 
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
+import com.eeum.eeum.application.reservation.dto.response.StoreTableSummaryResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.reservation.entity.StoreTable;
@@ -44,6 +45,15 @@ public class StoreTableService {
                 .stream()
                 .map(StoreTableResponseDto::from)
                 .toList();
+    }
+
+    // 활성 테이블 기준 수용 인원별 개수 + 총 개수 (비활성/삭제 테이블 제외)
+    @Transactional(readOnly = true)
+    public StoreTableSummaryResponseDto getTableSummary(Long ownerAccountId) {
+        Store store = getOwnerStore(ownerAccountId);
+        List<StoreTable> tables = storeTableRepository
+                .findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(store.getStoreId());
+        return StoreTableSummaryResponseDto.from(tables);
     }
 
     public List<StoreTableResponseDto> configureTables(Long ownerAccountId, StoreTableConfigRequestDto request) {

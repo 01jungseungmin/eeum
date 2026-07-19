@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -129,16 +130,24 @@ public class FavoriteService {
                         StoreImage::getImageUrl
                 ));
 
-        return favorites.map(fav -> {
-            Store store = storeMap.get(fav.getRefId());
-            if (store == null) {
-                // 찜 등록 후 상점이 삭제된 경우 — 방어적 처리
-                log.warn("찜 목록 조회 중 삭제된 상점 발견: refId={}", fav.getRefId());
-                throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
-            }
-            String thumbnail = thumbnailMap.get(store.getStoreId());
-            return FavoriteStoreResponseDto.of(fav.getFavoriteId(), store, thumbnail, fav.getCreatedAt());
-        });
+        // 찜 등록 후 상점이 삭제된 dangling 참조는 해당 항목만 건너뛴다 — 예외를 던지면 그 1건 때문에
+        // 찜 목록 페이지 전체가 실패해 사용자가 다른 찜을 삭제할 화면조차 열 수 없게 된다.
+        List<FavoriteStoreResponseDto> content = favorites.getContent().stream()
+                .filter(fav -> {
+                    boolean exists = storeMap.containsKey(fav.getRefId());
+                    if (!exists) {
+                        log.warn("찜 목록 조회 중 삭제된 상점 발견 — 항목 스킵: refId={}", fav.getRefId());
+                    }
+                    return exists;
+                })
+                .map(fav -> {
+                    Store store = storeMap.get(fav.getRefId());
+                    String thumbnail = thumbnailMap.get(store.getStoreId());
+                    return FavoriteStoreResponseDto.of(fav.getFavoriteId(), store, thumbnail, fav.getCreatedAt());
+                })
+                .toList();
+
+        return new PageImpl<>(content, pageable, favorites.getTotalElements());
     }
 
     // ===================== 찜 여부 확인 =====================

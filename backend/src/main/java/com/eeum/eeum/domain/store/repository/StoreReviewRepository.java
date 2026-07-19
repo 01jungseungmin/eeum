@@ -19,6 +19,10 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
     @Query("SELECT r.order.orderId FROM StoreReview r WHERE r.order.orderId IN :orderIds")
     Set<Long> findOrderIdsWithReview(@Param("orderIds") List<Long> orderIds);
 
+    //예약 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 visitReservationId 집합
+    @Query("SELECT r.visitReservation.visitReservationId FROM StoreReview r WHERE r.visitReservation.visitReservationId IN :visitReservationIds")
+    Set<Long> findVisitReservationIdsWithReview(@Param("visitReservationIds") List<Long> visitReservationIds);
+
     //상점 리뷰 목록 조회 (최신순)
     Page<StoreReview> findByStore_StoreIdOrderByCreatedAtDesc(
             Long storeId,
@@ -27,6 +31,9 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
 
     //평점 재계산용 — 해당 상점의 전체 리뷰 목록
     List<StoreReview> findByStore_StoreId(Long storeId);
+
+    //AI 매니저 — 최근 기간 리뷰 조회 (반복 불만 키워드 분석용)
+    List<StoreReview> findByStore_StoreIdAndCreatedAtAfter(Long storeId, java.time.LocalDateTime after);
 
     //상점 리뷰 단건 조회
     Optional<StoreReview> findByStorereviewIdAndStore_StoreId(

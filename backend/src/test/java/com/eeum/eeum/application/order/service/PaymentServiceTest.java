@@ -52,6 +52,7 @@ class PaymentServiceTest {
     @Mock private OrderService orderService;
     @Mock private PortOnePaymentClient portOnePaymentClient;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     @BeforeEach
     void setUp() {
@@ -64,7 +65,8 @@ class PaymentServiceTest {
                 orderService,
                 portOnePaymentClient,
                 new ObjectMapper(),
-                eventPublisher
+                eventPublisher,
+                aiPlanSubscriptionService
         );
     }
 

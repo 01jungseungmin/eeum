@@ -5,6 +5,7 @@ import com.eeum.eeum.application.notification.service.NotificationService;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
 import com.eeum.eeum.domain.reservation.event.ReservationApprovedEvent;
+import com.eeum.eeum.domain.reservation.event.ReservationCancelledEvent;
 import com.eeum.eeum.domain.reservation.event.ReservationCreatedEvent;
 import com.eeum.eeum.domain.reservation.event.ReservationRejectedEvent;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +77,22 @@ public class ReservationNotificationListener {
                 .refType(NotificationRefType.RESERVATION)
                 .refId(event.reservationId())
                 .linkUrl("/reservations/" + event.reservationId())
+                .build());
+    }
+
+    // 사용자 예약 취소 → 사장에게 알림
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onReservationCancelled(ReservationCancelledEvent event) {
+        String when = format(event.visitDate(), event.visitTime());
+        notificationService.createNotification(NotificationCreateRequestDto.builder()
+                .accountId(event.ownerAccountId())
+                .type(NotificationType.RESERVATION_CANCELLED)
+                .title("예약이 취소되었습니다")
+                .content(String.format("%s님이 %s 방문 예약을 취소했습니다.", event.customerName(), when))
+                .refType(NotificationRefType.RESERVATION)
+                .refId(event.reservationId())
+                .linkUrl("/owner/reservations/" + event.reservationId())
                 .build());
     }
 

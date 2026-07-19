@@ -33,18 +33,20 @@ public class SseEmitterManager {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
 
-        // 연결 종료/에러 시 맵에서 제거
+        // 연결 종료/에러 시 맵에서 제거 — 반드시 "이 emitter가 아직 매핑돼 있을 때만" 제거한다.
+        // 무조건 remove(accountId)하면 재연결로 교체된 새 emitter가 지워져(기존 emitter의 onCompletion이
+        // 늦게 실행되는 경우) 연결은 살아있는데 unread 이벤트를 못 받는 상태가 된다.
         emitter.onCompletion(() -> {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 연결 종료: accountId={}", accountId);
         });
         emitter.onTimeout(() -> {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 연결 타임아웃: accountId={}", accountId);
             emitter.complete();
         });
         emitter.onError(e -> {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 연결 에러: accountId={}, error={}", accountId, e.getMessage());
         });
 
@@ -60,13 +62,18 @@ public class SseEmitterManager {
     // ===================== 이벤트 전송 =====================
 
     //안 읽은 알림 수를 해당 계정의 SSE 채널로 전송 연결된 emitter가 없으면 스킵
-    // @param accountId 수신 계정 ID @param count 안 읽은 알림 수
+    // @param accountId 수신 계정 ID @param payload 전체 + 카테고리별 unread 카운트 (JSON 직렬화)
 
-    public void sendUnreadCount(Long accountId, long count) {
+    public void sendUnreadCount(Long accountId, Object payload) {
         SseEmitter emitter = emitters.get(accountId);
         if (emitter == null) return;
 
-        sendEvent(accountId, emitter, "unread-count", count);
+        sendEvent(accountId, emitter, "unread-count", payload);
+    }
+
+    // 해당 계정의 SSE 연결 여부 — 미연결이면 호출자가 payload 조회(DB 쿼리)를 생략할 수 있다
+    public boolean isConnected(Long accountId) {
+        return emitters.containsKey(accountId);
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -79,7 +86,7 @@ public class SseEmitterManager {
                             .data(data)
             );
         } catch (IOException e) {
-            emitters.remove(accountId);
+            emitters.remove(accountId, emitter);
             log.debug("SSE 이벤트 전송 실패 — emitter 제거: accountId={}", accountId);
         }
     }

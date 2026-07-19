@@ -174,10 +174,28 @@ public class StoreOrderService {
 
     @Transactional
     public void approveRefund(Long ownerId, Long orderId) {
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId),
+                ORDER_LOCK_LEASE_TIME,
+                ErrorCode.LOCK_ORDER_FAILED,
+                () -> approveRefundWithLock(ownerId, orderId)
+        );
+    }
+
+    private void approveRefundWithLock(Long ownerId, Long orderId) {
+        // 주문 락(redis) + Payment 비관적 락으로 임계구역이 보호되므로 order는 일반 조회로 충분하다.
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         validateOwnerOrder(ownerId, order);
+
+        // 픽업 완료/취소/만료된 주문은 환불 승인 불가 — 상태 검증 없이 승인하면
+        // 고객이 물건을 수령(COMPLETED)한 뒤에도 전액 환불+재고 복구가 실행되는 금전 피해가 발생한다.
+        if (order.getStatus() == OrderStatus.COMPLETED
+                || order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.EXPIRED) {
+            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+        }
 
         Payment payment = paymentRepository
                 .findByOrderIdWithPessimisticLock(orderId)

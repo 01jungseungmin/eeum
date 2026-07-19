@@ -20,16 +20,18 @@ import java.util.Map;
 
 @Slf4j
 @Component
-@Profile("prod")
+@Profile({"prod", "demo"})
 @RequiredArgsConstructor
 public class FcmPushAdapter implements PushAdapter {
 
     private static final String FCM_SEND_URL =
             "https://fcm.googleapis.com/v1/projects/%s/messages:send";
 
-    // FCM 오류 코드 중 토큰 무효화 대상
+    // FCM 오류 코드 중 토큰 무효화 대상 — UNREGISTERED(토큰 만료/앱 삭제)만 포함한다.
+    // INVALID_ARGUMENT는 잘못된 페이로드(메시지 필드 오류)에도 반환되므로, 여기에 넣으면 배포 후
+    // 페이로드 버그가 생겼을 때 발송 실패마다 정상 토큰이 일괄 null 처리되어 전체 푸시가 중단된다.
     private static final List<String> INVALID_TOKEN_ERRORS = List.of(
-            "UNREGISTERED", "INVALID_ARGUMENT"
+            "UNREGISTERED"
     );
 
     private final RestTemplate restTemplate;

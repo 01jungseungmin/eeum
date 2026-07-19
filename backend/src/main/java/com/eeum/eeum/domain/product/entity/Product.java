@@ -116,7 +116,20 @@ public class Product extends BaseEntity {
     }
 
     public void updateStock(Integer stock) {
+        // 음수 재고 방지
+        if (stock != null && stock < 0) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
         this.stock = stock;
+        // 재고와 상태 동기화 — 재입고 시 SOLD_OUT이 풀리고, 0으로 맞추면 SOLD_OUT 처리.
+        // 사장이 내린(INACTIVE) 상품은 건드리지 않는다.
+        if (stock != null) {
+            if (stock == 0 && this.status == ProductStatus.ACTIVE) {
+                this.status = ProductStatus.SOLD_OUT;
+            } else if (stock > 0 && this.status == ProductStatus.SOLD_OUT) {
+                this.status = ProductStatus.ACTIVE;
+            }
+        }
     }
 
     public void soldOut() { this.status = ProductStatus.SOLD_OUT; }

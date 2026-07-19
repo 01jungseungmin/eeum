@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -301,7 +302,13 @@ public class AuthService {
                 nickname
         );
 
-        accountRepository.save(account);
+        try {
+            accountRepository.saveAndFlush(account);
+        } catch (DataIntegrityViolationException e) {
+            // 동시 요청으로 같은 tempToken이 두 번 처리되는 경우 uk_account_provider 제약이 두 번째 저장을 막는다
+            // (check-then-act 경합 방지). 이미 가입된 것으로 간주한다.
+            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
+        }
 
         eventPublisher.publishEvent(AccountTokenCleanupEvent.oauthTemp(request.getTempToken()));
 

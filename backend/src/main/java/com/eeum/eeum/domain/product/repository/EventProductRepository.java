@@ -17,6 +17,8 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     List<EventProduct> findByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
 
+    Optional<EventProduct> findFirstByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
+
     boolean existsByProduct_ProductIdAndStatusAndEndAtAfter(Long productId, EventProductStatus eventProductStatus, LocalDateTime now);
 
 
@@ -36,7 +38,9 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
     void deleteByProduct_ProductId(Long productId);
 
 
-    // 특정 상품의 현재 진행 중인 이벤트 조회
+    // 특정 상품의 현재 진행 중인 이벤트 조회.
+    // List + 최신순 정렬로 반환한다 — 동시 생성 등으로 ACTIVE 이벤트가 2건 이상 생겨도 단건 조회가
+    // NonUniqueResultException(상품 상세 500)으로 터지지 않도록 방어한다.
     @Query("""
             SELECT ep
             FROM EventProduct ep
@@ -45,19 +49,20 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
               AND ep.status = :status
               AND ep.startAt <= :now
               AND ep.endAt > :now
+            ORDER BY ep.createdAt DESC
             """)
-    Optional<EventProduct> findActiveEventByProductId(
+    List<EventProduct> findActiveEventsByProductId(
             @Param("productId") Long productId,
             @Param("status") EventProductStatus status,
             @Param("now") LocalDateTime now
     );
 
     default Optional<EventProduct> findActiveEventByProductId(Long productId) {
-        return findActiveEventByProductId(
+        return findActiveEventsByProductId(
                 productId,
                 EventProductStatus.ACTIVE,
                 LocalDateTime.now()
-        );
+        ).stream().findFirst();
     }
 
     // 특정 상점의 현재 진행 중인 이벤트 목록 조회

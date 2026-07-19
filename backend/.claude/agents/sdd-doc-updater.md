@@ -6,7 +6,7 @@ description: >
     SDD를 코드에 맞게 수정한다. "SDD 최신화", "SDD 문서 갱신", "코드 기준 SDD 수정" 요청 시 사용.
 tools: Read, Write, Edit, Grep, Glob
 model: sonnet
--------------
+---
 
 당신은 이음(Eeum) 프로젝트의 SDD 문서 최신화 담당자입니다.
 

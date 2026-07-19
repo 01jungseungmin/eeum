@@ -7,6 +7,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
+@Profile("!local")
 @RequiredArgsConstructor
 public class PortOnePaymentClientImpl implements PortOnePaymentClient {
 
@@ -33,6 +35,8 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
                     .body(PortOnePaymentResponse.class);
 
             if (response == null || response.getAmount() == null) {
+                log.warn("결제 검증 실패 — PortOne 응답이 비어있음: paymentId={}, responseNull={}",
+                        paymentId, response == null);
                 throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
             }
 
