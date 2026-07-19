@@ -1,14 +1,11 @@
 package com.eeum.eeum.application.reservation.dto.response;
 
-import com.eeum.eeum.domain.reservation.entity.StoreTable;
+import com.eeum.eeum.domain.reservation.repository.CapacityCountProjection;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
 
 @Getter
 @Builder
@@ -21,20 +18,21 @@ public class StoreTableSummaryResponseDto {
     @Schema(description = "수용 인원별 테이블 개수 (capacity 오름차순)")
     private List<CapacityCountDto> capacityCounts;
 
-    public static StoreTableSummaryResponseDto from(List<StoreTable> tables) {
-        // TreeMap으로 capacity 오름차순 정렬 보장
-        Map<Integer, Long> countByCapacity = tables.stream()
-                .collect(Collectors.groupingBy(StoreTable::getCapacity, TreeMap::new, Collectors.counting()));
-
-        List<CapacityCountDto> capacityCounts = countByCapacity.entrySet().stream()
-                .map(entry -> CapacityCountDto.builder()
-                        .capacity(entry.getKey())
-                        .count(entry.getValue())
+    // 집계 쿼리 결과가 capacity 오름차순으로 정렬되어 있음을 전제로 한다
+    public static StoreTableSummaryResponseDto from(List<CapacityCountProjection> aggregates) {
+        List<CapacityCountDto> capacityCounts = aggregates.stream()
+                .map(aggregate -> CapacityCountDto.builder()
+                        .capacity(aggregate.getCapacity())
+                        .count(aggregate.getCount())
                         .build())
                 .toList();
 
+        long totalCount = aggregates.stream()
+                .mapToLong(CapacityCountProjection::getCount)
+                .sum();
+
         return StoreTableSummaryResponseDto.builder()
-                .totalCount(tables.size())
+                .totalCount(totalCount)
                 .capacityCounts(capacityCounts)
                 .build();
     }

@@ -27,6 +27,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMON_DUPLICATE_RESOURCE("COMMON_008","이미 존재하는 리소스입니다.",HttpStatus.CONFLICT ),
     COMMON_NOT_FOUND("COMMON_009","존재하지 않는 리소스입니다.",HttpStatus.NOT_FOUND),
     COMMON_CONFLICT("COMMON_010", "요청 처리 중 충돌이 발생했습니다.", HttpStatus.CONFLICT),
+    COMMON_METHOD_NOT_ALLOWED("COMMON_011", "지원하지 않는 HTTP 메서드입니다", HttpStatus.METHOD_NOT_ALLOWED),
 
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),

@@ -19,19 +19,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.script.RedisScript;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -49,15 +44,14 @@ class NotificationServiceTest {
     @Mock private NotificationSettingsRepository settingsRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private StringRedisTemplate redisTemplate;
+    @Mock private UnreadCountService unreadCountService;
     @Mock private SseEmitterManager sseEmitterManager;
-    @Mock private ValueOperations<String, String> valueOperations;
 
     private static final Long ACCOUNT_ID = 6L;
 
-    private void stubRedisValueOps() {
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        lenient().when(valueOperations.increment(anyString())).thenReturn(1L);
+    private void stubUnreadCount() {
+        lenient().when(unreadCountService.getUnreadCount(ACCOUNT_ID))
+                .thenReturn(UnreadCountResponseDto.of(1L, Map.of()));
     }
 
     private Account stubAccount(String fcmToken) {
@@ -80,10 +74,12 @@ class NotificationServiceTest {
                 .build();
     }
 
+    // ===================== 생성 =====================
+
     @Test
     void createNotification은_동의된_계정에_FCM_푸시_이벤트를_발행한다() {
         // given
-        stubRedisValueOps();
+        stubUnreadCount();
         stubAccount("valid-token");
         when(settingsRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
@@ -93,13 +89,14 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNotNull();
         verify(notificationRepository).save(any());
+        verify(unreadCountService).increment(ACCOUNT_ID);
         verify(eventPublisher).publishEvent(any(NotificationPushEvent.class));
     }
 
     @Test
     void createNotificationWithoutPush는_알림은_생성하되_FCM_이벤트는_발행하지_않는다() {
         // given
-        stubRedisValueOps();
+        stubUnreadCount();
         stubAccount("valid-token");
         when(settingsRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
         when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
@@ -117,7 +114,7 @@ class NotificationServiceTest {
     @Test
     void createNotificationWithoutPush도_수신_거부_계정이면_생성하지_않는다() {
         // given
-        Account account = stubAccount("valid-token");
+        stubAccount("valid-token");
         NotificationSettings settings = mock(NotificationSettings.class);
         when(settings.isAllowed(NotificationType.MARKETING_EVENT)).thenReturn(false);
         when(settingsRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.of(settings));
@@ -136,22 +133,20 @@ class NotificationServiceTest {
     @Test
     void 단건_읽음_처리시_unread_감소_후_SSE로_최신_카운트를_전송한다() {
         // given
-        stubRedisValueOps();
+        stubUnreadCount();
         Long notificationId = 100L;
         Notification notification = mock(Notification.class);
         when(notification.isUnread()).thenReturn(true);
         when(notificationRepository.findByNotificationIdAndAccount_AccountId(notificationId, ACCOUNT_ID))
                 .thenReturn(Optional.of(notification));
-        when(redisTemplate.execute(any(RedisScript.class), anyList())).thenReturn(2L);
         when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
-        lenient().when(valueOperations.get(anyString())).thenReturn("2");
 
         // when
         notificationService.markAsRead(ACCOUNT_ID, notificationId);
 
         // then
         verify(notification).markAsRead();
-        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of("unread:account:" + ACCOUNT_ID)));
+        verify(unreadCountService).decrement(ACCOUNT_ID);
         verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
@@ -169,48 +164,46 @@ class NotificationServiceTest {
 
         // then
         verify(notification, never()).markAsRead();
+        verify(unreadCountService, never()).decrement(anyLong());
         verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
     }
 
     @Test
     void 전체_읽음_처리시_캐시를_초기화하고_SSE를_전송한다() {
         // given
-        stubRedisValueOps();
+        stubUnreadCount();
         when(notificationRepository.markAllAsReadByAccountId(eq(ACCOUNT_ID), any(LocalDateTime.class)))
                 .thenReturn(5);
         when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
-        lenient().when(valueOperations.get(anyString())).thenReturn("0");
 
         // when
         notificationService.markAllAsRead(ACCOUNT_ID);
 
         // then
-        verify(redisTemplate).delete("unread:account:" + ACCOUNT_ID);
+        verify(unreadCountService).clear(ACCOUNT_ID);
         verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
     @Test
     void 채팅방_읽음시_해당_방의_CHAT_MESSAGE_알림만_읽음_처리하고_캐시를_재계산한다() {
         // given
-        stubRedisValueOps();
+        stubUnreadCount();
         Long roomId = 7L;
         when(notificationRepository.markAsReadByAccountAndTypeAndRef(
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class)))
                 .thenReturn(3);
-        when(notificationRepository.countByAccount_AccountIdAndIsReadFalse(ACCOUNT_ID)).thenReturn(19L);
         when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
-        lenient().when(valueOperations.get(anyString())).thenReturn("19");
 
         // when
         notificationService.markAsReadByRef(
                 ACCOUNT_ID, NotificationType.CHAT_MESSAGE, NotificationRefType.CHAT_ROOM, roomId);
 
-        // then: 대상 조건(계정 + 타입 + 참조)이 정확히 전달되고, DB 기준으로 Redis가 재설정된다
+        // then: 대상 조건(계정 + 타입 + 참조)이 정확히 전달되고, DB 기준으로 캐시가 재설정된다
         verify(notificationRepository).markAsReadByAccountAndTypeAndRef(
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class));
-        verify(valueOperations).set("unread:account:" + ACCOUNT_ID, "19");
+        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
         verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
@@ -227,6 +220,7 @@ class NotificationServiceTest {
                 ACCOUNT_ID, NotificationType.CHAT_MESSAGE, NotificationRefType.CHAT_ROOM, roomId);
 
         // then
+        verify(unreadCountService, never()).refreshFromDb(anyLong());
         verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
     }
 }
