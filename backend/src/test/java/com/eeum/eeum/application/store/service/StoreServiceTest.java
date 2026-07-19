@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,8 +74,8 @@ class StoreServiceTest {
         // given
         Store store = createStore();
         when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(Optional.of(createStoreChatRoom()));
+        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(List.of(createStoreChatRoom()));
 
         // when
         StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
@@ -89,8 +90,8 @@ class StoreServiceTest {
         // given
         Store store = createStore();
         when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(Optional.empty());
+        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(List.of());
 
         // when
         StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
@@ -101,14 +102,34 @@ class StoreServiceTest {
     }
 
     @Test
+    void GROUP과_GROUP_STREET_방이_공존하면_GROUP_방을_우선_반환한다() {
+        // given
+        Store store = createStore();
+        ChatRoom streetRoom = ChatRoom.createGroup(
+                mock(Account.class), ChatRoomType.GROUP_STREET, "동네방",
+                ChatRoomRefType.STORE, STORE_ID, null);
+        ReflectionTestUtils.setField(streetRoom, "chatroomId", 99L);
+        when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
+        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(List.of(streetRoom, createStoreChatRoom()));
+
+        // when
+        StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
+
+        // then: 단건 Optional이었다면 2건 조회로 예외가 났을 상황 — GROUP 방 ID가 선택된다
+        assertThat(dashboard.isStoreChatRoomCreated()).isTrue();
+        assertThat(dashboard.getStoreChatRoomId()).isEqualTo(CHAT_ROOM_ID);
+    }
+
+    @Test
     void 비활성화된_상점_채팅방은_개설되지_않은_것으로_처리된다() {
         // given
         Store store = createStore();
         ChatRoom deactivatedRoom = createStoreChatRoom();
         deactivatedRoom.deactivate();
         when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(Optional.of(deactivatedRoom));
+        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(List.of(deactivatedRoom));
 
         // when
         StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);

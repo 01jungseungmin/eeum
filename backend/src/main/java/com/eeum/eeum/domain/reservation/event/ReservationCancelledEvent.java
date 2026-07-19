@@ -9,7 +9,6 @@ import java.time.LocalTime;
 public record ReservationCancelledEvent(
         Long ownerAccountId,
         String customerName,
-        String storeName,
         LocalDate visitDate,
         LocalTime visitTime,
         Long reservationId

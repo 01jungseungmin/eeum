@@ -140,7 +140,6 @@ public class VisitReservationService {
         eventPublisher.publishEvent(new ReservationCancelledEvent(
                 reservation.getStore().getAccount().getAccountId(),
                 reservation.getAccount().getName(),
-                reservation.getStore().getName(),
                 reservation.getVisitDate(),
                 reservation.getVisitTime(),
                 reservation.getVisitReservationId()

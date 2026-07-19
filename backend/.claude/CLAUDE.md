@@ -136,7 +136,8 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `refresh:{accountId}` — refresh token
 - `blacklist:access:{token}` — 로그아웃된 access token
 - `reauth:{accountId}` / `password-reset:{accountId}` — 일회용 토큰
-- `unread:account:{accountId}` — 알림 unread 카운트 캐시
+- `unread:account:{accountId}` — 알림 unread 카운트 캐시 (전체)
+- `unread:category:{accountId}` — 알림 unread 카테고리별 카운트 캐시 (hash, 변경 시 무효화)
 - `rate-limit:email-verification:{email}` — 이메일 인증 코드 발송 쿨다운 (60초)
 - `rate-limit:password-reset:{email}` — 비밀번호 재설정 메일 발송 쿨다운 (5분)
 - `rate-limit:login-fail:{email}` — 로그인 실패 카운터 (5분 내 5회 초과 시 차단)

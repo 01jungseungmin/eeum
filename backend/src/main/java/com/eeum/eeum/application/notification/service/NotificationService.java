@@ -22,8 +22,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.stereotype.Service;
@@ -41,24 +39,22 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class NotificationService {
 
-    // Redis 키 패턴: unread:account:{accountId}
-    private static final String UNREAD_KEY_PREFIX = "unread:account:";
-
     private final NotificationRepository notificationRepository;
     private final NotificationSettingsRepository settingsRepository;
     private final AccountRepository accountRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final StringRedisTemplate redisTemplate;
+    private final UnreadCountService unreadCountService;
     private final SseEmitterManager sseEmitterManager;
 
     // ===================== SSE 구독 =====================
 
     // 클라이언트(웹)가 SSE 구독을 요청할 때 호출
-    // 연결 직후 현재 unread 카운트를 즉시 전송
+    // 연결 직후 현재 unread 카운트를 즉시 전송 — 카운트 조회는 UnreadCountService 프록시를 경유해
+    // readOnly 트랜잭션이 적용되고, emitter 생성 자체는 트랜잭션에 묶지 않는다
     public SseEmitter subscribe(Long accountId) {
         SseEmitter emitter = sseEmitterManager.subscribe(accountId);
         // 구독 직후 현재 카운트를 즉시 전달 (페이지 진입 시 배지 즉시 표시)
-        sseEmitterManager.sendUnreadCount(accountId, getUnreadCount(accountId));
+        sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
         return emitter;
     }
 
@@ -114,7 +110,7 @@ public class NotificationService {
         // 이후 롤백(배치 발송 중 특정 계정 예외 등) 시 저장되지 않은 알림의 unread/배지가 남아 DB와 어긋난다.
         Long targetAccountId = account.getAccountId();
         runAfterCommit(() -> {
-            incrementUnreadCount(targetAccountId);
+            unreadCountService.increment(targetAccountId);
             pushUnreadCount(targetAccountId);
         });
 
@@ -177,21 +173,9 @@ public class NotificationService {
                 .map(NotificationResponseDto::from);
     }
 
-    // 안 읽은 알림 수 — 전체는 Redis 우선 조회(캐시 미스 시 DB fallback 후 복구), 카테고리별은 DB 집계
-    @Transactional(readOnly = true)
+    // 안 읽은 알림 수 — 조회/캐싱 로직은 UnreadCountService가 전담 (프록시 경유로 readOnly 트랜잭션 적용)
     public UnreadCountResponseDto getUnreadCount(Long accountId) {
-        String key = UNREAD_KEY_PREFIX + accountId;
-        String cached = redisTemplate.opsForValue().get(key);
-
-        long count;
-        if (cached != null) {
-            count = Long.parseLong(cached);
-        } else {
-            count = notificationRepository.countByAccount_AccountIdAndIsReadFalse(accountId);
-            redisTemplate.opsForValue().set(key, String.valueOf(count));
-            log.debug("unread 캐시 복구: accountId={}, count={}", accountId, count);
-        }
-        return UnreadCountResponseDto.of(count, notificationRepository.countUnreadByCategory(accountId));
+        return unreadCountService.getUnreadCount(accountId);
     }
 
     // ===================== 읽음 처리 =====================
@@ -207,7 +191,7 @@ public class NotificationService {
             // Redis 감소·SSE 전송은 커밋 후 — 커밋 전에 하면 롤백 시 카운트가 어긋나고,
             // SSE를 받은 프론트가 재조회했을 때 아직 커밋되지 않은 이전 상태를 읽을 수 있다.
             runAfterCommit(() -> {
-                decrementUnreadCount(accountId);
+                unreadCountService.decrement(accountId);
                 pushUnreadCount(accountId);
             });
         }
@@ -218,7 +202,7 @@ public class NotificationService {
         int updated = notificationRepository.markAllAsReadByAccountId(accountId, LocalDateTime.now());
         if (updated > 0) {
             runAfterCommit(() -> {
-                clearUnreadCount(accountId);
+                unreadCountService.clear(accountId);
                 pushUnreadCount(accountId);
             });
         }
@@ -233,7 +217,7 @@ public class NotificationService {
                 accountId, type, refType, refId, LocalDateTime.now());
         if (updated > 0) {
             runAfterCommit(() -> {
-                refreshUnreadCache(accountId);
+                unreadCountService.refreshFromDb(accountId);
                 pushUnreadCount(accountId);
             });
         }
@@ -253,7 +237,7 @@ public class NotificationService {
         notificationRepository.delete(notification);
         if (wasUnread) {
             runAfterCommit(() -> {
-                decrementUnreadCount(accountId);
+                unreadCountService.decrement(accountId);
                 pushUnreadCount(accountId);
             });
         }
@@ -263,7 +247,7 @@ public class NotificationService {
     public void deleteAllByAccountId(Long accountId) {
         notificationRepository.deleteAllByAccount_AccountId(accountId);
         runAfterCommit(() -> {
-            clearUnreadCount(accountId);
+            unreadCountService.clear(accountId);
             pushUnreadCount(accountId);
         });
     }
@@ -279,7 +263,7 @@ public class NotificationService {
     // 현재 unread 카운트(전체 + 카테고리별)를 SSE로 전송 — 미연결 계정은 카테고리 집계 쿼리 없이 스킵
     private void pushUnreadCount(Long accountId) {
         if (!sseEmitterManager.isConnected(accountId)) return;
-        sseEmitterManager.sendUnreadCount(accountId, getUnreadCount(accountId));
+        sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
     }
 
     private void publishPushEvent(Account account, NotificationCreateRequestDto request) {
@@ -295,36 +279,6 @@ public class NotificationService {
                 ))
                 .build();
         eventPublisher.publishEvent(new NotificationPushEvent(pushMessage, account.getAccountId()));
-    }
-
-    // Redis INCR 후 현재 값 반환
-    private long incrementUnreadCount(Long accountId) {
-        Long val = redisTemplate.opsForValue().increment(UNREAD_KEY_PREFIX + accountId);
-        return val != null ? val : 0L;
-    }
-
-    // 0보다 클 때만 DECR — GET→검사→DECR로 나누면 동시 읽음 처리 시 둘 다 검사를 통과해 -1이 될 수 있으므로
-    // Lua로 원자적으로 처리한다.
-    private static final DefaultRedisScript<Long> DECR_IF_POSITIVE = new DefaultRedisScript<>(
-            "local v = tonumber(redis.call('get', KEYS[1]) or '0') "
-                    + "if v > 0 then return redis.call('decr', KEYS[1]) else return 0 end",
-            Long.class);
-
-    // Redis DECR 후 현재 값 반환 (0 미만으로 내려가지 않음)
-    private long decrementUnreadCount(Long accountId) {
-        String key = UNREAD_KEY_PREFIX + accountId;
-        Long result = redisTemplate.execute(DECR_IF_POSITIVE, List.of(key));
-        return result != null ? result : 0L;
-    }
-
-    private void clearUnreadCount(Long accountId) {
-        redisTemplate.delete(UNREAD_KEY_PREFIX + accountId);
-    }
-
-    // 일괄 읽음 처리처럼 감소량이 가변적인 경우 DB 기준으로 Redis 캐시를 재설정한다 (커밋 후 호출 전제)
-    private void refreshUnreadCache(Long accountId) {
-        long dbCount = notificationRepository.countByAccount_AccountIdAndIsReadFalse(accountId);
-        redisTemplate.opsForValue().set(UNREAD_KEY_PREFIX + accountId, String.valueOf(dbCount));
     }
 
     // 트랜잭션이 있으면 커밋 후 실행, 없으면 즉시 실행

@@ -14,6 +14,7 @@ import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
@@ -148,10 +149,19 @@ public class StoreService {
         long soldOutProductCount = productRepository
                 .countByStore_StoreIdAndStatus(store.getStoreId(), ProductStatus.SOLD_OUT);
 
-        ChatRoom storeChatRoom = chatRoomRepository
-                .findByRefTypeAndRefId(ChatRoomRefType.STORE, store.getStoreId())
+        // (STORE, storeId) 조합은 유니크가 아니라 GROUP/GROUP_STREET 방이 공존할 수 있다 —
+        // 단건 Optional 조회는 2건 이상일 때 예외로 대시보드 전체가 실패하므로 목록 조회 후
+        // 활성 방 중 상점 단톡방(GROUP)을 우선 선택한다.
+        List<ChatRoom> storeRooms = chatRoomRepository
+                .findAllByRefTypeAndRefId(ChatRoomRefType.STORE, store.getStoreId());
+        ChatRoom storeChatRoom = storeRooms.stream()
                 .filter(ChatRoom::isActive)
-                .orElse(null);
+                .filter(room -> room.getType() == ChatRoomType.GROUP)
+                .findFirst()
+                .orElseGet(() -> storeRooms.stream()
+                        .filter(ChatRoom::isActive)
+                        .findFirst()
+                        .orElse(null));
 
         return toDashboardDto(
                 store,

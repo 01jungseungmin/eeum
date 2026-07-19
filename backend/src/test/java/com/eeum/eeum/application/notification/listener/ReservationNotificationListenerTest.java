@@ -57,7 +57,7 @@ class ReservationNotificationListenerTest {
         Long ownerAccountId = 10L;
         Long reservationId = 77L;
         ReservationCancelledEvent event = new ReservationCancelledEvent(
-                ownerAccountId, "홍길동", "테스트상점",
+                ownerAccountId, "홍길동",
                 LocalDate.of(2026, 7, 20), LocalTime.of(18, 0), reservationId);
         ArgumentCaptor<NotificationCreateRequestDto> captor =
                 ArgumentCaptor.forClass(NotificationCreateRequestDto.class);

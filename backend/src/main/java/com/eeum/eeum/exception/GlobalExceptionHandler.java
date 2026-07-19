@@ -112,7 +112,7 @@ public class GlobalExceptionHandler {
         log.warn("[MethodNotSupported] method={}, supported={}", e.getMethod(), e.getSupportedHttpMethods());
         return ResponseEntity
                 .status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ApiResponse.fail(ErrorCode.COMMON_INVALID_PARAMETER.getCode(),
+                .body(ApiResponse.fail(ErrorCode.COMMON_METHOD_NOT_ALLOWED.getCode(),
                         "지원하지 않는 HTTP 메서드입니다: " + e.getMethod()));
     }
 
