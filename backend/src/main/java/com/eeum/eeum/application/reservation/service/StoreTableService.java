@@ -1,12 +1,14 @@
 package com.eeum.eeum.application.reservation.service;
 
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.StoreTableListResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableSummaryResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.reservation.entity.StoreTable;
 import com.eeum.eeum.domain.reservation.enums.VisitReservationStatus;
+import com.eeum.eeum.domain.reservation.repository.CapacityCountProjection;
 import com.eeum.eeum.domain.reservation.repository.StoreTableRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -39,21 +41,32 @@ public class StoreTableService {
             List.of(VisitReservationStatus.PENDING, VisitReservationStatus.APPROVED);
 
     @Transactional(readOnly = true)
-    public List<StoreTableResponseDto> getTables(Long ownerAccountId) {
+    public StoreTableListResponseDto getTables(Long ownerAccountId) {
         Store store = getOwnerStore(ownerAccountId);
-        return storeTableRepository.findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(store.getStoreId())
+
+        List<StoreTableResponseDto> tables = storeTableRepository
+                .findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(
+                        store.getStoreId()
+                )
                 .stream()
                 .map(StoreTableResponseDto::from)
                 .toList();
+
+        List<CapacityCountProjection> aggregates =
+                storeTableRepository.countActiveTablesByCapacity(store.getStoreId());
+
+        StoreTableSummaryResponseDto summary =
+                StoreTableSummaryResponseDto.from(aggregates);
+
+        return StoreTableListResponseDto.of(tables, summary);
     }
 
-    // 활성 테이블 기준 수용 인원별 개수 + 총 개수 (비활성/삭제 테이블 제외)
+    // 활성 테이블 기준 수용 인원별 개수 + 총 개수 (비활성/삭제 테이블 제외) — DB 집계 쿼리 사용
     @Transactional(readOnly = true)
     public StoreTableSummaryResponseDto getTableSummary(Long ownerAccountId) {
         Store store = getOwnerStore(ownerAccountId);
-        List<StoreTable> tables = storeTableRepository
-                .findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(store.getStoreId());
-        return StoreTableSummaryResponseDto.from(tables);
+        return StoreTableSummaryResponseDto.from(
+                storeTableRepository.countActiveTablesByCapacity(store.getStoreId()));
     }
 
     public List<StoreTableResponseDto> configureTables(Long ownerAccountId, StoreTableConfigRequestDto request) {

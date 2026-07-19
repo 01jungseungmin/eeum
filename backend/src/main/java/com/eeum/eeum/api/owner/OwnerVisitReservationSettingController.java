@@ -3,10 +3,7 @@ package com.eeum.eeum.api.owner;
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationSettingUpdateRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationTimeSlotUpdateRequestDto;
-import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
-import com.eeum.eeum.application.reservation.dto.response.StoreTableSummaryResponseDto;
-import com.eeum.eeum.application.reservation.dto.response.VisitReservationSettingResponseDto;
-import com.eeum.eeum.application.reservation.dto.response.VisitReservationTimeSlotResponseDto;
+import com.eeum.eeum.application.reservation.dto.response.*;
 import com.eeum.eeum.application.reservation.service.StoreTableService;
 import com.eeum.eeum.application.reservation.service.VisitReservationSettingService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -85,9 +82,12 @@ public class OwnerVisitReservationSettingController {
 
     @Operation(summary = "테이블 구성 조회")
     @GetMapping("/tables")
-    public ResponseEntity<ApiResponse<List<StoreTableResponseDto>>> getTables() {
+    public ResponseEntity<ApiResponse<StoreTableListResponseDto>> getTables() {
         Long accountId = SecurityUtil.getCurrentAccountId();
-        return ResponseEntity.ok(ApiResponse.success(storeTableService.getTables(accountId)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(storeTableService.getTables(accountId))
+        );
     }
 
     @Operation(summary = "테이블 구성 요약 조회", description = "현재 상점의 활성 테이블 기준 수용 인원별 테이블 개수와 총 개수를 반환합니다.")
