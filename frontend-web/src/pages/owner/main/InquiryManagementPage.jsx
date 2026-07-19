@@ -77,9 +77,14 @@ export default function InquiryManagement() {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 채팅방 존재 여부 및 개설 상태 관리 State 추가
+  // 룸 ID 상태 (개설 완료 문구에 룸 ID 표출용으로 유지)
   const [myRoomId, setMyRoomId] = useState(() => {
     return localStorage.getItem('my_shop_room_id') || null;
+  });
+
+  // 채팅방 개설 유무 상태 추가 (로컬스토리지에서 불리언 판별값 가져오기)
+  const [isChatRoomCreated, setIsChatRoomCreated] = useState(() => {
+    return localStorage.getItem('storeChatRoomCreated') === 'true';
   });
 
   // 필터 상태 관리
@@ -87,7 +92,7 @@ export default function InquiryManagement() {
   const [statusFilter, setStatusFilter] = useState('전체');
   const [typeFilter, setTypeFilter] = useState('전체 유형');
 
-  // 문의 내역 로드 함수
+  // 문의 내역 로드 함수 (기존과 동일)
   const loadInquiries = async () => {
     try {
       const res = await inquiryApi.getStoreInquiries({ page: 0, size: 50 });
@@ -111,23 +116,26 @@ export default function InquiryManagement() {
       const requestBody = {
         name: '맛있는 반찬가게 사장님 단톡방',
         type: 'GROUP',
-        refType: 'NONE',
-        refId: 0,
-        participantAccountIds: [], // 필요한 초기 참여자 ID 목록이 있다면 추가
+        refType: 'STORE',
+        refId: localStorage.getItem('my_store_id'),
+        participantAccountIds: [],
       };
 
       const res = await chatApi.createGroupChat(requestBody);
 
-      // 백엔드에서 제공한 success 응답 및 roomId 바인딩
       if (res.data.success && res.data.data.roomId !== undefined) {
         const newRoomId = res.data.data.roomId;
         setMyRoomId(newRoomId);
+        setIsChatRoomCreated(true); // 💡 로컬 상태 즉시 반영
 
-        // 룸 ID를 브라우저나 전역 상태에 저장하여 다음 진입 시 배너가 안 뜨게 처리
-        localStorage.setItem('my_shop_room_id', newRoomId);
+        localStorage.setItem('my_shop_room_id', String(newRoomId));
+        localStorage.setItem('storeChatRoomCreated', 'true'); // 💡 문자열 저장 연동
+
         alert(
           '🎉 상점 대표 실시간 채팅방이 성공적으로 개설되었습니다! 왼쪽 [채팅] 메뉴에서 확인하세요.',
         );
+
+        window.location.reload();
       }
     } catch (error) {
       console.error('채팅방 생성 실패:', error);
@@ -166,7 +174,7 @@ export default function InquiryManagement() {
       />
 
       {/* 💡 4. 채팅방이 아직 개설되지 않았을 때만 상단 안내 배너 노출 */}
-      {!myRoomId ? (
+      {!isChatRoomCreated ? (
         <ChatBanner>
           <BannerText>
             <h4>💬 실시간 고객 통합 채팅방이 아직 없습니다</h4>

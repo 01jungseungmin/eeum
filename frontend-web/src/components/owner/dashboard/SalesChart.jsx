@@ -1,7 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
 import {
-  ResponsiveContainer,
   AreaChart,
   Area,
   XAxis,
@@ -70,46 +69,47 @@ function SalesChart() {
       </CardHeader>
 
       <div style={{ width: '100%', height: 220 }}>
-        <ResponsiveContainer>
-          <AreaChart
-            data={data}
-            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#2d5a43" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#2d5a43" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#f0f0f0"
-            />
-            <XAxis
-              dataKey="name"
-              stroke="#bfbfbf"
-              fontSize={11}
-              tickLine={false}
-            />
-            <YAxis
-              stroke="#bfbfbf"
-              fontSize={11}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => `${v}만`}
-            />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="revenue"
-              stroke="#2d5a43"
-              strokeWidth={2}
-              fillOpacity={1}
-              fill="url(#colorRevenue)"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <AreaChart
+          width={400} // 기본 Fallback 너비 (생략 가능하나 경고 방지용)
+          height={220}
+          data={data}
+          margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+          style={{ width: '100%' }} // 너비를 100%로 유연하게 확장
+        >
+          <defs>
+            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#2d5a43" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#2d5a43" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            vertical={false}
+            stroke="#f0f0f0"
+          />
+          <XAxis
+            dataKey="name"
+            stroke="#bfbfbf"
+            fontSize={11}
+            tickLine={false}
+          />
+          <YAxis
+            stroke="#bfbfbf"
+            fontSize={11}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => `${v}만`}
+          />
+          <Tooltip />
+          <Area
+            type="monotone"
+            dataKey="revenue"
+            stroke="#2d5a43"
+            strokeWidth={2}
+            fillOpacity={1}
+            fill="url(#colorRevenue)"
+          />
+        </AreaChart>
       </div>
     </ChartCard>
   );

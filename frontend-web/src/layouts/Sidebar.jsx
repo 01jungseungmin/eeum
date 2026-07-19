@@ -113,15 +113,13 @@ const StatusBadge = styled.span`
   font-weight: bold;
 `;
 
-function Sidebar({ approvalStatus }) {
+function Sidebar({ approvalStatus, hasChatRoom }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, hasChatRoom } = useAuth();
+  const { logout } = useAuth(); // 💡 기존 컨텍스트 구조분해에서 hasChatRoom 삭제
 
   const role = localStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
-  const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG; // 💡 hasChatRoom 상태를 기반으로 메뉴 구성 선택
-  // : OWNER_MENU_CONFIG(hasChatRoom);
 
   // 알림 수량 실시간 상태
   const [counts, setCounts] = useState({
