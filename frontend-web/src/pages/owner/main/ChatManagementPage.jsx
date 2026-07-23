@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useLayoutEffect,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { chatApi } from '../../../api/owner/chatApi';
 import useChatSocket from '../../../hooks/useChatSocket';
@@ -405,9 +406,10 @@ const LeaveButton = styled.button`
 `;
 
 export default function ShopChatManagement() {
-  const roomKey = localStorage.getItem('my_shop_room_id') || '1';
+  const roomKey = localStorage.getItem('storeChatRoom_id') || '1';
   const ROOM_ID = parseInt(roomKey, 10);
   const MY_ACCOUNT_ID = Number(localStorage.getItem('accountId')) || 4;
+  const navigate = useNavigate();
 
   // 채팅방 세부 정보 상태 추가
   const [roomInfo, setRoomInfo] = useState({
@@ -419,7 +421,7 @@ export default function ShopChatManagement() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
-  const [showParticipants, setShowParticipants] = useState(false); // 팝업 열림 상태
+  const [showParticipants, setShowParticipants] = useState(false);
 
   const [uploadImages, setUploadImages] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -438,13 +440,13 @@ export default function ShopChatManagement() {
     try {
       setLoading(true);
 
-      // 1. 읽음 처리 먼저 수행
+      // 읽음 처리 먼저 수행
       await chatApi.markRoomAsRead(ROOM_ID);
 
-      // 2. 읽음 처리 후 카운트 갱신 (사이드바용)
+      // 읽음 처리 후 카운트 갱신
       refetch();
 
-      // 3. 병렬로 방 정보와 메시지 조회
+      // 병렬로 방 정보와 메시지 조회
       const [roomRes, msgRes] = await Promise.all([
         chatApi.getRoomDetail(ROOM_ID),
         chatApi.getMessages(ROOM_ID),
@@ -465,7 +467,6 @@ export default function ShopChatManagement() {
             ...msg,
             isMe: msg.senderAccountId === MY_ACCOUNT_ID,
             isDeleted: msg.deleted || false,
-            // 💡 서버에서 내려주는 unreadCount를 그대로 가져옵니다.
             unreadCount: msg.unreadCount || 0,
           }));
         setMessages(formatted);
@@ -508,11 +509,13 @@ export default function ShopChatManagement() {
     });
   }, [messages, loading, connected]);
 
+  // 메시지 전송 핸들러
   const handleSend = () => {
     if (!inputValue || !inputValue.trim()) return;
     if (sendMessage(inputValue.trim())) setInputValue('');
   };
 
+  // 메시지 우클릭 컨텍스트 메뉴
   const handleContextMenu = (e, msg) => {
     if (!msg.isMe || msg.isDeleted) return;
     e.preventDefault();
@@ -571,8 +574,15 @@ export default function ShopChatManagement() {
     try {
       await chatApi.leaveRoom(ROOM_ID);
       alert('채팅방에서 나갔습니다.');
-      // setHasChatRoom(false);
+
+      // 채팅방 개설 플래그를 문자열 'false'로 변경
+      localStorage.setItem('storeChatRoomCreated', 'false');
+
+      // 저장되어 있던 상점 룸 ID 데이터도 깔끔하게 삭제
+      localStorage.removeItem('storeChatRoom_id');
+
       navigate('/inquiry');
+      window.location.reload();
     } catch (error) {
       console.error('채팅방 나가기 실패:', error);
       alert('채팅방 나가기에 실패했습니다.');

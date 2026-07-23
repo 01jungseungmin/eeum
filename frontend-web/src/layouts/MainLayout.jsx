@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 import { approvalApi } from '../api/owner/ApprovalApi';
-import { storeApi } from '../api/owner/storeApi'; // 대시보드 API 임포트
+import { storeApi } from '../api/owner/storeApi';
 
 const LayoutWrapper = styled.div`
   display: flex;
@@ -32,7 +32,6 @@ function MainLayout() {
   const { accessToken, isLoading: authLoading } = useAuth();
 
   const [approvalStatus, setApprovalStatus] = useState(null);
-  const [hasChatRoom, setHasChatRoom] = useState(false); // 채팅방 개설 여부 상태 추가
   const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
@@ -40,6 +39,7 @@ function MainLayout() {
 
     const role = localStorage.getItem('role');
 
+    // 초기 데이터 로드 함수
     const fetchInitialData = async () => {
       try {
         if (role === 'ROLE_ADMIN') {
@@ -51,6 +51,7 @@ function MainLayout() {
           return;
         }
 
+        // 사장님 권한일 경우, 승인 상태와 대시보드 정보를 동시에 가져오기
         const [approvalRes, dashboardRes] = await Promise.all([
           approvalApi.getOwnerStoreChecklist(),
           storeApi.getDashboard(),
@@ -59,27 +60,39 @@ function MainLayout() {
           setApprovalStatus(approvalRes.data.data.approvalStatus);
         }
 
+        // 대시보드 정보 처리
         if (dashboardRes && dashboardRes.success) {
-          console.log('대시보드 정보:', dashboardRes.data);
           const serverData = dashboardRes.data;
 
-          // 1. 방금 개설되어 로컬에 true 흔적이 있거나 백엔드가 true를 주면 존재(true)로 판정
-          const isCreatedInLocal = localStorage.getItem('storeChatRoomCreated');
+          // 방금 개설되어 로컬에 true 흔적이 있거나 백엔드가 true를 주면 존재(true)로 판정
+          const isCreatedInLocal =
+            localStorage.getItem('storeChatRoomCreated') === 'true';
           const chatCreated =
             isCreatedInLocal || serverData.storeChatRoomCreated;
 
-          // 2. ★ 중요: 이 상태를 React State에 집어넣어야 Sidebar가 즉시 읽어서 그립니다.
-          setHasChatRoom(chatCreated);
+          // 개설 여부 상태 동기화
+          localStorage.setItem(
+            'storeChatRoomCreated',
+            String(Boolean(chatCreated)),
+          );
 
-          // 3. 로컬스토리지 동기화 (문자열 형태로 변환)
-          localStorage.setItem('storeChatRoomCreated', String(chatCreated));
+          // storeChatRoomId가 유효할 때만 로컬스토리지 업데이트
+          const targetRoomId = serverData.storeChatRoomId;
+          if (
+            targetRoomId !== undefined &&
+            targetRoomId !== null &&
+            String(targetRoomId) !== 'undefined'
+          ) {
+            localStorage.setItem('storeChatRoom_id', String(targetRoomId));
+          }
 
-          // 4. 나중에 채팅 개설할 때 쓸 수 있게 storeId도 임시 저장
+          // storeId 저장
           if (serverData.storeId) {
             localStorage.setItem('my_store_id', String(serverData.storeId));
           }
         }
       } catch (error) {
+        console.error('초기 데이터 로드 실패:', error);
         setApprovalStatus('REJECTED');
       } finally {
         setStatusLoading(false);
@@ -89,7 +102,7 @@ function MainLayout() {
     fetchInitialData();
   }, [accessToken]);
 
-  // 인증, 입점상태, 대시보드 정보가 다 올 때까지 안전하게 대기
+  // 인증 및 승인 상태 데이터 로딩 대기
   if (authLoading || (accessToken && statusLoading)) {
     return (
       <div
@@ -114,13 +127,12 @@ function MainLayout() {
 
   return (
     <LayoutWrapper>
-      {/* 사이드바에 승인 상태와 함께 채팅방 개설 유무도 props로 주입 */}
-      <Sidebar approvalStatus={approvalStatus} hasChatRoom={hasChatRoom} />
+      <Sidebar approvalStatus={approvalStatus} />
 
       <MainContent>
         <TopNavbar />
         <PageContainer>
-          <Outlet context={{ approvalStatus, hasChatRoom }} />
+          <Outlet context={{ approvalStatus }} />
         </PageContainer>
       </MainContent>
     </LayoutWrapper>

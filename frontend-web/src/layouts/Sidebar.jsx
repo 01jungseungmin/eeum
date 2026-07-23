@@ -116,7 +116,7 @@ const StatusBadge = styled.span`
 function Sidebar({ approvalStatus, hasChatRoom }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth(); // 💡 기존 컨텍스트 구조분해에서 hasChatRoom 삭제
+  const { logout } = useAuth();
 
   const role = localStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
@@ -183,10 +183,18 @@ function Sidebar({ approvalStatus, hasChatRoom }) {
   }, []);
   const counts = useNotificationCounts();
 
-  const handleMenuClick = async (item, isItemDisabled) => {
-    if (isItemDisabled) {
-      alert('입점 심사 승인이 완료된 후 사용하실 수 있습니다. 📋');
-      return;
+  const handleMenuClick = (e, item) => {
+    if (item.path === '/chat') {
+      const isCreated = localStorage.getItem('storeChatRoomCreated') === 'true';
+
+      if (!isCreated) {
+        e.preventDefault();
+        alert(
+          '💡 먼저 대표 실시간 채팅방을 개설하셔야 합니다.\n[문의 관리] 페이지로 이동합니다.',
+        );
+        navigate('/inquiry');
+        return;
+      }
     }
 
     // 알림 배지가 있는 메뉴 클릭 시
@@ -248,7 +256,7 @@ function Sidebar({ approvalStatus, hasChatRoom }) {
               return (
                 <MenuItem
                   key={item.id}
-                  onClick={() => handleMenuClick(item, isItemDisabled)}
+                  onClick={(e) => handleMenuClick(e, item)}
                   $active={isActive}
                   $isAdmin={isAdmin}
                   $disabled={isItemDisabled}

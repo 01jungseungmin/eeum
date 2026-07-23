@@ -97,18 +97,15 @@ export const OWNER_MENU_CONFIG = (hasChatRoom) => [
         subtitle: '고객들이 남긴 소중한 리뷰에 답글을 달아주세요',
         countKey: 'reviews',
       },
-      ...(hasChatRoom
-        ? [
-            {
-              id: 'chat',
-              name: '채팅',
-              path: '/chat',
-              icon: <MessageSquare {...iconProps} />,
-              subtitle: '고객과 실시간으로 소통하세요',
-              countKey: 'chat',
-            },
-          ]
-        : []),
+
+      {
+        id: 'chat',
+        name: '채팅',
+        path: '/chat',
+        icon: <MessageSquare {...iconProps} />,
+        subtitle: '고객과 실시간으로 소통하세요',
+        countKey: 'chat',
+      },
     ],
   },
   {
@@ -255,15 +252,10 @@ export const ADMIN_MENU_CONFIG = [
   },
 ];
 
-// 브레드크럼이나 헤더 타이틀 매칭 함수도 안전하게 리팩토링
+// 브레드크럼이나 헤더 타이틀 매칭 함수 리팩토링
 export const findMenuByPath = (path, role) => {
-  // 로컬스토리지에 들어있는 값으로 폴백 처리
-  const storedChatStatus =
-    localStorage.getItem('storeChatRoomCreated') === 'true';
   const targetConfig =
-    role === 'ROLE_ADMIN'
-      ? ADMIN_MENU_CONFIG
-      : OWNER_MENU_CONFIG(storedChatStatus);
+    role === 'ROLE_ADMIN' ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 
   if (!Array.isArray(targetConfig)) return null;
 

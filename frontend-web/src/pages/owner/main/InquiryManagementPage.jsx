@@ -14,7 +14,6 @@ const Container = styled.div`
   font-family: 'Noto Sans KR', sans-serif;
 `;
 
-// 💡 1. 채팅방 개설 유도용 상단 배너 스타일 추가
 const ChatBanner = styled.div`
   background-color: #eafaf1; /* 브랜드 그린 연한 배경 톤 */
   border: 1px solid #42a574;
@@ -79,7 +78,7 @@ export default function InquiryManagement() {
 
   // 룸 ID 상태 (개설 완료 문구에 룸 ID 표출용으로 유지)
   const [myRoomId, setMyRoomId] = useState(() => {
-    return localStorage.getItem('my_shop_room_id') || null;
+    return localStorage.getItem('storeChatRoom_id') || null;
   });
 
   // 채팅방 개설 유무 상태 추가 (로컬스토리지에서 불리언 판별값 가져오기)
@@ -125,10 +124,11 @@ export default function InquiryManagement() {
 
       if (res.data.success && res.data.data.roomId !== undefined) {
         const newRoomId = res.data.data.roomId;
+        console.log('채팅방 생성 성공, Room ID:', newRoomId);
         setMyRoomId(newRoomId);
         setIsChatRoomCreated(true); // 💡 로컬 상태 즉시 반영
 
-        localStorage.setItem('my_shop_room_id', String(newRoomId));
+        localStorage.setItem('storeChatRoom_id', String(newRoomId));
         localStorage.setItem('storeChatRoomCreated', 'true'); // 💡 문자열 저장 연동
 
         alert(
@@ -173,7 +173,7 @@ export default function InquiryManagement() {
         setStatusFilter={setStatusFilter}
       />
 
-      {/* 💡 4. 채팅방이 아직 개설되지 않았을 때만 상단 안내 배너 노출 */}
+      {/* 채팅방이 아직 개설되지 않았을 때만 상단 안내 배너 노출 */}
       {!isChatRoomCreated ? (
         <ChatBanner>
           <BannerText>
