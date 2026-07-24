@@ -13,7 +13,6 @@ import CapacityModal from '../../../components/owner/reservation/CapacityModal';
 import DateSlotEditModal from '../../../components/owner/reservation/DateSlotEditModal';
 import { reservationApi } from '../../../api/owner/reservationApi';
 
-// 레이아웃 전체 대형 프레임 정의
 const PageContainer = styled.div`
   padding: 24px;
   background-color: #f8f9fa;
@@ -215,7 +214,6 @@ export default function ReservationPage() {
     try {
       const response = await reservationApi.getVisitSettings();
       if (response.data && response.data.success) {
-        console.log('기본 설정 로드 성공:', response.data.data);
         setSettings({ ...response.data.data });
         fetchTimeSlots(selectedDate);
       }
@@ -249,6 +247,7 @@ export default function ReservationPage() {
 
       const response = await reservationApi.getVisitReservations({ status });
       if (response.data && response.data.success) {
+        console.log('주문 목록 로드 성공:', response.data.data?.content || []);
         setOrders(response.data.data?.content || []);
       }
     } catch (error) {
@@ -280,6 +279,7 @@ export default function ReservationPage() {
     (o) => o.status === 'PENDING',
   ).length;
 
+  // 주간 달력용 날짜 코드
   const weekDaysList = Array.from({ length: 7 }).map((_, index) => {
     const day = new Date(currentWeekMonday);
     day.setDate(currentWeekMonday.getDate() + index);
@@ -368,12 +368,12 @@ export default function ReservationPage() {
             <Sliders size={16} /> 시간대별 수용인원 설정
           </ModalTriggerButton>
 
-          {/* 🎯 이 버튼을 눌렀을 때만 하루 전용 조절 모달(DateSlotEditModal)이 활성화됩니다 */}
+          {/* 이 버튼을 눌렀을 때만 하루 전용 조절 모달(DateSlotEditModal)이 활성화 */}
           <DateEditTriggerButton onClick={() => setIsDateModalOpen(true)}>
             <CalendarRange size={16} /> 🗓️ 특정 일자 시간대 오픈/차단 조정
           </DateEditTriggerButton>
 
-          {/* 🎯 [수정 완료] 클릭 연동 코드를 완전히 삭제하여 순수 리스트 뷰어로만 쓰이도록 격리 */}
+          {/* 클릭 연동 코드를 완전히 삭제하여 순수 리스트 뷰어로만 쓰이도록 격리 */}
           <TimeSlotStatus
             slotsData={timeSlots}
             selectedDate={selectedDate}
