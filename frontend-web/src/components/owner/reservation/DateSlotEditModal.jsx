@@ -278,18 +278,6 @@ export default function DateSlotEditModal({
                       {isEnabled ? '오픈됨' : '차단됨'}
                     </ToggleButton>
                   </TimeBlock>
-
-                  <InputWrapper>
-                    <span>최대 테이블 수:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      disabled={!isEnabled}
-                      value={slot.maxTeamCount ?? 0}
-                      onChange={(e) => handleCountChange(index, e.target.value)}
-                    />
-                    <span>개</span>
-                  </InputWrapper>
                 </SlotItemRow>
               );
             })

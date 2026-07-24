@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
-import { Clock, Sliders } from 'lucide-react';
-import SingleSlotEditModal from './DateSlotEditModal';
+import { Clock } from 'lucide-react';
 
 const Container = styled.div`
   background: #fff;
@@ -28,20 +27,18 @@ const TitleZone = styled.div`
 const SlotRow = styled.div`
   display: flex;
   align-items: center;
-  padding: 14px 10px;
+  padding: 12px 10px;
   border-bottom: 1px solid #f1f3f5;
-  cursor: pointer;
   border-radius: 8px;
-  transition: background 0.2s ease;
 
   &:last-child {
     border-bottom: none;
   }
-  opacity: ${(props) => (props.$disabled ? 0.5 : 1)}; /* 차단된 슬롯 흐리게 */
+  opacity: ${(props) => (props.$disabled ? 0.5 : 1)};
 `;
 
 const TimeLabel = styled.span`
-  width: 55px;
+  width: 50px;
   font-size: 13px;
   font-weight: 700;
   color: #495057;
@@ -49,24 +46,30 @@ const TimeLabel = styled.span`
 
 const TableInfoContainer = styled.div`
   flex: 1;
-  margin-left: 12px;
+  margin-left: 8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
 `;
 
 const BadgeGroup = styled.div`
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 `;
 
-const TotalTableBadge = styled.span`
+const CapacityBadge = styled.span`
   font-size: 11px;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 6px;
-  background: ${(props) => (props.$disabled ? '#f1f3f5' : '#e4f2eb')};
-  color: ${(props) => (props.$disabled ? '#868e96' : '#4CA771')};
+
+  background: ${(props) =>
+    props.$disabled ? '#f1f3f5' : props.$isFull ? '#fff0f0' : '#e4f2eb'};
+  color: ${(props) =>
+    props.$disabled ? '#868e96' : props.$isFull ? '#e53935' : '#4ca771'};
+  border: 1px solid
+    ${(props) =>
+      props.$disabled ? '#e9ecef' : props.$isFull ? '#ffcdd2' : '#c8e6c9'};
 `;
 
 const CloseLabel = styled.span`
@@ -78,45 +81,62 @@ const CloseLabel = styled.span`
   border-radius: 6px;
 `;
 
-const ActionBtn = styled.div`
-  color: #adb5bd;
-  display: flex;
-  align-items: center;
-  ${SlotRow}:hover & {
-    color: #4ca771;
-  } /* 행에 마우스 올리면 아이콘 색 변경 */
-`;
-
 export default function TimeSlotStatus({
   slotsData = [],
   selectedDate,
   dayOrders = [],
   defaultSettings,
-  refreshDashboard,
 }) {
-  const validOrders = dayOrders.filter(
-    (order) => order.status !== 'REJECTED' && order.status !== 'CANCELED',
+  // 대기(PENDING), 거절(REJECTED)을 제외하고 '승인된 예약'만 필터링
+  const approvedOrders = dayOrders.filter(
+    (order) => order.status === 'APPROVED',
   );
 
-  const activeReservationTimes = validOrders.map((order) => {
+  // 승인된 예약이 존재하는 시간대만 추출
+  const activeReservationTimes = approvedOrders.map((order) => {
     if (!order.visitTime) return '';
     return order.visitTime.substring(0, 5);
   });
 
+  // 화면에 표시할 시간대 필터링
   const visibleSlots = slotsData.filter((slot) => {
     const slotTime = slot.time?.substring(0, 5);
-    const hasReservations = activeReservationTimes.includes(slotTime);
-    const hasReservedCount = (slot.reservedTableCount || 0) > 0;
+    const hasApprovedReservations = activeReservationTimes.includes(slotTime);
     const isManuallyModified = slot.enabled === false;
 
-    return hasReservations || hasReservedCount || isManuallyModified;
+    // 승인된 예약이 있거나 수동으로 차단된 시간대만 화면에 표시
+    return hasApprovedReservations || isManuallyModified;
   });
+
+  // 인원수를 파싱하는 안전한 함수
+  const getHeadCount = (order) => {
+    const count =
+      order.headCount ??
+      order.partySize ??
+      order.guestCount ??
+      order.peopleCount ??
+      order.people ??
+      1;
+
+    if (typeof count === 'string') {
+      const parsed = parseInt(count.replace(/[^0-9]/g, ''), 10);
+      return isNaN(parsed) ? 1 : parsed;
+    }
+    return Number(count);
+  };
+
+  // 인원수별 인석 매칭
+  const getCapacityByPeople = (count) => {
+    if (count <= 2) return 2; // 1~2명 -> 2인석
+    if (count <= 4) return 4; // 3~4명 -> 4인석
+    return 6; // 5명 이상 -> 6인석
+  };
 
   return (
     <Container>
       <TitleZone>
         <h3>시간대별 테이블 현황</h3>
-        <p>{selectedDate} · 클릭하여 개별 시간대를 조정·차단할 수 있습니다.</p>
+        <p>{selectedDate} · 승인 확정된 예약의 테이블 사용 현황입니다.</p>
       </TitleZone>
 
       {visibleSlots.length === 0 ? (
@@ -130,15 +150,32 @@ export default function TimeSlotStatus({
         >
           <Clock size={20} style={{ color: '#ccc', marginBottom: '8px' }} />
           <br />
-          해당 날짜에 노출할 예약 시간대가 없습니다.
+          해당 날짜에 승인된 예약 시간대가 없습니다.
         </div>
       ) : (
         visibleSlots.map((slot) => {
           const slotTime = slot.time?.substring(0, 5);
-          const totalReserved = slot.reservedTableCount || 0;
-          const totalMax =
-            slot.maxTableCount || defaultSettings?.defaultMaxTeamCount || 3;
           const isSlotEnabled = slot.enabled !== false;
+
+          // 해당 시간대의 '승인된' 예약만 추출
+          const slotOrders = approvedOrders.filter(
+            (o) => o.visitTime?.substring(0, 5) === slotTime,
+          );
+
+          // 승인된 예약에 대해서만 인석별 테이블 사용량 집계
+          const usedMap = { 2: 0, 4: 0, 6: 0 };
+          slotOrders.forEach((order) => {
+            const count = getHeadCount(order);
+            const cap = getCapacityByPeople(count);
+            usedMap[cap] = (usedMap[cap] || 0) + 1;
+          });
+
+          // 설정된 총 테이블 수
+          const totalMap = {
+            2: defaultSettings?.table2Seater ?? 2,
+            4: defaultSettings?.table4Seater ?? 3,
+            6: defaultSettings?.table6Seater ?? 1,
+          };
 
           return (
             <SlotRow key={slot.time} $disabled={!isSlotEnabled}>
@@ -148,15 +185,23 @@ export default function TimeSlotStatus({
                   <CloseLabel>예약 마감(차단됨)</CloseLabel>
                 ) : (
                   <BadgeGroup>
-                    <TotalTableBadge $disabled={!isSlotEnabled}>
-                      테이블: {totalReserved} / {totalMax}개 사용중
-                    </TotalTableBadge>
+                    {[2, 4, 6].map((cap) => {
+                      const used = usedMap[cap] || 0;
+                      const total = totalMap[cap] || 0;
+                      const isFull = used >= total && total > 0;
+
+                      return (
+                        <CapacityBadge
+                          key={cap}
+                          $isFull={isFull}
+                          $disabled={!isSlotEnabled}
+                        >
+                          {cap}인석 {used}/{total}
+                        </CapacityBadge>
+                      );
+                    })}
                   </BadgeGroup>
                 )}
-
-                <ActionBtn>
-                  <Sliders size={13} />
-                </ActionBtn>
               </TableInfoContainer>
             </SlotRow>
           );
