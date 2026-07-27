@@ -6,7 +6,6 @@ import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../api/authApi';
 import { notificationApi } from '../api/owner/notificationApi';
-import { useNotificationCounts } from '../hooks/useNotificationCounts';
 
 const SideContainer = styled.div`
   width: 260px;
@@ -128,8 +127,7 @@ function Sidebar({ approvalStatus }) {
     chat: 0,
     qna: 0,
     alerts: 0,
-    adminApproval: 0,
-    adminReports: 0,
+    system: 0,
   });
 
   const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
@@ -161,6 +159,7 @@ function Sidebar({ approvalStatus }) {
           reviews: byCategory.REVIEW || 0,
           chat: byCategory.CHAT || 0,
           qna: byCategory.QNA || 0,
+          system: byCategory.SYSTEM || 0,
           alerts: parsedData.unreadCount || 0,
         });
       } catch (error) {
@@ -181,12 +180,35 @@ function Sidebar({ approvalStatus }) {
       eventSource.close();
     };
   }, []);
-  const counts = useNotificationCounts();
 
-  const handleMenuClick = async (item, isItemDisabled) => {
-    if (isItemDisabled) {
-      alert('입점 심사 승인이 완료된 후 사용하실 수 있습니다. 📋');
-      return;
+  const handleMenuClick = async (e, item) => {
+    if (item.path === '/chat') {
+      const isCreated = localStorage.getItem('storeChatRoomCreated') === 'true';
+
+      if (!isCreated) {
+        e.preventDefault();
+        alert(
+          '💡 먼저 대표 실시간 채팅방을 개설하셔야 합니다.\n[문의 관리] 페이지로 이동합니다.',
+        );
+        navigate('/inquiry');
+        return;
+      }
+    }
+
+    // 알림 배지가 있는 메뉴 클릭 시
+    if (item.countKey && counts[item.countKey] > 0) {
+      //  UI 즉시 반영 (낙관적 업데이트)
+      setCounts((prev) => ({
+        ...prev,
+        [item.countKey]: 0,
+      }));
+
+      // 백엔드 DB의 알림 상태를 '읽음'으로 변경 요청 (일단 전체 읽음 처리)
+      try {
+        await notificationApi.readNotification();
+      } catch (error) {
+        console.error('알림 읽음 처리 실패:', error);
+      }
     }
 
     // 알림 배지가 있는 메뉴 클릭 시
@@ -248,7 +270,7 @@ function Sidebar({ approvalStatus }) {
               return (
                 <MenuItem
                   key={item.id}
-                  onClick={() => handleMenuClick(item, isItemDisabled)}
+                  onClick={(e) => handleMenuClick(e, item)}
                   $active={isActive}
                   $isAdmin={isAdmin}
                   $disabled={isItemDisabled}

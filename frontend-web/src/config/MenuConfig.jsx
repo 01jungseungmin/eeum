@@ -7,7 +7,6 @@ import {
   ClipboardList,
   Calendar,
   Users,
-  Heart,
   Star,
   MessageSquare,
   MessageCircle,
@@ -24,7 +23,6 @@ import {
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
 
-// 사장님 전용 메뉴
 export const OWNER_MENU_CONFIG = [
   {
     group: '메뉴',
@@ -99,12 +97,13 @@ export const OWNER_MENU_CONFIG = [
         subtitle: '고객들이 남긴 소중한 리뷰에 답글을 달아주세요',
         countKey: 'reviews',
       },
+
       {
         id: 'chat',
         name: '채팅',
         path: '/chat',
         icon: <MessageSquare {...iconProps} />,
-        subtitle: '고객과의 1:1 채팅을 관리하세요',
+        subtitle: '고객과 실시간으로 소통하세요',
         countKey: 'chat',
       },
     ],
@@ -169,15 +168,14 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'logout',
         name: '로그아웃',
-        path: '#', // 실제 페이지 경로가 아님을 명시
-        action: 'LOGOUT', // 로그아웃을 실행하겠다는 명시적 표시
-        icon: <LogOut {...iconProps} />, // lucide-react에서 LogOut 추가 필요
+        path: '#',
+        action: 'LOGOUT',
+        icon: <LogOut {...iconProps} />,
       },
     ],
   },
 ];
 
-// 관리자 전용 메뉴
 export const ADMIN_MENU_CONFIG = [
   {
     group: '',
@@ -187,21 +185,18 @@ export const ADMIN_MENU_CONFIG = [
         name: '대시보드',
         path: '/admin/dashboard',
         icon: <LayoutGrid {...iconProps} />,
-        subtitle: '이웃 플랫폼의 전체 운영 현황을 확인합니다.',
       },
       {
         id: 'admin-members',
         name: '회원 관리',
         path: '/admin/members',
         icon: <Users {...iconProps} />,
-        subtitle: '전체 가입 회원 및 블랙리스트를 관리합니다.',
       },
       {
         id: 'admin-approval',
         name: '사장 승인',
         path: '/admin/approval',
         icon: <UserCheck {...iconProps} />,
-        subtitle: '입점 신청한 사장님의 서류를 심사합니다.',
         countKey: 'adminApproval',
       },
       {
@@ -209,36 +204,31 @@ export const ADMIN_MENU_CONFIG = [
         name: '게시글',
         path: '/admin/posts',
         icon: <FileText {...iconProps} />,
-        subtitle: '커뮤니티 및 중고거래 게시글을 모니터링합니다.',
       },
       {
         id: 'admin-reports',
         name: '신고',
         path: '/admin/reports',
         icon: <Flag {...iconProps} />,
-        subtitle: '접수된 유저 및 게시글 신고를 처리합니다.',
-        countKey: 'adminReports', // 알림 숫자 '5' 연동용
+        countKey: 'adminReports',
       },
       {
         id: 'admin-qna',
         name: '문의',
         path: '/admin/qna',
         icon: <MessageCircle {...iconProps} />,
-        subtitle: '고객 센터로 접수된 1:1 문의에 답변합니다.',
       },
       {
         id: 'admin-categories',
         name: '카테고리',
         path: '/admin/categories',
         icon: <FolderTree {...iconProps} />,
-        subtitle: '서비스 전체 카테고리를 설정하고 관리합니다.',
       },
       {
         id: 'admin-logs',
         name: '관리자 로그',
         path: '/admin/logs',
         icon: <ClipboardList {...iconProps} />,
-        subtitle: '관리자 계정들의 활동 행동 로그를 조회합니다.',
       },
     ],
   },
@@ -254,17 +244,21 @@ export const ADMIN_MENU_CONFIG = [
       {
         id: 'admin-logout',
         name: '로그아웃',
-        path: '#', // 실제 페이지 경로가 아님을 명시
-        action: 'LOGOUT', // 로그아웃을 실행하겠다는 명시적 표시
+        path: '#',
+        action: 'LOGOUT',
         icon: <LogOut {...iconProps} />,
       },
     ],
   },
 ];
 
+// 브레드크럼이나 헤더 타이틀 매칭 함수 리팩토링
 export const findMenuByPath = (path, role) => {
   const targetConfig =
-    role === 'ROLE_OWNER' ? OWNER_MENU_CONFIG : ADMIN_MENU_CONFIG;
+    role === 'ROLE_ADMIN' ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
+
+  if (!Array.isArray(targetConfig)) return null;
+
   for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;

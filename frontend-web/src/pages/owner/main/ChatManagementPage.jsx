@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useLayoutEffect,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { chatApi } from '../../../api/owner/chatApi';
 import useChatSocket from '../../../hooks/useChatSocket';
@@ -39,6 +40,9 @@ const ChatHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   padding: 18px 24px;
+  border-bottom: 1px solid #eaeaea;
+  position: relative; /* 팝업 기준점 */
+  background-color: #ffffff;
   border-bottom: 1px solid #eaeaea;
   position: relative; /* 팝업 기준점 */
 `;
@@ -307,14 +311,6 @@ const ModalActionRow = styled.div`
   gap: 8px;
   margin-top: 10px;
 `;
-const CancelButton = styled.button`
-  background: #f1f3f5;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-`;
 const ConfirmButton = styled.button`
   background: ${({ $isDelete }) => ($isDelete ? '#e03131' : '#00a651')};
   color: white;
@@ -325,14 +321,41 @@ const ConfirmButton = styled.button`
   font-size: 14px;
   &:disabled {
     background: #cbd5e1;
-    cursor: not-allowed;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #fff5f5;
+  }
+`;
+const CancelButton = styled.button`
+  background: #f1f3f5;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+`;
+const LeaveButton = styled.button`
+  padding: 6px 12px;
+  background-color: #fff1f0;
+  color: #e03131;
+  border: 1px solid #ffc9c9;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #ffe3e3;
   }
 `;
 
 export default function ShopChatManagement() {
-  const roomKey = localStorage.getItem('my_shop_room_id') || '1';
+  const roomKey = localStorage.getItem('storeChatRoom_id') || '1';
   const ROOM_ID = parseInt(roomKey, 10);
   const MY_ACCOUNT_ID = Number(localStorage.getItem('accountId')) || 4;
+  const navigate = useNavigate();
 
   // 채팅방 세부 정보 상태 추가
   const [roomInfo, setRoomInfo] = useState({
@@ -344,7 +367,7 @@ export default function ShopChatManagement() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
-  const [showParticipants, setShowParticipants] = useState(false); // 팝업 열림 상태
+  const [showParticipants, setShowParticipants] = useState(false);
 
   const [uploadImages, setUploadImages] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -363,13 +386,13 @@ export default function ShopChatManagement() {
     try {
       setLoading(true);
 
-      // 1. 읽음 처리 먼저 수행
+      // 읽음 처리 먼저 수행
       await chatApi.markRoomAsRead(ROOM_ID);
 
-      // 2. 읽음 처리 후 카운트 갱신 (사이드바용)
+      // 읽음 처리 후 카운트 갱신
       refetch();
 
-      // 3. 병렬로 방 정보와 메시지 조회
+      // 병렬로 방 정보와 메시지 조회
       const [roomRes, msgRes] = await Promise.all([
         chatApi.getRoomDetail(ROOM_ID),
         chatApi.getMessages(ROOM_ID),
@@ -390,7 +413,6 @@ export default function ShopChatManagement() {
             ...msg,
             isMe: msg.senderAccountId === MY_ACCOUNT_ID,
             isDeleted: msg.deleted || false,
-            // 💡 서버에서 내려주는 unreadCount를 그대로 가져옵니다.
             unreadCount: msg.unreadCount || 0,
           }));
         setMessages(formatted);
@@ -433,11 +455,13 @@ export default function ShopChatManagement() {
     });
   }, [messages, loading, connected]);
 
+  // 메시지 전송 핸들러
   const handleSend = () => {
     if (!inputValue || !inputValue.trim()) return;
     if (sendMessage(inputValue.trim())) setInputValue('');
   };
 
+  // 메시지 우클릭 컨텍스트 메뉴
   const handleContextMenu = (e, msg) => {
     if (!msg.isMe || msg.isDeleted) return;
     e.preventDefault();
@@ -452,18 +476,20 @@ export default function ShopChatManagement() {
     setSelectedMessageId(msg.messageId);
   };
 
+  // 채팅 삭제
   const handleConfirmDelete = async () => {
     if (!selectedMessageId) return;
     try {
       await chatApi.deleteMessage(selectedMessageId);
+      await initChat();
       setIsDeleteModalOpen(false);
-      loadChatData();
     } catch (error) {
       console.error(error);
       alert('메시지 삭제에 실패했습니다.');
     }
   };
 
+  // 이미지 업로드 후 전송
   const handleImagesSubmit = async () => {
     if (uploadImages.length === 0) return;
     setIsUploading(true);
@@ -477,13 +503,35 @@ export default function ShopChatManagement() {
           });
         }
       }
+      await initChat();
       setUploadImages([]);
       setIsModalOpen(false);
-      loadChatData();
     } catch (error) {
       console.error(error);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // 채팅방 나가기
+  const handleLeaveRoom = async () => {
+    if (!window.confirm('정말로 이 채팅방을 나가시겠습니까?')) return;
+
+    try {
+      await chatApi.leaveRoom(ROOM_ID);
+      alert('채팅방에서 나갔습니다.');
+
+      // 채팅방 개설 플래그를 문자열 'false'로 변경
+      localStorage.setItem('storeChatRoomCreated', 'false');
+
+      // 저장되어 있던 상점 룸 ID 데이터도 깔끔하게 삭제
+      localStorage.removeItem('storeChatRoom_id');
+
+      navigate('/inquiry');
+      window.location.reload();
+    } catch (error) {
+      console.error('채팅방 나가기 실패:', error);
+      alert('채팅방 나가기에 실패했습니다.');
     }
   };
 
@@ -505,10 +553,12 @@ export default function ShopChatManagement() {
               <ShopBadge>🏠 맛있는 반찬가게 · 마포구</ShopBadge>
             </UserInfo>
           </UserProfile>
-          <StatusIndicator $connected={connected}>
-            {connected ? '실시간 연결됨' : '연결 끊김'}
-          </StatusIndicator>
-
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <StatusIndicator $connected={connected}>
+              {connected ? '실시간 연결됨' : '연결 끊김'}
+            </StatusIndicator>
+            <LeaveButton onClick={handleLeaveRoom}>방 나가기</LeaveButton>
+          </div>
           {/* 👥 누르면 열리는 참여자 목록 레이어 */}
           {showParticipants && (
             <ParticipantsDropdown>
@@ -596,6 +646,56 @@ export default function ShopChatManagement() {
       </ChatWrapper>
 
       {/* 모달 생략 - 이전과 동일 */}
+      {isModalOpen && (
+        <ModalOverlay onClick={() => !isUploading && setIsModalOpen(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalTitle>전송할 이미지 선택 (최대 5장)</ModalTitle>
+            <ImageUploaderGrid
+              variant="product"
+              images={uploadImages}
+              onChange={setUploadImages}
+              maxCount={5}
+            />
+            <ModalActionRow>
+              <CancelButton
+                disabled={isUploading}
+                onClick={() => setIsModalOpen(false)}
+              >
+                취소
+              </CancelButton>
+              <ConfirmButton
+                disabled={isUploading || uploadImages.length === 0}
+                onClick={handleImagesSubmit}
+              >
+                {isUploading
+                  ? '전송 중...'
+                  : `${uploadImages.length}장의 사진 전송`}
+              </ConfirmButton>
+            </ModalActionRow>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {isDeleteModalOpen && (
+        <ModalOverlay onClick={() => setIsDeleteModalOpen(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalTitle>🚨 메시지 삭제</ModalTitle>
+            <div style={{ fontSize: '14px', color: '#555', lineHeight: '1.5' }}>
+              정말로 이 메시지를 삭제하시겠습니까?
+              <br />
+              삭제된 대화는 복구할 수 없으며 대화창 전체에 반영됩니다.
+            </div>
+            <ModalActionRow>
+              <CancelButton onClick={() => setIsDeleteModalOpen(false)}>
+                취소
+              </CancelButton>
+              <ConfirmButton $isDelete={true} onClick={handleConfirmDelete}>
+                정말 삭제
+              </ConfirmButton>
+            </ModalActionRow>
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </PageContainer>
   );
 }

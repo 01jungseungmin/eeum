@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell } from 'recharts';
 
 const Card = styled.div`
   background: white;
@@ -67,22 +67,29 @@ function CategoryChart() {
       <Title>카테고리별 판매</Title>
       <SubTitle>이번 달 기준</SubTitle>
 
-      <div style={{ width: '100%', height: 140 }}>
-        <ResponsiveContainer>
-          <PieChart>
-            <Pie
-              data={data}
-              innerRadius={45}
-              outerRadius={60}
-              paddingAngle={3}
-              dataKey="value"
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
+      <div
+        style={{
+          width: '100%',
+          height: 140,
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
+        <PieChart width={200} height={140}>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={45}
+            outerRadius={60}
+            paddingAngle={3}
+            dataKey="value"
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+        </PieChart>
       </div>
 
       <LegendContainer>

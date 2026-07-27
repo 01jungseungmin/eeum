@@ -8,6 +8,10 @@ export const storeApi = {
   updateStoreInfo: (storeData) =>
     apiClient.patch('/owner/stores/me', storeData).then((res) => res.data),
 
+  // 내 상점 대시보드
+  getDashboard: () =>
+    apiClient.get('/owner/stores/me/dashboard').then((res) => res.data),
+
   // 영업시간 조회 / 수정
   getBusinessHours: () => apiClient.get('/owner/stores/me/business-hours'),
   updateBusinessHours: (data) =>

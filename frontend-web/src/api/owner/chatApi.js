@@ -41,4 +41,9 @@ export const chatApi = {
   getUnreadCount: () => {
     return apiClient.get('/chat/messages/unread/count');
   },
+
+  // 채팅방 나가기
+  leaveRoom: (roomId) => {
+    return apiClient.patch(`/chat/rooms/${roomId}/leave`);
+  },
 };

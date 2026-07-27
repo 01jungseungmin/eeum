@@ -94,6 +94,8 @@ function App() {
           <Route path="/inquiry" element={<InquiryManagementPage />} />
           <Route path="/chat" element={<ChatManagementPage />} />
           <Route path="/customers" element={<CustomerManagementPage />} />
+          <Route path="/inquiry" element={<InquiryManagementPage />} />
+          <Route path="/chat" element={<ChatManagementPage />} />
         </Route>
       </Route>
     </Routes>
