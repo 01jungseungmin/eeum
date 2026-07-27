@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,11 +13,18 @@ import { chatApi } from '../../api/chat';
 
 const { width } = Dimensions.get('window');
 
+// 상품이 어떤 카테고리에 속하는지 유연하게 추출 (백엔드 응답 형태 방어)
+const getProductCategoryId = (product: any) =>
+  product?.productCategoryId ??
+  product?.categoryId ??
+  product?.productCategory?.productCategoryId ??
+  null;
+
 export default function ShopDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
 
-  const insets = useSafeAreaInsets(); 
+  const insets = useSafeAreaInsets();
 
   const [isLoading, setIsLoading] = useState(true);
   const [shopDetail, setShopDetail] = useState<any>(null);
@@ -25,6 +32,9 @@ export default function ShopDetailScreen() {
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
   const [favoriteCount, setFavoriteCount] = useState<number>(0);
   const [shopReviews, setShopReviews] = useState<any[]>([]);
+  const [shopNotices, setShopNotices] = useState<any[]>([]);
+  const [productCategories, setProductCategories] = useState<any[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null); // null = 전체
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
@@ -33,13 +43,15 @@ export default function ShopDetailScreen() {
     const fetchShopData = async () => {
       try {
         setIsLoading(true);
-        const [detailData, productsData, checkRes, countRes, reviewsRes, regionsRes] = await Promise.all([
+        const [detailData, productsData, checkRes, countRes, reviewsRes, regionsRes, noticesRes, categoriesRes] = await Promise.all([
           shopApi.getShopDetail(shopIdNum),
           shopApi.getShopProducts(shopIdNum),
           favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
           favoriteApi.getFavoriteCount('STORE', shopIdNum).catch(() => null),
           reviewApi.getReviews(shopIdNum).catch(() => null),
-          regionApi.getMyRegions().catch(() => null) 
+          regionApi.getMyRegions().catch(() => null),
+          shopApi.getShopNotices(shopIdNum).catch(() => []),
+          shopApi.getShopProductCategories(shopIdNum).catch(() => []),
         ]);
 
         setShopReviews(reviewsRes?.content || reviewsRes?.data || []);
@@ -47,6 +59,21 @@ export default function ShopDetailScreen() {
         setShopProducts(productsData || []);
         if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
         if (countRes?.data) setFavoriteCount(countRes.data.data);
+
+        // 공지: 배열 / { content: [] } / null 어떤 형태로 와도 방어
+        console.log('📢 공지 응답:', noticesRes);
+        setShopNotices(
+          Array.isArray(noticesRes) ? noticesRes : (noticesRes?.content ?? [])
+        );
+
+        // 카테고리: active인 것만, displayOrder 순으로 정렬
+        console.log('🗂 카테고리 응답:', categoriesRes);
+        const rawCategories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes?.content ?? []);
+        setProductCategories(
+          rawCategories
+            .filter((c: any) => c.active !== false)
+            .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        );
 
         // 유연한 동네 인증 검사 로직
         if (regionsRes?.data) {
@@ -70,6 +97,12 @@ export default function ShopDetailScreen() {
     if (shopIdNum) fetchShopData();
   }, [shopIdNum]);
 
+  // 선택된 카테고리에 따라 상품 필터링
+  const filteredProducts = useMemo(() => {
+    if (selectedCategoryId === null) return shopProducts;
+    return shopProducts.filter((p) => getProductCategoryId(p) === selectedCategoryId);
+  }, [shopProducts, selectedCategoryId]);
+
   const handleToggleFavorite = async () => {
     try {
       const res = await favoriteApi.toggleFavorite('STORE', shopIdNum);
@@ -87,7 +120,7 @@ export default function ShopDetailScreen() {
       return;
     }
 
-    const roomId = shopDetail?.chatRoomId; 
+    const roomId = shopDetail?.chatRoomId;
 
     if (!roomId /* || !shopDetail?.chatRoomExists */) {
       Alert.alert('알림', '아직 이 상점의 단체 채팅방이 개설되지 않았습니다.');
@@ -95,8 +128,8 @@ export default function ShopDetailScreen() {
     }
 
     try {
-      await chatApi.joinRoom(roomId); 
-      router.push(`/chat/${roomId}` as any); 
+      await chatApi.joinRoom(roomId);
+      router.push(`/chat/${roomId}` as any);
     } catch (error: any) {
       if (error.response?.status === 409 || error.response?.status === 400) {
         router.push(`/chat/${roomId}` as any);
@@ -169,26 +202,96 @@ export default function ShopDetailScreen() {
 
         <View style={styles.divider} />
 
+        {/* 상점 공지 섹션 */}
+        {shopNotices.length > 0 && (
+          <>
+            <View style={styles.noticeSection}>
+              <Text fontWeight="bold" style={styles.sectionTitle}>상점 공지</Text>
+              {shopNotices.map((notice: any, index: number) => (
+                <View key={notice.noticeId ?? notice.id ?? index} style={styles.noticeCard}>
+                  <View style={styles.noticeTitleRow}>
+                    <Ionicons name="megaphone-outline" size={16} color="#00A859" />
+                    <Text fontWeight="bold" style={styles.noticeTitle} numberOfLines={1}>
+                      {notice.title}
+                    </Text>
+                  </View>
+                  <Text style={styles.noticeContent} numberOfLines={3}>
+                    {notice.content}
+                  </Text>
+                  {notice.createdAt && (
+                    <Text style={styles.noticeDate}>
+                      {new Date(notice.createdAt).toLocaleDateString('ko-KR')}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.divider} />
+          </>
+        )}
+
         {/* 메뉴 섹션 */}
         <View style={styles.menuSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>메뉴</Text>
-          {shopProducts.map((menu: any) => (
-            <TouchableOpacity
-              key={menu.productId}
-              style={styles.menuCard}
-              onPress={() => router.push({
-                pathname: `/product/${menu.productId}` as any,
-                params: { isRestaurant: isRestaurant ? 'true' : 'false' }
-              })}
+
+          {/* 카테고리 필터 칩 */}
+          {productCategories.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+              style={styles.chipScroll}
             >
-              <View style={styles.menuTextContainer}>
-                <Text fontWeight="bold" style={styles.menuName}>{menu.name}</Text>
-                <Text style={styles.menuDesc} numberOfLines={2}>{menu.description}</Text>
-                <Text fontWeight="bold" style={styles.menuPrice}>{menu.price?.toLocaleString()}원</Text>
-              </View>
-              {menu.thumbnailUrl && <Image source={{ uri: menu.thumbnailUrl }} style={styles.menuImg} />}
-            </TouchableOpacity>
-          ))}
+              <TouchableOpacity
+                style={[styles.chip, selectedCategoryId === null && styles.chipActive]}
+                activeOpacity={0.7}
+                onPress={() => setSelectedCategoryId(null)}
+              >
+                <Text style={[styles.chipText, selectedCategoryId === null && styles.chipTextActive]}>
+                  전체 {shopProducts.length}
+                </Text>
+              </TouchableOpacity>
+
+              {productCategories.map((cat: any) => {
+                const isActive = selectedCategoryId === cat.productCategoryId;
+                return (
+                  <TouchableOpacity
+                    key={cat.productCategoryId}
+                    style={[styles.chip, isActive && styles.chipActive]}
+                    activeOpacity={0.7}
+                    onPress={() => setSelectedCategoryId(cat.productCategoryId)}
+                  >
+                    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                      {cat.name}{typeof cat.productCount === 'number' ? ` ${cat.productCount}` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {filteredProducts.length === 0 ? (
+            <Text style={styles.emptyMenuText}>해당 카테고리에 등록된 상품이 없습니다.</Text>
+          ) : (
+            filteredProducts.map((menu: any) => (
+              <TouchableOpacity
+                key={menu.productId}
+                style={styles.menuCard}
+                onPress={() => router.push({
+                  pathname: `/product/${menu.productId}` as any,
+                  params: { isRestaurant: isRestaurant ? 'true' : 'false' }
+                })}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text fontWeight="bold" style={styles.menuName}>{menu.name}</Text>
+                  <Text style={styles.menuDesc} numberOfLines={2}>{menu.description}</Text>
+                  <Text fontWeight="bold" style={styles.menuPrice}>{menu.price?.toLocaleString()}원</Text>
+                </View>
+                {menu.thumbnailUrl && <Image source={{ uri: menu.thumbnailUrl }} style={styles.menuImg} />}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -216,9 +319,9 @@ export default function ShopDetailScreen() {
               </View>
             ))
           )}
-          
+
           {shopReviews.length > 0 && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.moreReviewBtn}
               onPress={() => router.push({
                 pathname: '/review/list' as any,
@@ -236,7 +339,7 @@ export default function ShopDetailScreen() {
       {/* 하단 고정 버튼 영역 */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 15) + 10 }]}>
         <View style={{ width: '100%' }}>
-          
+
           {/* 1. 상단 메인 액션 버튼 (조건 없이 항상 장바구니로 통일) */}
           <TouchableOpacity
             style={styles.cartButton}
@@ -255,8 +358,8 @@ export default function ShopDetailScreen() {
 
           {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
           <View style={styles.rowButtons}>
-            <TouchableOpacity 
-              style={styles.halfButton} 
+            <TouchableOpacity
+              style={styles.halfButton}
               activeOpacity={0.7}
               onPress={() => router.push(`/inquiry/write?storeId=${shopIdNum}` as any)}
             >
@@ -264,16 +367,16 @@ export default function ShopDetailScreen() {
               <Text style={styles.halfButtonText}>문의하기</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.halfButton} 
-              activeOpacity={0.7} 
+            <TouchableOpacity
+              style={styles.halfButton}
+              activeOpacity={0.7}
               onPress={handleGroupChat}
             >
               <Ionicons name="chatbubbles-outline" size={18} color="#1B854A" style={{ marginRight: 6 }} />
               <Text style={styles.halfButtonText}>단체 채팅</Text>
             </TouchableOpacity>
           </View>
-          
+
         </View>
       </View>
     </SafeAreaView>
@@ -299,8 +402,26 @@ const styles = StyleSheet.create({
   contentReserveBtn: { flexDirection: 'row', backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#EAEAEA', paddingVertical: 12, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginTop: 15 },
   contentReserveBtnText: { color: '#333', fontSize: 14 },
 
+  // 상점 공지 스타일
+  noticeSection: { padding: 20 },
+  noticeCard: { backgroundColor: '#F8FBF9', borderRadius: 8, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E8F5E9' },
+  noticeTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  noticeTitle: { fontSize: 15, color: '#333', marginLeft: 6, flex: 1 },
+  noticeContent: { fontSize: 13, color: '#666', lineHeight: 20 },
+  noticeDate: { fontSize: 11, color: '#AAA', marginTop: 8 },
+
   menuSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 20 },
+
+  // 카테고리 필터 칩 스타일
+  chipScroll: { marginBottom: 8, marginHorizontal: -20 },
+  chipRow: { paddingHorizontal: 20, paddingBottom: 4 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#E0E0E0', backgroundColor: '#FFF', marginRight: 8 },
+  chipActive: { backgroundColor: '#00A859', borderColor: '#00A859' },
+  chipText: { fontSize: 13, color: '#666' },
+  chipTextActive: { color: '#FFF', fontWeight: 'bold' },
+  emptyMenuText: { color: '#888', textAlign: 'center', paddingVertical: 30, fontSize: 14 },
+
   menuCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   menuTextContainer: { flex: 1, paddingRight: 15 },
   menuName: { fontSize: 16, color: '#333', marginBottom: 5 },
@@ -321,11 +442,11 @@ const styles = StyleSheet.create({
   moreReviewBtnText: { color: '#666', fontSize: 14, marginRight: 4, fontWeight: '500' },
 
   bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EAEAEA', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
-  
+
   // 장바구니 버튼 스타일
   cartButton: { flexDirection: 'row', backgroundColor: '#1B854A', paddingVertical: 14, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   cartButtonText: { color: '#FFF', fontSize: 15 },
-  
+
   rowButtons: { flexDirection: 'row', justifyContent: 'space-between' },
   halfButton: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#1B854A', paddingVertical: 12, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
   halfButtonText: { color: '#1B854A', fontSize: 14 },
