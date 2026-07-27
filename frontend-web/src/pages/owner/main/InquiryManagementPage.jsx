@@ -14,6 +14,7 @@ const Container = styled.div`
   font-family: 'Noto Sans KR', sans-serif;
 `;
 
+// 💡 1. 채팅방 개설 유도용 상단 배너 스타일 추가
 const ChatBanner = styled.div`
   background-color: #eafaf1; /* 브랜드 그린 연한 배경 톤 */
   border: 1px solid #42a574;
@@ -91,7 +92,7 @@ export default function InquiryManagement() {
   const [statusFilter, setStatusFilter] = useState('전체');
   const [typeFilter, setTypeFilter] = useState('전체 유형');
 
-  // 문의 내역 로드 함수 (기존과 동일)
+  // 문의 내역 로드 함수
   const loadInquiries = async () => {
     try {
       const res = await inquiryApi.getStoreInquiries({ page: 0, size: 50 });

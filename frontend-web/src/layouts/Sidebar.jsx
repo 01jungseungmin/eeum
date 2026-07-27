@@ -211,6 +211,22 @@ function Sidebar({ approvalStatus }) {
       }
     }
 
+    // 알림 배지가 있는 메뉴 클릭 시
+    if (item.countKey && counts[item.countKey] > 0) {
+      //  UI 즉시 반영 (낙관적 업데이트)
+      setCounts((prev) => ({
+        ...prev,
+        [item.countKey]: 0,
+      }));
+
+      // 백엔드 DB의 알림 상태를 '읽음'으로 변경 요청 (일단 전체 읽음 처리)
+      try {
+        await notificationApi.readNotification();
+      } catch (error) {
+        console.error('알림 읽음 처리 실패:', error);
+      }
+    }
+
     if (item.action === 'LOGOUT') {
       const refreshToken = localStorage.getItem('refreshToken');
       const currentRole = localStorage.getItem('role');
