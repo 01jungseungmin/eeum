@@ -311,14 +311,6 @@ const ModalActionRow = styled.div`
   gap: 8px;
   margin-top: 10px;
 `;
-const CancelButton = styled.button`
-  background: #f1f3f5;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-`;
 const ConfirmButton = styled.button`
   background: ${({ $isDelete }) => ($isDelete ? '#e03131' : '#00a651')};
   color: white;
@@ -335,39 +327,6 @@ const ConfirmButton = styled.button`
     background-color: #fff5f5;
   }
 `;
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vw;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3000;
-`;
-const ModalContent = styled.div`
-  background: white;
-  padding: 24px;
-  border-radius: 16px;
-  width: 400px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-`;
-const ModalTitle = styled.h3`
-  margin: 0;
-  font-size: 16px;
-  color: #333;
-`;
-const ModalActionRow = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-`;
 const CancelButton = styled.button`
   background: #f1f3f5;
   border: none;
@@ -375,19 +334,6 @@ const CancelButton = styled.button`
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-`;
-const ConfirmButton = styled.button`
-  background: ${({ $isDelete }) => ($isDelete ? '#e03131' : '#00a651')};
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  &:disabled {
-    background: #cbd5e1;
-    cursor: not-allowed;
-  }
 `;
 const LeaveButton = styled.button`
   padding: 6px 12px;

@@ -6,7 +6,6 @@ import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../api/authApi';
 import { notificationApi } from '../api/owner/notificationApi';
-import { useNotificationCounts } from '../hooks/useNotificationCounts';
 
 const SideContainer = styled.div`
   width: 260px;
@@ -113,7 +112,7 @@ const StatusBadge = styled.span`
   font-weight: bold;
 `;
 
-function Sidebar({ approvalStatus, hasChatRoom }) {
+function Sidebar({ approvalStatus }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
@@ -128,8 +127,7 @@ function Sidebar({ approvalStatus, hasChatRoom }) {
     chat: 0,
     qna: 0,
     alerts: 0,
-    adminApproval: 0,
-    adminReports: 0,
+    system: 0,
   });
 
   const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
@@ -161,6 +159,7 @@ function Sidebar({ approvalStatus, hasChatRoom }) {
           reviews: byCategory.REVIEW || 0,
           chat: byCategory.CHAT || 0,
           qna: byCategory.QNA || 0,
+          system: byCategory.SYSTEM || 0,
           alerts: parsedData.unreadCount || 0,
         });
       } catch (error) {
@@ -181,9 +180,8 @@ function Sidebar({ approvalStatus, hasChatRoom }) {
       eventSource.close();
     };
   }, []);
-  const counts = useNotificationCounts();
 
-  const handleMenuClick = (e, item) => {
+  const handleMenuClick = async (e, item) => {
     if (item.path === '/chat') {
       const isCreated = localStorage.getItem('storeChatRoomCreated') === 'true';
 

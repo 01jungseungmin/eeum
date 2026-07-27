@@ -23,7 +23,7 @@ import {
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
 
-export const OWNER_MENU_CONFIG = (hasChatRoom) => [
+export const OWNER_MENU_CONFIG = [
   {
     group: '메뉴',
     items: [

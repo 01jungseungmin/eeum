@@ -21,8 +21,6 @@ import ReviewManagementPage from './pages/owner/main/ReviewManagementPage';
 import InquiryManagementPage from './pages/owner/main/InquiryManagementPage';
 import ChatManagementPage from './pages/owner/main/ChatManagementPage';
 import CustomerManagementPage from './pages/owner/main/CustomerManagementPage';
-import InquiryManagementPage from './pages/owner/main/InquiryManagementPage';
-import ChatManagementPage from './pages/owner/main/ChatManagementPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
