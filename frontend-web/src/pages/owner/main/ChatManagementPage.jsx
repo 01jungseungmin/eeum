@@ -16,7 +16,7 @@ const PageContainer = styled.div`
   flex: 1;
   padding: 20px;
   background-color: #f8f9fa;
-  height: calc(100vh - 160px);
+  height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
   font-family: 'Noto Sans KR', sans-serif;
@@ -41,6 +41,8 @@ const ChatHeader = styled.div`
   padding: 18px 24px;
   border-bottom: 1px solid #eaeaea;
   position: relative; /* 팝업 기준점 */
+  background-color: #ffffff;
+  border-bottom: 1px solid #eaeaea;
 `;
 
 const UserProfile = styled.div`
@@ -59,7 +61,13 @@ const Avatar = styled.div`
   align-items: center;
   justify-content: center;
   font-weight: bold;
+  font-size: 16px;
   overflow: hidden;
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 `;
 
 const UserInfo = styled.div`
@@ -190,6 +198,43 @@ const MessageArea = styled.div`
   flex-direction: column;
   gap: 18px;
 `;
+
+const MessageRow = styled.div`
+  display: flex;
+  justify-content: ${({ isMe }) => (isMe ? 'flex-end' : 'flex-start')};
+  align-items: flex-end;
+  gap: 8px;
+`;
+
+const BubbleWrap = styled.div`
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 65%;
+  flex-direction: ${({ isMe }) => (isMe ? 'row-reverse' : 'row')};
+`;
+
+const ChatBubble = styled.div`
+  padding: 12px 18px;
+  border-radius: ${({ isMe }) =>
+    isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
+  background-color: ${({ isMe }) => (isMe ? '#42a574' : '#ffffff')};
+  color: ${({ isMe }) => (isMe ? '#ffffff' : '#333333')};
+  font-size: 14px;
+  line-height: 1.6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  white-space: pre-wrap;
+  font-style: ${({ isDeleted }) => (isDeleted ? 'italic' : 'normal')};
+  color: ${({ isDeleted, isMe }) =>
+    isDeleted ? '#bbb' : isMe ? '#ffffff' : '#333333'};
+`;
+
+const TimeStamp = styled.span`
+  font-size: 11px;
+  color: #aaa;
+  white-space: nowrap;
+`;
+
 const InputBarContainer = styled.div`
   padding: 20px 24px;
   background-color: #ffffff;
@@ -201,7 +246,8 @@ const InputFieldWrapper = styled.div`
   background-color: #ffffff;
   border: 1px solid #e0e0e0;
   border-radius: 28px;
-  padding: 8px 10px 8px 14px;
+  padding: 8px 10px 8px 20px;
+
   &:focus-within {
     border-color: #42a574;
     box-shadow: 0 0 0 1px #42a574;
@@ -325,6 +371,15 @@ const ConfirmButton = styled.button`
   font-size: 14px;
   &:disabled {
     background: #cbd5e1;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #42a574;
+    color: #ffffff;
+  }
+
+  &:disabled {
+    color: #ccc;
     cursor: not-allowed;
   }
 `;
@@ -535,17 +590,41 @@ export default function ShopChatManagement() {
 
         <MessageArea>
           {loading ? (
-            <div style={{ textAlign: 'center', color: '#888' }}>
-              채팅 내역 로드 중...
-            </div>
+            <LoadingText>채팅 내역을 불러오는 중입니다...</LoadingText>
           ) : (
-            messages.map((msg, index) => (
-              <ChatMessageItem
-                key={`msg-${msg.messageId || index}`}
-                msg={msg}
-                onContextMenu={handleContextMenu}
-              />
-            ))
+            messages.map((msg) => {
+              const isMe = msg.senderAccountId === MY_ACCOUNT_ID;
+
+              return (
+                <MessageRow key={msg.messageId} isMe={isMe}>
+                  {!isMe && (
+                    <Avatar
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        fontSize: '13px',
+                        marginRight: '4px',
+                      }}
+                    >
+                      {msg.senderProfileImageUrl ? (
+                        <img
+                          src={msg.senderProfileImageUrl}
+                          alt={msg.senderName}
+                        />
+                      ) : (
+                        msg.senderName?.charAt(0) || '고'
+                      )}
+                    </Avatar>
+                  )}
+                  <BubbleWrap isMe={isMe}>
+                    <ChatBubble isMe={isMe} isDeleted={msg.deleted}>
+                      {msg.deleted ? '삭제된 메시지입니다' : msg.content}
+                    </ChatBubble>
+                    <TimeStamp>{formatTime(msg.sentAt)}</TimeStamp>
+                  </BubbleWrap>
+                </MessageRow>
+              );
+            })
           )}
           <div ref={scrollRef} />
         </MessageArea>

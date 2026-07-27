@@ -14,6 +14,7 @@ const Container = styled.div`
   font-family: 'Noto Sans KR', sans-serif;
 `;
 
+// 💡 1. 채팅방 개설 유도용 상단 배너 스타일 추가
 const ChatBanner = styled.div`
   background-color: #eafaf1; /* 브랜드 그린 연한 배경 톤 */
   border: 1px solid #42a574;
@@ -63,11 +64,7 @@ const LoadingText = styled.div`
   color: #666;
 `;
 
-const STATUS_MAP = {
-  PENDING: '미답변',
-  ANSWERED: '답변완료',
-};
-
+const STATUS_MAP = { PENDING: '미답변', ANSWERED: '답변완료' };
 const CATEGORY_MAP = {
   STORE: '상품 문의',
   ORDER: '주문 문의',
@@ -80,8 +77,9 @@ export default function InquiryManagement() {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 채팅방 존재 여부 및 개설 상태 관리 State 추가
+  // 💡 2. 채팅방 존재 여부 및 개설 상태 관리 State 추가
   const [myRoomId, setMyRoomId] = useState(() => {
+    // 예시로 로컬스토리지나 프로젝트 세션에 방 번호가 이미 있는지 확인하는 로직 (프로젝트 환경에 맞게 커스텀)
     return localStorage.getItem('my_shop_room_id') || null;
   });
 
@@ -94,7 +92,6 @@ export default function InquiryManagement() {
   const loadInquiries = async () => {
     try {
       const res = await inquiryApi.getStoreInquiries({ page: 0, size: 50 });
-      // 기존에 쓰시던 res.data.data.content 완벽 반영
       if (res.data.success && res.data.data.content) {
         setInquiries(res.data.data.content);
       }
@@ -144,18 +141,14 @@ export default function InquiryManagement() {
     const mappedStatus = STATUS_MAP[item.status] || '미답변';
     const matchesStatus =
       statusFilter === '전체' || mappedStatus === statusFilter;
-
     const mappedType = CATEGORY_MAP[item.category] || '기타';
     const matchesType = typeFilter === '전체 유형' || mappedType === typeFilter;
-
     const matchesSearch =
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.writerName.toLowerCase().includes(searchTerm.toLowerCase());
-
     return matchesStatus && matchesType && matchesSearch;
   });
 
-  // 카운트 자동 계산 데이터 바인딩
   const counts = {
     total: inquiries.length,
     pending: inquiries.filter((i) => i.status === 'PENDING').length,
