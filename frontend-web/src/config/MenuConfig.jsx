@@ -122,7 +122,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'reports',
         name: '신고 내역',
-        path: '/8',
+        path: '/reports',
         icon: <Flag {...iconProps} />,
         subtitle: '매장 신고 내역을 확인하세요',
         isSpecial: true,
