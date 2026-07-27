@@ -54,5 +54,48 @@ export const shopApi = {
       console.error('상품 옵션 조회 에러:', error);
       throw error;
     }
+  },
+
+  getEventProducts: async (storeId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}/event-products`);
+      return response.data;
+    } catch (error) {
+      console.error(`상점 ${storeId} 이벤트 상품 조회 에러:`, error);
+      throw error;
+    }
+  },
+
+  // 상점 공지 목록 조회 (GET /stores/{storeId}/notices)
+  getShopNotices: async (storeId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}/notices`);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error(`상점 ${storeId} 공지 목록 조회 에러:`, error);
+      throw error;
+    }
+  },
+
+  // 상점 상품 카테고리 조회 (GET /stores/{storeId}/product-categories)
+  getShopProductCategories: async (storeId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}/product-categories`);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error(`상점 ${storeId} 상품 카테고리 조회 에러:`, error);
+      throw error;
+    }
+  },
+
+  // 주변 상점 조회 (GET /stores/nearby)
+  getNearbyShops: async (params: { latitude: number; longitude: number; radius?: number }) => {
+    try {
+      const response = await client.get('/stores/nearby', { params });
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error('주변 상점 조회 에러:', error);
+      throw error;
+    }
   }
 };
