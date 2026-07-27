@@ -102,7 +102,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'chat',
         name: '채팅',
-        path: '/6',
+        path: '/chat',
         icon: <MessageSquare {...iconProps} />,
         subtitle: '고객과의 1:1 채팅을 관리하세요',
         countKey: 'chat',
@@ -115,7 +115,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'qna',
         name: '문의 관리',
-        path: '/7',
+        path: '/inquiry',
         icon: <MessageCircle {...iconProps} />,
         subtitle: '매장 이용 관련 문의 사항에 답변하세요',
         countKey: 'qna',
