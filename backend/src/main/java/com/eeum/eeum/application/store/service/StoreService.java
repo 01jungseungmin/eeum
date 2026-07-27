@@ -12,6 +12,10 @@ import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.enums.ChatRoomType;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
@@ -56,6 +60,7 @@ public class StoreService {
     private final ProductRepository productRepository;
     private final StoreImageRepository storeImageRepository;
     private final VisitReservationRepository visitReservationRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final StoreMapper storeMapper;
 
     // ===================== 상점 조회/수정 =====================
@@ -115,17 +120,22 @@ public class StoreService {
                 .map(StoreImage::getImageUrl)
                 .orElse(null);
 
+        // 매출은 결제 완료 후 전이된 상태까지 포함해야 실제 매출과 일치한다 (PAID만 합산하면 사장이
+        // 주문을 확인/준비완료 처리하는 순간 매출에서 누락됨).
+        List<OrderStatus> revenueStatuses = List.of(
+                OrderStatus.PAID, OrderStatus.CONFIRMED, OrderStatus.READY, OrderStatus.COMPLETED);
+
         long todayOrderCount = orderRepository
                 .countByStore_StoreIdAndCreatedAtBetween(store.getStoreId(), todayStart, now);
 
         BigDecimal todayRevenue = orderRepository
-                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), todayStart, now, OrderStatus.PAID);
+                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), todayStart, now, revenueStatuses);
 
         long monthOrderCount = orderRepository
                 .countByStore_StoreIdAndCreatedAtBetween(store.getStoreId(), monthStart, now);
 
         BigDecimal monthRevenue = orderRepository
-                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), monthStart, now, OrderStatus.PAID);
+                .sumTotalPriceByStoreAndCreatedAtBetween(store.getStoreId(), monthStart, now, revenueStatuses);
 
         long pendingOrderCount = orderRepository
                 .countByStore_StoreIdAndStatus(store.getStoreId(), OrderStatus.PENDING);
@@ -139,6 +149,20 @@ public class StoreService {
         long soldOutProductCount = productRepository
                 .countByStore_StoreIdAndStatus(store.getStoreId(), ProductStatus.SOLD_OUT);
 
+        // (STORE, storeId) 조합은 유니크가 아니라 GROUP/GROUP_STREET 방이 공존할 수 있다 —
+        // 단건 Optional 조회는 2건 이상일 때 예외로 대시보드 전체가 실패하므로 목록 조회 후
+        // 활성 방 중 상점 단톡방(GROUP)을 우선 선택한다.
+        List<ChatRoom> storeRooms = chatRoomRepository
+                .findAllByRefTypeAndRefId(ChatRoomRefType.STORE, store.getStoreId());
+        ChatRoom storeChatRoom = storeRooms.stream()
+                .filter(ChatRoom::isActive)
+                .filter(room -> room.getType() == ChatRoomType.GROUP)
+                .findFirst()
+                .orElseGet(() -> storeRooms.stream()
+                        .filter(ChatRoom::isActive)
+                        .findFirst()
+                        .orElse(null));
+
         return toDashboardDto(
                 store,
                 thumbnailUrl,
@@ -149,7 +173,8 @@ public class StoreService {
                 pendingOrderCount,
                 pendingReservationCount,
                 totalProductCount,
-                soldOutProductCount
+                soldOutProductCount,
+                storeChatRoom
         );
     }
     // ===================== 영업시간 관리 =====================
@@ -365,7 +390,8 @@ public class StoreService {
             long pendingOrderCount,
             long pendingReservationCount,
             long totalProductCount,
-            long soldOutProductCount
+            long soldOutProductCount,
+            ChatRoom storeChatRoom
     ) {
         return StoreDashboardResponseDto.builder()
                 .storeId(store.getStoreId())
@@ -383,6 +409,8 @@ public class StoreService {
                 .soldOutProductCount(soldOutProductCount)
                 .averageRating(store.getRating() != null ? store.getRating() : 0.0)
                 .totalReviewCount(store.getReviewCount() != null ? store.getReviewCount() : 0)
+                .storeChatRoomCreated(storeChatRoom != null)
+                .storeChatRoomId(storeChatRoom != null ? storeChatRoom.getChatroomId() : null)
                 .build();
     }
 

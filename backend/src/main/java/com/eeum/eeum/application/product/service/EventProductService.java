@@ -12,6 +12,8 @@ import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,10 +31,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EventProductService {
 
+    private static final Duration EVENT_CREATE_LOCK_LEASE = Duration.ofSeconds(5);
+
     private final ProductRepository productRepository;
     private final EventProductRepository eventProductRepository;
     private final StoreRepository storeRepository;
     private final ProductMapper productMapper;
+    private final RedisLockService redisLockService;
 
     @Transactional(readOnly = true)
     public List<EventProductResponseDto> getMyEventProducts(Long accountId) {
@@ -46,6 +52,15 @@ public class EventProductService {
 
     @Transactional
     public EventProductResponseDto createEventProduct(Long accountId, EventProductRequestDto request) {
+        // 동일 상품 ACTIVE 이벤트 중복 생성(exists-후-save 경합) 방지 — 상품 단위 락으로 직렬화한다.
+        return redisLockService.executeWithLock(
+                LockKeys.eventProductCreate(request.getProductId()),
+                EVENT_CREATE_LOCK_LEASE,
+                ErrorCode.EVENT_ALREADY_ACTIVE,
+                () -> createEventProductInLock(accountId, request));
+    }
+
+    private EventProductResponseDto createEventProductInLock(Long accountId, EventProductRequestDto request) {
         Store store = getStore(accountId);
 
         Product product = productRepository.findById(request.getProductId())
@@ -90,6 +105,12 @@ public class EventProductService {
     ) {
         EventProduct eventProduct = getEventProductWithOwnerCheck(accountId, eventProductId);
 
+        // 종료(ENDED)/삭제(DELETED)된 이벤트는 수정 불가 — 상태 검증 없이 두면 지난 이벤트의 가격/기간을
+        // 되살려 편집할 수 있다.
+        if (eventProduct.getStatus() != EventProductStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.EVENT_NOT_ACTIVE);
+        }
+
         Product product = eventProduct.getProduct();
 
         if (!product.getProductId().equals(request.getProductId())) {
@@ -101,6 +122,11 @@ public class EventProductService {
         BigDecimal eventPrice = BigDecimal.valueOf(request.getEventPrice());
         validateEventPrice(product, eventPrice);
         validateEventStock(product, request.getEventStock());
+
+        // 이미 판매된 수량보다 적게 재고를 줄이면 잔여재고(eventStock - soldCount)가 음수가 된다.
+        if (request.getEventStock() < eventProduct.getSoldCount()) {
+            throw new BusinessException(ErrorCode.EVENT_OUT_OF_STOCK);
+        }
 
         eventProduct.update(
                 eventPrice,

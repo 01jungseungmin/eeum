@@ -36,4 +36,8 @@ public class StoreDashboardResponseDto {
     // 평점
     private double averageRating;
     private long totalReviewCount;
+
+    // 상점 단체 채팅방 개설 여부 (개설된 방이 없으면 storeChatRoomId는 null)
+    private boolean storeChatRoomCreated;
+    private Long storeChatRoomId;
 }

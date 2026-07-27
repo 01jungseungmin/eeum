@@ -52,17 +52,9 @@ Java 17 / Spring Boot / Gradle 8.x / JPA + QueryDSL 환경입니다.
 - 최종 빌드 결과 (`BUILD SUCCESSFUL` 확인 여부)
 - 해결 못한 항목이 있으면 시도 내역과 막힌 지점
 
-## 허용 Bash 명령
-- `./gradlew build`
-- `./gradlew test`
-- `./gradlew clean build`
-- `git diff`
-- `git status`
-- `grep`, `find`
-
 ## 금지 Bash 명령
-- `git reset --hard`
-- `git clean -fd`
-- `rm -rf`
+- `git reset --hard`, `git clean -fd`, `rm -rf`
 - 운영 DB/Redis 접속 명령
 - 환경변수/secret 출력 명령
+
+그 외 빌드/테스트/진단에 필요한 명령(단일 테스트 실행, compileJava 등)은 자유롭게 사용한다.

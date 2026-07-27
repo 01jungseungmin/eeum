@@ -188,6 +188,12 @@ public class ChatRoomService {
             chatAccessHelper.verifyRoomActive(room);
             chatAccessHelper.verifyGroupRoom(room);
 
+            // STORE 단톡방은 사장 초대(inviteParticipants)로만 입장 가능 — 자가 입장을 막지 않으면
+            // roomId만 알면 초대 없이 들어와 사장이 통제하는 단골방 메시지를 열람/발송할 수 있다.
+            if (room.getRefType() == ChatRoomRefType.STORE) {
+                throw new ForbiddenException(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
+            }
+
             ChatParticipant existing = chatParticipantRepository
                     .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId)
                     .orElse(null);

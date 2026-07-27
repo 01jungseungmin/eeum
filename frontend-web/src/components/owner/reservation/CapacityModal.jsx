@@ -205,6 +205,7 @@ export default function CapacityModal({
   const totalTablesCount =
     Number(table2Seater) + Number(table4Seater) + Number(table6Seater);
 
+  // 설정 저장 api
   const handleSaveSettings = async () => {
     try {
       const payload = {

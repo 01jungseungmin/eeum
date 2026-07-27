@@ -237,6 +237,26 @@ public class OrderService {
         restoreStock(orderItems);
     }
 
+    // 고객 PAID 결제 취소(환불) 후 주문 취소 + 재고 복원 — PortOne 환불은 PaymentService가 먼저 수행한다.
+    // 주문 락 안에서 이미 CANCELLED/EXPIRED면 스킵해 재고 이중 복원을 방지한다.
+    @Transactional
+    public void cancelPaidOrder(Long orderId) {
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId),
+                ORDER_LOCK_LEASE_TIME,
+                ErrorCode.LOCK_ORDER_FAILED,
+                () -> {
+                    Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                            .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+                    if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED) {
+                        return;
+                    }
+                    restoreStock(orderItemRepository.findByOrder_OrderId(orderId));
+                    order.cancel("고객 결제 취소");
+                }
+        );
+    }
+
     @Transactional
     public void requestOrderRefund(Long accountId, Long orderId, RefundRequestDto request) {
         Order order = orderRepository
@@ -363,8 +383,10 @@ public class OrderService {
             }
 
             if (item.getProductId() != null) {
+                // 차감 경로(주문 생성)가 비관적 락으로 재고를 수정하므로 복원도 같은 락으로 읽어야
+                // lost update(스테일 값 기준 복원으로 재고 부풀림 → oversell)를 막을 수 있다.
                 Product product = productRepository
-                        .findById(item.getProductId())
+                        .findByIdWithPessimisticLock(item.getProductId())
                         .orElse(null);
 
                 if (product != null && product.getStock() != null) {

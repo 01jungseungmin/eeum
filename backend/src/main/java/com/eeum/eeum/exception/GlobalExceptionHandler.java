@@ -7,9 +7,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus; //HTTP 상태 코드
 import org.springframework.http.ResponseEntity; //응답 객체 생성
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException; //@Valid 검증 실패를 처리하기 위한 클래스
 import org.springframework.web.bind.annotation.ExceptionHandler; //특정 예외 타입을 처리하는 메서드 지정
 import org.springframework.web.bind.annotation.RestControllerAdvice; //모든 Controller에서 발생한 예외를 잡는 클래스
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -23,9 +26,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleBusinessException(BusinessException e) {
         log.warn("[BusinessException] code={}, message={}", e.getErrorCode().getCode(), e.getMessage());
 
+        ApiResponse<?> body = e.getData() != null
+                ? ApiResponse.fail(e.getErrorCode().getCode(), e.getMessage(), e.getData())
+                : ApiResponse.fail(e.getErrorCode().getCode(), e.getMessage());
+
         return ResponseEntity
                 .status(e.getErrorCode().getHttpStatus())
-                .body(ApiResponse.fail(e.getErrorCode().getCode(), e.getMessage()));
+                .body(body);
     }
 
     // ===================== 입력값 검증 예외 =====================
@@ -88,6 +95,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
+    }
+
+    // ===================== 존재하지 않는 URL / 지원하지 않는 메서드 =====================
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<?>> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("[NoResourceFound] {} {}", e.getHttpMethod(), e.getResourcePath());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.fail(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<?>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("[MethodNotSupported] method={}, supported={}", e.getMethod(), e.getSupportedHttpMethods());
+        return ResponseEntity
+                .status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.fail(ErrorCode.COMMON_METHOD_NOT_ALLOWED.getCode(),
+                        "지원하지 않는 HTTP 메서드입니다: " + e.getMethod()));
+    }
+
+    // ===================== 권한 거부 (@PreAuthorize 등 메서드 시큐리티) =====================
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<?>> handleAccessDenied(AccessDeniedException e) {
+        log.warn("[AccessDenied] message={}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail(ErrorCode.COMMON_FORBIDDEN));
     }
 
     // ===================== 서버 오류 =====================

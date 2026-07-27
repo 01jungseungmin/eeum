@@ -216,13 +216,16 @@ public class VisitReservationSettingService {
 
     private List<LocalTime> generateSlotTimes(StoreVisitReservationSetting setting) {
         List<LocalTime> times = new ArrayList<>();
-        LocalTime current = setting.getStartTime();
-        LocalTime end = setting.getEndTime();
         int interval = setting.getSlotIntervalMinutes();
-
-        while (!current.plusMinutes(interval).isAfter(end)) {
-            times.add(current);
-            current = current.plusMinutes(interval);
+        if (interval <= 0) {
+            return times;
+        }
+        // 하루 분(minute) 단위 정수로 순회 — LocalTime.plusMinutes의 자정 랩어라운드로 인한 무한 루프를 방지한다.
+        // current + interval(슬롯 종료 시각)이 endMinute를 넘지 않는 슬롯만 생성.
+        int startMinute = setting.getStartTime().toSecondOfDay() / 60;
+        int endMinute = setting.getEndTime().toSecondOfDay() / 60;
+        for (int minute = startMinute; minute + interval <= endMinute; minute += interval) {
+            times.add(LocalTime.ofSecondOfDay(minute * 60L));
         }
         return times;
     }

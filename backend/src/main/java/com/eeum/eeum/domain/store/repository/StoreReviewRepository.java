@@ -32,6 +32,9 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
     //평점 재계산용 — 해당 상점의 전체 리뷰 목록
     List<StoreReview> findByStore_StoreId(Long storeId);
 
+    //AI 매니저 — 최근 기간 리뷰 조회 (반복 불만 키워드 분석용)
+    List<StoreReview> findByStore_StoreIdAndCreatedAtAfter(Long storeId, java.time.LocalDateTime after);
+
     //상점 리뷰 단건 조회
     Optional<StoreReview> findByStorereviewIdAndStore_StoreId(
             Long storereviewId,

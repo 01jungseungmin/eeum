@@ -186,6 +186,7 @@ public class CommunityCommentService {
     ) {
         CommunityComment comment = getCommentOrThrow(commentId);
         validateOwner(comment, accountId);
+        validateNotDeleted(comment);
 
         comment.update(request.getContent());
 
@@ -199,6 +200,9 @@ public class CommunityCommentService {
     public void deleteComment(Long accountId, Long commentId) {
         CommunityComment comment = getCommentOrThrow(commentId);
         validateOwner(comment, accountId);
+        // 이미 삭제된 댓글 재삭제 차단 — 검증 없이 재실행하면 decreaseCommentCount가 중복 호출되어
+        // 게시글 commentCount가 실제 댓글 수보다 작아진다(중복 클릭/다기기 동시 삭제).
+        validateNotDeleted(comment);
 
         comment.softDelete();
         postRepository.decreaseCommentCount(comment.getPost().getPostId());
@@ -222,6 +226,12 @@ public class CommunityCommentService {
     private CommunityComment getCommentOrThrow(Long commentId) {
         return commentRepository.findById(commentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+    }
+
+    private void validateNotDeleted(CommunityComment comment) {
+        if (comment.isDeleted()) {
+            throw new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        }
     }
 
     private CommunityPost getPostOrThrow(Long postId) {

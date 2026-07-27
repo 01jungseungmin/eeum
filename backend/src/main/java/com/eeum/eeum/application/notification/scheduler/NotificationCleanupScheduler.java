@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.notification.scheduler;
 
+import com.eeum.eeum.application.notification.service.UnreadCountService;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class NotificationCleanupScheduler {
 
     private final NotificationRepository notificationRepository;
     private final StringRedisTemplate redisTemplate;
+    private final UnreadCountService unreadCountService;
 
     // 매일 새벽 3시 — 6개월 이전 알림 일괄 삭제
     @Scheduled(cron = "0 0 3 * * *")
@@ -52,6 +54,8 @@ public class NotificationCleanupScheduler {
 
                 if (dbCount != redisCount) {
                     redisTemplate.opsForValue().set(key, String.valueOf(dbCount));
+                    // 전체 카운트가 어긋났다면 카테고리 캐시도 신뢰할 수 없으므로 함께 무효화
+                    unreadCountService.invalidateCategoryCache(accountId);
                     mismatchCount++;
                     log.debug("[UnreadReconcile] 보정: accountId={}, redis={}, db={}", accountId, redisCount, dbCount);
                 }

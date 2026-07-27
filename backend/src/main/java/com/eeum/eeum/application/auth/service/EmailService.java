@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.auth.service;
 
+import com.eeum.eeum.common.lock.RateLimitKeys;
+import com.eeum.eeum.common.service.RateLimitService;
 import com.eeum.eeum.common.util.RedisUtil;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.UUID;
 
 @Slf4j
@@ -24,8 +27,12 @@ public class EmailService {
     private static final String EMAIL_TOKEN_PREFIX = "email:token:";
     private static final String PASSWORD_RESET_CODE_PREFIX = "email:password-reset:code:";
 
+    // 코드 검증 브루트포스 방지 — 코드 TTL 동안 최대 시도 횟수
+    private static final int MAX_CODE_VERIFY_ATTEMPTS = 5;
+
     private final JavaMailSender mailSender;
     private final RedisUtil redisUtil;
+    private final RateLimitService rateLimitService;
 
     @Value("${spring.mail.username}")
     private String fromAddress;
@@ -58,15 +65,20 @@ public class EmailService {
 
     // 인증 코드 검증 후 1회성 인증 토큰 반환
     public String verifyCodeAndIssueToken(String email, String code) {
+        String failKey = RateLimitKeys.emailCodeVerifyFail(email);
+        rateLimitService.checkNotBlocked(failKey, MAX_CODE_VERIFY_ATTEMPTS, ErrorCode.AUTH_RATE_LIMITED);
+
         String stored = redisUtil.get(EMAIL_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));
 
         if (!stored.equals(code)) {
+            rateLimitService.recordFailure(failKey, Duration.ofSeconds(codeExpiration));
             throw new BusinessException(ErrorCode.AUTH_INVALID_VERIFICATION_CODE);
         }
 
         // 코드 사용 후 삭제
         redisUtil.delete(EMAIL_CODE_PREFIX + email);
+        rateLimitService.resetFailure(failKey);
 
         // 인증 토큰 발급 (회원가입 요청 시 같이 보내는 값)
         String token = UUID.randomUUID().toString();
@@ -109,15 +121,20 @@ public class EmailService {
 
     // 인증 토큰 발급 (비밀번호 재설정 요청 시 같이 보내는 값)
     public void verifyPasswordResetCode(String email, String code) {
+        String failKey = RateLimitKeys.passwordResetVerifyFail(email);
+        rateLimitService.checkNotBlocked(failKey, MAX_CODE_VERIFY_ATTEMPTS, ErrorCode.AUTH_RATE_LIMITED);
+
         String stored = redisUtil.get(PASSWORD_RESET_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));
 
         if (!stored.equals(code)) {
+            rateLimitService.recordFailure(failKey, Duration.ofSeconds(codeExpiration));
             throw new BusinessException(ErrorCode.AUTH_INVALID_VERIFICATION_CODE);
         }
 
         // 코드 사용 후 삭제
         redisUtil.delete(PASSWORD_RESET_CODE_PREFIX + email);
+        rateLimitService.resetFailure(failKey);
     }
 
     // ===================== 내부 유틸 =====================

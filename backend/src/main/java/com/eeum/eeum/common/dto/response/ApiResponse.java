@@ -84,4 +84,15 @@ public class ApiResponse<T> { //응답 데이터 타입을 상황에 따라 변�
                 .traceId(UUID.randomUUID().toString())
                 .build();
     }
+
+    // 실패 응답에도 프론트가 확인 다이얼로그 등을 그리는 데 필요한 상세 데이터를 함께 실어야 할 때 사용
+    public static <T> ApiResponse<T> fail(String code, String message, T data) {
+        return ApiResponse.<T>builder()
+                .success(false)
+                .data(data)
+                .error(ErrorDetail.of(code, message))
+                .timestamp(LocalDateTime.now())
+                .traceId(UUID.randomUUID().toString())
+                .build();
+    }
 }

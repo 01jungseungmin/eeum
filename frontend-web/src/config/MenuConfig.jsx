@@ -87,16 +87,9 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'customers',
         name: '고객 관리',
-        path: '/3',
+        path: '/customers',
         icon: <Users {...iconProps} />,
         subtitle: '우리 가게 단골 손님을 관리하세요',
-      },
-      {
-        id: 'wishlist',
-        name: '관심 고객',
-        path: '/4',
-        icon: <Heart {...iconProps} />,
-        subtitle: '상점을 찜한 고객 리스트입니다',
       },
       {
         id: 'reviews',
@@ -173,12 +166,6 @@ export const OWNER_MENU_CONFIG = [
   {
     group: '설정',
     items: [
-      {
-        id: 'settings',
-        name: '상점 설정',
-        path: '/settings',
-        icon: <Settings {...iconProps} />, // lucide-react에서 Settings 추가 필요
-      },
       {
         id: 'logout',
         name: '로그아웃',

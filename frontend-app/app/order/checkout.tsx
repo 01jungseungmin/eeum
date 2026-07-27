@@ -37,6 +37,7 @@ export default function CheckoutScreen() {
   // 포트원 동적 파라미터 세팅 세트
   const [paymentData, setPaymentData] = useState({
     orderNumber: '',
+    paymentId: '',
     totalAmount: 0,
     orderName: '',
     customerName: '',
@@ -46,8 +47,7 @@ export default function CheckoutScreen() {
     portoneChannelKey: '',
     easyPayProvider: ''
   });
-
-  const uniquePaymentId = `pay_${new Date().getTime()}`; 
+ 
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -66,7 +66,7 @@ export default function CheckoutScreen() {
   }, []);
 
   const handlePayment = async () => {
-    // ✨ 안전장치: 만약 이미 한 번 주문생성이 완료되어 주문번호가 있다면,
+    // 안전장치: 만약 이미 한 번 주문생성이 완료되어 주문번호가 있다면,
     // 백엔드 API를 다시 호출하지 않고 (장바구니 비어있음 에러 방지) 곧바로 결제창만 다시 열어줍니다.
     if (currentOrderNumber && selectedPayMethod !== 'ONSITE') {
       setPaymentData((prev) => ({
@@ -107,7 +107,8 @@ export default function CheckoutScreen() {
 
       // 토스페이먼츠 단일 채널 및 간편결제 프로바이더 데이터 동적 주입
       setPaymentData({
-        orderNumber: orderResponse.orderNumber,          
+        orderNumber: orderResponse.orderNumber,
+        paymentId: orderResponse.paymentId,          
         totalAmount: orderResponse.totalPrice,           
         orderName: orderResponse.orderName,
         customerName: userInfo.name,        
@@ -182,7 +183,7 @@ export default function CheckoutScreen() {
       return true;
     }
 
-    // ✨ 3. 안드로이드 딥링크(Intent) 파싱 및 외부 앱 호출 로직 복원 (토스/카카오 앱 오픈 핵심)
+    // 3. 안드로이드 딥링크(Intent) 파싱 및 외부 앱 호출 로직 복원 (토스/카카오 앱 오픈 핵심)
     if (Platform.OS === 'android' && url.startsWith('intent')) {
       const intentParts = url.split('#Intent;');
       const urlBeforeIntent = intentParts[0].replace('intent://', ''); 
@@ -223,7 +224,6 @@ export default function CheckoutScreen() {
     ? `easyPay: { easyPayProvider: '${paymentData.easyPayProvider}' },` 
     : '';
 
-  // 🛠️ storeId 단락의 누락되었던 여는 따옴표(') 완벽히 보완 완료
   const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -238,7 +238,7 @@ export default function CheckoutScreen() {
               await PortOne.requestPayment({
                 storeId: '${process.env.EXPO_PUBLIC_PORTONE_STORE_ID}',
                 channelKey: '${process.env.EXPO_PUBLIC_PORTONE_DEFAULT_KEY}',
-                paymentId: '${uniquePaymentId}',
+                paymentId: '${paymentData.paymentId}',
                 orderName: '${paymentData.orderName}', 
                 totalAmount: ${paymentData.totalAmount}, 
                 currency: 'CURRENCY_KRW',

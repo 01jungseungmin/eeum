@@ -2,9 +2,11 @@ package com.eeum.eeum.application.reservation.service;
 
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
+import com.eeum.eeum.application.reservation.dto.response.StoreTableSummaryResponseDto;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.reservation.entity.StoreTable;
+import com.eeum.eeum.domain.reservation.repository.CapacityCountProjection;
 import com.eeum.eeum.domain.reservation.repository.StoreTableRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -112,6 +114,74 @@ class StoreTableServiceTest {
         when(storeRepository.findByAccount_AccountId(eq(1L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> storeTableService.getTables(1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_NOT_FOUND);
+    }
+
+    // ──────────────── getTableSummary ────────────────
+
+    private CapacityCountProjection capacityCount(int capacity, long count) {
+        return new CapacityCountProjection() {
+            @Override
+            public Integer getCapacity() {
+                return capacity;
+            }
+
+            @Override
+            public Long getCount() {
+                return count;
+            }
+        };
+    }
+
+    @Test
+    void 테이블_요약_조회_시_수용인원별_개수와_총개수가_집계된다() {
+        // given: 2인석 2개, 4인석 3개, 6인석 1개
+        Long ownerAccountId = 1L;
+        Account owner = createAccount(ownerAccountId);
+        Store store = createStore(10L, owner);
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeTableRepository.countActiveTablesByCapacity(eq(10L)))
+                .thenReturn(List.of(capacityCount(2, 2L), capacityCount(4, 3L), capacityCount(6, 1L)));
+
+        // when
+        StoreTableSummaryResponseDto result = storeTableService.getTableSummary(ownerAccountId);
+
+        // then
+        assertThat(result.getTotalCount()).isEqualTo(6);
+        assertThat(result.getCapacityCounts()).hasSize(3);
+        assertThat(result.getCapacityCounts())
+                .extracting(StoreTableSummaryResponseDto.CapacityCountDto::getCapacity)
+                .containsExactly(2, 4, 6); // capacity 오름차순
+        assertThat(result.getCapacityCounts())
+                .extracting(StoreTableSummaryResponseDto.CapacityCountDto::getCount)
+                .containsExactly(2L, 3L, 1L);
+    }
+
+    @Test
+    void 활성_테이블이_없으면_빈_집계와_총개수_0을_반환한다() {
+        Long ownerAccountId = 1L;
+        Account owner = createAccount(ownerAccountId);
+        Store store = createStore(10L, owner);
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeTableRepository.countActiveTablesByCapacity(eq(10L))).thenReturn(List.of());
+
+        // when
+        StoreTableSummaryResponseDto result = storeTableService.getTableSummary(ownerAccountId);
+
+        // then
+        assertThat(result.getTotalCount()).isZero();
+        assertThat(result.getCapacityCounts()).isEmpty();
+    }
+
+    @Test
+    void 테이블_요약_조회_시_상점이_없으면_STORE_NOT_FOUND() {
+        when(storeRepository.findByAccount_AccountId(eq(1L))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> storeTableService.getTableSummary(1L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.STORE_NOT_FOUND);

@@ -52,6 +52,20 @@ class EventProductServiceTest {
     @Mock
     private ProductMapper productMapper;
 
+    @Mock
+    private com.eeum.eeum.common.service.RedisLockService redisLockService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void stubLock() {
+        // createEventProduct가 감싸는 분산 락 — supplier를 그대로 실행하도록 스텁
+        org.mockito.Mockito.lenient().when(redisLockService.executeWithLock(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(com.eeum.eeum.exception.ErrorCode.class),
+                        org.mockito.ArgumentMatchers.<java.util.function.Supplier<Object>>any()))
+                .thenAnswer(inv -> inv.<java.util.function.Supplier<Object>>getArgument(3).get());
+    }
+
     // ──────────────────── Helpers ────────────────────
 
     private Store createStore(Long storeId) {

@@ -28,6 +28,8 @@ import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -151,6 +153,18 @@ public class ChatMessageService {
         Boolean isNew = redisTemplate.opsForValue().setIfAbsent(key, "1", Duration.ofMinutes(5));
         if (!Boolean.TRUE.equals(isNew)) {
             throw new ConflictException(ErrorCode.CHAT_MESSAGE_DUPLICATE);
+        }
+        // 트랜잭션이 롤백되면 메시지는 저장되지 않았으므로 멱등 키를 되돌린다 — 그대로 두면 5분 TTL 동안
+        // 동일 clientMessageId의 정상 재시도가 CHAT_MESSAGE_DUPLICATE로 거부되어 메시지가 조용히 유실된다.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status == STATUS_ROLLED_BACK) {
+                        redisTemplate.delete(key);
+                    }
+                }
+            });
         }
     }
 

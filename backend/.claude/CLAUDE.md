@@ -127,13 +127,17 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 물리 삭제
 - `OrderExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 주문 만료 처리
 - `NotificationCleanupScheduler` — 매일 03:00 6개월 이전 알림 삭제 / 5분 주기 Redis unread 카운트 ↔ DB 정합성 보정
+- `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
+- `AiPlanExpirationScheduler` — 매일 03:30, 만료일 지난 AI 플랜 구독 비활성화 (이후 FREE 처리)
+- `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:
 - `refresh:{accountId}` — refresh token
 - `blacklist:access:{token}` — 로그아웃된 access token
 - `reauth:{accountId}` / `password-reset:{accountId}` — 일회용 토큰
-- `unread:account:{accountId}` — 알림 unread 카운트 캐시
+- `unread:account:{accountId}` — 알림 unread 카운트 캐시 (전체)
+- `unread:category:{accountId}` — 알림 unread 카테고리별 카운트 캐시 (hash, 변경 시 무효화)
 - `rate-limit:email-verification:{email}` — 이메일 인증 코드 발송 쿨다운 (60초)
 - `rate-limit:password-reset:{email}` — 비밀번호 재설정 메일 발송 쿨다운 (5분)
 - `rate-limit:login-fail:{email}` — 로그인 실패 카운터 (5분 내 5회 초과 시 차단)
