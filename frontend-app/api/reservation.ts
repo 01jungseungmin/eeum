@@ -46,5 +46,15 @@ export const reservationApi = {
       console.error('방문 예약 상세 조회 에러:', error);
       throw error;
     }
+  },
+
+  getAvailableTimeSlots: async (storeId: number, params: { date: string; partySize?: number }) => {
+    try {
+      const response = await client.get(`/reservations/visits/stores/${storeId}/time-slots`, { params });
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error('예약 가능 시간대 조회 에러:', error);
+      throw error;
+    }
   }
 };

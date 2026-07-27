@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function ReservationSuccessScreen() {
   const router = useRouter();
-  const { reservationId, month, date, time } = useLocalSearchParams();
+  const { reservationId, month, date, time, people } = useLocalSearchParams();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -38,6 +38,10 @@ export default function ReservationSuccessScreen() {
               <Text style={styles.infoLabel}>예약 일정</Text>
               <Text style={styles.infoValue}>{month}월 {date}일 {time}</Text>
             </View>
+            <View style={[styles.infoRow, { marginTop: 10 }]}>
+              <Text style={styles.infoLabel}>방문 인원</Text>
+              <Text style={styles.infoValue}>{people}명</Text>
+            </View>
           </View>
         </View>
 
@@ -52,6 +56,13 @@ export default function ReservationSuccessScreen() {
             }}
           >
             <Text style={styles.detailBtnText}>예약 상세 보기</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.homeBtn} 
+            onPress={() => router.replace('/(tabs)')}
+          >
+            <Text fontWeight="bold" style={styles.homeBtnText}>홈으로 돌아가기</Text>
           </TouchableOpacity>
         </View>
       </View>
