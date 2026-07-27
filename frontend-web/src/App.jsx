@@ -21,6 +21,7 @@ import ReviewManagementPage from './pages/owner/main/ReviewManagementPage';
 import InquiryManagementPage from './pages/owner/main/InquiryManagementPage';
 import ChatManagementPage from './pages/owner/main/ChatManagementPage';
 import CustomerManagementPage from './pages/owner/main/CustomerManagementPage';
+import ReportManagementPage from './pages/owner/main/ReportManagementPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
@@ -96,6 +97,7 @@ function App() {
           <Route path="/customers" element={<CustomerManagementPage />} />
           <Route path="/inquiry" element={<InquiryManagementPage />} />
           <Route path="/chat" element={<ChatManagementPage />} />
+          <Route path="/reports" element={<ReportManagementPage />} />
         </Route>
       </Route>
     </Routes>
