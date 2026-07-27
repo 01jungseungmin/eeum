@@ -146,6 +146,25 @@ export default function ShopDetailScreen() {
           </View>
           <View style={styles.contactRow}><Ionicons name="location-outline" size={16} color="#888" /><Text style={styles.contactText}>{shopDetail.address}</Text></View>
           <View style={styles.contactRow}><Ionicons name="call-outline" size={16} color="#888" /><Text style={styles.contactText}>{shopDetail.phone}</Text></View>
+
+          {/* 상단 소개 바로 밑으로 이동한 예약 버튼 (식당/상점 구분 없이 모두 노출) */}
+          <TouchableOpacity
+            style={styles.contentReserveBtn}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (!isVerified) {
+                Alert.alert('동네 인증 필요', '예약하려면 마이페이지에서 대표 동네를 인증해주세요.');
+                return;
+              }
+              router.push({
+                pathname: '/restaurant/reservation' as any,
+                params: { storeId: shopDetail.storeId }
+              });
+            }}
+          >
+            <Ionicons name="calendar-outline" size={16} color="#333" style={{ marginRight: 6 }} />
+            <Text fontWeight="bold" style={styles.contentReserveBtnText}>상점 방문 예약하기</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.divider} />
@@ -218,41 +237,21 @@ export default function ShopDetailScreen() {
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 15) + 10 }]}>
         <View style={{ width: '100%' }}>
           
-          {/* 1. 상단 메인 액션 버튼 (업종에 따라 예약/장바구니) */}
-          {isRestaurant ? (
-            <TouchableOpacity
-              style={styles.reserveButton}
-              activeOpacity={0.8}
-              onPress={() => {
-                if (!isVerified) {
-                  Alert.alert('동네 인증 필요', '예약하려면 마이페이지에서 대표 동네를 인증해주세요.');
-                  return;
-                }
-                router.push({
-                  pathname: '/restaurant/reservation' as any,
-                  params: { storeId: shopDetail.storeId }
-                });
-              }}
-            >
-              <Ionicons name="calendar-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-              <Text fontWeight="bold" style={styles.reserveButtonText}>상점 방문 예약</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.reserveButton}
-              activeOpacity={0.8}
-              onPress={() => {
-                if (!isVerified) {
-                  Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
-                  return;
-                }
-                router.push('/cart');
-              }}
-            >
-              <Ionicons name="cart-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-              <Text fontWeight="bold" style={styles.reserveButtonText}>장바구니 보기</Text>
-            </TouchableOpacity>
-          )}
+          {/* 1. 상단 메인 액션 버튼 (조건 없이 항상 장바구니로 통일) */}
+          <TouchableOpacity
+            style={styles.cartButton}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (!isVerified) {
+                Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
+                return;
+              }
+              router.push('/cart');
+            }}
+          >
+            <Ionicons name="cart-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+            <Text fontWeight="bold" style={styles.cartButtonText}>장바구니 보기</Text>
+          </TouchableOpacity>
 
           {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
           <View style={styles.rowButtons}>
@@ -297,6 +296,9 @@ const styles = StyleSheet.create({
   contactText: { fontSize: 14, color: '#666', marginLeft: 10 },
   divider: { height: 8, backgroundColor: '#F8F8F8' },
 
+  contentReserveBtn: { flexDirection: 'row', backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#EAEAEA', paddingVertical: 12, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginTop: 15 },
+  contentReserveBtnText: { color: '#333', fontSize: 14 },
+
   menuSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 20 },
   menuCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
@@ -320,12 +322,11 @@ const styles = StyleSheet.create({
 
   bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EAEAEA', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
   
-  reserveButton: { flexDirection: 'row', backgroundColor: '#1B854A', paddingVertical: 14, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  reserveButtonText: { color: '#FFF', fontSize: 15 },
+  // 장바구니 버튼 스타일
+  cartButton: { flexDirection: 'row', backgroundColor: '#1B854A', paddingVertical: 14, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  cartButtonText: { color: '#FFF', fontSize: 15 },
+  
   rowButtons: { flexDirection: 'row', justifyContent: 'space-between' },
   halfButton: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#1B854A', paddingVertical: 12, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
   halfButtonText: { color: '#1B854A', fontSize: 14 },
-  
-  primaryBtn: { backgroundColor: '#1B854A', paddingVertical: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 0 },
-  primaryBtnText: { color: '#fff', fontSize: 16 },
 });

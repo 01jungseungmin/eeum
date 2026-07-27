@@ -54,5 +54,15 @@ export const shopApi = {
       console.error('상품 옵션 조회 에러:', error);
       throw error;
     }
+  },
+
+  getEventProducts: async (storeId: number) => {
+    try {
+      const response = await client.get(`/stores/${storeId}/event-products`);
+      return response.data;
+    } catch (error) {
+      console.error(`상점 ${storeId} 이벤트 상품 조회 에러:`, error);
+      throw error;
+    }
   }
 };
