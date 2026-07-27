@@ -118,6 +118,19 @@ const Badge = styled.span`
   }};
 `;
 
+/* 💡 신규 추가: 예약 신청 시각 표기 태그 */
+const CreatedAtBadge = styled.span`
+  font-size: 11px;
+  font-weight: 600;
+  color: #495057;
+  background: #f1f3f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+`;
+
 const MenuText = styled.p`
   font-size: 13px;
   color: #495057;
@@ -172,6 +185,18 @@ const ActionBtn = styled.button`
   }
 `;
 
+// 💡 시간 포맷팅 헬퍼 함수 ("2026-07-24T00:05:10.743683" -> "신청 00:05")
+const formatCreatedTime = (isoString) => {
+  if (!isoString) return null;
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return null;
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${hours}:${minutes}`;
+};
+
 export default function ReservationList({
   selectedDate,
   orders = [],
@@ -181,7 +206,7 @@ export default function ReservationList({
   refreshOrders,
   refreshTimeSlots,
 }) {
-  // 🟢 [확정/승인] 처리 함수
+  // [확정/승인] 처리 함수
   const handleApprove = async (reservationId) => {
     if (!window.confirm('이 예약을 확정하시겠습니까?')) return;
     try {
@@ -196,7 +221,7 @@ export default function ReservationList({
     }
   };
 
-  // 🔴 [거절] 처리 함수
+  // [거절] 처리 함수
   const handleReject = async (reservationId) => {
     const reason = window.prompt(
       '거절 사유를 입력해주세요:',
@@ -223,16 +248,24 @@ export default function ReservationList({
     }
   };
 
-  // 🎯 [핵심] 프론트엔드 단에서 대시보드 상태 버튼 종류에 따라 실시간 매핑 필터링
-  const displayOrders = orders.filter((order) => {
-    if (filter === '전체') return true;
-    if (filter === '확정')
-      return order.status === 'APPROVED' || order.status === 'CONFIRMED';
-    if (filter === '대기') return order.status === 'PENDING';
-    if (filter === '취소')
-      return order.status === 'CANCELED' || order.status === 'REJECTED';
-    return true;
-  });
+  // 상태별 필터링 + 신청 시각 기준 정렬
+  const displayOrders = orders
+    .filter((order) => {
+      if (filter === '전체') return true;
+      if (filter === '확정')
+        return order.status === 'APPROVED' || order.status === 'CONFIRMED';
+      if (filter === '대기') return order.status === 'PENDING';
+      if (filter === '취소')
+        return order.status === 'CANCELED' || order.status === 'REJECTED';
+      return true;
+    })
+    .sort((a, b) => {
+      // 신청시간(createdAt) 오름차순 정렬 (먼저 신청한 사람이 위로)
+      if (a.createdAt && b.createdAt) {
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      }
+      return 0;
+    });
 
   return (
     <Container>
@@ -243,7 +276,7 @@ export default function ReservationList({
             <FilterBtn
               key={type}
               $active={filter === type}
-              onClick={() => setFilter(type)} // 상위 state 변경 -> 실시간 리액트 리렌더링 트리거
+              onClick={() => setFilter(type)}
             >
               {type}
             </FilterBtn>
@@ -277,6 +310,7 @@ export default function ReservationList({
         ) : (
           displayOrders.map((order, idx) => {
             const uniqueKey = order.visitReservationId || `visit-${idx}`;
+            const createdTime = formatCreatedTime(order.createdAt);
 
             return (
               <ReservationCard
@@ -300,9 +334,14 @@ export default function ReservationList({
                             ? '확정'
                             : '취소'}
                       </Badge>
+
+                      {/* 💡 예약 신청 시각 태그 추가 */}
+                      {createdTime && (
+                        <CreatedAtBadge>신청 {createdTime}</CreatedAtBadge>
+                      )}
                     </NameRow>
 
-                    <MenuText>방문 예약 · {order.visitorCount || 0}명</MenuText>
+                    <MenuText>방문 예약 · {order.partySize || 0}명</MenuText>
 
                     {order.requestMessage && (
                       <div>
@@ -337,7 +376,7 @@ export default function ReservationList({
                   </Details>
                 </InfoSection>
 
-                {/* 대기 상태인 카드 우측에만 [확정] / [거절] 제어 인터페이스 활성화 */}
+                {/* 대기 상태인 카드 우측 버튼 */}
                 {order.status === 'PENDING' && (
                   <ActionButtons>
                     <ActionBtn

@@ -6,6 +6,7 @@ import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../api/authApi';
 import { notificationApi } from '../api/owner/notificationApi';
+import { useNotificationCounts } from '../hooks/useNotificationCounts';
 
 const SideContainer = styled.div`
   width: 260px;
@@ -180,6 +181,7 @@ function Sidebar({ approvalStatus }) {
       eventSource.close();
     };
   }, []);
+  const counts = useNotificationCounts();
 
   const handleMenuClick = async (item, isItemDisabled) => {
     if (isItemDisabled) {

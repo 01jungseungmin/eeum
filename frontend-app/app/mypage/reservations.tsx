@@ -1,40 +1,56 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   StyleSheet, View, FlatList, Image, 
   TouchableOpacity, ActivityIndicator, Alert 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
-// ✨ API 임포트 (경로는 프로젝트 환경에 맞게 수정하세요)
 import { reservationApi } from '@/api/reservation'; 
+import { reviewApi } from '../../api/review'; 
 
 export default function ReservationsScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [reservationList, setReservationList] = useState<any[]>([]);
 
-  useEffect(() => {
-    fetchReservations();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchReservations();
+    }, [])
+  );
 
   const fetchReservations = async () => {
     try {
       setIsLoading(true);
-      
-      // ✨ 1. 진짜 예약 내역 API 호출
       const res = await reservationApi.getMyVisitReservations();
       
-      // 서버 응답 구조에 맞게 배열 추출
       const realData = res?.content || res?.data || res || [];
       
-      // ✨ 2. 데이터 구조 파악을 위한 로그 (이름, 날짜 등의 Key값 확인용)
-      console.log("🔥 실제 예약 내역 데이터:", JSON.stringify(realData[0], null, 2));
+      // ✨ [추가] 받아온 예약 목록 중 'COMPLETED'인 항목들만 리뷰 작성 여부를 확인합니다.
+      const updatedData = await Promise.all(
+        realData.map(async (item: any) => {
+          if (item.status === 'COMPLETED') {
+            try {
+              // 리뷰 상세 조회 API 호출
+              const reviewData = await reviewApi.getReservationReview(item.visitReservationId);
+              // 데이터가 존재하면 리뷰 작성 완료 처리
+              if (reviewData && reviewData.storereviewId) {
+                return { ...item, isReviewed: true };
+              }
+            } catch (e) {
+              // 에러(404 등)가 나면 아직 리뷰를 안 쓴 것
+              return { ...item, isReviewed: false };
+            }
+          }
+          // COMPLETED가 아니면 기존 데이터 그대로 리턴
+          return item;
+        })
+      );
 
-      setReservationList(realData);
-
+      setReservationList(updatedData);
     } catch (error) {
       console.error('예약 내역 로딩 실패:', error);
     } finally {
@@ -42,7 +58,6 @@ export default function ReservationsScreen() {
     }
   };
 
-  // ✨ 3. 실제 예약 취소 API 연동
   const handleCancelReservation = (reservationId: number) => {
     Alert.alert(
       '예약 취소',
@@ -53,11 +68,8 @@ export default function ReservationsScreen() {
           text: '예', 
           onPress: async () => {
             try {
-              // 백엔드 취소 API 호출
               await reservationApi.cancelVisitReservation(reservationId);
               Alert.alert('알림', '예약이 정상적으로 취소되었습니다.');
-              
-              // 취소 후 목록을 다시 불러와서 화면을 갱신합니다.
               fetchReservations(); 
             } catch (error) {
               Alert.alert('오류', '예약 취소에 실패했습니다.');
@@ -69,38 +81,44 @@ export default function ReservationsScreen() {
   };
 
   const renderReservationItem = ({ item }: { item: any }) => {
-    // ✨ 실제 데이터의 Key 이름으로 변경!
     const rId = item.visitReservationId; 
     const storeName = item.storeName;
     
-    // 시간 뒤의 초(00) 자르기 (예: "11:30:00" -> "11:30")
     const timeText = item.visitTime ? item.visitTime.substring(0, 5) : '';
     const dateText = `${item.visitDate} ${timeText}`;
 
-    // ✨ 예약 상태(status)에 따른 뱃지 스타일 분기 처리
     let statusText = '예약 대기';
-    let statusColor = '#FF9800'; // 주황색 (대기중)
+    let statusColor = '#FF9800'; 
     let statusBg = '#FFF3E0';
 
     if (item.status === 'APPROVED' || item.status === 'RESERVED' || item.status === 'CONFIRMED') {
       statusText = '예약 확정';
-      statusColor = '#2196F3'; // 파란색 (확정)
+      statusColor = '#2196F3';
       statusBg = '#E3F2FD';
+    } else if (item.status === 'COMPLETED') {
+      statusText = '이용 완료';
+      statusColor = '#00A859';
+      statusBg = '#E8F5E9';
     } else if (item.status === 'CANCELLED' || item.status === 'REJECTED') {
       statusText = item.status === 'CANCELLED' ? '예약 취소' : '예약 거절';
-      statusColor = '#FF5252'; // 빨간색 (취소/거절)
+      statusColor = '#FF5252';
       statusBg = '#FFEBEE';
     }
+
+    const isReviewCompleted = item.isReviewed === true;
 
     return (
       <TouchableOpacity 
         style={styles.cardContainer}
+        // 상세 페이지 이동 유지
         onPress={() => router.push(`/restaurant/reservation-detail?id=${rId}` as any)}
       >
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Ionicons name="calendar-outline" size={14} color={statusColor} style={{ marginRight: 4 }} />
-            <Text style={[styles.dateText, { color: statusColor }]}>{dateText} 방문 예정</Text>
+            <Text style={[styles.dateText, { color: statusColor }]}>
+              {dateText} {item.status === 'COMPLETED' ? '방문함' : '방문 예정'}
+            </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
             <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
@@ -108,7 +126,6 @@ export default function ReservationsScreen() {
         </View>
 
         <View style={styles.cardBody}>
-          {/* 예약 데이터에 이미지가 없으므로 기본 이미지 사용 */}
           <Image 
             source={{ uri: 'https://via.placeholder.com/150' }} 
             style={styles.cardImage} 
@@ -121,15 +138,37 @@ export default function ReservationsScreen() {
           </View>
         </View>
 
-        {/* 취소나 거절 상태가 아닐 때만 취소 버튼 노출 */}
-        {item.status !== 'CANCELLED' && item.status !== 'REJECTED' && (
-          <TouchableOpacity 
-            style={styles.cancelButton}
-            onPress={() => handleCancelReservation(rId)}
-          >
-            <Text fontWeight="bold" style={styles.cancelButtonText}>예약 취소하기</Text>
-          </TouchableOpacity>
-        )}
+        {/* 하단 버튼 영역 분기 처리 */}
+        <View style={{ marginTop: 12 }}>
+          
+          {/* 1. 예약 취소하기 버튼 (유지) */}
+          {(item.status === 'PENDING' || item.status === 'APPROVED' || item.status === 'RESERVED' || item.status === 'CONFIRMED') && (
+            <TouchableOpacity style={styles.cancelButton} onPress={(e) => { e.stopPropagation(); handleCancelReservation(rId); }}>
+              <Text fontWeight="bold" style={styles.cancelButtonText}>예약 취소하기</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 2. 리뷰 작성 / 완료 버튼 (교체된 isReviewCompleted가 여기서 작동합니다!) */}
+          {item.status === 'COMPLETED' && (
+            isReviewCompleted ? (
+              // 🟢 리뷰 작성이 완료되었을 때 (회색 버튼)
+              <View style={[styles.reviewButton, { backgroundColor: '#F5F5F5', borderColor: '#EEE' }]}>
+                <Text fontWeight="bold" style={[styles.reviewButtonText, { color: '#999' }]}>리뷰 작성 완료</Text>
+              </View>
+            ) : (
+              // 🔵 아직 리뷰를 안 썼을 때 (초록색 버튼)
+              <TouchableOpacity 
+                style={styles.reviewButton}
+                onPress={(e) => {
+                  e.stopPropagation(); 
+                  router.push(`/review/write?storeId=${item.storeId}&reservationId=${rId}`);
+                }}
+              >
+                <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -151,7 +190,7 @@ export default function ReservationsScreen() {
       ) : reservationList.length === 0 ? (
         <View style={styles.centerContainer}>
           <Ionicons name="calendar-clear-outline" size={60} color="#DDD" style={{ marginBottom: 15 }} />
-          <Text style={styles.emptyText}>진행 중인 예약 내역이 없어요.</Text>
+          <Text style={styles.emptyText}>예약 내역이 없어요.</Text>
         </View>
       ) : (
         <FlatList
@@ -193,8 +232,13 @@ const styles = StyleSheet.create({
   shopName: { fontSize: 16, color: '#333', marginBottom: 6 },
   amountText: { fontSize: 14, color: '#555' },
   cancelButton: { 
-    marginTop: 12, backgroundColor: '#FFF5F5', paddingVertical: 12, 
+    backgroundColor: '#FFF5F5', paddingVertical: 12, 
     borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#FF5252' 
   },
-  cancelButtonText: { color: '#FF5252', fontSize: 14 }
+  cancelButtonText: { color: '#FF5252', fontSize: 14 },
+  reviewButton: { 
+    backgroundColor: '#F0F9F4', paddingVertical: 12, 
+    borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00A859' 
+  },
+  reviewButtonText: { color: '#00A859', fontSize: 14 }
 });

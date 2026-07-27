@@ -28,7 +28,7 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
       setHasNoRegion(false);
       try {
         const shopRes = await shopApi.getShops({ 
-          size: 5, 
+          size: 15, 
           regionId: regionId 
         }); 
         

@@ -19,8 +19,8 @@ export default function ReviewListScreen() {
       try {
         setIsLoading(true);
         const res = await reviewApi.getReviews(storeIdNum);
-        // 스웨거 구조에 맞게 res.content 가져오기
-        setReviews(res?.content || []);
+        // 스웨거 페이징 구조에 맞게 res.content 가져오기 (없으면 res 자체를 배열로 간주)
+        setReviews(res?.content || res || []);
       } catch (error) {
         console.error("리뷰 목록 로딩 에러:", error);
       } finally {
@@ -35,16 +35,16 @@ export default function ReviewListScreen() {
       <View style={styles.reviewUserRow}>
         <Ionicons name="star" size={14} color="#FFD700" />
         <Text style={styles.reviewRatingText}>{item.rating?.toFixed(1) || '0.0'}</Text>
-        {/* ✨ writerName 대신 nickname 사용 */}
         <Text style={styles.reviewWriterText}>{item.nickname || '익명'}</Text>
         <Text style={styles.reviewDateText}>{item.createdAt?.split('T')[0]}</Text>
       </View>
       <Text style={styles.reviewContentText}>{item.content}</Text>
-      {item.images && item.images.length > 0 && (
+      
+      {/* ✨ 안전한 이미지 접근 */}
+      {item.images && item.images.length > 0 && item.images[0]?.imageUrl && (
         <Image source={{ uri: item.images[0].imageUrl }} style={styles.reviewImage} />
       )}
       
-      {/* ✨ 사장님 답글 영역 (데이터에 reply가 있으면 노출) */}
       {item.reply && (
         <View style={styles.replyBox}>
           <Text fontWeight="bold" style={styles.replyNickname}>{item.reply.nickname}</Text>
@@ -73,8 +73,7 @@ export default function ReviewListScreen() {
       ) : (
         <FlatList
           data={reviews}
-          // ✨ reviewId 대신 storereviewId 사용
-          keyExtractor={(item) => item.storereviewId?.toString()}
+          keyExtractor={(item) => item.storereviewId?.toString() || Math.random().toString()}
           renderItem={renderReview}
           contentContainerStyle={{ padding: 20 }}
           showsVerticalScrollIndicator={false}
@@ -96,7 +95,6 @@ const styles = StyleSheet.create({
   reviewDateText: { color: '#999', marginLeft: 'auto', fontSize: 12 },
   reviewContentText: { fontSize: 14, color: '#333', lineHeight: 22 },
   reviewImage: { width: 100, height: 100, borderRadius: 8, marginTop: 12 },
-  // 사장님 답글 스타일
   replyBox: { marginTop: 12, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8 },
   replyNickname: { fontSize: 13, color: '#333', marginBottom: 4 },
   replyContent: { fontSize: 13, color: '#666', lineHeight: 18 }

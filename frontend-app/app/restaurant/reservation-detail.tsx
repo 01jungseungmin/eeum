@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { reservationApi } from '../../api/reservation';
+import { reviewApi } from '../../api/review';
 
 export default function ReservationDetailScreen() {
   const router = useRouter();
@@ -13,10 +14,12 @@ export default function ReservationDetailScreen() {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // 리뷰 작성 여부를 저장할 상태 추가
+  const [isReviewCompleted, setIsReviewCompleted] = useState(false);
+
   useEffect(() => {
     const fetchDetail = async () => {
       try {
-        // 1. 백엔드에 예약 상세 정보 요청
         const data = await reservationApi.getVisitReservationDetail(Number(id));
         setDetail(data);
       } catch (error) {
@@ -34,11 +37,29 @@ export default function ReservationDetailScreen() {
     }
   }, [id]);
 
-  // 백엔드에서 주는 영문 상태(PENDING 등)를 한글로 예쁘게 변환해주는 함수
+  // 예약 상태가 'COMPLETED'일 때만 리뷰 작성 여부를 백엔드에 물어봅니다.
+  useEffect(() => {
+    const checkReviewStatus = async () => {
+      if (detail && detail.status === 'COMPLETED') {
+        try {
+          const reviewData = await reviewApi.getReservationReview(Number(id));
+          if (reviewData && reviewData.storereviewId) {
+            setIsReviewCompleted(true);
+          }
+        } catch (error) {
+          setIsReviewCompleted(false);
+        }
+      }
+    };
+
+    checkReviewStatus();
+  }, [detail, id]);
+
   const getStatusDisplay = (status: string) => {
     switch (status) {
       case 'PENDING': return { text: '예약 대기 (사장님 확인 중)', color: '#F39C12' };
       case 'APPROVED': return { text: '예약 확정 완료', color: '#00A859' };
+      case 'COMPLETED': return { text: '방문 완료', color: '#1B854A' }; // ✨ 방문 완료 상태 추가
       case 'REJECTED': return { text: '예약 거절됨', color: '#E74C3C' };
       case 'CANCELLED': return { text: '예약 취소됨', color: '#95A5A6' };
       default: return { text: '상태 알 수 없음', color: '#333' };
@@ -118,6 +139,35 @@ export default function ReservationDetailScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* 4. 방문 완료 시에만 하단에 띄워주는 리뷰 버튼 영역 */}
+      {detail.status === 'COMPLETED' && (
+        <View style={styles.bottomBar}>
+          {isReviewCompleted ? (
+            // 리뷰 작성 완료 상태 (버튼 비활성화 및 회색 처리)
+            <View style={[styles.submitBtn, styles.disabledBtn]}>
+              <Ionicons name="checkmark-circle" size={18} color="#999" style={{ marginRight: 6 }} />
+              <Text fontWeight="bold" style={styles.disabledBtnText}>리뷰 작성 완료</Text>
+            </View>
+          ) : (
+            // 리뷰 작성 가능 상태 (클릭 시 작성 화면으로 이동)
+            <TouchableOpacity 
+              style={styles.submitBtn} 
+              onPress={() => router.push({
+                pathname: '/review/write',
+                params: {
+                  storeId: detail.storeId,
+                  reservationId: detail.visitReservationId, // 예약 리뷰 작성 시 필요한 ID 넘김
+                  type: 'RESERVATION'
+                }
+              } as any)}
+            >
+              <Ionicons name="pencil" size={16} color="#fff" style={{ marginRight: 6 }} />
+              <Text fontWeight="bold" style={styles.submitBtnText}>이 예약 리뷰 작성하기</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -127,7 +177,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 15, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
   headerTitle: { fontSize: 16, color: '#333' },
-  scrollContent: { padding: 15, paddingBottom: 50 },
+  scrollContent: { padding: 15, paddingBottom: 100 },
   card: { backgroundColor: '#fff', borderRadius: 10, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 15, borderRadius: 8 },
   statusText: { fontSize: 16, marginLeft: 8 },
@@ -135,5 +185,10 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, color: '#333', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   label: { fontSize: 14, color: '#888', flex: 1 },
-  value: { fontSize: 14, color: '#333', flex: 2, textAlign: 'right' }
+  value: { fontSize: 14, color: '#333', flex: 2, textAlign: 'right' },
+  bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#fff', padding: 15, borderTopWidth: 1, borderTopColor: '#E0E0E0' },
+  submitBtn: { flexDirection: 'row', backgroundColor: '#00A859', paddingVertical: 14, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  submitBtnText: { color: '#fff', fontSize: 16 },
+  disabledBtn: { backgroundColor: '#F0F0F0', borderWidth: 1, borderColor: '#EAEAEA' },
+  disabledBtnText: { color: '#999', fontSize: 16 }
 });
