@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { productApi } from '../../../api/owner/productApi';
+import { categoryApi } from '../../../api/owner/categoryApi';
 
 import ProductStats from '../../../components/owner/product/ProductStats';
 import ProductFilterBar from '../../../components/owner/product/ProductFilterBar';
@@ -30,6 +31,8 @@ function ProductManagementPage() {
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [editingProductId, setEditingProductId] = useState(null);
+
+  const [categories, setCategories] = useState([]);
 
   const fetchProductsWithImages = async () => {
     try {
@@ -92,8 +95,23 @@ function ProductManagementPage() {
     }
   };
 
+  const fetchCategoryData = async () => {
+    try {
+      const response = await categoryApi.getOwnerProductCategories();
+
+      if (response.data && response.data.success) {
+        setCategories(response.data.data || []);
+      } else {
+        alert(response.data.message || '카테고리 목록을 가져오지 못했습니다.');
+      }
+    } catch (error) {
+      console.error('카테고리 조회 실패 : ', error);
+    }
+  };
+
   useEffect(() => {
     fetchProductsWithImages();
+    fetchCategoryData();
   }, []);
 
   const activeProducts = products.filter((p) => p.status !== 'INACTIVE');
@@ -279,6 +297,7 @@ function ProductManagementPage() {
           mode="CREATE"
           onClose={() => setIsPostModalOpen(false)}
           onSuccess={fetchProductsWithImages}
+          categories={categories}
         />
       )}
 
@@ -289,6 +308,7 @@ function ProductManagementPage() {
           productId={editingProductId}
           onClose={() => setEditingProductId(null)}
           onSuccess={fetchProductsWithImages}
+          categories={categories}
         />
       )}
 

@@ -79,6 +79,7 @@ function SaleFormFields({
   setBasePrice,
   stockQuantity,
   setStockQuantity,
+  categories,
 }) {
   return (
     <>
@@ -93,9 +94,16 @@ function SaleFormFields({
             onChange={(e) => setCategoryId(e.target.value)}
           >
             <option value="">선택</option>
-            <option value="1">반찬류</option>
-            <option value="2">국/찌개</option>
-            <option value="3">밑반찬</option>
+            {categories
+              .filter((category) => category.active)
+              .map((category) => (
+                <option
+                  key={category.productCategoryId}
+                  value={category.productCategoryId}
+                >
+                  {category.name}
+                </option>
+              ))}
           </Select>
         </FormGroup>
         <FormGroup>
