@@ -9,6 +9,8 @@ import { useRouter } from 'expo-router';
 
 import { Text } from '../components/CustomText';
 import { notificationApi, NotificationItem } from '../api/notification';
+import { getNotificationRoute } from '../utils/notificationRoute';
+
 
 // 백엔드 DB 타입에 맞춘 카테고리 탭 데이터 구성
 const NOTI_TABS = [
@@ -101,11 +103,14 @@ export default function NotificationsScreen() {
       }
     }
 
-    // DB의 link_url 속성을 기반으로 다이내믹 라우팅 연동
-    if (item.linkUrl) {
-      router.push(item.linkUrl as any);
+    const route = getNotificationRoute(item);
+    if (!route) {
+      Alert.alert('알림', '이 알림은 이동할 화면이 없습니다.');
+      return;
     }
+    router.push(route as any);
   };
+
 
   // 단건 알림 삭제 (DELETE /notifications/{id})
   const handleDeleteItem = async (id: number) => {
