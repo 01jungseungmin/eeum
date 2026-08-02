@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { EventSourcePolyfill } from 'event-source-polyfill';
-import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
-import { useAuth } from '../contexts/AuthContext';
-import { authApi } from '../api/authApi';
-import { notificationApi } from '../api/owner/notificationApi';
+import { useState, useEffect } from "react";
+import styled from "styled-components";
+import { useNavigate, useLocation } from "react-router-dom";
+import { EventSourcePolyfill } from "event-source-polyfill";
+import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from "../config/MenuConfig";
+import { useAuth } from "../contexts/AuthContext";
+import { authApi } from "../api/authApi";
+import { notificationApi } from "../api/owner/notificationApi";
 
 const SideContainer = styled.div`
   width: 260px;
-  background-color: ${(props) => (props.$isAdmin ? '#005936' : '#1a392a')};
+  background-color: ${(props) => (props.$isAdmin ? "#005936" : "#1a392a")};
   color: white;
   display: flex;
   flex-direction: column;
   height: 100vh;
   padding: 20px 0;
-  font-family: 'Pretendard', sans-serif;
+  font-family: "Pretendard", sans-serif;
   transition: background-color 0.2s ease;
 `;
 
@@ -28,7 +28,7 @@ const LogoSection = styled.div`
     font-weight: 800;
   }
   p {
-    color: ${(props) => (props.$isAdmin ? '#a3ccbe' : '#81c784')};
+    color: ${(props) => (props.$isAdmin ? "#a3ccbe" : "#81c784")};
     font-size: 12px;
     margin: 5px 0 0;
   }
@@ -43,7 +43,7 @@ const MenuSection = styled.div`
     width: 4px;
   }
   &::-webkit-scrollbar-thumb {
-    background: ${(props) => (props.$isAdmin ? '#004027' : '#2d5a43')};
+    background: ${(props) => (props.$isAdmin ? "#004027" : "#2d5a43")};
     border-radius: 10px;
   }
 `;
@@ -60,7 +60,7 @@ const MenuItem = styled.div`
   align-items: center;
   padding: 12px 15px;
   border-radius: 12px;
-  cursor: ${(props) => (props.$disabled ? 'not-allowed' : 'pointer')};
+  cursor: ${(props) => (props.$disabled ? "not-allowed" : "pointer")};
   font-size: 15px;
   margin-bottom: 4px;
   position: relative;
@@ -68,19 +68,19 @@ const MenuItem = styled.div`
   opacity: ${(props) => (props.$disabled ? 0.35 : 1)};
 
   background-color: ${(props) =>
-    props.$active ? (props.$isAdmin ? '#0f4229' : '#2d5a43') : 'transparent'};
-  color: ${(props) => (props.$active ? '#fff' : '#adb5bd')};
+    props.$active ? (props.$isAdmin ? "#0f4229" : "#2d5a43") : "transparent"};
+  color: ${(props) => (props.$active ? "#fff" : "#adb5bd")};
 
   &:hover {
     background-color: ${(props) =>
       props.$disabled
-        ? ''
+        ? ""
         : props.$active
-          ? ''
+          ? ""
           : props.$isAdmin
-            ? '#0a3621'
-            : '#264d39'};
-    color: ${(props) => (props.$disabled ? '#adb5bd' : '#fff')};
+            ? "#0a3621"
+            : "#264d39"};
+    color: ${(props) => (props.$disabled ? "#adb5bd" : "#fff")};
   }
 `;
 
@@ -89,12 +89,12 @@ const IconWrapper = styled.span`
   display: flex;
   align-items: center;
   font-size: 18px;
-  opacity: ${(props) => (props.$active ? '1' : '0.7')};
+  opacity: ${(props) => (props.$active ? "1" : "0.7")};
 `;
 
 const Badge = styled.span`
-  background-color: ${(props) => (props.$isAdmin ? '#f1b913' : '#ff4d4f')};
-  color: ${(props) => (props.$isAdmin ? '#000' : '#fff')};
+  background-color: ${(props) => (props.$isAdmin ? "#f1b913" : "#ff4d4f")};
+  color: ${(props) => (props.$isAdmin ? "#000" : "#fff")};
   font-size: 11px;
   font-weight: bold;
   padding: 2px 8px;
@@ -117,8 +117,8 @@ function Sidebar({ approvalStatus }) {
   const location = useLocation();
   const { logout } = useAuth();
 
-  const role = localStorage.getItem('role');
-  const isAdmin = role === 'ROLE_ADMIN';
+  const role = localStorage.getItem("role");
+  const isAdmin = role === "ROLE_ADMIN";
 
   // 알림 수량 실시간 상태
   const [counts, setCounts] = useState({
@@ -130,7 +130,7 @@ function Sidebar({ approvalStatus }) {
     system: 0,
   });
 
-  const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
+  const isOwnerRestricted = !isAdmin && approvalStatus !== "APPROVED";
   const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 
   // SSE 실시간 연결
@@ -148,7 +148,7 @@ function Sidebar({ approvalStatus }) {
     });
 
     // 백엔드 이벤트 수신 ('unread-count')
-    eventSource.addEventListener('unread-count', (event) => {
+    eventSource.addEventListener("unread-count", (event) => {
       try {
         const parsedData = JSON.parse(event.data);
         const byCategory = parsedData.byCategory || {};
@@ -163,16 +163,16 @@ function Sidebar({ approvalStatus }) {
           alerts: parsedData.unreadCount || 0,
         });
       } catch (error) {
-        console.error('SSE 데이터 파싱 실패:', error);
+        console.error("SSE 데이터 파싱 실패:", error);
       }
     });
 
     eventSource.onopen = () => {
-      console.log('SSE 연결 성공');
+      console.log("SSE 연결 성공");
     };
 
     eventSource.onerror = (err) => {
-      console.error('SSE 연결 에러:', err);
+      console.error("SSE 연결 에러:", err);
       eventSource.close();
     };
 
@@ -182,15 +182,15 @@ function Sidebar({ approvalStatus }) {
   }, []);
 
   const handleMenuClick = async (e, item) => {
-    if (item.path === '/chat') {
-      const isCreated = localStorage.getItem('storeChatRoomCreated') === 'true';
+    if (item.path === "/chat") {
+      const isCreated = localStorage.getItem("storeChatRoomCreated") === "true";
 
       if (!isCreated) {
         e.preventDefault();
         alert(
-          '💡 먼저 대표 실시간 채팅방을 개설하셔야 합니다.\n[문의 관리] 페이지로 이동합니다.',
+          "💡 먼저 대표 실시간 채팅방을 개설하셔야 합니다.\n[문의 관리] 페이지로 이동합니다.",
         );
-        navigate('/inquiry');
+        navigate("/inquiry");
         return;
       }
     }
@@ -207,7 +207,7 @@ function Sidebar({ approvalStatus }) {
       try {
         await notificationApi.readNotification();
       } catch (error) {
-        console.error('알림 읽음 처리 실패:', error);
+        console.error("알림 읽음 처리 실패:", error);
       }
     }
 
@@ -223,27 +223,27 @@ function Sidebar({ approvalStatus }) {
       try {
         await notificationApi.readNotification();
       } catch (error) {
-        console.error('알림 읽음 처리 실패:', error);
+        console.error("알림 읽음 처리 실패:", error);
       }
     }
 
-    if (item.action === 'LOGOUT') {
-      const refreshToken = localStorage.getItem('refreshToken');
-      const currentRole = localStorage.getItem('role');
+    if (item.action === "LOGOUT") {
+      const refreshToken = localStorage.getItem("refreshToken");
+      const currentRole = localStorage.getItem("role");
       const targetPath =
-        currentRole === 'ROLE_ADMIN' ? '/admin/login' : '/login';
+        currentRole === "ROLE_ADMIN" ? "/admin/login" : "/login";
 
       try {
         if (refreshToken) {
           await authApi.logout(refreshToken);
         }
       } catch (error) {
-        console.error('로그아웃 API 에러:', error.response?.status);
+        console.error("로그아웃 API 에러:", error.response?.status);
       } finally {
         logout();
         navigate(targetPath);
       }
-    } else if (item.path && item.path !== '#') {
+    } else if (item.path && item.path !== "#") {
       navigate(item.path);
     }
   };
@@ -251,8 +251,8 @@ function Sidebar({ approvalStatus }) {
   return (
     <SideContainer $isAdmin={isAdmin}>
       <LogoSection $isAdmin={isAdmin}>
-        <h2>{isAdmin ? '이웃' : '이음'}</h2>
-        <p>{isAdmin ? 'Admin Dashboard' : '사장님 전용 관리 센터'}</p>
+        <h2>{isAdmin ? "이웃" : "이음"}</h2>
+        <p>{isAdmin ? "Admin Dashboard" : "사장님 전용 관리 센터"}</p>
       </LogoSection>
 
       <MenuSection $isAdmin={isAdmin}>
@@ -264,8 +264,8 @@ function Sidebar({ approvalStatus }) {
               const isActive = location.pathname === item.path;
               const isItemDisabled =
                 isOwnerRestricted &&
-                item.id !== 'approval' &&
-                item.id !== 'logout';
+                item.id !== "approval" &&
+                item.id !== "logout";
 
               return (
                 <MenuItem
