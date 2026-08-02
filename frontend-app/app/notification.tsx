@@ -152,6 +152,8 @@ export default function NotificationsScreen() {
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const isUnread = item.Read === false || item.Read === 0 || item.Read === '0';
 
+    const cleanContent = item.content ? item.content.replace(/\(ORD-[^)]+\)/g, '') : '';
+
     return (
       <TouchableOpacity 
         style={[styles.card, isUnread && styles.unreadCard]} 
@@ -170,7 +172,7 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.contentText}>{item.content}</Text>
+        <Text style={styles.contentText}>{cleanContent}</Text>
         <Text style={styles.dateText}>{item.createdAt.replace('T', ' ').substring(0, 16)}</Text>
       </TouchableOpacity>
     );
