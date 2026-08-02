@@ -77,7 +77,15 @@ export default function ReservationDetailScreen() {
 
   if (!detail) return null;
 
+  console.log("🔍 백엔드가 주는 예약 데이터:", detail);
+
   const statusInfo = getStatusDisplay(detail.status);
+
+  // 백엔드에서 내려올 수 있는 다양한 인원수 변수명 다중 대응 (HeadCount, visitCount, count 등)
+  const visitorCount = detail.partySize ?? detail.visitorCount ?? 1;
+  // 예약 번호 및 날짜 안전성 보장 변수
+  const reservationIdStr = String(detail.visitReservationId || detail.reservationId || detail.id || '').padStart(4, '0');
+  const dateStr = detail.visitDate?.replace(/-/g, '') || '00000000';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -110,11 +118,11 @@ export default function ReservationDetailScreen() {
           <Text fontWeight="bold" style={styles.cardTitle}>방문 매장</Text>
           <View style={styles.row}>
             <Text style={styles.label}>매장명</Text>
-            <Text fontWeight="bold" style={styles.value}>{detail.storeName}</Text>
+            <Text fontWeight="bold" style={styles.value}>{detail.storeName || '매장명 알 수 없음'}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>주소</Text>
-            <Text style={styles.value}>{detail.storeAddress}</Text>
+            <Text style={styles.value}>{detail.storeAddress || '주소 정보 없음'}</Text>
           </View>
         </View>
 
@@ -123,15 +131,17 @@ export default function ReservationDetailScreen() {
           <Text fontWeight="bold" style={styles.cardTitle}>예약 정보</Text>
           <View style={styles.row}>
             <Text style={styles.label}>예약 번호</Text>
-            <Text style={styles.value}>EX-{detail.visitDate?.replace(/-/g, '')}-{String(detail.visitReservationId).padStart(4, '0')}</Text>
+            <Text style={styles.value}>EX-{dateStr}-{reservationIdStr}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>방문 일정</Text>
-            <Text fontWeight="bold" style={styles.value}>{detail.visitDate}  {detail.visitTime?.substring(0, 5)}</Text>
+            <Text fontWeight="bold" style={styles.value}>
+              {detail.visitDate || '-'}  {detail.visitTime ? detail.visitTime.substring(0, 5) : ''}
+            </Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>방문 인원</Text>
-            <Text style={styles.value}>{detail.visitorCount}명</Text>
+            <Text style={styles.value}>{visitorCount}명</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>요청 사항</Text>

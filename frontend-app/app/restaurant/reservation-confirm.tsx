@@ -66,8 +66,9 @@ export default function ReservationConfirmScreen() {
         visitDate: fullDateString,
         visitTime: time as string,
         visitorCount: Number(people) || 1,
+        partySize: Number(people) || 1,
         requestMessage: (request as string) || ''
-      });
+      } as any);
 
       // 3. 응답 성공 시 성공 화면으로 이동
       if (response.success) {
