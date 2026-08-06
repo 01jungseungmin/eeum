@@ -13,12 +13,17 @@ import { chatApi } from '../../api/chat';
 
 const { width } = Dimensions.get('window');
 
-// 상품이 어떤 카테고리에 속하는지 유연하게 추출 (백엔드 응답 형태 방어)
-const getProductCategoryId = (product: any) =>
-  product?.productCategoryId ??
-  product?.categoryId ??
-  product?.productCategory?.productCategoryId ??
-  null;
+const getProductCategoryId = (product: any) => {
+  const id = 
+    product?.productCategoryId ??
+    product?.categoryId ??
+    product?.productCategory?.productCategoryId ??
+    product?.productCategory?.id ??
+    null;
+    
+  // 값이 있으면 무조건 숫자로 변환해서 반환 (문자열 "1" === 숫자 1 비교 실패 방지)
+  return id !== null ? Number(id) : null; 
+};
 
 export default function ShopDetailScreen() {
   const router = useRouter();
@@ -29,12 +34,16 @@ export default function ShopDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [shopDetail, setShopDetail] = useState<any>(null);
   const [shopProducts, setShopProducts] = useState<any[]>([]);
+  
+  // 💡 이벤트 상품 상태 추가
+  const [eventProducts, setEventProducts] = useState<any[]>([]); 
+  
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
   const [favoriteCount, setFavoriteCount] = useState<number>(0);
   const [shopReviews, setShopReviews] = useState<any[]>([]);
   const [shopNotices, setShopNotices] = useState<any[]>([]);
   const [productCategories, setProductCategories] = useState<any[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null); // null = 전체
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const shopIdNum = typeof id === 'string' ? Number(id) : 1;
@@ -43,7 +52,11 @@ export default function ShopDetailScreen() {
     const fetchShopData = async () => {
       try {
         setIsLoading(true);
-        const [detailData, productsData, checkRes, countRes, reviewsRes, regionsRes, noticesRes, categoriesRes] = await Promise.all([
+        // 💡 Promise.all 배열에 getEventProducts 추가 (병렬로 빠르게 가져오기)
+        const [
+          detailData, productsData, checkRes, countRes, 
+          reviewsRes, regionsRes, noticesRes, categoriesRes, eventRes 
+        ] = await Promise.all([
           shopApi.getShopDetail(shopIdNum),
           shopApi.getShopProducts(shopIdNum),
           favoriteApi.checkFavorite('STORE', shopIdNum).catch(() => null),
@@ -52,22 +65,23 @@ export default function ShopDetailScreen() {
           regionApi.getMyRegions().catch(() => null),
           shopApi.getShopNotices(shopIdNum).catch(() => []),
           shopApi.getShopProductCategories(shopIdNum).catch(() => []),
+          shopApi.getEventProducts(shopIdNum).catch(() => []) // ✨ 추가
         ]);
 
         setShopReviews(reviewsRes?.content || reviewsRes?.data || []);
         setShopDetail(detailData);
         setShopProducts(productsData || []);
+
+        console.log("🔍 백엔드가 주는 일반 상품 1개 데이터:", productsData?.[0]);
+        
+        // 💡 이벤트 상품 데이터 세팅
+        setEventProducts(eventRes?.data || eventRes || []);
+
         if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
         if (countRes?.data) setFavoriteCount(countRes.data.data);
 
-        // 공지: 배열 / { content: [] } / null 어떤 형태로 와도 방어
-        console.log('📢 공지 응답:', noticesRes);
-        setShopNotices(
-          Array.isArray(noticesRes) ? noticesRes : (noticesRes?.content ?? [])
-        );
+        setShopNotices(Array.isArray(noticesRes) ? noticesRes : (noticesRes?.content ?? []));
 
-        // 카테고리: active인 것만, displayOrder 순으로 정렬
-        console.log('🗂 카테고리 응답:', categoriesRes);
         const rawCategories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes?.content ?? []);
         setProductCategories(
           rawCategories
@@ -75,7 +89,6 @@ export default function ShopDetailScreen() {
             .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
         );
 
-        // 유연한 동네 인증 검사 로직
         if (regionsRes?.data) {
           const primaryRegion = regionsRes.data.find((r: any) => r.isPrimary === true);
           const isPrimaryVerified = primaryRegion?.verified === true || primaryRegion?.isVerified === true;
@@ -86,7 +99,6 @@ export default function ShopDetailScreen() {
           setIsVerified(isPrimaryVerified || isStoreRegionVerified);
         }
       } catch (e) {
-        console.log("❌ 에러:", e);
         Alert.alert("오류", "정보를 불러오지 못했습니다.");
         router.back();
       } finally {
@@ -97,11 +109,31 @@ export default function ShopDetailScreen() {
     if (shopIdNum) fetchShopData();
   }, [shopIdNum]);
 
-  // 선택된 카테고리에 따라 상품 필터링
+  // 💡 진행 중이고 재고가 남아있는 이벤트 상품만 필터링
+  const activeEventProducts = useMemo(() => {
+    return eventProducts.filter(p => p.ongoing !== false && p.remainingStock > 0);
+  }, [eventProducts]);
+
+  // 💡 선택된 카테고리에 따라 상품 필터링 (단, 진행 중인 이벤트 상품은 아래에서 제외!)
   const filteredProducts = useMemo(() => {
-    if (selectedCategoryId === null) return shopProducts;
-    return shopProducts.filter((p) => getProductCategoryId(p) === selectedCategoryId);
-  }, [shopProducts, selectedCategoryId]);
+    // 1. 이벤트 중인 상품들의 ID 목록만 따로 뽑아냅니다.
+    const eventProductIds = activeEventProducts.map(ep => 
+      ep.productId || ep.product?.productId || ep.product?.id || ep.id
+    );
+
+    // 2. 카테고리 필터링 적용
+    let result = shopProducts;
+    if (selectedCategoryId !== null) {
+      result = result.filter((p) => getProductCategoryId(p) === selectedCategoryId);
+    }
+
+    // 3. 일반 메뉴 리스트에서 이벤트 상품 ID를 가진 녀석들은 제외!
+    return result.filter(p => {
+      const currentId = p.productId || p.id;
+      return !eventProductIds.includes(currentId);
+    });
+  }, [shopProducts, selectedCategoryId, activeEventProducts]);
+
 
   const handleToggleFavorite = async () => {
     try {
@@ -115,18 +147,9 @@ export default function ShopDetailScreen() {
   };
 
   const handleGroupChat = async () => {
-    if (!isVerified) {
-      Alert.alert('동네 인증 필요', '이 상점의 단체 채팅방에 참여하려면 마이페이지에서 대표 동네를 인증해주세요.');
-      return;
-    }
-
+    if (!isVerified) return Alert.alert('동네 인증 필요', '단체 채팅방에 참여하려면 대표 동네를 인증해주세요.');
     const roomId = shopDetail?.chatRoomId;
-
-    if (!roomId /* || !shopDetail?.chatRoomExists */) {
-      Alert.alert('알림', '아직 이 상점의 단체 채팅방이 개설되지 않았습니다.');
-      return;
-    }
-
+    if (!roomId) return Alert.alert('알림', '아직 단체 채팅방이 개설되지 않았습니다.');
     try {
       await chatApi.joinRoom(roomId);
       router.push(`/chat/${roomId}` as any);
@@ -180,19 +203,12 @@ export default function ShopDetailScreen() {
           <View style={styles.contactRow}><Ionicons name="location-outline" size={16} color="#888" /><Text style={styles.contactText}>{shopDetail.address}</Text></View>
           <View style={styles.contactRow}><Ionicons name="call-outline" size={16} color="#888" /><Text style={styles.contactText}>{shopDetail.phone}</Text></View>
 
-          {/* 상단 소개 바로 밑으로 이동한 예약 버튼 (식당/상점 구분 없이 모두 노출) */}
           <TouchableOpacity
             style={styles.contentReserveBtn}
             activeOpacity={0.7}
             onPress={() => {
-              if (!isVerified) {
-                Alert.alert('동네 인증 필요', '예약하려면 마이페이지에서 대표 동네를 인증해주세요.');
-                return;
-              }
-              router.push({
-                pathname: '/restaurant/reservation' as any,
-                params: { storeId: shopDetail.storeId }
-              });
+              if (!isVerified) return Alert.alert('동네 인증 필요', '예약하려면 대표 동네를 인증해주세요.');
+              router.push({ pathname: '/restaurant/reservation' as any, params: { storeId: shopDetail.storeId } });
             }}
           >
             <Ionicons name="calendar-outline" size={16} color="#333" style={{ marginRight: 6 }} />
@@ -202,7 +218,6 @@ export default function ShopDetailScreen() {
 
         <View style={styles.divider} />
 
-        {/* 상점 공지 섹션 */}
         {shopNotices.length > 0 && (
           <>
             <View style={styles.noticeSection}>
@@ -211,59 +226,118 @@ export default function ShopDetailScreen() {
                 <View key={notice.noticeId ?? notice.id ?? index} style={styles.noticeCard}>
                   <View style={styles.noticeTitleRow}>
                     <Ionicons name="megaphone-outline" size={16} color="#00A859" />
-                    <Text fontWeight="bold" style={styles.noticeTitle} numberOfLines={1}>
-                      {notice.title}
-                    </Text>
+                    <Text fontWeight="bold" style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
                   </View>
-                  <Text style={styles.noticeContent} numberOfLines={3}>
-                    {notice.content}
-                  </Text>
-                  {notice.createdAt && (
-                    <Text style={styles.noticeDate}>
-                      {new Date(notice.createdAt).toLocaleDateString('ko-KR')}
-                    </Text>
-                  )}
+                  <Text style={styles.noticeContent} numberOfLines={3}>{notice.content}</Text>
                 </View>
               ))}
             </View>
-
             <View style={styles.divider} />
           </>
         )}
 
-        {/* 메뉴 섹션 */}
+        {/* 💡 이벤트 상품 섹션 (진행 중인 이벤트가 있을 때만 노출) */}
+        {activeEventProducts.length > 0 && (
+          <>
+            <View style={styles.eventSection}>
+              <Text fontWeight="bold" style={[styles.sectionTitle, { color: '#FF5252' }]}>🔥 진행 중인 이벤트</Text>
+              
+              {activeEventProducts.map((eventProd: any, index: number) => {
+                // 💡 1. API 명세서에 맞춘 정확한 변수명 매핑
+                const pId = eventProd.productId;
+                const pName = eventProd.productName || '상품명 없음';
+                
+                // 💡 2. 가격 및 재고 매핑
+                const pPrice = eventProd.originalPrice || 0;
+                const pEventPrice = eventProd.eventPrice || 0;
+                const pStock = eventProd.remainingStock || 0;
+                
+                // 💡 3. 이미지 방어 로직
+                const rawImage = eventProd.thumbnailUrl;
+                const isValidImage = rawImage && rawImage !== 'null' && rawImage.trim() !== '';
+
+                // 💡 4. API에 할인율이 없으므로 직접 계산 (원가보다 이벤트가가 저렴할 때만)
+                const discountRate = pPrice > 0 && pEventPrice > 0 && pPrice > pEventPrice
+                  ? Math.round(((pPrice - pEventPrice) / pPrice) * 100)
+                  : 0;
+
+                return (
+                  <TouchableOpacity
+                    key={`event-${pId || index}`}
+                    style={styles.eventCard}
+                    onPress={() => router.push({
+                      pathname: `/product/${pId}` as any,
+                      params: { isRestaurant: isRestaurant ? 'true' : 'false' }
+                    })}
+                  >
+                    <View style={styles.menuTextContainer}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
+                        <Text fontWeight="bold" style={styles.menuName}>{pName}</Text>
+                        <View style={styles.stockBadge}>
+                          <Text style={styles.stockText}>남은 수량 {pStock}개</Text>
+                        </View>
+                      </View>
+                      
+                      {/* API에 description이 포함되어 있지 않으므로 설명란은 제외했습니다 */}
+                      
+                      <View style={styles.priceRow}>
+                        {/* 직접 계산한 할인율 노출 */}
+                        {discountRate > 0 ? (
+                          <Text style={styles.discountRate}>{discountRate}%</Text>
+                        ) : null}
+                        
+                        <Text fontWeight="bold" style={styles.menuPrice}>
+                          {pEventPrice > 0 ? pEventPrice.toLocaleString() : pPrice.toLocaleString()}원
+                        </Text>
+                        
+                        {/* 이벤트가가 있고, 원가보다 쌀 때만 취소선 가격 노출 */}
+                        {pEventPrice > 0 && pPrice > pEventPrice ? (
+                          <Text style={styles.originalPrice}>{pPrice.toLocaleString()}원</Text>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    {/* 이미지 안전 렌더링 */}
+                    {isValidImage ? (
+                      <Image source={{ uri: rawImage }} style={styles.menuImg} />
+                    ) : (
+                      <View style={[styles.menuImg, { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="image-outline" size={28} color="#CCC" />
+                        <Text style={{ fontSize: 10, color: '#999', marginTop: 4 }}>No Image</Text>
+                      </View>
+                    )}
+                    
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.divider} />
+          </>
+        )}
+
+        {/* 일반 메뉴 섹션 */}
         <View style={styles.menuSection}>
           <Text fontWeight="bold" style={styles.sectionTitle}>메뉴</Text>
-
-          {/* 카테고리 필터 칩 */}
           {productCategories.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
-              style={styles.chipScroll}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} style={styles.chipScroll}>
               <TouchableOpacity
                 style={[styles.chip, selectedCategoryId === null && styles.chipActive]}
-                activeOpacity={0.7}
                 onPress={() => setSelectedCategoryId(null)}
               >
                 <Text style={[styles.chipText, selectedCategoryId === null && styles.chipTextActive]}>
                   전체 {shopProducts.length}
                 </Text>
               </TouchableOpacity>
-
               {productCategories.map((cat: any) => {
                 const isActive = selectedCategoryId === cat.productCategoryId;
                 return (
                   <TouchableOpacity
                     key={cat.productCategoryId}
                     style={[styles.chip, isActive && styles.chipActive]}
-                    activeOpacity={0.7}
                     onPress={() => setSelectedCategoryId(cat.productCategoryId)}
                   >
                     <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                      {cat.name}{typeof cat.productCount === 'number' ? ` ${cat.productCount}` : ''}
+                      {cat.name}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -301,7 +375,6 @@ export default function ShopDetailScreen() {
           <View style={styles.reviewHeader}>
             <Text fontWeight="bold" style={styles.sectionTitle}>상점 리뷰</Text>
           </View>
-
           {shopReviews.length === 0 ? (
             <Text style={styles.emptyReviewText}>아직 등록된 리뷰가 없습니다.</Text>
           ) : (
@@ -313,42 +386,19 @@ export default function ShopDetailScreen() {
                   <Text style={styles.reviewWriterText}>{review.nickname || '익명'}</Text>
                 </View>
                 <Text style={styles.reviewContentText}>{review.content}</Text>
-                {review.images && review.images.length > 0 && (
-                  <Image source={{ uri: review.images[0].imageUrl }} style={styles.reviewImage} />
-                )}
               </View>
             ))
           )}
-
-          {shopReviews.length > 0 && (
-            <TouchableOpacity
-              style={styles.moreReviewBtn}
-              onPress={() => router.push({
-                pathname: '/review/list' as any,
-                params: { storeId: shopDetail.storeId }
-              })}
-            >
-              <Text style={styles.moreReviewBtnText}>리뷰 더 보기</Text>
-              <Ionicons name="chevron-forward" size={16} color="#666" />
-            </TouchableOpacity>
-          )}
         </View>
-
       </ScrollView>
 
       {/* 하단 고정 버튼 영역 */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 15) + 10 }]}>
         <View style={{ width: '100%' }}>
-
-          {/* 1. 상단 메인 액션 버튼 (조건 없이 항상 장바구니로 통일) */}
           <TouchableOpacity
             style={styles.cartButton}
-            activeOpacity={0.8}
             onPress={() => {
-              if (!isVerified) {
-                Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
-                return;
-              }
+              if (!isVerified) return Alert.alert('동네 인증 필요', '상품을 구매하려면 대표 동네를 인증해주세요.');
               router.push('/cart');
             }}
           >
@@ -356,27 +406,17 @@ export default function ShopDetailScreen() {
             <Text fontWeight="bold" style={styles.cartButtonText}>장바구니 보기</Text>
           </TouchableOpacity>
 
-          {/* 2. 하단 2분할 버튼 (문의하기 & 단체 채팅) */}
           <View style={styles.rowButtons}>
-            <TouchableOpacity
-              style={styles.halfButton}
-              activeOpacity={0.7}
-              onPress={() => router.push(`/inquiry/write?storeId=${shopIdNum}` as any)}
-            >
+            <TouchableOpacity style={styles.halfButton} onPress={() => router.push(`/inquiry/write?storeId=${shopIdNum}` as any)}>
               <Ionicons name="chatbubble-outline" size={18} color="#1B854A" style={{ marginRight: 6 }} />
               <Text style={styles.halfButtonText}>문의하기</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.halfButton}
-              activeOpacity={0.7}
-              onPress={handleGroupChat}
-            >
+            <TouchableOpacity style={styles.halfButton} onPress={handleGroupChat}>
               <Ionicons name="chatbubbles-outline" size={18} color="#1B854A" style={{ marginRight: 6 }} />
               <Text style={styles.halfButtonText}>단체 채팅</Text>
             </TouchableOpacity>
           </View>
-
         </View>
       </View>
     </SafeAreaView>
@@ -398,22 +438,26 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   contactText: { fontSize: 14, color: '#666', marginLeft: 10 },
   divider: { height: 8, backgroundColor: '#F8F8F8' },
-
   contentReserveBtn: { flexDirection: 'row', backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#EAEAEA', paddingVertical: 12, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginTop: 15 },
   contentReserveBtnText: { color: '#333', fontSize: 14 },
 
-  // 상점 공지 스타일
   noticeSection: { padding: 20 },
   noticeCard: { backgroundColor: '#F8FBF9', borderRadius: 8, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E8F5E9' },
   noticeTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   noticeTitle: { fontSize: 15, color: '#333', marginLeft: 6, flex: 1 },
   noticeContent: { fontSize: 13, color: '#666', lineHeight: 20 },
-  noticeDate: { fontSize: 11, color: '#AAA', marginTop: 8 },
+
+  // ✨ 이벤트 상품 전용 스타일 추가
+  eventSection: { padding: 20, backgroundColor: '#FFF5F5' }, // 살짝 붉은 배경으로 강조
+  eventCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#FDECEC' },
+  stockBadge: { backgroundColor: '#FF5252', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 },
+  stockText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  discountRate: { color: '#FF5252', fontSize: 16, fontWeight: 'bold', marginRight: 6 },
+  originalPrice: { color: '#999', fontSize: 13, textDecorationLine: 'line-through', marginLeft: 6 },
 
   menuSection: { padding: 20 },
   sectionTitle: { fontSize: 18, color: '#333', marginBottom: 20 },
-
-  // 카테고리 필터 칩 스타일
   chipScroll: { marginBottom: 8, marginHorizontal: -20 },
   chipRow: { paddingHorizontal: 20, paddingBottom: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#E0E0E0', backgroundColor: '#FFF', marginRight: 8 },
@@ -421,7 +465,6 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, color: '#666' },
   chipTextActive: { color: '#FFF', fontWeight: 'bold' },
   emptyMenuText: { color: '#888', textAlign: 'center', paddingVertical: 30, fontSize: 14 },
-
   menuCard: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   menuTextContainer: { flex: 1, paddingRight: 15 },
   menuName: { fontSize: 16, color: '#333', marginBottom: 5 },
@@ -437,16 +480,10 @@ const styles = StyleSheet.create({
   reviewRatingText: { fontWeight: 'bold', marginLeft: 4, fontSize: 14, color: '#333' },
   reviewWriterText: { color: '#888', marginLeft: 10, fontSize: 12 },
   reviewContentText: { fontSize: 14, color: '#333', lineHeight: 20 },
-  reviewImage: { width: 80, height: 80, borderRadius: 8, marginTop: 10 },
-  moreReviewBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15 },
-  moreReviewBtnText: { color: '#666', fontSize: 14, marginRight: 4, fontWeight: '500' },
 
   bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EAEAEA', backgroundColor: '#fff', position: 'absolute', bottom: 0, width: '100%' },
-
-  // 장바구니 버튼 스타일
   cartButton: { flexDirection: 'row', backgroundColor: '#1B854A', paddingVertical: 14, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   cartButtonText: { color: '#FFF', fontSize: 15 },
-
   rowButtons: { flexDirection: 'row', justifyContent: 'space-between' },
   halfButton: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#1B854A', paddingVertical: 12, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
   halfButtonText: { color: '#1B854A', fontSize: 14 },

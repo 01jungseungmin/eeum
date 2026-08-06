@@ -138,6 +138,15 @@ export default function ProductDetailScreen() {
 
   const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
 
+  // 💡 1. 상세 페이지에서도 할인가와 원가, 할인율을 계산합니다.
+  const pPrice = productDetail.price || 0;
+  const pEventPrice = productDetail.eventPrice || 0;
+  const hasEvent = productDetail.hasEvent === true;
+  
+  const discountRate = hasEvent && pPrice > 0 && pEventPrice > 0 && pPrice > pEventPrice
+    ? Math.round(((pPrice - pEventPrice) / pPrice) * 100)
+    : 0;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* 상단 헤더 */}
@@ -149,17 +158,33 @@ export default function ProductDetailScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* 하단 바가 높아졌으므로 ScrollView의 paddingBottom을 넉넉하게 160으로 조절합니다. */}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
         {/* 상품 이미지 */}
         <Image source={{ uri: productImgUrl }} style={styles.productImg} />
 
-        {/* 상품 정보 섹션 */}
+        {/* 💡 2. 상품 정보 섹션 (할인가, 취소선 적용) */}
         <View style={styles.infoSection}>
           <Text fontWeight="bold" style={styles.productName}>{productDetail.name}</Text>
-          <Text fontWeight="bold" style={styles.productPrice}>
-            {productDetail.price?.toLocaleString()}원
-          </Text>
+          
+          <View style={styles.priceRow}>
+            {/* 할인 중이면 할인율 표시 */}
+            {hasEvent && discountRate > 0 && (
+              <Text style={styles.discountRateText}>{discountRate}%</Text>
+            )}
+            
+            {/* 최종 가격 (할인 중이면 할인가, 아니면 원가) */}
+            <Text fontWeight="bold" style={styles.productPrice}>
+              {hasEvent && pEventPrice > 0 
+                ? pEventPrice.toLocaleString() 
+                : pPrice.toLocaleString()}원
+            </Text>
+            
+            {/* 할인 중일 때만 취소선 그어진 원가 표시 */}
+            {hasEvent && pEventPrice > 0 && pPrice > pEventPrice && (
+              <Text style={styles.originalPriceText}>{pPrice.toLocaleString()}원</Text>
+            )}
+          </View>
+
           <View style={styles.divider} />
           <Text style={styles.productDescTitle}>상품 설명</Text>
           <Text style={styles.productDesc}>{productDetail.description || '등록된 상품 설명이 없습니다.'}</Text>
@@ -238,7 +263,10 @@ const styles = StyleSheet.create({
   productImg: { width: width, height: width, backgroundColor: '#F9F9F9' },
   infoSection: { padding: 20 },
   productName: { fontSize: 22, color: '#333', marginBottom: 8 },
-  productPrice: { fontSize: 20, color: '#00A859', marginBottom: 15 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  discountRateText: { fontSize: 20, fontWeight: 'bold', color: '#FF5252', marginRight: 8 },
+  productPrice: { fontSize: 20, color: '#00A859' }, 
+  originalPriceText: { fontSize: 15, color: '#999', textDecorationLine: 'line-through', marginLeft: 8 },
   divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 15 },
   productDescTitle: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 8 },
   productDesc: { fontSize: 14, color: '#666', lineHeight: 22 },
