@@ -1,0 +1,4 @@
+interface:
+  display_name: "단위 테스트 생성"
+  short_description: "서비스 클래스의 Mockito 단위 테스트를 작성합니다"
+  default_prompt: "Use $test-gen to add unit tests for the specified service class."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDD 문서 갱신"
+  short_description: "현재 코드에 맞춰 관련 SDD 문서를 안전하게 갱신합니다"
+  default_prompt: "Use $sdd-doc-updater to update the relevant SDD from the current implementation."
