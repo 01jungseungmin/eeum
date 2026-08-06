@@ -114,6 +114,7 @@ class ChatMessageServiceTest {
         ChatParticipant participant = ChatParticipant.create(room, sender);
         ChatMessageSendRequestDto request = createTextRequest("안녕하세요", null);
 
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
         when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
         when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -122,6 +123,7 @@ class ChatMessageServiceTest {
 
         // Then
         assertThat(result).isNotNull();
+        verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
         verify(chatMessageRepository).save(any(ChatMessage.class));
         // room.updateLastMessageAt()는 엔티티 직접 호출 — repository 검증 없음
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
@@ -139,6 +141,7 @@ class ChatMessageServiceTest {
         ChatMessageSendRequestDto request = createTextRequest("안녕하세요", "unique-uuid");
 
         when(valueOps.setIfAbsent(anyString(), eq("1"), any(Duration.class))).thenReturn(true);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
         when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
         when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -195,10 +198,9 @@ class ChatMessageServiceTest {
         Account sender = createAccount(accountId, "홍길동");
         ChatRoom room = createGroupRoom(roomId, sender);
         room.deactivate();
-        ChatParticipant participant = ChatParticipant.create(room, sender);
         ChatMessageSendRequestDto request = createTextRequest("안녕", null);
 
-        when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
         doThrow(new BadRequestException(ErrorCode.CHAT_ROOM_INACTIVE))
                 .when(chatAccessHelper).verifyRoomActive(room);
 
@@ -223,6 +225,7 @@ class ChatMessageServiceTest {
         ChatParticipant participant = ChatParticipant.create(room, sender);
         ChatImageMessageSendRequestDto request = createImageRequest("https://cdn.example.com/img.jpg", null);
 
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
         when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
         when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -231,6 +234,7 @@ class ChatMessageServiceTest {
 
         // Then
         assertThat(result).isNotNull();
+        verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
         verify(chatMessageRepository).save(any(ChatMessage.class));
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
         verify(eventPublisher).publishEvent(any(ChatMessageSentEvent.class));
@@ -279,10 +283,9 @@ class ChatMessageServiceTest {
         Account sender = createAccount(accountId, "홍길동");
         ChatRoom room = createGroupRoom(roomId, sender);
         room.deactivate();
-        ChatParticipant participant = ChatParticipant.create(room, sender);
         ChatImageMessageSendRequestDto request = createImageRequest("https://cdn.example.com/img.jpg", null);
 
-        when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
         doThrow(new BadRequestException(ErrorCode.CHAT_ROOM_INACTIVE))
                 .when(chatAccessHelper).verifyRoomActive(room);
 
@@ -386,7 +389,7 @@ class ChatMessageServiceTest {
         Account sender = createAccount(accountId, "홍길동");
         ChatRoom room = createGroupRoom(10L, sender);
         ChatParticipant participant = ChatParticipant.create(room, sender);
-        when(chatParticipantRepository.findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE))
+        when(chatParticipantRepository.findActiveParticipationsInActiveRooms(accountId, ParticipantStatus.ACTIVE))
                 .thenReturn(List.of(participant));
         when(chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                 eq(10L), any(LocalDateTime.class), eq(accountId)))
@@ -397,7 +400,7 @@ class ChatMessageServiceTest {
 
         // Then
         assertThat(result.getUnreadCount()).isEqualTo(3L);
-        verify(chatParticipantRepository).findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE);
+        verify(chatParticipantRepository).findActiveParticipationsInActiveRooms(accountId, ParticipantStatus.ACTIVE);
         verify(chatMessageRepository).countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                 eq(10L), any(LocalDateTime.class), eq(accountId));
     }

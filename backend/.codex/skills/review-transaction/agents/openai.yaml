@@ -1,0 +1,4 @@
+interface:
+  display_name: "트랜잭션 리뷰"
+  short_description: "트랜잭션과 이벤트 및 예외 처리 규칙을 점검합니다"
+  default_prompt: "Use $review-transaction to review transaction, event, and exception handling."

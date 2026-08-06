@@ -3,6 +3,7 @@ package com.eeum.eeum.application.chat.helper;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.repository.ChatAccessStatus;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
@@ -30,6 +31,13 @@ public class ChatAccessHelper {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CHAT_ROOM_NOT_FOUND));
     }
 
+    // 채팅방 상태를 확인한 뒤 쓰는 경로의 공통 잠금 조회.
+    // 반드시 쓰기 트랜잭션 안에서 호출해야 하며, 잠금은 트랜잭션 커밋까지 유지된다.
+    public ChatRoom getRoomWithPessimisticLockOrThrow(Long roomId) {
+        return chatRoomRepository.findByIdWithPessimisticLock(roomId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+    }
+
     // 채팅방 ACTIVE 참여자 검증
     public ChatParticipant verifyParticipant(Long accountId, Long roomId) {
         ChatParticipant participant = chatParticipantRepository
@@ -39,6 +47,22 @@ public class ChatAccessHelper {
             throw new ForbiddenException(ErrorCode.CHAT_NOT_PARTICIPANT);
         }
         return participant;
+    }
+
+    // 활성 채팅방의 ACTIVE 참여자 검증 (WebSocket SUBSCRIBE/SEND 전용)
+    // 종료된 방은 참여자 레코드가 그대로 남아 있어 verifyParticipant만으로는 통과하므로
+    // 방 활성 여부까지 함께 확인해야 종료된 방으로의 구독/발행을 막을 수 있다.
+    // 엔티티 로딩 없이 스칼라 projection 1회로 처리한다 (메시지마다 호출되는 경로).
+    public void verifyActiveRoomParticipant(Long accountId, Long roomId) {
+        ChatAccessStatus status = chatParticipantRepository
+                .findAccessStatus(roomId, accountId)
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.CHAT_NOT_PARTICIPANT));
+        if (!status.isActiveParticipant()) {
+            throw new ForbiddenException(ErrorCode.CHAT_NOT_PARTICIPANT);
+        }
+        if (!status.roomActive()) {
+            throw new BadRequestException(ErrorCode.CHAT_ROOM_INACTIVE);
+        }
     }
 
     // 메시지 발신자 본인 검증

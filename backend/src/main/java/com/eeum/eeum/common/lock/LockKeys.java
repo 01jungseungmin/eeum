@@ -26,18 +26,18 @@ public final class LockKeys {
         return "lock:portone-payment:" + portonePaymentId;
     }
 
-    public static String chatRoom(Long creatorId) {
-        return "lock:chat-room:creator:" + creatorId;
-    }
+    // 생성자 단위 채팅방 락(chatRoom(creatorId))은 제거됐다.
+    // 비STORE GROUP 방은 중복 판정이 없어 락이 중복을 막지 못하면서, 대기 없는 락 정책 탓에
+    // 정상적인 동시 요청만 LOCK_ACQUIRE_FAILED로 실패시켰기 때문. 같은 패턴을 다시 만들지 말 것.
 
     public static String chatRoomStore(Long storeId) {
         return "lock:chat-room:store:" + storeId;
     }
 
-    public static String chatRoomInvite(Long roomId) {
-        return "lock:chat-room:" + roomId + ":invite";
-    }
-
+    // 방 상태 변경(생성/입장/초대/퇴장/종료) 공용 키.
+    // 초대 전용 키(chatRoomInvite)는 제거했다 — 종료와 다른 키를 쓰면 종료 직전 활성 검증을
+    // 통과한 입장/초대가 종료 커밋 이후에 참여자를 남긴다. 경로별로 키를 나누지 말 것.
+    // 가게 단톡방은 생성과 직렬화해야 하므로 chatRoomStore(storeId)를 쓴다 (ChatRoomService 참고).
     public static String chatRoomLeave(Long roomId) {
         return "lock:chat-room:" + roomId + ":leave";
     }

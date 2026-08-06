@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR 본문 작성"
+  short_description: "현재 브랜치 변경사항으로 PR 본문과 작업일지를 작성합니다"
+  default_prompt: "Use $pr to draft a pull request body and worklog for the current branch."

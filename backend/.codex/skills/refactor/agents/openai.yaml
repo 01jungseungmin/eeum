@@ -1,0 +1,4 @@
+interface:
+  display_name: "리팩토링 제안"
+  short_description: "외부 계약을 유지하는 내부 구조 개선안을 제시합니다"
+  default_prompt: "Use $refactor to propose behavior-preserving refactoring opportunities."

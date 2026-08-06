@@ -101,7 +101,7 @@ class StoreTableServiceTest {
                 .thenReturn(List.of(table1, table2));
 
         // when
-        List<StoreTableResponseDto> result = storeTableService.getTables(ownerAccountId);
+        List<StoreTableResponseDto> result = storeTableService.getTables(ownerAccountId).getTables();
 
         // then
         assertThat(result).hasSize(2);

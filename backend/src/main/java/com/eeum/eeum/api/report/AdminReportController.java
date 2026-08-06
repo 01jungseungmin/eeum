@@ -38,7 +38,11 @@ public class AdminReportController {
         return ResponseEntity.ok(ApiResponse.success(adminReportService.getReports(status, pageable)));
     }
 
-    @Operation(summary = "[관리자] 신고 상세 조회")
+    @Operation(
+            summary = "[관리자] 신고 상세 조회",
+            description = "신고 기본 정보에 더해 신고자 정보, 신고 대상(가게/리뷰/게시글/댓글/사용자) 스냅샷, " +
+                    "관리자 처리 내역을 함께 반환합니다. 신고 접수 후 대상이 삭제된 경우 target.exists=false로 반환됩니다."
+    )
     @GetMapping("/{reportId}")
     public ResponseEntity<ApiResponse<ReportResponseDto>> getReportDetail(
             @Parameter(description = "신고 ID") @PathVariable Long reportId
