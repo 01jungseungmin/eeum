@@ -1,7 +1,6 @@
 package com.eeum.eeum.api.report;
 
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
-import com.eeum.eeum.application.report.dto.response.ReportDetailResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.service.AdminReportService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -45,7 +44,7 @@ public class AdminReportController {
                     "관리자 처리 내역을 함께 반환합니다. 신고 접수 후 대상이 삭제된 경우 target.exists=false로 반환됩니다."
     )
     @GetMapping("/{reportId}")
-    public ResponseEntity<ApiResponse<ReportDetailResponseDto>> getReportDetail(
+    public ResponseEntity<ApiResponse<ReportResponseDto>> getReportDetail(
             @Parameter(description = "신고 ID") @PathVariable Long reportId
     ) {
         return ResponseEntity.ok(ApiResponse.success(adminReportService.getReportDetail(reportId)));

@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
+import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
@@ -16,9 +17,11 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -31,9 +34,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +49,7 @@ class AdminChatServiceTest {
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
     @Mock private ChatRoomService chatRoomService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     // ===================== 픽스처 헬퍼 =====================
 
@@ -183,6 +186,7 @@ class AdminChatServiceTest {
         Account creator = createAccount(1L, "홍길동");
         ChatRoom room = createGroupRoom(10L, creator);
         ChatMessage message = ChatMessage.text(room, creator, "삭제 대상 메시지");
+        ReflectionTestUtils.setField(message, "chatmessageId", messageId);
 
         when(chatMessageRepository.findById(messageId)).thenReturn(Optional.of(message));
 
@@ -191,6 +195,14 @@ class AdminChatServiceTest {
 
         // Then
         assertThat(message.isDeleted()).isTrue();
+        ArgumentCaptor<ChatMessageBroadcastEvent> eventCaptor =
+                ArgumentCaptor.forClass(ChatMessageBroadcastEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        ChatMessageBroadcastEvent event = eventCaptor.getValue();
+        assertThat(event.roomId()).isEqualTo(10L);
+        assertThat(event.payload().getMessageId()).isEqualTo(messageId);
+        assertThat(event.payload().isDeleted()).isTrue();
+        assertThat(event.payload().getContent()).isEqualTo("삭제된 메시지입니다.");
     }
 
     @Test
@@ -205,6 +217,7 @@ class AdminChatServiceTest {
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_MESSAGE_NOT_FOUND);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

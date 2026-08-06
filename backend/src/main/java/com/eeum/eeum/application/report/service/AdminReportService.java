@@ -1,7 +1,6 @@
 package com.eeum.eeum.application.report.service;
 
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
-import com.eeum.eeum.application.report.dto.response.ReportDetailResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -33,25 +32,33 @@ public class AdminReportService {
     // 신고 상세 — 신고자 정보 + 대상 콘텐츠 스냅샷 + 관리자 처리 내역
     // 쿼리 2회 고정 (신고+신고자 fetch join 1회, 대상 fetch join 1회)
     @Transactional(readOnly = true)
-    public ReportDetailResponseDto getReportDetail(Long reportId) {
+    public ReportResponseDto getReportDetail(Long reportId) {
         Report report = getReportOrThrow(reportId);
-        ReportTargetSnapshotDto target =
+        ReportTargetSnapshotDto currentTarget =
                 reportTargetResolver.resolve(report.getTargetType(), report.getTargetId());
-        return ReportDetailResponseDto.of(report, target);
+        ReportTargetSnapshotDto target = ReportTargetSnapshotDto.withStoredContent(
+                currentTarget,
+                report.getTargetTitleSnapshot(),
+                report.getTargetContentSnapshot());
+        return ReportResponseDto.of(report, target);
     }
 
     @Transactional
     public ReportResponseDto reviewReport(Long reportId, ReportReviewRequestDto request) {
         Report report = getReportOrThrow(reportId);
         report.review(request.getAdminNote());
-        return ReportResponseDto.from(report);
+        // modifiedAt은 JPA flush 시점에 갱신된다. flush 전에 DTO를 만들면 처리 응답의
+        // updatedAt/processedAt이 신고 접수 시각으로 남으므로, 갱신 완료 후 응답을 변환한다.
+        Report saved = reportRepository.saveAndFlush(report);
+        return ReportResponseDto.from(saved);
     }
 
     @Transactional
     public ReportResponseDto dismissReport(Long reportId, ReportReviewRequestDto request) {
         Report report = getReportOrThrow(reportId);
         report.dismiss(request.getAdminNote());
-        return ReportResponseDto.from(report);
+        Report saved = reportRepository.saveAndFlush(report);
+        return ReportResponseDto.from(saved);
     }
 
     // ===================== 내부 유틸 =====================

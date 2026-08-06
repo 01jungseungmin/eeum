@@ -7,6 +7,7 @@ import com.eeum.eeum.application.chat.helper.ChatMessagePreview;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
+import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
@@ -14,6 +15,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class AdminChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatRoomService chatRoomService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 전체 채팅방 조회 (타입/활성/기간 필터) — 배치 쿼리로 N+1 제거
     @Transactional(readOnly = true)
@@ -85,6 +88,9 @@ public class AdminChatService {
         ChatMessage message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CHAT_MESSAGE_NOT_FOUND));
         message.markDeleted();
+        Long roomId = message.getChatRoom().getChatroomId();
+        eventPublisher.publishEvent(
+                new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message)));
         log.info("[ADMIN] 채팅 메시지 강제 삭제: messageId={}", messageId);
     }
 

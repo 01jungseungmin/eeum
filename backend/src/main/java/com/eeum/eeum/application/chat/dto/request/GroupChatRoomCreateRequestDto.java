@@ -24,7 +24,7 @@ public class GroupChatRoomCreateRequestDto {
     @Schema(description = "연관 도메인 타입 (선택)", example = "NONE")
     private ChatRoomRefType refType;
 
-    @Schema(description = "연관 도메인 ID (선택)")
+    @Schema(description = "연관 도메인 ID (refType=STORE이면 필수·양수, 그 외 타입은 선택)")
     private Long refId;
 
     @Schema(description = "초대할 참여자 accountId 목록 (선택 — 미전달 시 생성자만 참여)", requiredMode = io.swagger.v3.oas.annotations.media.Schema.RequiredMode.NOT_REQUIRED)

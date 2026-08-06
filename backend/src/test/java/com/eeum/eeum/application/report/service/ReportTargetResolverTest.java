@@ -70,6 +70,7 @@ class ReportTargetResolverTest {
         // Then
         assertThat(result.isExists()).isTrue();
         assertThat(result.getTitle()).isEqualTo("이음 카페");
+        assertThat(result.getContent()).isEqualTo("동네 카페입니다");
         assertThat(result.getContentPreview()).isEqualTo("동네 카페입니다");
         assertThat(result.getOwnerAccountId()).isEqualTo(OWNER_ID);
         assertThat(result.getOwnerName()).isEqualTo("김사장");
@@ -93,6 +94,7 @@ class ReportTargetResolverTest {
         // Then
         assertThat(result.isExists()).isTrue();
         assertThat(result.getTitle()).isEqualTo("별점 1점");
+        assertThat(result.getContent()).isEqualTo("최악이에요");
         assertThat(result.getContentPreview()).isEqualTo("최악이에요");
         assertThat(result.getOwnerAccountId()).isEqualTo(20L);
         assertThat(result.getParentTitle()).isEqualTo("이음 카페");
@@ -113,6 +115,7 @@ class ReportTargetResolverTest {
         // Then
         assertThat(result.isExists()).isTrue();
         assertThat(result.getTitle()).isEqualTo("신고 대상 게시글");
+        assertThat(result.getContent()).isEqualTo("부적절한 본문");
         assertThat(result.getContentPreview()).isEqualTo("부적절한 본문");
         assertThat(result.getOwnerAccountId()).isEqualTo(20L);
     }
@@ -133,13 +136,14 @@ class ReportTargetResolverTest {
 
         // Then
         assertThat(result.isExists()).isTrue();
+        assertThat(result.getContent()).isEqualTo("욕설 댓글");
         assertThat(result.getContentPreview()).isEqualTo("욕설 댓글");
         assertThat(result.getParentTitle()).isEqualTo("원본 게시글");
         assertThat(result.getParentId()).isEqualTo(40L);
     }
 
     @Test
-    void 삭제된_댓글은_본문을_노출하지_않지만_신고는_열람할_수_있다() {
+    void 삭제된_댓글은_현재_대상_미존재로_판정한다() {
         // Given
         Account author = createAccount(20L, "박작성", "작성자");
         CommunityPost post = CommunityPost.create(author, null, null, "원본 게시글", "본문");
@@ -154,9 +158,9 @@ class ReportTargetResolverTest {
         ReportTargetSnapshotDto result = reportTargetResolver.resolve(ReportTargetType.COMMUNITY_COMMENT, 50L);
 
         // Then
-        assertThat(result.isExists()).isTrue();
+        assertThat(result.isExists()).isFalse();
         assertThat(result.getContentPreview()).isNull();
-        assertThat(result.getOwnerAccountId()).isEqualTo(20L);
+        assertThat(result.getOwnerAccountId()).isNull();
     }
 
     @Test

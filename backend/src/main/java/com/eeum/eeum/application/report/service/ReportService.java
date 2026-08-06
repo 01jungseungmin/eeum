@@ -2,16 +2,12 @@ package com.eeum.eeum.application.report.service;
 
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
+import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
-import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
-import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.report.entity.Report;
-import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.event.ReportSubmittedEvent;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
-import com.eeum.eeum.domain.store.repository.StoreRepository;
-import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -31,10 +27,7 @@ public class ReportService {
 
     private final ReportRepository reportRepository;
     private final AccountRepository accountRepository;
-    private final StoreRepository storeRepository;
-    private final StoreReviewRepository storeReviewRepository;
-    private final CommunityPostRepository communityPostRepository;
-    private final CommunityCommentRepository communityCommentRepository;
+    private final ReportTargetResolver reportTargetResolver;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -47,8 +40,9 @@ public class ReportService {
             throw new ConflictException(ErrorCode.REPORT_ALREADY_EXISTS);
         }
 
-        Long ownerAccountId = validateTargetAndGetOwner(request.getTargetType(), request.getTargetId());
-        if (ownerAccountId.equals(accountId)) {
+        ReportTargetSnapshotDto target = reportTargetResolver.resolveForCreation(
+                request.getTargetType(), request.getTargetId());
+        if (target.getOwnerAccountId().equals(accountId)) {
             throw new BadRequestException(ErrorCode.REPORT_SELF_NOT_ALLOWED);
         }
 
@@ -57,7 +51,9 @@ public class ReportService {
                 request.getTargetType(),
                 request.getTargetId(),
                 request.getReason(),
-                request.getContent()
+                request.getContent(),
+                target.getTitle(),
+                target.getContent()
         );
 
         Report saved;
@@ -92,34 +88,6 @@ public class ReportService {
     }
 
     // ===================== 내부 유틸 =====================
-
-    /**
-     * 대상이 존재하는지 검증하고, 대상 콘텐츠 소유자의 accountId를 반환한다.
-     * ACCOUNT 타입은 targetId 자체가 소유자 ID이므로 그대로 반환.
-     * Hibernate 프록시는 ID 접근 시 별도 SELECT 없이 반환되므로 추가 쿼리 없음.
-     */
-    private Long validateTargetAndGetOwner(ReportTargetType targetType, Long targetId) {
-        return switch (targetType) {
-            case STORE -> storeRepository.findById(targetId)
-                    .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND))
-                    .getAccount().getAccountId();
-            case STORE_REVIEW -> storeReviewRepository.findById(targetId)
-                    .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_REVIEW_NOT_FOUND))
-                    .getAccount().getAccountId();
-            case COMMUNITY_POST -> communityPostRepository.findById(targetId)
-                    .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND))
-                    .getAccount().getAccountId();
-            case COMMUNITY_COMMENT -> communityCommentRepository.findById(targetId)
-                    .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND))
-                    .getAccount().getAccountId();
-            case ACCOUNT -> {
-                if (!accountRepository.existsByAccountIdAndDeletedAtIsNull(targetId)) {
-                    throw new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND);
-                }
-                yield targetId;
-            }
-        };
-    }
 
     private Report getReportOrThrow(Long reportId) {
         return reportRepository.findByReportId(reportId)

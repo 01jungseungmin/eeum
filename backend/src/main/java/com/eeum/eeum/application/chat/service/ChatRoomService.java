@@ -85,12 +85,14 @@ public class ChatRoomService {
         }
 
         ChatRoomRefType refType = request.getRefType() != null ? request.getRefType() : ChatRoomRefType.NONE;
+        validateReference(refType, request.getRefId());
         boolean isStoreRoom = refType == ChatRoomRefType.STORE && request.getRefId() != null;
 
         Supplier<ChatRoomResponseDto> create = () -> {
             Store store = null;
             if (isStoreRoom) {
-                store = storeRepository.findById(request.getRefId())
+                // 가게행을 먼저 잠가 종료/재생성과 DB 레벨에서 직렬화한다.
+                store = storeRepository.findByIdWithPessimisticLock(request.getRefId())
                         .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
                 if (!store.isOwnedBy(accountId)) {
                     throw new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED);
@@ -193,23 +195,17 @@ public class ChatRoomService {
 
     // ===================== 참여자 관리 =====================
 
-    // 직접 입장 — 초대 없이 GROUP 채팅방에 스스로 참여
+    // 직접 입장 — 초대 없이 일반 GROUP 및 공개된 STORE 채팅방에 스스로 참여
     // 락 획득 후 트랜잭션 시작 → 커밋 완료 후 락 해제 (중복 INSERT 방지)
     // 종료와 같은 방 단위 락을 쓴다 — 별도 키를 쓰면 종료 직전 활성 검증을 통과한 입장이
     // 종료 커밋 이후에 참여자를 남길 수 있다.
     public void joinRoom(Long accountId, Long roomId) {
         ChatRoom target = chatAccessHelper.getRoomOrThrow(roomId);
         withLockAndTx(roomStateLockKey(target), () -> {
-            // 락 획득 전 스냅샷은 오래됐을 수 있으므로 트랜잭션 안에서 다시 조회
-            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            // Redis lease가 만료되어도 종료와 같은 방 행에서 DB 커밋까지 직렬화한다.
+            ChatRoom room = lockRoomState(target);
             chatAccessHelper.verifyRoomActive(room);
             chatAccessHelper.verifyGroupRoom(room);
-
-            // STORE 단톡방은 사장 초대(inviteParticipants)로만 입장 가능 — 자가 입장을 막지 않으면
-            // roomId만 알면 초대 없이 들어와 사장이 통제하는 단골방 메시지를 열람/발송할 수 있다.
-            if (room.getRefType() == ChatRoomRefType.STORE) {
-                throw new ForbiddenException(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
-            }
 
             ChatParticipant existing = chatParticipantRepository
                     .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId)
@@ -222,6 +218,7 @@ public class ChatRoomService {
             }
 
             Account account = getAccount(accountId);
+            verifyDirectJoinRegion(account, room);
             if (existing != null) {
                 existing.rejoin();
             } else {
@@ -241,8 +238,7 @@ public class ChatRoomService {
     public void inviteParticipants(Long accountId, Long roomId, List<Long> accountIds) {
         ChatRoom target = chatAccessHelper.getRoomOrThrow(roomId);
         withLockAndTx(roomStateLockKey(target), () -> {
-            // 락 획득 전 스냅샷은 오래됐을 수 있으므로 트랜잭션 안에서 다시 조회
-            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            ChatRoom room = lockRoomState(target);
             chatAccessHelper.verifyRoomActive(room);
             chatAccessHelper.verifyParticipant(accountId, roomId);
             chatAccessHelper.verifyGroupRoom(room);
@@ -288,7 +284,7 @@ public class ChatRoomService {
         // 생성 쪽이 "곧 종료될 방"을 기존 ACTIVE 방으로 오인해 죽은 roomId를 반환한다.
         ChatRoom target = chatAccessHelper.getRoomOrThrow(roomId);
         withLockAndTx(roomStateLockKey(target), () -> {
-            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            ChatRoom room = lockRoomState(target);
             ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
             participant.leave();
             eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
@@ -318,8 +314,7 @@ public class ChatRoomService {
         ChatRoom target = chatAccessHelper.getRoomOrThrow(roomId);
 
         withLockAndTx(roomStateLockKey(target), () -> {
-            // 락 획득 전 읽은 스냅샷은 오래됐을 수 있으므로 트랜잭션 안에서 다시 조회
-            ChatRoom room = chatAccessHelper.getRoomOrThrow(roomId);
+            ChatRoom room = lockRoomState(target);
             chatAccessHelper.verifyGroupRoom(room);
             verifyCloseAuthority(accountId, room);
 
@@ -333,6 +328,7 @@ public class ChatRoomService {
         ChatRoom target = chatAccessHelper.getRoomOrThrow(roomId);
 
         withLockAndTx(roomStateLockKey(target), () -> {
+            lockRoomState(target);
             // 관리자는 actor 계정이 없으므로 방 생성자를 SYSTEM 메시지 발신자로 사용
             closeRoomInternal(roomId, () -> chatAccessHelper.getRoomOrThrow(roomId).getCreator(),
                     null, "관리자에 의해 채팅방이 종료되었습니다.");
@@ -437,6 +433,14 @@ public class ChatRoomService {
 
     // ===================== 내부 헬퍼 =====================
 
+    // STORE 방은 가게 행을 잠금·소유권·중복 판정의 기준으로 사용하므로 유효한 refId가 필수다.
+    // USED_PRODUCT 등 다른 참조 타입은 해당 채팅방 기능이 구현될 때 각 도메인 정책으로 검증한다.
+    private void validateReference(ChatRoomRefType refType, Long refId) {
+        if (refType == ChatRoomRefType.STORE && (refId == null || refId <= 0)) {
+            throw new BadRequestException(ErrorCode.CHAT_INVALID_REF_ID);
+        }
+    }
+
     // 락 획득 + 트랜잭션 실행 (반환값 있음)
     private <T> T withLockAndTx(String lockKey, Supplier<T> action) {
         return redisLockService.executeWithLock(lockKey, Duration.ofSeconds(5),
@@ -460,6 +464,16 @@ public class ChatRoomService {
         return chatRoomRepository
                 .findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
                         ChatRoomRefType.STORE, storeId);
+    }
+
+    // 잠금 순서는 항상 Store → ChatRoom으로 고정한다.
+    // 가게행은 종료/재생성 사이의 안정적인 mutex이고, 방행은 메시지 쓰기와 상태 변경을 직렬화한다.
+    private ChatRoom lockRoomState(ChatRoom target) {
+        if (target.isStoreRoom()) {
+            storeRepository.findByIdWithPessimisticLock(target.getRefId())
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
+        }
+        return chatAccessHelper.getRoomWithPessimisticLockOrThrow(target.getChatroomId());
     }
 
     // 채팅방 저장 — Redis 락이 유실된 상황에서도 ACTIVE 단톡방 중복이 생기지 않도록
@@ -564,6 +578,29 @@ public class ChatRoomService {
                 .filter(AccountRegion::isVerified)
                 .map(AccountRegion::getRegion)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
+    }
+
+    // 공개 목록과 직접 입장의 지역 경계를 동일하게 유지한다.
+    // 이미 ACTIVE 참여자인 사용자는 초대 등으로 권한을 얻은 상태이므로 joinRoom의 조기 반환에서 제외하고,
+    // 신규 참여와 LEFT 재입장에만 현재 인증된 대표 지역을 검증한다.
+    private void verifyDirectJoinRegion(Account account, ChatRoom room) {
+        Long primaryAccountRegionId = account.getPrimaryRegionId();
+        Region roomRegion = room.getRegion();
+        if (primaryAccountRegionId == null || roomRegion == null) {
+            throw new ForbiddenException(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
+
+        boolean sameVerifiedRegion = accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(
+                        primaryAccountRegionId, account.getAccountId())
+                .filter(AccountRegion::isVerified)
+                .map(AccountRegion::getRegionId)
+                .filter(roomRegion.getRegionId()::equals)
+                .isPresent();
+
+        if (!sameVerifiedRegion) {
+            throw new ForbiddenException(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
     }
 
     // 초대 대상 로드 (중복 제거, excludeAccountId 제외)

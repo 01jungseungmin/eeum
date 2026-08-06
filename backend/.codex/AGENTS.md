@@ -204,3 +204,8 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - PR 베이스 브랜치는 `develop` (`main` 직접 머지 금지)
 - 브랜치 네이밍: `feature/{기능명}` (예: `feature/chat`, `feature/notification`)
 - 커밋 메시지: `feat:`, `fix:`, `refactor:` prefix + 한글 설명
+
+## 마무리
+
+- 모든 기능이 종료된 후 바뀐 부분에 대한 설명과 이유를 작성해서 정리
+- 테스트면 테스트로 기능이면 기능으로 묶어서 출력

@@ -58,9 +58,11 @@ public class ChatMessageService {
             Long accountId, Long roomId, ChatMessageSendRequestDto request) {
         checkIdempotency(accountId, roomId, request.getClientMessageId());
 
-        ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
-        ChatRoom room = participant.getChatRoom();
+        // 종료와 같은 방 행을 잠근 뒤 활성 상태를 확인한다.
+        // 확인 후 종료가 끼어드는 check-then-act 경쟁을 DB 커밋까지 차단한다.
+        ChatRoom room = chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId);
         chatAccessHelper.verifyRoomActive(room);
+        ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
         Account sender = participant.getAccount();
         ChatMessage message = ChatMessage.text(room, sender, request.getContent());
@@ -85,9 +87,9 @@ public class ChatMessageService {
             Long accountId, Long roomId, ChatImageMessageSendRequestDto request) {
         checkIdempotency(accountId, roomId, request.getClientMessageId());
 
-        ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
-        ChatRoom room = participant.getChatRoom();
+        ChatRoom room = chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId);
         chatAccessHelper.verifyRoomActive(room);
+        ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
         Account sender = participant.getAccount();
         ChatMessage message = ChatMessage.image(room, sender, request.getImageUrl());

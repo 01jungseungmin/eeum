@@ -85,7 +85,8 @@ public class ChatRoomController {
 
     @Operation(
             summary = "채팅방 직접 입장",
-            description = "초대 없이 GROUP 채팅방에 스스로 참여합니다. " +
+            description = "초대 없이 일반 GROUP 및 공개된 STORE 채팅방에 스스로 참여합니다. " +
+                    "사용자의 현재 인증된 대표 지역과 채팅방 지역이 같아야 합니다. " +
                     "이미 ACTIVE 참여자인 경우 읽음 처리만 수행하며 200을 반환합니다. " +
                     "신규 참여 / 재입장 모두 동일하게 200을 반환합니다."
     )

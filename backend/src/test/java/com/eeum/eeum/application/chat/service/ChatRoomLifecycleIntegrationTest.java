@@ -3,8 +3,10 @@ package com.eeum.eeum.application.chat.service;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
+import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
@@ -17,6 +19,7 @@ import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +40,7 @@ import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +51,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * 가게 단톡방 생성 → 입장 → 종료 → 재생성 전체 흐름 통합 테스트.
@@ -290,46 +295,133 @@ class ChatRoomLifecycleIntegrationTest {
     // ──────────────── 시나리오 1-B: 종료 vs 진행 중 쓰기 ────────────────
 
     @Test
-    void 종료_직전에_시작된_메시지_트랜잭션이_종료_상태를_되돌리지_못한다() throws InterruptedException {
-        // given: sendMessage는 락을 잡지 않으므로 closeRoom과 겹칠 수 있다.
-        //        ChatRoom에 @DynamicUpdate가 없으면 lastMessageAt만 바꿔도 전체 컬럼이 UPDATE되어
-        //        커밋 시점에 is_active=1 / closed_at=NULL이 되살아난다 (lost update).
+    void 메시지_쓰기와_종료는_같은_DB_행에서_커밋까지_직렬화된다() throws InterruptedException {
+        // given: 메시지 쓰기 트랜잭션이 채팅방 행 잠금을 먼저 획득한다.
         Long roomId = chatRoomService
                 .createGroupRoom(ownerAccountId, storeRoomRequest(List.of(customerId)))
                 .getRoomId();
 
-        CountDownLatch roomLoaded = new CountDownLatch(1);
-        CountDownLatch roomClosed = new CountDownLatch(1);
+        CountDownLatch writerLocked = new CountDownLatch(1);
+        CountDownLatch releaseWriter = new CountDownLatch(1);
+        CountDownLatch closeFinished = new CountDownLatch(1);
+        AtomicReference<Throwable> writerError = new AtomicReference<>();
+        AtomicReference<Throwable> closeError = new AtomicReference<>();
 
-        Thread writer = new Thread(() -> transactionTemplate.execute(status -> {
-            // 종료 이전 스냅샷으로 방을 로드 (sendMessage가 participant.getChatRoom()으로 얻는 것과 동일)
-            ChatRoom loaded = chatRoomRepository.findById(roomId).orElseThrow();
-            roomLoaded.countDown();
+        Thread writer = new Thread(() -> {
             try {
-                roomClosed.await(20, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                transactionTemplate.execute(status -> {
+                    ChatRoom locked = chatRoomRepository.findByIdWithPessimisticLock(roomId).orElseThrow();
+                    Account sender = accountRepository.findById(ownerAccountId).orElseThrow();
+                    writerLocked.countDown();
+                    try {
+                        releaseWriter.await(20, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    ChatMessage message = ChatMessage.text(locked, sender, "종료 직전 메시지");
+                    chatMessageRepository.save(message);
+                    locked.updateLastMessageAt(message.getSentAt());
+                    return null;
+                });
+            } catch (Throwable t) {
+                writerError.set(t);
             }
-            loaded.updateLastMessageAt(LocalDateTime.now());
-            return null;
-        }));
+        });
         writer.start();
 
-        // when: 메시지 트랜잭션이 방을 든 채로 대기하는 사이 종료가 커밋된다
-        assertThat(roomLoaded.await(20, TimeUnit.SECONDS)).isTrue();
-        chatRoomService.closeRoom(ownerAccountId, roomId);
-        LocalDateTime closedAt = chatRoomRepository.findById(roomId).orElseThrow().getClosedAt();
-        roomClosed.countDown();
-        writer.join(30_000);
+        assertThat(writerLocked.await(20, TimeUnit.SECONDS)).isTrue();
+        Thread closer = new Thread(() -> {
+            try {
+                chatRoomService.closeRoom(ownerAccountId, roomId);
+            } catch (Throwable t) {
+                closeError.set(t);
+            } finally {
+                closeFinished.countDown();
+            }
+        });
+        closer.start();
 
-        // then: 종결 상태가 유지되어야 한다
+        // then 1: 메시지 트랜잭션이 잠금을 가진 동안 종료는 완료될 수 없다.
+        assertThat(closeFinished.await(300, TimeUnit.MILLISECONDS)).isFalse();
+
+        // when: 메시지를 먼저 커밋하면 종료가 이어서 잠금을 얻고 종결 상태를 기록한다.
+        releaseWriter.countDown();
+        writer.join(30_000);
+        closer.join(30_000);
+
+        // then 2: 메시지는 종료 전에 저장되고 최종 상태는 종료로 남는다.
+        assertThat(writerError.get()).isNull();
+        assertThat(closeError.get()).isNull();
         ChatRoom after = chatRoomRepository.findById(roomId).orElseThrow();
-        assertThat(after.isActive())
-                .as("종료 이후 커밋된 메시지 트랜잭션이 방을 되살리면 안 된다")
-                .isFalse();
-        assertThat(after.getClosedAt())
-                .as("closed_at이 덮어써지거나 NULL로 되돌아가면 안 된다")
-                .isEqualTo(closedAt);
+        assertThat(after.isActive()).isFalse();
+        assertThat(after.getClosedAt()).isNotNull();
+        assertThat(chatMessageRepository
+                .findAllByChatRoom_ChatroomIdOrderBySentAtDesc(roomId, PageRequest.of(0, 50))
+                .getContent())
+                .extracting(ChatMessage::getContent)
+                .contains("종료 직전 메시지");
+    }
+
+    @Test
+    void 종료_중_재생성은_가게행_잠금으로_커밋을_기다린_뒤_새_방을_반환한다()
+            throws InterruptedException {
+        // given: Redis lease가 먼저 만료됐다고 가정하고 DB 잠금만으로 안전성을 검증한다.
+        Long roomId = chatRoomService
+                .createGroupRoom(ownerAccountId, storeRoomRequest(null))
+                .getRoomId();
+        CountDownLatch closeUpdated = new CountDownLatch(1);
+        CountDownLatch releaseClose = new CountDownLatch(1);
+        CountDownLatch lookupFinished = new CountDownLatch(1);
+        AtomicReference<Long> createdRoomId = new AtomicReference<>();
+        AtomicReference<Throwable> closeError = new AtomicReference<>();
+        AtomicReference<Throwable> lookupError = new AtomicReference<>();
+
+        Thread closer = new Thread(() -> {
+            try {
+                transactionTemplate.execute(status -> {
+                    storeRepository.findByIdWithPessimisticLock(storeId).orElseThrow();
+                    ChatRoom locked = chatRoomRepository.findByIdWithPessimisticLock(roomId).orElseThrow();
+                    locked.deactivate();
+                    closeUpdated.countDown();
+                    try {
+                        releaseClose.await(20, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return null;
+                });
+            } catch (Throwable t) {
+                closeError.set(t);
+            }
+        });
+        closer.start();
+        assertThat(closeUpdated.await(20, TimeUnit.SECONDS)).isTrue();
+
+        Thread lookup = new Thread(() -> {
+            try {
+                createdRoomId.set(chatRoomService
+                        .createGroupRoom(ownerAccountId, storeRoomRequest(null))
+                        .getRoomId());
+            } catch (Throwable t) {
+                lookupError.set(t);
+            } finally {
+                lookupFinished.countDown();
+            }
+        });
+        lookup.start();
+
+        // then 1: 종료 트랜잭션이 미커밋인 동안 ACTIVE 방 조회가 과거 roomId를 반환하지 않는다.
+        assertThat(lookupFinished.await(300, TimeUnit.MILLISECONDS)).isFalse();
+
+        releaseClose.countDown();
+        closer.join(30_000);
+        lookup.join(30_000);
+
+        // then 2: 종료 커밋 후 새 ACTIVE 방을 만들며, 종료된 roomId를 반환하지 않는다.
+        assertThat(closeError.get()).isNull();
+        assertThat(lookupError.get()).isNull();
+        assertThat(createdRoomId.get()).isNotEqualTo(roomId);
+        assertThat(chatRoomRepository.findById(createdRoomId.get()).orElseThrow().isActive()).isTrue();
     }
 
     @Test
@@ -460,6 +552,83 @@ class ChatRoomLifecycleIntegrationTest {
     }
 
     @Test
+    void Redis_lease가_만료돼도_종료_DB락을_기다린_초대는_비활성_예외로_실패한다()
+            throws InterruptedException {
+        // given: 종료 트랜잭션이 Redis 락과 무관하게 Store → ChatRoom DB 락을 먼저 선점한다.
+        Long roomId = chatRoomService
+                .createGroupRoom(ownerAccountId, storeRoomRequest(null))
+                .getRoomId();
+        String lockKey = LockKeys.chatRoomStore(storeId);
+        CountDownLatch closeUpdated = new CountDownLatch(1);
+        CountDownLatch releaseClose = new CountDownLatch(1);
+        CountDownLatch inviteFinished = new CountDownLatch(1);
+        AtomicReference<Throwable> closeError = new AtomicReference<>();
+        AtomicReference<Throwable> inviteError = new AtomicReference<>();
+
+        Thread closer = new Thread(() -> {
+            try {
+                transactionTemplate.execute(status -> {
+                    storeRepository.findByIdWithPessimisticLock(storeId).orElseThrow();
+                    ChatRoom locked = chatRoomRepository.findByIdWithPessimisticLock(roomId).orElseThrow();
+                    locked.deactivate();
+                    closeUpdated.countDown();
+                    try {
+                        releaseClose.await(20, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return null;
+                });
+            } catch (Throwable t) {
+                closeError.set(t);
+            }
+        });
+        closer.start();
+        assertThat(closeUpdated.await(20, TimeUnit.SECONDS)).isTrue();
+
+        // when: 초대는 Redis 락을 얻지만 Store DB 락에서 종료 커밋을 기다린다.
+        Thread inviter = new Thread(() -> {
+            try {
+                chatRoomService.inviteParticipants(ownerAccountId, roomId, List.of(customerId));
+            } catch (Throwable t) {
+                inviteError.set(t);
+            } finally {
+                inviteFinished.countDown();
+            }
+        });
+        inviter.start();
+
+        await().atMost(Duration.ofSeconds(3))
+                .until(() -> Boolean.TRUE.equals(redisTemplate.hasKey(lockKey)));
+        assertThat(inviteFinished.await(300, TimeUnit.MILLISECONDS))
+                .as("종료 트랜잭션이 DB 락을 보유하는 동안 초대는 완료되면 안 된다")
+                .isFalse();
+
+        // Redis lease(5초)가 끝난 뒤에도 DB 락이 초대를 계속 막는지 확인한다.
+        await().atMost(Duration.ofSeconds(7))
+                .until(() -> Boolean.FALSE.equals(redisTemplate.hasKey(lockKey)));
+        boolean finishedBeforeCloseCommit = inviteFinished.await(300, TimeUnit.MILLISECONDS);
+
+        // 종료를 커밋하면 초대가 최신 비활성 상태를 읽고 실패해야 한다.
+        releaseClose.countDown();
+        closer.join(30_000);
+        inviter.join(30_000);
+
+        // then
+        assertThat(finishedBeforeCloseCommit)
+                .as("Redis lease 만료 후에도 종료 커밋 전까지 DB 락이 초대를 직렬화해야 한다")
+                .isFalse();
+        assertThat(closeError.get()).isNull();
+        assertThat(inviteError.get()).isInstanceOf(BusinessException.class);
+        assertThat(((BusinessException) inviteError.get()).getErrorCode())
+                .isEqualTo(ErrorCode.CHAT_ROOM_INACTIVE);
+        assertThat(chatParticipantRepository
+                .findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, customerId))
+                .as("종료된 방에는 초대 대상 참여자가 생성되면 안 된다")
+                .isEmpty();
+    }
+
+    @Test
     void 동시_종료_요청에도_종료_처리는_정확히_한_번만_수행된다() throws InterruptedException {
         // given: 종료 판정을 엔티티 스냅샷으로 하면 두 요청이 모두 "아직 ACTIVE"로 보고
         //        closed_at 덮어쓰기 + 종료 SYSTEM 메시지/이벤트 중복 발행이 일어난다.
@@ -528,6 +697,12 @@ class ChatRoomLifecycleIntegrationTest {
 
         // when: Redis 캐시가 축출/만료된 상황을 모사 (DB fallback 경로로 유도)
         Thread.sleep(700); // AFTER_COMMIT @Async 리스너 정리 대기
+
+        assertThat(redisTemplate.opsForValue().get("unread:chat:" + customerId + ":room:" + roomId))
+                .isNull();
+        assertThat(notificationRepository.countByAccount_AccountIdAndIsReadFalse(customerId))
+                .as("종료 정리 뒤 메시지 알림이 늦게 생성되어 미읽음으로 남으면 안 된다")
+                .isZero();
         redisTemplate.delete(redisTemplate.keys("unread:chat:*"));
 
         // then: 종료된 방은 읽어서 회수할 수단이 없으므로 DB 기준값에서도 0이어야 한다

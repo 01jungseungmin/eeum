@@ -12,6 +12,8 @@ import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
+import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -27,8 +29,6 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class ReportTargetResolver {
-
-    private static final int PREVIEW_MAX_LENGTH = 200;
 
     private final StoreRepository storeRepository;
     private final StoreReviewRepository storeReviewRepository;
@@ -48,11 +48,28 @@ public class ReportTargetResolver {
                     .map(this::fromCommunityPost)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case COMMUNITY_COMMENT -> communityCommentRepository.findWithAccountAndPostByCommentId(targetId)
+                    .filter(comment -> !comment.isDeleted())
                     .map(this::fromCommunityComment)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case ACCOUNT -> accountRepository.findById(targetId)
+                    .filter(account -> account.getDeletedAt() == null)
                     .map(this::fromAccount)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
+        };
+    }
+
+    // 신고 접수 시에는 대상이 반드시 존재해야 하므로 타입별 표준 NotFound 예외로 변환한다.
+    public ReportTargetSnapshotDto resolveForCreation(ReportTargetType targetType, Long targetId) {
+        ReportTargetSnapshotDto target = resolve(targetType, targetId);
+        if (target.isExists()) {
+            return target;
+        }
+        throw switch (targetType) {
+            case STORE -> new NotFoundException(ErrorCode.STORE_NOT_FOUND);
+            case STORE_REVIEW -> new NotFoundException(ErrorCode.STORE_REVIEW_NOT_FOUND);
+            case COMMUNITY_POST -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+            case COMMUNITY_COMMENT -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+            case ACCOUNT -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND);
         };
     }
 
@@ -60,9 +77,11 @@ public class ReportTargetResolver {
 
     private ReportTargetSnapshotDto fromStore(Store store) {
         Account owner = store.getAccount();
+        String content = store.getDescription();
         return base(ReportTargetType.STORE, store.getStoreId())
                 .title(store.getName())
-                .contentPreview(truncate(store.getDescription()))
+                .content(content)
+                .contentPreview(ReportTargetSnapshotDto.preview(content))
                 .ownerAccountId(owner.getAccountId())
                 .ownerName(owner.getName())
                 .ownerNickname(owner.getNickname())
@@ -73,9 +92,11 @@ public class ReportTargetResolver {
     private ReportTargetSnapshotDto fromStoreReview(StoreReview review) {
         Account author = review.getAccount();
         Store store = review.getStore();
+        String content = review.getContent();
         return base(ReportTargetType.STORE_REVIEW, review.getStorereviewId())
                 .title("별점 " + review.getRating() + "점")
-                .contentPreview(truncate(review.getContent()))
+                .content(content)
+                .contentPreview(ReportTargetSnapshotDto.preview(content))
                 .ownerAccountId(author.getAccountId())
                 .ownerName(author.getName())
                 .ownerNickname(author.getNickname())
@@ -87,9 +108,11 @@ public class ReportTargetResolver {
 
     private ReportTargetSnapshotDto fromCommunityPost(CommunityPost post) {
         Account author = post.getAccount();
+        String content = post.getContent();
         return base(ReportTargetType.COMMUNITY_POST, post.getPostId())
                 .title(post.getTitle())
-                .contentPreview(truncate(post.getContent()))
+                .content(content)
+                .contentPreview(ReportTargetSnapshotDto.preview(content))
                 .ownerAccountId(author.getAccountId())
                 .ownerName(author.getName())
                 .ownerNickname(author.getNickname())
@@ -100,9 +123,10 @@ public class ReportTargetResolver {
     private ReportTargetSnapshotDto fromCommunityComment(CommunityComment comment) {
         Account author = comment.getAccount();
         CommunityPost post = comment.getPost();
+        String content = comment.getContent();
         return base(ReportTargetType.COMMUNITY_COMMENT, comment.getCommentId())
-                // 삭제된 댓글은 본문이 노출되지 않도록 하되 신고 자체는 열람 가능해야 한다
-                .contentPreview(comment.isDeleted() ? null : truncate(comment.getContent()))
+                .content(content)
+                .contentPreview(ReportTargetSnapshotDto.preview(content))
                 .ownerAccountId(author.getAccountId())
                 .ownerName(author.getName())
                 .ownerNickname(author.getNickname())
@@ -132,12 +156,4 @@ public class ReportTargetResolver {
                 .exists(true);
     }
 
-    private String truncate(String text) {
-        if (text == null) {
-            return null;
-        }
-        return text.length() > PREVIEW_MAX_LENGTH
-                ? text.substring(0, PREVIEW_MAX_LENGTH) + "…"
-                : text;
-    }
 }

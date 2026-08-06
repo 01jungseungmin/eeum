@@ -6,6 +6,8 @@ import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
@@ -55,6 +57,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -101,6 +104,12 @@ class ChatRoomServiceTest {
             TransactionCallback<?> callback = inv.getArgument(0);
             return callback.doInTransaction(null);
         }).when(transactionTemplate).execute(any());
+
+        // 상태 변경 경로는 일반 조회로 얻은 테스트 방을 DB 잠금 조회에서도 그대로 반환한다.
+        lenient().when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(any(Long.class)))
+                .thenAnswer(inv -> chatAccessHelper.getRoomOrThrow(inv.getArgument(0)));
+        lenient().when(storeRepository.findByIdWithPessimisticLock(any(Long.class)))
+                .thenAnswer(inv -> storeRepository.findById(inv.getArgument(0)));
     }
 
     // ===================== 픽스처 헬퍼 =====================
@@ -114,6 +123,28 @@ class ChatRoomServiceTest {
 
     private ChatRoom createGroupRoom(Long id, Account creator) {
         ChatRoom room = ChatRoom.createGroup(creator, ChatRoomType.GROUP, "테스트방", ChatRoomRefType.NONE, null, null);
+        ReflectionTestUtils.setField(room, "chatroomId", id);
+        return room;
+    }
+
+    private Region createRegion(Long id, String code) {
+        Region region = Region.create(code, "서울특별시", "강남구", "역삼동", 3000);
+        ReflectionTestUtils.setField(region, "regionId", id);
+        return region;
+    }
+
+    private AccountRegion createVerifiedPrimaryRegion(
+            Account account, Region region, Long accountRegionId) {
+        AccountRegion accountRegion = AccountRegion.create(account, region);
+        ReflectionTestUtils.setField(accountRegion, "accountRegionId", accountRegionId);
+        accountRegion.verify();
+        account.setPrimaryRegion(accountRegionId);
+        return accountRegion;
+    }
+
+    private ChatRoom createPublicGroupRoom(Long id, Account creator, Region region) {
+        ChatRoom room = ChatRoom.createGroup(
+                creator, ChatRoomType.GROUP, "테스트방", ChatRoomRefType.NONE, null, region);
         ReflectionTestUtils.setField(room, "chatroomId", id);
         return room;
     }
@@ -206,6 +237,35 @@ class ChatRoomServiceTest {
     }
 
     @Test
+    void 가게_단톡방은_refId가_없으면_생성할_수_없다() {
+        // Given
+        GroupChatRoomCreateRequestDto request = createStoreRoomRequest();
+        ReflectionTestUtils.setField(request, "refId", null);
+
+        // When & Then
+        assertThatThrownBy(() -> chatRoomService.createGroupRoom(1L, request))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_INVALID_REF_ID);
+        verify(redisLockService, never())
+                .executeWithLock(any(String.class), any(Duration.class), any(Supplier.class));
+        verify(storeRepository, never()).findByIdWithPessimisticLock(anyLong());
+    }
+
+    @Test
+    void 가게_단톡방은_refId가_양수가_아니면_생성할_수_없다() {
+        // Given
+        GroupChatRoomCreateRequestDto request = createStoreRoomRequest();
+        ReflectionTestUtils.setField(request, "refId", 0L);
+
+        // When & Then
+        assertThatThrownBy(() -> chatRoomService.createGroupRoom(1L, request))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_INVALID_REF_ID);
+    }
+
+    @Test
     void 그룹채팅방_생성_계정없음_예외() {
         // Given
         Long creatorId = 99L;
@@ -290,6 +350,14 @@ class ChatRoomServiceTest {
         ChatRoom room = ChatRoom.createGroup(
                 creator, ChatRoomType.GROUP, "테스트 상점 단톡방",
                 ChatRoomRefType.STORE, STORE_ID, null);
+        ReflectionTestUtils.setField(room, "chatroomId", id);
+        return room;
+    }
+
+    private ChatRoom createStoreRoom(Long id, Account creator, Region region) {
+        ChatRoom room = ChatRoom.createGroup(
+                creator, ChatRoomType.GROUP, "테스트 상점 단톡방",
+                ChatRoomRefType.STORE, STORE_ID, region);
         ReflectionTestUtils.setField(room, "chatroomId", id);
         return room;
     }
@@ -403,6 +471,8 @@ class ChatRoomServiceTest {
         ReflectionTestUtils.setField(room, "isActive", false);
         ReflectionTestUtils.setField(room, "closedAt", LocalDateTime.now());
         when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
+        doReturn(Optional.of(createStore(owner)))
+                .when(storeRepository).findByIdWithPessimisticLock(STORE_ID);
         when(chatRoomRepository.closeIfActive(eq(roomId), any(LocalDateTime.class))).thenReturn(1);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(createStore(owner)));
         when(accountRepository.findById(ownerId)).thenReturn(Optional.of(owner));
@@ -505,6 +575,8 @@ class ChatRoomServiceTest {
         ReflectionTestUtils.setField(room, "isActive", false);
         ReflectionTestUtils.setField(room, "closedAt", LocalDateTime.now());
         when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
+        doReturn(Optional.of(createStore(owner)))
+                .when(storeRepository).findByIdWithPessimisticLock(STORE_ID);
         when(chatRoomRepository.closeIfActive(eq(roomId), any(LocalDateTime.class))).thenReturn(1);
         when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
         when(chatParticipantRepository.findActiveAccountIds(roomId)).thenReturn(List.of(1L, 2L));
@@ -512,9 +584,9 @@ class ChatRoomServiceTest {
         // When
         chatRoomService.forceCloseRoom(roomId);
 
-        // Then: 소유권 검증을 타지 않고(가게 조회 없음) 사장 종료와 같은 뒷정리를 수행한다
+        // Then: 소유권 검증은 생략하지만 재생성과 직렬화하기 위한 가게행 잠금은 공유한다
         verify(chatRoomRepository).closeIfActive(eq(roomId), any(LocalDateTime.class));
-        verify(storeRepository, never()).findById(any());
+        verify(storeRepository).findByIdWithPessimisticLock(STORE_ID);
         verify(eventPublisher).publishEvent(any(ChatRoomUnreadBulkResetEvent.class));
 
         ArgumentCaptor<ChatRoomClosedEvent> captor = ArgumentCaptor.forClass(ChatRoomClosedEvent.class);
@@ -723,7 +795,9 @@ class ChatRoomServiceTest {
         Long accountId = 1L;
         Long roomId = 10L;
         Account account = createAccount(accountId, "홍길동");
-        ChatRoom room = createGroupRoom(roomId, account);
+        Region region = createRegion(100L, "1168010100");
+        AccountRegion accountRegion = createVerifiedPrimaryRegion(account, region, 1000L);
+        ChatRoom room = createPublicGroupRoom(roomId, account, region);
 
         when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
         doNothing().when(chatAccessHelper).verifyRoomActive(room);
@@ -731,6 +805,8 @@ class ChatRoomServiceTest {
         when(chatParticipantRepository.findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId))
                 .thenReturn(Optional.empty());
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(1000L, accountId))
+                .thenReturn(Optional.of(accountRegion));
 
         // When
         chatRoomService.joinRoom(accountId, roomId);
@@ -742,12 +818,51 @@ class ChatRoomServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void 가게_단톡방도_공개목록에서_직접입장할_수_있다() {
+        // Given
+        Long ownerId = 1L;
+        Long customerId = 2L;
+        Long roomId = 10L;
+        Account owner = createAccount(ownerId, "사장님");
+        Account customer = createAccount(customerId, "고객");
+        Region region = createRegion(100L, "1168010100");
+        AccountRegion customerRegion = createVerifiedPrimaryRegion(customer, region, 1000L);
+        ChatRoom room = createStoreRoom(roomId, owner, region);
+
+        when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(createStore(owner)));
+        doNothing().when(chatAccessHelper).verifyRoomActive(room);
+        doNothing().when(chatAccessHelper).verifyGroupRoom(room);
+        when(chatParticipantRepository.findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, customerId))
+                .thenReturn(Optional.empty());
+        when(accountRepository.findById(customerId)).thenReturn(Optional.of(customer));
+        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(1000L, customerId))
+                .thenReturn(Optional.of(customerRegion));
+
+        // When
+        chatRoomService.joinRoom(customerId, roomId);
+
+        // Then
+        verify(redisLockService).executeWithLock(
+                eq(LockKeys.chatRoomStore(STORE_ID)),
+                any(Duration.class),
+                any(Supplier.class));
+        verify(storeRepository).findByIdWithPessimisticLock(STORE_ID);
+        verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
+        verify(chatParticipantRepository).saveAndFlush(any(ChatParticipant.class));
+        verify(eventPublisher).publishEvent(any(ChatRoomReadEvent.class));
+    }
+
+    @Test
     void 채팅방_입장_LEFT참여자_재입장_성공() {
         // Given
         Long accountId = 1L;
         Long roomId = 10L;
         Account account = createAccount(accountId, "홍길동");
-        ChatRoom room = createGroupRoom(roomId, account);
+        Region region = createRegion(100L, "1168010100");
+        AccountRegion accountRegion = createVerifiedPrimaryRegion(account, region, 1000L);
+        ChatRoom room = createPublicGroupRoom(roomId, account, region);
         ChatParticipant leftParticipant = ChatParticipant.create(room, account);
         leftParticipant.leave();
 
@@ -757,6 +872,8 @@ class ChatRoomServiceTest {
         when(chatParticipantRepository.findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId))
                 .thenReturn(Optional.of(leftParticipant));
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(1000L, accountId))
+                .thenReturn(Optional.of(accountRegion));
 
         // When
         chatRoomService.joinRoom(accountId, roomId);
@@ -766,6 +883,89 @@ class ChatRoomServiceTest {
         verify(chatParticipantRepository, never()).save(any(ChatParticipant.class));
         verify(chatMessageRepository).save(any(ChatMessage.class));
         verify(eventPublisher).publishEvent(any(ChatRoomReadEvent.class));
+    }
+
+    @Test
+    void 채팅방_입장_타지역_사용자_CHAT_ROOM_ACCESS_DENIED() {
+        // Given
+        Long accountId = 2L;
+        Long roomId = 10L;
+        Account account = createAccount(accountId, "타지역 사용자");
+        Region roomRegion = createRegion(100L, "1168010100");
+        Region accountRegionValue = createRegion(200L, "2644010100");
+        AccountRegion accountRegion = createVerifiedPrimaryRegion(account, accountRegionValue, 2000L);
+        ChatRoom room = createPublicGroupRoom(roomId, createAccount(1L, "방장"), roomRegion);
+
+        when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
+        doNothing().when(chatAccessHelper).verifyRoomActive(room);
+        doNothing().when(chatAccessHelper).verifyGroupRoom(room);
+        when(chatParticipantRepository.findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId))
+                .thenReturn(Optional.empty());
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(2000L, accountId))
+                .thenReturn(Optional.of(accountRegion));
+
+        // When & Then
+        assertThatThrownBy(() -> chatRoomService.joinRoom(accountId, roomId))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        verify(chatParticipantRepository, never()).saveAndFlush(any(ChatParticipant.class));
+        verify(chatMessageRepository, never()).save(any(ChatMessage.class));
+        verify(eventPublisher, never()).publishEvent(any(ChatRoomReadEvent.class));
+    }
+
+    @Test
+    void 채팅방_입장_대표지역이_없으면_CHAT_ROOM_ACCESS_DENIED() {
+        // Given
+        Long accountId = 2L;
+        Long roomId = 10L;
+        Account account = createAccount(accountId, "지역 미설정 사용자");
+        Region roomRegion = createRegion(100L, "1168010100");
+        ChatRoom room = createPublicGroupRoom(roomId, createAccount(1L, "방장"), roomRegion);
+
+        when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
+        doNothing().when(chatAccessHelper).verifyRoomActive(room);
+        doNothing().when(chatAccessHelper).verifyGroupRoom(room);
+        when(chatParticipantRepository.findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId))
+                .thenReturn(Optional.empty());
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+
+        // When & Then
+        assertThatThrownBy(() -> chatRoomService.joinRoom(accountId, roomId))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        verify(accountRegionRepository, never())
+                .findByAccountRegionIdAndAccount_AccountId(anyLong(), anyLong());
+        verify(chatParticipantRepository, never()).saveAndFlush(any(ChatParticipant.class));
+    }
+
+    @Test
+    void 채팅방_입장_방에_공개지역이_없으면_CHAT_ROOM_ACCESS_DENIED() {
+        // Given
+        Long accountId = 2L;
+        Long roomId = 10L;
+        Account account = createAccount(accountId, "고객");
+        Region accountRegionValue = createRegion(100L, "1168010100");
+        createVerifiedPrimaryRegion(account, accountRegionValue, 1000L);
+        ChatRoom room = createGroupRoom(roomId, createAccount(1L, "방장"));
+
+        when(chatAccessHelper.getRoomOrThrow(roomId)).thenReturn(room);
+        doNothing().when(chatAccessHelper).verifyRoomActive(room);
+        doNothing().when(chatAccessHelper).verifyGroupRoom(room);
+        when(chatParticipantRepository.findByChatRoom_ChatroomIdAndAccount_AccountId(roomId, accountId))
+                .thenReturn(Optional.empty());
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+
+        // When & Then
+        assertThatThrownBy(() -> chatRoomService.joinRoom(accountId, roomId))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        verify(accountRegionRepository, never())
+                .findByAccountRegionIdAndAccount_AccountId(anyLong(), anyLong());
+        verify(chatParticipantRepository, never()).saveAndFlush(any(ChatParticipant.class));
     }
 
     @Test

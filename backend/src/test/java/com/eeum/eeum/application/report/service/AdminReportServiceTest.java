@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.report.service;
 
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
-import com.eeum.eeum.application.report.dto.response.ReportDetailResponseDto;
+import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -50,15 +50,19 @@ class AdminReportServiceTest {
     }
 
     private Report createReport() {
+        LocalDateTime createdAt = LocalDateTime.now().minusDays(1);
         Report report = Report.create(
                 createReporter(),
                 ReportTargetType.COMMUNITY_POST,
                 TARGET_ID,
                 ReportReason.ABUSE,
-                "욕설이 포함되어 있습니다"
+                "욕설이 포함되어 있습니다",
+                "신고 당시 제목",
+                "신고 당시 전체 본문"
         );
         ReflectionTestUtils.setField(report, "reportId", REPORT_ID);
-        ReflectionTestUtils.setField(report, "createdAt", LocalDateTime.now().minusDays(1));
+        ReflectionTestUtils.setField(report, "createdAt", createdAt);
+        ReflectionTestUtils.setField(report, "modifiedAt", createdAt);
         return report;
     }
 
@@ -67,7 +71,8 @@ class AdminReportServiceTest {
                 .targetType(ReportTargetType.COMMUNITY_POST)
                 .targetId(TARGET_ID)
                 .exists(true)
-                .title("신고 대상 게시글")
+                .title("현재 게시글 제목")
+                .content("현재 수정된 본문")
                 .contentPreview("부적절한 본문")
                 .ownerAccountId(20L)
                 .ownerName("박작성")
@@ -86,7 +91,7 @@ class AdminReportServiceTest {
                 .thenReturn(createTargetSnapshot());
 
         // When
-        ReportDetailResponseDto result = adminReportService.getReportDetail(REPORT_ID);
+        ReportResponseDto result = adminReportService.getReportDetail(REPORT_ID);
 
         // Then
         assertThat(result.getReportId()).isEqualTo(REPORT_ID);
@@ -98,9 +103,13 @@ class AdminReportServiceTest {
         assertThat(result.getReporterName()).isEqualTo("신고자");
         assertThat(result.getReporterNickname()).isEqualTo("신고닉");
         assertThat(result.getReporterEmail()).isEqualTo("reporter@test.com");
+        assertThat(result.getCreatedAt()).isNotNull();
+        assertThat(result.getUpdatedAt()).isNotNull();
+        assertThat(result.getReportedAt()).isEqualTo(result.getCreatedAt());
         assertThat(result.getReportedAt()).isNotNull();
         assertThat(result.getStatus()).isEqualTo(ReportStatus.PENDING);
-        assertThat(result.getTarget().getTitle()).isEqualTo("신고 대상 게시글");
+        assertThat(result.getTarget().getTitle()).isEqualTo("신고 당시 제목");
+        assertThat(result.getTarget().getContent()).isEqualTo("신고 당시 전체 본문");
         assertThat(result.getTarget().getOwnerAccountId()).isEqualTo(20L);
     }
 
@@ -112,7 +121,7 @@ class AdminReportServiceTest {
                 .thenReturn(createTargetSnapshot());
 
         // When
-        ReportDetailResponseDto result = adminReportService.getReportDetail(REPORT_ID);
+        ReportResponseDto result = adminReportService.getReportDetail(REPORT_ID);
 
         // Then
         assertThat(result.getStatus()).isEqualTo(ReportStatus.PENDING);
@@ -131,7 +140,7 @@ class AdminReportServiceTest {
                 .thenReturn(createTargetSnapshot());
 
         // When
-        ReportDetailResponseDto result = adminReportService.getReportDetail(REPORT_ID);
+        ReportResponseDto result = adminReportService.getReportDetail(REPORT_ID);
 
         // Then
         assertThat(result.getStatus()).isEqualTo(ReportStatus.REVIEWED);
@@ -147,11 +156,13 @@ class AdminReportServiceTest {
                 .thenReturn(ReportTargetSnapshotDto.deleted(ReportTargetType.COMMUNITY_POST, TARGET_ID));
 
         // When
-        ReportDetailResponseDto result = adminReportService.getReportDetail(REPORT_ID);
+        ReportResponseDto result = adminReportService.getReportDetail(REPORT_ID);
 
         // Then
         assertThat(result.getReportId()).isEqualTo(REPORT_ID);
         assertThat(result.getTarget().isExists()).isFalse();
+        assertThat(result.getTarget().getTitle()).isEqualTo("신고 당시 제목");
+        assertThat(result.getTarget().getContent()).isEqualTo("신고 당시 전체 본문");
     }
 
     @Test
@@ -176,12 +187,47 @@ class AdminReportServiceTest {
         ReportReviewRequestDto request = new ReportReviewRequestDto();
         ReflectionTestUtils.setField(request, "adminNote", "조치 완료");
         when(reportRepository.findByReportId(REPORT_ID)).thenReturn(Optional.of(report));
+        LocalDateTime processedAt = LocalDateTime.now();
+        when(reportRepository.saveAndFlush(report)).thenAnswer(invocation -> {
+            ReflectionTestUtils.setField(report, "modifiedAt", processedAt);
+            return report;
+        });
 
         // When
-        adminReportService.reviewReport(REPORT_ID, request);
+        ReportResponseDto result = adminReportService.reviewReport(REPORT_ID, request);
 
         // Then
         assertThat(report.getStatus()).isEqualTo(ReportStatus.REVIEWED);
         assertThat(report.getAdminNote()).isEqualTo("조치 완료");
+        assertThat(result.getCreatedAt()).isNotNull();
+        assertThat(result.getUpdatedAt()).isNotNull();
+        assertThat(result.getUpdatedAt()).isEqualTo(processedAt);
+        assertThat(result.getProcessedAt()).isEqualTo(processedAt);
+        assertThat(result.getReportedAt()).isEqualTo(result.getCreatedAt());
+        verify(reportRepository).saveAndFlush(report);
+    }
+
+    @Test
+    void 신고_기각_처리_시_flush_후_처리시각을_반환한다() {
+        // Given
+        Report report = createReport();
+        ReportReviewRequestDto request = new ReportReviewRequestDto();
+        ReflectionTestUtils.setField(request, "adminNote", "신고 기각");
+        LocalDateTime processedAt = LocalDateTime.now();
+        when(reportRepository.findByReportId(REPORT_ID)).thenReturn(Optional.of(report));
+        when(reportRepository.saveAndFlush(report)).thenAnswer(invocation -> {
+            ReflectionTestUtils.setField(report, "modifiedAt", processedAt);
+            return report;
+        });
+
+        // When
+        ReportResponseDto result = adminReportService.dismissReport(REPORT_ID, request);
+
+        // Then
+        assertThat(result.getStatus()).isEqualTo(ReportStatus.DISMISSED);
+        assertThat(result.getAdminNote()).isEqualTo("신고 기각");
+        assertThat(result.getUpdatedAt()).isEqualTo(processedAt);
+        assertThat(result.getProcessedAt()).isEqualTo(processedAt);
+        verify(reportRepository).saveAndFlush(report);
     }
 }

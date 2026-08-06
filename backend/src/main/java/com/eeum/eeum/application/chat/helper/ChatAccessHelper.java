@@ -31,6 +31,13 @@ public class ChatAccessHelper {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CHAT_ROOM_NOT_FOUND));
     }
 
+    // 채팅방 상태를 확인한 뒤 쓰는 경로의 공통 잠금 조회.
+    // 반드시 쓰기 트랜잭션 안에서 호출해야 하며, 잠금은 트랜잭션 커밋까지 유지된다.
+    public ChatRoom getRoomWithPessimisticLockOrThrow(Long roomId) {
+        return chatRoomRepository.findByIdWithPessimisticLock(roomId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+    }
+
     // 채팅방 ACTIVE 참여자 검증
     public ChatParticipant verifyParticipant(Long accountId, Long roomId) {
         ChatParticipant participant = chatParticipantRepository

@@ -2,7 +2,9 @@ package com.eeum.eeum.domain.chat.repository;
 
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,8 +25,11 @@ public interface ChatRoomRepository
     Optional<ChatRoom> findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
             ChatRoomRefType refType, Long refId);
 
-    // 활성 방 여부 — 종료된 방에 대한 unread 증가/알림 생성을 막을 때 사용 (엔티티 로딩 불필요)
-    boolean existsByChatroomIdAndIsActiveTrue(Long chatroomId);
+    // 메시지 저장 / 입장 / 초대 / 퇴장 / 종료가 공유하는 DB 최종 방어선.
+    // Redis 락의 lease가 만료되어 다른 요청이 진입해도 같은 방 행에서는 커밋까지 직렬화된다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM ChatRoom r WHERE r.chatroomId = :roomId")
+    Optional<ChatRoom> findByIdWithPessimisticLock(@Param("roomId") Long roomId);
 
     // 주어진 방 중 종료된 것만 — Redis에 남은 종료 방 unread 키 정리용
     @Query("SELECT r.chatroomId FROM ChatRoom r WHERE r.chatroomId IN :roomIds AND r.isActive = false")
