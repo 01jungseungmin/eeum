@@ -74,8 +74,9 @@ class StoreServiceTest {
         // given
         Store store = createStore();
         when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(List.of(createStoreChatRoom()));
+        when(chatRoomRepository.findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
+                ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(Optional.of(createStoreChatRoom()));
 
         // when
         StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
@@ -90,8 +91,9 @@ class StoreServiceTest {
         // given
         Store store = createStore();
         when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(List.of());
+        when(chatRoomRepository.findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
+                ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(Optional.empty());
 
         // when
         StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
@@ -102,40 +104,41 @@ class StoreServiceTest {
     }
 
     @Test
-    void GROUP과_GROUP_STREET_방이_공존하면_GROUP_방을_우선_반환한다() {
-        // given
+    void 종료된_방만_남아있으면_개설되지_않은_것으로_처리된다() {
+        // given: 조회는 ACTIVE 방만 대상으로 하므로 전부 종료된 상점은 빈 결과가 된다
         Store store = createStore();
-        ChatRoom streetRoom = ChatRoom.createGroup(
-                mock(Account.class), ChatRoomType.GROUP_STREET, "동네방",
+        when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
+        when(chatRoomRepository.findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
+                ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(Optional.empty());
+
+        // when
+        StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
+
+        // then
+        assertThat(dashboard.isStoreChatRoomCreated()).isFalse();
+        assertThat(dashboard.getStoreChatRoomId()).isNull();
+    }
+
+    @Test
+    void 재생성된_상점_채팅방은_종료된_옛_방이_아니라_최신_ACTIVE_방을_반환한다() {
+        // given: 종료 후 재생성으로 (STORE, storeId) 조합의 방이 여러 건 누적된 상황.
+        //        정렬 없는 단건 Optional 조회였다면 예외가 났을 케이스다.
+        Store store = createStore();
+        ChatRoom recreatedRoom = ChatRoom.createGroup(
+                mock(Account.class), ChatRoomType.GROUP, "테스트 상점 단톡방",
                 ChatRoomRefType.STORE, STORE_ID, null);
-        ReflectionTestUtils.setField(streetRoom, "chatroomId", 99L);
+        ReflectionTestUtils.setField(recreatedRoom, "chatroomId", 99L);
         when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(List.of(streetRoom, createStoreChatRoom()));
-
-        // when
-        StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
-
-        // then: 단건 Optional이었다면 2건 조회로 예외가 났을 상황 — GROUP 방 ID가 선택된다
-        assertThat(dashboard.isStoreChatRoomCreated()).isTrue();
-        assertThat(dashboard.getStoreChatRoomId()).isEqualTo(CHAT_ROOM_ID);
-    }
-
-    @Test
-    void 비활성화된_상점_채팅방은_개설되지_않은_것으로_처리된다() {
-        // given
-        Store store = createStore();
-        ChatRoom deactivatedRoom = createStoreChatRoom();
-        deactivatedRoom.deactivate();
-        when(storeRepository.findByAccount_AccountId(OWNER_ACCOUNT_ID)).thenReturn(Optional.of(store));
-        when(chatRoomRepository.findAllByRefTypeAndRefId(ChatRoomRefType.STORE, STORE_ID))
-                .thenReturn(List.of(deactivatedRoom));
+        when(chatRoomRepository.findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
+                ChatRoomRefType.STORE, STORE_ID))
+                .thenReturn(Optional.of(recreatedRoom));
 
         // when
         StoreDashboardResponseDto dashboard = storeService.getDashboard(OWNER_ACCOUNT_ID);
 
         // then
-        assertThat(dashboard.isStoreChatRoomCreated()).isFalse();
-        assertThat(dashboard.getStoreChatRoomId()).isNull();
+        assertThat(dashboard.isStoreChatRoomCreated()).isTrue();
+        assertThat(dashboard.getStoreChatRoomId()).isEqualTo(99L);
     }
 }

@@ -6,6 +6,8 @@ import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
+import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
+import com.eeum.eeum.domain.chat.repository.ChatAccessStatus;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
@@ -88,6 +90,71 @@ class ChatAccessHelperTest {
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_ROOM_NOT_FOUND);
+    }
+
+    // ===================== verifyActiveRoomParticipant (WebSocket SUBSCRIBE/SEND) =====================
+
+    @Test
+    void 활성방_참여자는_구독이_허용된다() {
+        // Given
+        Long accountId = 1L;
+        Long roomId = 10L;
+
+        when(chatParticipantRepository.findAccessStatus(roomId, accountId))
+                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.ACTIVE, true)));
+
+        // When & Then
+        assertThatCode(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 종료된_방은_참여자여도_구독이_거부된다() {
+        // Given: 종료 시 참여자 레코드는 ACTIVE로 남겨 기록 열람은 허용하므로
+        //        방 활성 여부를 함께 보지 않으면 종료된 방에 계속 구독할 수 있다
+        Long accountId = 1L;
+        Long roomId = 10L;
+
+        when(chatParticipantRepository.findAccessStatus(roomId, accountId))
+                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.ACTIVE, false)));
+
+        // When & Then
+        assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_ROOM_INACTIVE);
+    }
+
+    @Test
+    void 비참여자는_활성방이어도_구독이_거부된다() {
+        // Given
+        Long accountId = 1L;
+        Long roomId = 10L;
+
+        when(chatParticipantRepository.findAccessStatus(roomId, accountId))
+                .thenReturn(Optional.empty());
+
+        // When & Then
+        assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_NOT_PARTICIPANT);
+    }
+
+    @Test
+    void 퇴장한_참여자는_활성방이어도_구독이_거부된다() {
+        // Given
+        Long accountId = 1L;
+        Long roomId = 10L;
+
+        when(chatParticipantRepository.findAccessStatus(roomId, accountId))
+                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.LEFT, true)));
+
+        // When & Then
+        assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_NOT_PARTICIPANT);
     }
 
     // ===================== verifyParticipant =====================

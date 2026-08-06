@@ -56,7 +56,7 @@ public class ChatMessageService {
     @Transactional
     public ChatMessageResponseDto sendMessage(
             Long accountId, Long roomId, ChatMessageSendRequestDto request) {
-        checkIdempotency(request.getClientMessageId());
+        checkIdempotency(accountId, roomId, request.getClientMessageId());
 
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
         ChatRoom room = participant.getChatRoom();
@@ -83,7 +83,7 @@ public class ChatMessageService {
     @Transactional
     public ChatMessageResponseDto sendImageMessage(
             Long accountId, Long roomId, ChatImageMessageSendRequestDto request) {
-        checkIdempotency(request.getClientMessageId());
+        checkIdempotency(accountId, roomId, request.getClientMessageId());
 
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
         ChatRoom room = participant.getChatRoom();
@@ -145,11 +145,11 @@ public class ChatMessageService {
     // ===================== 내부 헬퍼 =====================
 
     // clientMessageId가 있으면 5분 TTL로 Redis에 NX 저장 — 중복 요청 차단
-    private void checkIdempotency(String clientMessageId) {
+    private void checkIdempotency(Long accountId, Long roomId, String clientMessageId) {
         if (clientMessageId == null) {
             return;
         }
-        String key = ChatRedisKeys.messageIdempotency(clientMessageId);
+        String key = ChatRedisKeys.messageIdempotency(accountId, roomId, clientMessageId);
         Boolean isNew = redisTemplate.opsForValue().setIfAbsent(key, "1", Duration.ofMinutes(5));
         if (!Boolean.TRUE.equals(isNew)) {
             throw new ConflictException(ErrorCode.CHAT_MESSAGE_DUPLICATE);
@@ -179,9 +179,12 @@ public class ChatMessageService {
         ));
     }
 
-    private long sumUnreadFromDb(Long accountId) {
+    // 채팅 unread의 DB 기준값 — Redis 캐시 미스 복구와 정합성 보정 스케줄러가 공유한다.
+    // 활성 방만 센다: 종료된 방은 목록에서 빠지고 구독도 막혀 사용자가 읽어서 회수할 수 없으므로,
+    // 여기에 포함하면 캐시가 사라질 때마다 회수 불가능한 배지가 되살아난다.
+    public long sumUnreadFromDb(Long accountId) {
         return chatParticipantRepository
-                .findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE)
+                .findActiveParticipationsInActiveRooms(accountId, ParticipantStatus.ACTIVE)
                 .stream()
                 .mapToLong(p -> chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                         p.getChatRoom().getChatroomId(), p.unreadSince(), accountId))

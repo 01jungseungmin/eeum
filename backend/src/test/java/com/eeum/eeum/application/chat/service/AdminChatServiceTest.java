@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +46,7 @@ class AdminChatServiceTest {
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
+    @Mock private ChatRoomService chatRoomService;
 
     // ===================== 픽스처 헬퍼 =====================
 
@@ -226,49 +228,30 @@ class AdminChatServiceTest {
     // ===================== forceDeactivateRoom =====================
 
     @Test
-    void 관리자_채팅방_강제비활성화_성공() {
-        // Given
+    void 관리자_채팅방_강제비활성화는_ChatRoomService에_위임된다() {
+        // Given: 여기서 직접 deactivate()하면 생성과 동일한 분산 락을 잡지 못해
+        //        재생성 요청과 레이스가 나고, unread 회수/종료 통지도 누락된다
         Long roomId = 10L;
-        Account creator = createAccount(1L, "홍길동");
-        ChatRoom room = createGroupRoom(roomId, creator);
-
-        when(chatRoomRepository.findById(roomId)).thenReturn(Optional.of(room));
 
         // When
         adminChatService.forceDeactivateRoom(roomId);
 
-        // Then
-        assertThat(room.isActive()).isFalse();
+        // Then: 락·정리 절차를 소유한 쪽으로 위임하고, 자체적으로 방을 조회·수정하지 않는다
+        verify(chatRoomService).forceCloseRoom(roomId);
+        verify(chatRoomRepository, never()).findById(roomId);
     }
 
     @Test
-    void 관리자_채팅방_강제비활성화_방없음_예외() {
+    void 관리자_채팅방_강제비활성화_방없음_예외가_전파된다() {
         // Given
         Long roomId = 99L;
-
-        when(chatRoomRepository.findById(roomId)).thenReturn(Optional.empty());
+        doThrow(new NotFoundException(ErrorCode.CHAT_ROOM_NOT_FOUND))
+                .when(chatRoomService).forceCloseRoom(roomId);
 
         // When & Then
         assertThatThrownBy(() -> adminChatService.forceDeactivateRoom(roomId))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_ROOM_NOT_FOUND);
-    }
-
-    @Test
-    void 관리자_채팅방_강제비활성화_이미비활성화된방도_예외없이_처리() {
-        // Given
-        Long roomId = 10L;
-        Account creator = createAccount(1L, "홍길동");
-        ChatRoom room = createGroupRoom(roomId, creator);
-        room.deactivate();
-
-        when(chatRoomRepository.findById(roomId)).thenReturn(Optional.of(room));
-
-        // When
-        adminChatService.forceDeactivateRoom(roomId);
-
-        // Then — 멱등성: 이미 비활성화된 방도 예외 없이 처리
-        assertThat(room.isActive()).isFalse();
     }
 }

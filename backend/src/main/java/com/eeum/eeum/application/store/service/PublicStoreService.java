@@ -104,8 +104,11 @@ public class PublicStoreService {
                 .map(this::toNoticeDto)
                 .toList();
 
+        // 종료된 단톡방 ID를 내려주면 사용자가 폭파된 옛 방으로 접속을 시도하게 된다 —
+        // 활성 방만, 여러 건이면 최신 방을 노출한다.
         Long chatRoomId = chatRoomRepository
-                .findByRefTypeAndRefId(ChatRoomRefType.STORE, storeId)
+                .findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
+                        ChatRoomRefType.STORE, storeId)
                 .map(ChatRoom::getChatroomId)
                 .orElse(null);
 

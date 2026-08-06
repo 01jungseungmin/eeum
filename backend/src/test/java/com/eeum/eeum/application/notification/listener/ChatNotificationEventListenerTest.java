@@ -25,6 +25,9 @@ import static org.mockito.Mockito.when;
 class ChatNotificationEventListenerTest {
 
     @Mock
+    private com.eeum.eeum.domain.chat.repository.ChatRoomRepository chatRoomRepository;
+
+    @Mock
     private ChatParticipantRepository chatParticipantRepository;
 
     @Mock
@@ -43,6 +46,7 @@ class ChatNotificationEventListenerTest {
         Long senderId = 1L;
         Long recipientA = 2L;
         Long recipientB = 3L;
+        when(chatRoomRepository.existsByChatroomIdAndIsActiveTrue(roomId)).thenReturn(true);
         when(chatParticipantRepository.findActiveAccountIds(roomId))
                 .thenReturn(List.of(senderId, recipientA, recipientB));
         ChatMessageSentEvent event = new ChatMessageSentEvent(

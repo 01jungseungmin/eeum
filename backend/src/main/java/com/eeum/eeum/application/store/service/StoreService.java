@@ -149,19 +149,13 @@ public class StoreService {
         long soldOutProductCount = productRepository
                 .countByStore_StoreIdAndStatus(store.getStoreId(), ProductStatus.SOLD_OUT);
 
-        // (STORE, storeId) 조합은 유니크가 아니라 GROUP/GROUP_STREET 방이 공존할 수 있다 —
-        // 단건 Optional 조회는 2건 이상일 때 예외로 대시보드 전체가 실패하므로 목록 조회 후
-        // 활성 방 중 상점 단톡방(GROUP)을 우선 선택한다.
-        List<ChatRoom> storeRooms = chatRoomRepository
-                .findAllByRefTypeAndRefId(ChatRoomRefType.STORE, store.getStoreId());
-        ChatRoom storeChatRoom = storeRooms.stream()
-                .filter(ChatRoom::isActive)
-                .filter(room -> room.getType() == ChatRoomType.GROUP)
-                .findFirst()
-                .orElseGet(() -> storeRooms.stream()
-                        .filter(ChatRoom::isActive)
-                        .findFirst()
-                        .orElse(null));
+        // (STORE, storeId) 조합에는 종료된 방이 여러 건 누적될 수 있다 —
+        // 정렬 없는 단건 Optional 조회는 2건 이상일 때 예외로 대시보드 전체를 실패시키므로
+        // 활성 방만 최신순 1건으로 조회한다 (상점 상세 API와 동일 기준).
+        ChatRoom storeChatRoom = chatRoomRepository
+                .findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
+                        ChatRoomRefType.STORE, store.getStoreId())
+                .orElse(null);
 
         return toDashboardDto(
                 store,

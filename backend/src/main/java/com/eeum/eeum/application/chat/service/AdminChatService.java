@@ -35,6 +35,7 @@ public class AdminChatService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatParticipantRepository chatParticipantRepository;
+    private final ChatRoomService chatRoomService;
 
     // 전체 채팅방 조회 (타입/활성/기간 필터) — 배치 쿼리로 N+1 제거
     @Transactional(readOnly = true)
@@ -87,12 +88,12 @@ public class AdminChatService {
         log.info("[ADMIN] 채팅 메시지 강제 삭제: messageId={}", messageId);
     }
 
-    // 채팅방 강제 비활성화
-    @Transactional
+    // 채팅방 강제 비활성화 — ChatRoomService에 위임한다.
+    // 여기서 직접 deactivate()하면 (1) 생성과 같은 분산 락을 잡지 않아 재생성 요청과 레이스가 나고
+    // (2) Redis unread 회수/종료 통지가 빠져 사장 종료와 다른 잔여 상태를 남긴다.
+    // @Transactional을 걸지 않는 이유: 위임 대상이 "락 획득 → 트랜잭션" 순서를 직접 관리한다.
     public void forceDeactivateRoom(Long roomId) {
-        ChatRoom room = getRoomOrThrow(roomId);
-        room.deactivate();
-        log.info("[ADMIN] 채팅방 강제 비활성화: roomId={}", roomId);
+        chatRoomService.forceCloseRoom(roomId);
     }
 
     private ChatRoom getRoomOrThrow(Long roomId) {

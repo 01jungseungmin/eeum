@@ -5,6 +5,7 @@ import com.eeum.eeum.application.notification.dto.request.NotificationCreateRequ
 import com.eeum.eeum.application.notification.service.NotificationService;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
 import lombok.RequiredArgsConstructor;
@@ -27,12 +28,20 @@ import java.util.List;
 public class ChatNotificationEventListener {
 
     private final ChatParticipantRepository chatParticipantRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final ChatUnreadService chatUnreadService;
     private final NotificationService notificationService;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMessageSent(ChatMessageSentEvent event) {
+        // 종료 직전에 시작된 메시지 트랜잭션이 종료 이후에 커밋되면 이 리스너가 종료된 방의 unread를 올린다.
+        // 그 방은 목록에서 빠지고 구독도 막혀 사용자가 읽어서 회수할 방법이 없으므로 배지가 영구히 남는다.
+        if (!chatRoomRepository.existsByChatroomIdAndIsActiveTrue(event.roomId())) {
+            log.debug("종료된 채팅방 메시지 — unread/알림 생략: roomId={}", event.roomId());
+            return;
+        }
+
         List<Long> recipientIds = chatParticipantRepository.findActiveAccountIds(event.roomId());
 
         String title = event.roomName() != null ? event.roomName() : "새 메시지";

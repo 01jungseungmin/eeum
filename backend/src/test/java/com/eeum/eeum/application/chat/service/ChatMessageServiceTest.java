@@ -386,7 +386,7 @@ class ChatMessageServiceTest {
         Account sender = createAccount(accountId, "홍길동");
         ChatRoom room = createGroupRoom(10L, sender);
         ChatParticipant participant = ChatParticipant.create(room, sender);
-        when(chatParticipantRepository.findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE))
+        when(chatParticipantRepository.findActiveParticipationsInActiveRooms(accountId, ParticipantStatus.ACTIVE))
                 .thenReturn(List.of(participant));
         when(chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                 eq(10L), any(LocalDateTime.class), eq(accountId)))
@@ -397,7 +397,7 @@ class ChatMessageServiceTest {
 
         // Then
         assertThat(result.getUnreadCount()).isEqualTo(3L);
-        verify(chatParticipantRepository).findAllByAccount_AccountIdAndStatus(accountId, ParticipantStatus.ACTIVE);
+        verify(chatParticipantRepository).findActiveParticipationsInActiveRooms(accountId, ParticipantStatus.ACTIVE);
         verify(chatMessageRepository).countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                 eq(10L), any(LocalDateTime.class), eq(accountId));
     }
