@@ -9,6 +9,7 @@ import com.eeum.eeum.application.chat.service.ChatRoomService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,14 +41,21 @@ public class ChatRoomController {
                 chatRoomService.createGroupRoom(accountId, request)));
     }
 
-    @Operation(summary = "내 채팅방 목록", description = "마지막 메시지 시각 내림차순으로 정렬되며 안 읽은 메시지 수를 포함합니다. 무한 스크롤 지원.")
+    @Operation(
+            summary = "내 채팅방 목록",
+            description = "마지막 메시지 시각 내림차순으로 정렬되며 안 읽은 메시지 수를 포함합니다. 무한 스크롤 지원. " +
+                    "기본은 활성 채팅방만 반환하며, includeClosed=true를 주면 종료된 방까지 포함해 지난 대화를 열람할 수 있습니다 " +
+                    "(응답의 active 필드로 구분)."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<Slice<ChatRoomResponseDto>>> getMyRooms(
+            @Parameter(description = "종료된 채팅방 포함 여부 (기본 false)")
+            @RequestParam(defaultValue = "false") boolean includeClosed,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                chatRoomService.getMyRooms(accountId, pageable)));
+                chatRoomService.getMyRooms(accountId, pageable, includeClosed)));
     }
 
     @Operation(
@@ -77,7 +85,8 @@ public class ChatRoomController {
 
     @Operation(
             summary = "채팅방 직접 입장",
-            description = "초대 없이 GROUP 채팅방에 스스로 참여합니다. " +
+            description = "초대 없이 일반 GROUP 및 공개된 STORE 채팅방에 스스로 참여합니다. " +
+                    "사용자의 현재 인증된 대표 지역과 채팅방 지역이 같아야 합니다. " +
                     "이미 ACTIVE 참여자인 경우 읽음 처리만 수행하며 200을 반환합니다. " +
                     "신규 참여 / 재입장 모두 동일하게 200을 반환합니다."
     )
@@ -104,6 +113,20 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<Void>> leaveRoom(@PathVariable Long roomId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         chatRoomService.leaveRoom(accountId, roomId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(
+            summary = "채팅방 종료(폭파)",
+            description = "채팅방을 종료합니다. 물리 삭제가 아닌 상태 전이(active=false)이며 대화 기록은 보존됩니다. " +
+                    "종료 후에는 메시지 발송과 WebSocket 구독이 차단되고 참여자의 채팅방 목록에서 제외됩니다. " +
+                    "가게 단톡방은 해당 가게 사장만, 그 외 그룹 방은 생성자만 종료할 수 있습니다. " +
+                    "이미 종료된 방에 대한 재요청도 200을 반환합니다(멱등)."
+    )
+    @PatchMapping("/{roomId}/close")
+    public ResponseEntity<ApiResponse<Void>> closeRoom(@PathVariable Long roomId) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        chatRoomService.closeRoom(accountId, roomId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 

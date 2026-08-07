@@ -69,7 +69,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         Long accountId = resolveAccountId(accessor);
         try {
-            chatAccessHelper.verifyParticipant(accountId, roomId);
+            // 종료된 방은 참여자 레코드가 남아 있어도 구독을 허용하지 않는다
+            chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId);
             log.debug("채팅방 구독 허용: accountId={}, roomId={}", accountId, roomId);
         } catch (BusinessException e) {
             log.warn("채팅방 구독 거부: accountId={}, roomId={}", accountId, roomId);
@@ -87,7 +88,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         Long accountId = resolveAccountId(accessor);
         try {
-            chatAccessHelper.verifyParticipant(accountId, roomId);
+            chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId);
         } catch (BusinessException e) {
             log.warn("채팅방 발행 거부: accountId={}, roomId={}", accountId, roomId);
             throw new MessageDeliveryException(

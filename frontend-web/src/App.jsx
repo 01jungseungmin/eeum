@@ -1,36 +1,40 @@
-import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import LoginPage from './pages/owner/login/LoginPage';
-import SignUpPage from './pages/owner/login/SignUpPage';
-import FindPasswordPage from './pages/owner/login/FindPasswordPage';
-import MainLayout from './layouts/MainLayout';
-import ApprovalStatus from './pages/owner/main/ApprovalStatusPage';
-import OwnerDashboardPage from './pages/owner/main/DashBoardPage';
-import AdminLoginPage from './pages/admin/login/AdminLoginPage';
-import AdminDashboardPage from './pages/admin/main/DashBoardPage';
-import ApprovalPage from './pages/admin/main/ApprovalPage';
-import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
-import MemberPage from './pages/admin/main/MemberPage';
-import StorePage from './pages/owner/main/StorePage';
-import CategoryPage from './pages/owner/main/CategoryPage';
-import EventPage from './pages/owner/main/EventPage';
-import OrderManagementPage from './pages/owner/main/OrderManagementPage';
-import ReservationPage from './pages/owner/main/ReservationPage';
-import ProductManagementPage from './pages/owner/main/ProductManagementPage';
-import ReviewManagementPage from './pages/owner/main/ReviewManagementPage';
-import CustomerManagementPage from './pages/owner/main/CustomerManagementPage';
+import { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import LoginPage from "./pages/owner/login/LoginPage";
+import SignUpPage from "./pages/owner/login/SignUpPage";
+import FindPasswordPage from "./pages/owner/login/FindPasswordPage";
+import MainLayout from "./layouts/MainLayout";
+import ApprovalStatus from "./pages/owner/main/ApprovalStatusPage";
+import OwnerDashboardPage from "./pages/owner/main/DashBoardPage";
+import AdminLoginPage from "./pages/admin/login/AdminLoginPage";
+import AdminDashboardPage from "./pages/admin/main/DashBoardPage";
+import ApprovalPage from "./pages/admin/main/ApprovalPage";
+import ApprovalDetailPage from "./pages/admin/main/ApprovalDetailPage";
+import MemberPage from "./pages/admin/main/MemberPage";
+import StorePage from "./pages/owner/main/StorePage";
+import CategoryPage from "./pages/owner/main/CategoryPage";
+import EventPage from "./pages/owner/main/EventPage";
+import OrderManagementPage from "./pages/owner/main/OrderManagementPage";
+import ReservationPage from "./pages/owner/main/ReservationPage";
+import ProductManagementPage from "./pages/owner/main/ProductManagementPage";
+import ReviewManagementPage from "./pages/owner/main/ReviewManagementPage";
+import InquiryManagementPage from "./pages/owner/main/InquiryManagementPage";
+import ChatManagementPage from "./pages/owner/main/ChatManagementPage";
+import CustomerManagementPage from "./pages/owner/main/CustomerManagementPage";
+import ReportManagementPage from "./pages/owner/main/ReportManagementPage";
+import NotificationPage from "./pages/owner/main/NotificationPage";
 
-import ApprovalGuard from './components/owner/ApprovalGuard';
-import { approvalApi } from './api/owner/ApprovalApi';
+import ApprovalGuard from "./components/owner/ApprovalGuard";
+import { approvalApi } from "./api/owner/ApprovalApi";
 
 // 루트 경로("/")에서 유저 상태에 맞춰 대시보드 또는 심사창으로 스위칭해주는 지능형 컴포넌트
 function InitialRedirect() {
   const [targetPath, setTargetPath] = useState(null);
-  const role = localStorage.getItem('role');
+  const role = localStorage.getItem("role");
 
   useEffect(() => {
-    if (role === 'ROLE_ADMIN') {
-      setTargetPath('/admin/dashboard');
+    if (role === "ROLE_ADMIN") {
+      setTargetPath("/admin/dashboard");
       return;
     }
 
@@ -39,14 +43,15 @@ function InitialRedirect() {
         const response = await approvalApi.getOwnerStoreChecklist();
         if (
           response.data.success &&
-          response.data.data.approvalStatus === 'APPROVED'
+          response.data.data.approvalStatus === "APPROVED"
         ) {
-          setTargetPath('/dashboard');
+          setTargetPath("/dashboard");
         } else {
-          setTargetPath('/approval-status');
+          setTargetPath("/approval-status");
         }
       } catch (error) {
-        setTargetPath('/approval-status');
+        console.error("Error fetching approval status:", error);
+        setTargetPath("/approval-status");
       }
     };
 
@@ -89,7 +94,13 @@ function App() {
           <Route path="/categories" element={<CategoryPage />} />
           <Route path="/events" element={<EventPage />} />
           <Route path="/reviews" element={<ReviewManagementPage />} />
+          <Route path="/inquiry" element={<InquiryManagementPage />} />
+          <Route path="/chat" element={<ChatManagementPage />} />
           <Route path="/customers" element={<CustomerManagementPage />} />
+          <Route path="/inquiry" element={<InquiryManagementPage />} />
+          <Route path="/chat" element={<ChatManagementPage />} />
+          <Route path="/reports" element={<ReportManagementPage />} />
+          <Route path="/notifications" element={<NotificationPage />} />
         </Route>
       </Route>
     </Routes>

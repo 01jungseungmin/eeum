@@ -226,6 +226,26 @@ public class NotificationService {
                 accountId, type, refType, refId, updated);
     }
 
+    // 여러 사용자의 동일 참조 알림 일괄 읽음 처리 — 채팅방 종료처럼 참여자 전원을 한 번에 정리할 때 사용.
+    // 참여자마다 markAsReadByRef를 호출하면 UPDATE와 unread 재계산이 인원수만큼 반복된다.
+    @Transactional
+    public void markAsReadByRefForAccounts(
+            List<Long> accountIds, NotificationType type, NotificationRefType refType, Long refId) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return;
+        }
+        int updated = notificationRepository.markAsReadByAccountsAndTypeAndRef(
+                accountIds, type, refType, refId, LocalDateTime.now());
+        if (updated > 0) {
+            runAfterCommit(() -> accountIds.forEach(accountId -> {
+                unreadCountService.refreshFromDb(accountId);
+                pushUnreadCount(accountId);
+            }));
+        }
+        log.debug("참조 기준 일괄 읽음 처리: accounts={}, type={}, refType={}, refId={}, count={}",
+                accountIds.size(), type, refType, refId, updated);
+    }
+
     // ===================== 삭제 =====================
 
     @Transactional

@@ -17,6 +17,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,17 +42,22 @@ class ChatUnreadServiceTest {
     // ===================== increment =====================
 
     @Test
+    @SuppressWarnings("unchecked")
     void unread_증가_전체_및_방별_카운트_모두_증가() {
-        // Given
+        // Given: 두 키를 개별 INCR하면 그 사이 resetRoom이 끼어들어 전체 배지가 영구히 부풀 수 있어
+        //        하나의 Lua 스크립트로 원자 처리한다
         Long accountId = 1L;
         Long roomId = 10L;
 
         // When
         chatUnreadService.increment(accountId, roomId);
 
-        // Then
-        verify(valueOps).increment(ChatRedisKeys.totalUnread(accountId));
-        verify(valueOps).increment(ChatRedisKeys.roomUnread(accountId, roomId));
+        // Then: 방별 키와 전체 키를 함께 넘긴 단일 스크립트 실행
+        ArgumentCaptor<List<String>> keysCaptor = ArgumentCaptor.forClass(List.class);
+        verify(redisTemplate).execute(any(RedisScript.class), keysCaptor.capture());
+        assertThat(keysCaptor.getValue())
+                .containsExactly("unread:chat:1:room:10", "unread:chat:1");
+        verify(valueOps, never()).increment(anyString());
     }
 
     // ===================== resetRoom (Lua 스크립트 기반) =====================
@@ -95,6 +101,69 @@ class ChatUnreadServiceTest {
         verify(redisTemplate).execute(any(RedisScript.class), keysCaptor.capture());
         assertThat(keysCaptor.getValue())
                 .containsExactly(expectedRoomKey, expectedAccountKey);
+    }
+
+    // ===================== compareAndSetTotal =====================
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 전체_unread_CAS_성공이면_true를_반환하고_기대값과_새값을_전달한다() {
+        // Given
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                eq(List.of("unread:chat:1")),
+                eq("5"),
+                eq("3")))
+                .thenReturn(1L);
+
+        // When
+        boolean updated = chatUnreadService.compareAndSetTotal(1L, 5L, 3L);
+
+        // Then
+        assertThat(updated).isTrue();
+        verify(redisTemplate).execute(
+                any(RedisScript.class),
+                eq(List.of("unread:chat:1")),
+                eq("5"),
+                eq("3"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 전체_unread_CAS_중_값이_바뀌면_false를_반환한다() {
+        // Given: Redis의 현재 값이 기대값과 달라 스크립트가 갱신을 거부한 상황
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                eq(List.of("unread:chat:1")),
+                eq("5"),
+                eq("3")))
+                .thenReturn(0L);
+
+        // When & Then
+        assertThat(chatUnreadService.compareAndSetTotal(1L, 5L, 3L)).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 전체_unread_CAS의_null_기대값은_키_없음을_뜻하는_빈문자열로_전달한다() {
+        // Given
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                eq(List.of("unread:chat:7")),
+                eq(""),
+                eq("2")))
+                .thenReturn(1L);
+
+        // When
+        boolean updated = chatUnreadService.compareAndSetTotal(7L, null, 2L);
+
+        // Then
+        assertThat(updated).isTrue();
+        verify(redisTemplate).execute(
+                any(RedisScript.class),
+                eq(List.of("unread:chat:7")),
+                eq(""),
+                eq("2"));
     }
 
     // ===================== getTotalUnread =====================

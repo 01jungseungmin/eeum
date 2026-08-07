@@ -273,6 +273,7 @@ function ProductFormModal({
   productId = null,
   onClose,
   onSuccess,
+  categories,
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -759,6 +760,7 @@ function ProductFormModal({
                 setBasePrice={setBasePrice}
                 stockQuantity={stockQuantity}
                 setStockQuantity={setStockQuantity}
+                categories={categories}
               />
             )}
 
@@ -769,6 +771,7 @@ function ProductFormModal({
                 basePrice={basePrice}
                 setBasePrice={setBasePrice}
                 stockQuantity={stockQuantity}
+                categories={categories}
               />
             )}
 

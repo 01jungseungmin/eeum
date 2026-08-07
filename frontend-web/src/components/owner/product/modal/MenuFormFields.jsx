@@ -1,7 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
 
-// 가로로 나란히 배치하기 위한 정렬 컴포넌트 추가
 const RowGroup = styled.div`
   display: flex;
   gap: 12px;
@@ -61,6 +60,7 @@ function MenuFormFields({
   basePrice,
   setBasePrice,
   stockQuantity,
+  categories,
 }) {
   return (
     <>
@@ -75,8 +75,16 @@ function MenuFormFields({
             onChange={(e) => setCategoryId(e.target.value)}
           >
             <option value="">선택</option>
-            <option value="1">국/찌개</option>
-            <option value="2">반찬류</option>
+            {categories
+              .filter((category) => category.active)
+              .map((category) => (
+                <option
+                  key={category.productCategoryId}
+                  value={category.productCategoryId}
+                >
+                  {category.name}
+                </option>
+              ))}
           </Select>
         </div>
 

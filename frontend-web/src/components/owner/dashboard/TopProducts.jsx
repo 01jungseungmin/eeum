@@ -1,7 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import { ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis } from 'recharts';
 
 const Card = styled.div`
   background: white;
@@ -36,7 +36,7 @@ const data = [
   { name: '불고기 반찬', value: 33 },
   { name: '잡채', value: 20 },
   { name: '계란말이', value: 12 },
-].reverse(); // 상위 정렬을 위해 리버스
+].reverse();
 
 function TopProducts() {
   return (
@@ -48,29 +48,30 @@ function TopProducts() {
         </span>
       </Header>
       <div style={{ width: '100%', height: 220 }}>
-        <ResponsiveContainer>
-          <BarChart
-            layout="vertical"
-            data={data}
-            margin={{ top: 0, right: 20, left: 30, bottom: 0 }}
-          >
-            <XAxis type="number" hide />
-            <YAxis
-              dataKey="name"
-              type="category"
-              axisLine={false}
-              tickLine={false}
-              stroke="#595959"
-              fontSize={11}
-            />
-            <Bar
-              dataKey="value"
-              fill="#5fa07e"
-              radius={[0, 6, 6, 0]}
-              barSize={14}
-            />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart
+          width={300}
+          height={220}
+          layout="vertical"
+          data={data}
+          margin={{ top: 0, right: 20, left: 30, bottom: 0 }}
+          style={{ width: '100%' }}
+        >
+          <XAxis type="number" hide />
+          <YAxis
+            dataKey="name"
+            type="category"
+            axisLine={false}
+            tickLine={false}
+            stroke="#595959"
+            fontSize={11}
+          />
+          <Bar
+            dataKey="value"
+            fill="#5fa07e"
+            radius={[0, 6, 6, 0]}
+            barSize={14}
+          />
+        </BarChart>
       </div>
     </Card>
   );

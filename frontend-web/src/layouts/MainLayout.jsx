@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 import { approvalApi } from '../api/owner/ApprovalApi';
+import { storeApi } from '../api/owner/storeApi';
 
 const LayoutWrapper = styled.div`
   display: flex;
@@ -28,35 +29,80 @@ const PageContainer = styled.div`
 `;
 
 function MainLayout() {
-  const { accessToken, isLoading: authLoading } = useAuth(); // 인증 상태 꺼내기
+  const { accessToken, isLoading: authLoading } = useAuth();
 
-  // 사장님의 승인 상태를 관리할 전역/지역 상태 추가
   const [approvalStatus, setApprovalStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
-  // 로그인된 유저(토큰이 있을 때)의 입점 심사 승인 상태를 가져오는 Effect
   useEffect(() => {
     if (!accessToken) return;
 
-    const fetchApprovalStatus = async () => {
+    const role = localStorage.getItem('role');
+
+    // 초기 데이터 로드 함수
+    const fetchInitialData = async () => {
       try {
-        const response = await approvalApi.getOwnerStoreChecklist();
-        if (response.data.success) {
-          // 백엔드 상태 동기화 ('PENDING', 'APPROVED', 'REJECTED')
-          setApprovalStatus(response.data.data.approvalStatus);
+        if (role === 'ROLE_ADMIN') {
+          const approvalRes = await approvalApi.getOwnerStoreChecklist();
+          if (approvalRes.data && approvalRes.data.success) {
+            setApprovalStatus(approvalRes.data.data.approvalStatus);
+          }
+          setStatusLoading(false);
+          return;
+        }
+
+        // 사장님 권한일 경우, 승인 상태와 대시보드 정보를 동시에 가져오기
+        const [approvalRes, dashboardRes] = await Promise.all([
+          approvalApi.getOwnerStoreChecklist(),
+          storeApi.getDashboard(),
+        ]);
+        if (approvalRes.data && approvalRes.data.success) {
+          setApprovalStatus(approvalRes.data.data.approvalStatus);
+        }
+
+        // 대시보드 정보 처리
+        if (dashboardRes && dashboardRes.success) {
+          const serverData = dashboardRes.data;
+
+          // 방금 개설되어 로컬에 true 흔적이 있거나 백엔드가 true를 주면 존재(true)로 판정
+          const isCreatedInLocal =
+            localStorage.getItem('storeChatRoomCreated') === 'true';
+          const chatCreated =
+            isCreatedInLocal || serverData.storeChatRoomCreated;
+
+          // 개설 여부 상태 동기화
+          localStorage.setItem(
+            'storeChatRoomCreated',
+            String(Boolean(chatCreated)),
+          );
+
+          // storeChatRoomId가 유효할 때만 로컬스토리지 업데이트
+          const targetRoomId = serverData.storeChatRoomId;
+          if (
+            targetRoomId !== undefined &&
+            targetRoomId !== null &&
+            String(targetRoomId) !== 'undefined'
+          ) {
+            localStorage.setItem('storeChatRoom_id', String(targetRoomId));
+          }
+
+          // storeId 저장
+          if (serverData.storeId) {
+            localStorage.setItem('my_store_id', String(serverData.storeId));
+          }
         }
       } catch (error) {
-        console.error('레이아웃 승인 상태 조회 실패:', error);
-        setApprovalStatus('REJECTED'); // 에러 시 기본 방어 처리
+        console.error('초기 데이터 로드 실패:', error);
+        setApprovalStatus('REJECTED');
       } finally {
         setStatusLoading(false);
       }
     };
 
-    fetchApprovalStatus();
+    fetchInitialData();
   }, [accessToken]);
 
-  // 인증 세션 확인 중이거나 승인 상태 조회 중일 때 로딩 가드
+  // 인증 및 승인 상태 데이터 로딩 대기
   if (authLoading || (accessToken && statusLoading)) {
     return (
       <div
@@ -75,20 +121,16 @@ function MainLayout() {
     );
   }
 
-  // 인증 토큰이 없으면 로그인 페이지로 리다이렉트
   if (!accessToken) {
     return <Navigate to="/login" replace />;
   }
 
   return (
     <LayoutWrapper>
-      {/* 왼쪽 사이드바에 현재 승인 상태를 넘겨주어 메뉴 비활성화 UI를 구현합니다. */}
       <Sidebar approvalStatus={approvalStatus} />
 
       <MainContent>
-        {/* 상단 네비바 */}
         <TopNavbar />
-        {/* 우측 하단 내용 변경 영역 */}
         <PageContainer>
           <Outlet context={{ approvalStatus }} />
         </PageContainer>

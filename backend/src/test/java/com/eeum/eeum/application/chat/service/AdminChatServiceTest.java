@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
+import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
@@ -16,9 +17,11 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -31,7 +34,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +48,8 @@ class AdminChatServiceTest {
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
+    @Mock private ChatRoomService chatRoomService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     // ===================== 픽스처 헬퍼 =====================
 
@@ -181,6 +186,7 @@ class AdminChatServiceTest {
         Account creator = createAccount(1L, "홍길동");
         ChatRoom room = createGroupRoom(10L, creator);
         ChatMessage message = ChatMessage.text(room, creator, "삭제 대상 메시지");
+        ReflectionTestUtils.setField(message, "chatmessageId", messageId);
 
         when(chatMessageRepository.findById(messageId)).thenReturn(Optional.of(message));
 
@@ -189,6 +195,14 @@ class AdminChatServiceTest {
 
         // Then
         assertThat(message.isDeleted()).isTrue();
+        ArgumentCaptor<ChatMessageBroadcastEvent> eventCaptor =
+                ArgumentCaptor.forClass(ChatMessageBroadcastEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        ChatMessageBroadcastEvent event = eventCaptor.getValue();
+        assertThat(event.roomId()).isEqualTo(10L);
+        assertThat(event.payload().getMessageId()).isEqualTo(messageId);
+        assertThat(event.payload().isDeleted()).isTrue();
+        assertThat(event.payload().getContent()).isEqualTo("삭제된 메시지입니다.");
     }
 
     @Test
@@ -203,6 +217,7 @@ class AdminChatServiceTest {
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_MESSAGE_NOT_FOUND);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -226,49 +241,30 @@ class AdminChatServiceTest {
     // ===================== forceDeactivateRoom =====================
 
     @Test
-    void 관리자_채팅방_강제비활성화_성공() {
-        // Given
+    void 관리자_채팅방_강제비활성화는_ChatRoomService에_위임된다() {
+        // Given: 여기서 직접 deactivate()하면 생성과 동일한 분산 락을 잡지 못해
+        //        재생성 요청과 레이스가 나고, unread 회수/종료 통지도 누락된다
         Long roomId = 10L;
-        Account creator = createAccount(1L, "홍길동");
-        ChatRoom room = createGroupRoom(roomId, creator);
-
-        when(chatRoomRepository.findById(roomId)).thenReturn(Optional.of(room));
 
         // When
         adminChatService.forceDeactivateRoom(roomId);
 
-        // Then
-        assertThat(room.isActive()).isFalse();
+        // Then: 락·정리 절차를 소유한 쪽으로 위임하고, 자체적으로 방을 조회·수정하지 않는다
+        verify(chatRoomService).forceCloseRoom(roomId);
+        verify(chatRoomRepository, never()).findById(roomId);
     }
 
     @Test
-    void 관리자_채팅방_강제비활성화_방없음_예외() {
+    void 관리자_채팅방_강제비활성화_방없음_예외가_전파된다() {
         // Given
         Long roomId = 99L;
-
-        when(chatRoomRepository.findById(roomId)).thenReturn(Optional.empty());
+        doThrow(new NotFoundException(ErrorCode.CHAT_ROOM_NOT_FOUND))
+                .when(chatRoomService).forceCloseRoom(roomId);
 
         // When & Then
         assertThatThrownBy(() -> adminChatService.forceDeactivateRoom(roomId))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_ROOM_NOT_FOUND);
-    }
-
-    @Test
-    void 관리자_채팅방_강제비활성화_이미비활성화된방도_예외없이_처리() {
-        // Given
-        Long roomId = 10L;
-        Account creator = createAccount(1L, "홍길동");
-        ChatRoom room = createGroupRoom(roomId, creator);
-        room.deactivate();
-
-        when(chatRoomRepository.findById(roomId)).thenReturn(Optional.of(room));
-
-        // When
-        adminChatService.forceDeactivateRoom(roomId);
-
-        // Then — 멱등성: 이미 비활성화된 방도 예외 없이 처리
-        assertThat(room.isActive()).isFalse();
     }
 }

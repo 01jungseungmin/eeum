@@ -12,12 +12,12 @@ import { reservationApi } from '@/api/reservation';
 export default function ReservationConfirmScreen() {
   const router = useRouter();
   
-  // ✨ 동적으로 넘겨받은 파라미터 (month 포함)
+  // 동적으로 넘겨받은 파라미터 (month 포함)
   const { storeId, month, date, time, people, request } = useLocalSearchParams();
   
   const [shopInfo, setShopInfo] = useState<any>(null);
   
-  // ✨ 실제 유저 데이터를 담을 State
+  // 실제 유저 데이터를 담을 State
   const [userInfo, setUserInfo] = useState({
     name: '로딩중...',
     phone: '로딩중...'
@@ -80,17 +80,17 @@ export default function ReservationConfirmScreen() {
             reservationId: newReservationId,
             month: month,
             date: date,
-            time: time
+            time: time,
+            people: people
           }
         });
       } else {
         Alert.alert('예약 실패', response.message || '예약에 실패했습니다.');
       }
     } catch (error) {
-     // 🚨 여기가 핵심입니다! 백엔드가 400 에러와 함께 보내준 진짜 이유를 출력합니다.
+     // 백엔드가 400 에러와 함께 보내준 진짜 이유를 출력합니다.
       const err = error as any; 
 
-      // 🚨 백엔드가 400 에러와 함께 보내준 진짜 이유를 출력합니다.
       console.log('============= 400 에러 상세 원인 =============');
       console.log(err.response?.data);
       console.log('==============================================');
@@ -105,7 +105,9 @@ export default function ReservationConfirmScreen() {
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 5 }}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
+        
         <Text fontWeight="bold" style={styles.headerTitle}>예약</Text>
+        
         <View style={{ width: 34 }} />
       </View>
 
@@ -115,12 +117,12 @@ export default function ReservationConfirmScreen() {
           <View style={styles.card}>
             <View style={styles.row}>
               <Text fontWeight="bold" style={styles.label}>예약자</Text>
-              {/* ✨ 실제 유저 데이터 렌더링 */}
+              {/* 실제 유저 데이터 렌더링 */}
               <Text style={styles.value}>{userInfo.name}  {userInfo.phone}</Text>
             </View>
             <View style={[styles.row, { marginTop: 10 }]}>
               <Text fontWeight="bold" style={styles.label}>예약 일정</Text>
-              {/* ✨ 동적으로 전달받은 월/일/시간 렌더링 */}
+              {/* 동적으로 전달받은 월/일/시간 렌더링 */}
               <Text style={styles.value}>{month}월 {date}일 {time}</Text>
             </View>
           </View>

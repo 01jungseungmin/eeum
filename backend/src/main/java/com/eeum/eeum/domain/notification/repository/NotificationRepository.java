@@ -99,6 +99,26 @@ public interface NotificationRepository
     boolean existsByAccount_AccountIdAndTypeAndRefTypeAndRefId(
             Long accountId, NotificationType type, NotificationRefType refType, Long refId);
 
+    // 여러 사용자의 동일 참조 알림 일괄 읽음 처리 (채팅방 종료 시 참여자 전원 동기화)
+    // 참여자 수만큼 UPDATE를 반복하지 않도록 IN 절 한 번으로 처리한다
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Notification n
+        SET n.isRead = true, n.readAt = :now
+        WHERE n.account.accountId IN :accountIds
+          AND n.type = :type
+          AND n.refType = :refType
+          AND n.refId = :refId
+          AND n.isRead = false
+        """)
+    int markAsReadByAccountsAndTypeAndRef(
+            @Param("accountIds") List<Long> accountIds,
+            @Param("type") NotificationType type,
+            @Param("refType") NotificationRefType refType,
+            @Param("refId") Long refId,
+            @Param("now") LocalDateTime now
+    );
+
     // 오래된 알림 정리 배치 (6개월 이전)
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Notification n WHERE n.createdAt < :threshold")

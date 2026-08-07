@@ -5,6 +5,7 @@ import com.eeum.eeum.domain.store.enums.StoreReviewType;
 import com.eeum.eeum.domain.store.repository.CustomerReviewStatProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,10 @@ import java.util.Optional;
 import java.util.Set;
 
 public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> {
+
+    // 신고 상세의 대상 스냅샷 — 작성자/가게를 함께 조회해 N+1 방지
+    @EntityGraph(attributePaths = {"account", "store"})
+    Optional<StoreReview> findWithAccountAndStoreByStorereviewId(Long storereviewId);
 
     //주문 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 orderId 집합
     @Query("SELECT r.order.orderId FROM StoreReview r WHERE r.order.orderId IN :orderIds")

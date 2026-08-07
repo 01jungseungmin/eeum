@@ -27,6 +27,17 @@ export const reservationApi = {
     );
   },
 
+  // 테이블 구성 조회 / 요약 조회 / 저장
+  getStoreTables: () => {
+    return apiClient.get('/owner/reservations/visits/tables');
+  },
+  getTableSummary: () => {
+    return apiClient.get('/owner/reservations/visits/tables/summary');
+  },
+  saveStoreTables: (tablesPayload) => {
+    return apiClient.put('/owner/reservations/visits/tables', tablesPayload);
+  },
+
   // 방문 예약 기본 설정 조회 / 수정
   getVisitSettings: () => {
     return apiClient.get('/owner/reservations/visits/settings');

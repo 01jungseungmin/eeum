@@ -1,5 +1,4 @@
-// CapacityModal.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { X, Settings, Layers, CalendarDays } from 'lucide-react';
 import { reservationApi } from '../../../api/owner/reservationApi';
@@ -44,6 +43,9 @@ const ModalHeader = styled.div`
     border: none;
     cursor: pointer;
     color: #adb5bd;
+    &:hover {
+      color: #1a1a1a;
+    }
   }
 `;
 
@@ -159,6 +161,13 @@ const TotalSummary = styled.div`
   text-align: right;
 `;
 
+const LoadingText = styled.div`
+  text-align: center;
+  padding: 16px 0;
+  font-size: 13px;
+  color: #868e96;
+`;
+
 const FooterGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -174,6 +183,11 @@ const FooterBtn = styled.button`
   border: 1px solid ${(props) => (props.$primary ? '#4CA771' : '#e9ecef')};
   background: ${(props) => (props.$primary ? '#4CA771' : '#fff')};
   color: ${(props) => (props.$primary ? '#fff' : '#495057')};
+  &:disabled {
+    background: #adb5bd;
+    border-color: #adb5bd;
+    cursor: not-allowed;
+  }
 `;
 
 export default function CapacityModal({
@@ -181,7 +195,6 @@ export default function CapacityModal({
   onClose,
   refreshSettings,
 }) {
-  // 상태 제어 변수들
   const [isEnabled, setIsEnabled] = useState(initialSettings?.enabled ?? true);
   const [sameDayReservationAllowed, setSameDayReservationAllowed] = useState(
     initialSettings?.sameDayReservationAllowed ?? true,
@@ -190,50 +203,95 @@ export default function CapacityModal({
     initialSettings?.slotIntervalMinutes || 30,
   );
 
-  // 인원수 변수 제거하고 2, 4, 6인용 테이블 개수 상태 추가
-  const [table2Seater, setTable2Seater] = useState(
-    initialSettings?.table2Seater || 0,
-  );
-  const [table4Seater, setTable4Seater] = useState(
-    initialSettings?.table4Seater || 0,
-  );
-  const [table6Seater, setTable6Seater] = useState(
-    initialSettings?.table6Seater || 0,
+  // 인원별 테이블 개수 상태 ({ 2: 4, 4: 6, ... })
+  const [capacityMap, setCapacityMap] = useState({ 2: 0, 4: 0, 6: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 백엔드 요약 API 호출 (/tables/summary)
+  useEffect(() => {
+    const fetchTableSummary = async () => {
+      try {
+        setIsLoading(true);
+        const response = await reservationApi.getTableSummary();
+
+        if (response.data && response.data.success) {
+          const { capacityCounts } = response.data.data;
+
+          const map = { 2: 0, 4: 0, 6: 0 }; // 기본 틀 구성
+          (capacityCounts || []).forEach((item) => {
+            map[item.capacity] = item.count;
+          });
+          setCapacityMap(map);
+        }
+      } catch (error) {
+        console.error('테이블 요약 정보 조회 실패:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTableSummary();
+  }, []);
+
+  // 인원수별 수량 변경
+  const handleCapacityChange = (cap, val) => {
+    const num = Math.max(0, parseInt(val, 10) || 0);
+    setCapacityMap((prev) => ({
+      ...prev,
+      [cap]: num,
+    }));
+  };
+
+  // 총 운영 테이블 개수 계산
+  const totalTablesCount = Object.values(capacityMap).reduce(
+    (acc, cur) => acc + Number(cur),
+    0,
   );
 
-  // 백엔드로 넘겨줄 총 테이블(팀) 개수 합산
-  const totalTablesCount =
-    Number(table2Seater) + Number(table4Seater) + Number(table6Seater);
-
-  // 설정 저장 api
+  // 저장 로직 (테이블 구성 저장 -> 방문 예약 정책 저장)
   const handleSaveSettings = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
     try {
-      const payload = {
+      const tablesPayload = {
+        tables: Object.entries(capacityMap).map(([capacity, count]) => ({
+          capacity: Number(capacity),
+          count: Number(count),
+        })),
+      };
+
+      const tableRes = await reservationApi.saveStoreTables(tablesPayload);
+      if (!tableRes.data || !tableRes.data.success) {
+        throw new Error('테이블 구성 저장에 실패했습니다.');
+      }
+
+      const settingsPayload = {
         enabled: isEnabled,
         sameDayReservationAllowed: sameDayReservationAllowed,
         slotIntervalMinutes: Number(slotIntervalMinutes),
         cancelDeadlineMinutes: initialSettings?.cancelDeadlineMinutes || 0,
         startTime: initialSettings?.startTime || '10:00',
         endTime: initialSettings?.endTime || '20:00',
-
-        // 테이블 개수 세부 데이터 전송
-        table2Seater: Number(table2Seater),
-        table4Seater: Number(table4Seater),
-        table6Seater: Number(table6Seater),
-        defaultMaxTeamCount: totalTablesCount, // 총 팀(테이블) 수 계산 데이터 매핑
+        table2Seater: capacityMap[2] || 0,
+        table4Seater: capacityMap[4] || 0,
+        table6Seater: capacityMap[6] || 0,
+        defaultMaxTeamCount: totalTablesCount,
       };
 
-      const response = await reservationApi.updateVisitSettings(payload);
-      if (response.data && response.data.success) {
-        alert('방문 예약 정책이 성공적으로 저장되었습니다.');
-        if (refreshSettings) {
-          await refreshSettings();
-        }
+      const settingsRes =
+        await reservationApi.updateVisitSettings(settingsPayload);
+      if (settingsRes.data && settingsRes.data.success) {
+        alert('테이블 구성 및 방문 예약 정책이 저장되었습니다.');
+        if (refreshSettings) await refreshSettings();
         onClose();
       }
     } catch (error) {
-      console.error('설정 저장 실패:', error);
-      alert('설정값 저장 도중 오류가 발생했습니다.');
+      console.error('설정 저장 중 오류 발생:', error);
+      alert(error.message || '설정 저장 도중 오류가 발생했습니다.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -275,7 +333,7 @@ export default function CapacityModal({
             </InputRow>
           </FormGroup>
 
-          {/* [기존 유지] 2. 예약 타임 간격 */}
+          {/* 예약 타임 간격 */}
           <FormGroup>
             <GroupTitle>
               <Settings size={15} color="#4CA771" />
@@ -294,56 +352,33 @@ export default function CapacityModal({
             </InputRow>
           </FormGroup>
 
+          {/* 슬롯당 최대 수용량 (테이블 구성) */}
           <FormGroup>
             <GroupTitle>
               <Layers size={15} color="#4CA771" />
-              <span>슬롯당 최대 수용량 (테이블 수)</span>
+              <span>슬롯당 최대 수용량 (인원석별 테이블 수)</span>
             </GroupTitle>
 
-            <InputRow>
-              <label>2인용 테이블 제한 수</label>
-              <FieldControl>
-                <StyledInput
-                  type="number"
-                  min="0"
-                  value={table2Seater}
-                  onChange={(e) =>
-                    setTable2Seater(Math.max(0, parseInt(e.target.value) || 0))
-                  }
-                />
-                <span>개</span>
-              </FieldControl>
-            </InputRow>
-
-            <InputRow>
-              <label>4인용 테이블 제한 수</label>
-              <FieldControl>
-                <StyledInput
-                  type="number"
-                  min="0"
-                  value={table4Seater}
-                  onChange={(e) =>
-                    setTable4Seater(Math.max(0, parseInt(e.target.value) || 0))
-                  }
-                />
-                <span>개</span>
-              </FieldControl>
-            </InputRow>
-
-            <InputRow>
-              <label>6인용 테이블 제한 수</label>
-              <FieldControl>
-                <StyledInput
-                  type="number"
-                  min="0"
-                  value={table6Seater}
-                  onChange={(e) =>
-                    setTable6Seater(Math.max(0, parseInt(e.target.value) || 0))
-                  }
-                />
-                <span>개</span>
-              </FieldControl>
-            </InputRow>
+            {isLoading ? (
+              <LoadingText>테이블 요약 정보를 불러오는 중...</LoadingText>
+            ) : (
+              Object.entries(capacityMap).map(([capacity, count]) => (
+                <InputRow key={capacity}>
+                  <label>{capacity}인용 테이블 제한 수</label>
+                  <FieldControl>
+                    <StyledInput
+                      type="number"
+                      min="0"
+                      value={count}
+                      onChange={(e) =>
+                        handleCapacityChange(capacity, e.target.value)
+                      }
+                    />
+                    <span>개</span>
+                  </FieldControl>
+                </InputRow>
+              ))
+            )}
 
             <TotalSummary>
               타임당 총 운영 테이블: {totalTablesCount}개
@@ -352,9 +387,11 @@ export default function CapacityModal({
         </ScrollArea>
 
         <FooterGrid>
-          <FooterBtn onClick={onClose}>취소</FooterBtn>
-          <FooterBtn $primary onClick={handleSaveSettings}>
-            저장
+          <FooterBtn onClick={onClose} disabled={isSaving}>
+            취소
+          </FooterBtn>
+          <FooterBtn $primary onClick={handleSaveSettings} disabled={isSaving}>
+            {isSaving ? '저장 중...' : '저장'}
           </FooterBtn>
         </FooterGrid>
       </ModalContainer>

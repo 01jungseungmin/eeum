@@ -9,7 +9,13 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface CommunityCommentRepository extends JpaRepository<CommunityComment, Long> {
+
+    // 신고 상세의 대상 스냅샷 — 작성자/게시글을 함께 조회해 N+1 방지
+    @EntityGraph(attributePaths = {"account", "post"})
+    Optional<CommunityComment> findWithAccountAndPostByCommentId(Long commentId);
 
     @EntityGraph(attributePaths = "account")
     Page<CommunityComment> findByPost_PostIdAndParentCommentIsNull(Long postId, Pageable pageable);

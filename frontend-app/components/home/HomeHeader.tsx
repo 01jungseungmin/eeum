@@ -1,13 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import { 
   View, StyleSheet, TouchableOpacity, Modal, 
-  FlatList, ActivityIndicator 
+  FlatList, ActivityIndicator, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 import { useRouter, useFocusEffect } from 'expo-router';
 
 import { notificationApi, NotificationItem } from '../../api/notification'; 
+import { getNotificationRoute } from '../../utils/notificationRoute';
 
 interface HomeHeaderProps {
   primaryRegionName: string;
@@ -68,23 +69,30 @@ export default function HomeHeader({
     setIsDropdownVisible(false);
   };
 
-  // 드롭다운 안에서 개별 알림을 클릭했을 때의 동작
   const handlePressNotification = async (item: NotificationItem) => {
-    handleCloseDropdown(); // 모달 닫기
-    
-    // 안 읽은 알림이라면 읽음 처리 후 이동
+    console.log('🔔 알림 원본:', item);   // linkUrl / refType / refId 확인용
+    handleCloseDropdown();
+
     if (!item.Read && item.Read !== 1 && item.Read !== '1') {
       try {
         await notificationApi.markAsRead(item.notificationId);
-        // UI 즉각 반영을 위해 로컬 카운트 차감
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
         console.error('읽음 처리 실패', error);
       }
     }
 
-    if (item.linkUrl) {
-      router.push(item.linkUrl as any);
+    const route = getNotificationRoute(item);
+    if (!route) {
+      Alert.alert('알림', '이 알림은 이동할 화면이 없습니다.');
+      return;
+    }
+
+    try {
+      router.push(route as any);
+    } catch (e) {
+      console.error('라우팅 실패:', route, e);
+      Alert.alert('오류', '해당 화면으로 이동할 수 없습니다.');
     }
   };
 
@@ -109,6 +117,8 @@ export default function HomeHeader({
       </TouchableOpacity>
     );
   };
+  
+
 
   return (
     <View style={styles.headerContainer}>
