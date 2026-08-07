@@ -63,7 +63,7 @@ public class NotificationService {
     /**
      * 단건 알림 생성
      * 1. 수신 동의 여부 확인
-     * 2. Notification 저장 + Redis unread INCR
+     * 2. Notification 저장 후 DB 기준 Redis unread 스냅샷 갱신
      * 3. SSE로 웹 클라이언트에 unread 카운트 즉시 전달
      * 4. DND가 비활성 상태이고 FCM 토큰이 있으면 NotificationPushEvent 발행 (AFTER_COMMIT + @Async → FCM)
      */
@@ -109,10 +109,7 @@ public class NotificationService {
         // 3~4. Redis unread 증가 + SSE 배지 갱신은 커밋 후에 수행한다 — 트랜잭션 중간에 하면
         // 이후 롤백(배치 발송 중 특정 계정 예외 등) 시 저장되지 않은 알림의 unread/배지가 남아 DB와 어긋난다.
         Long targetAccountId = account.getAccountId();
-        runAfterCommit(() -> {
-            unreadCountService.increment(targetAccountId);
-            pushUnreadCount(targetAccountId);
-        });
+        synchronizeUnreadAfterCommit(targetAccountId);
 
         // 5. FCM 푸시 이벤트 발행 (DND 비활성 + 토큰 있는 경우만) — 호출자가 자체 발송을 이미 처리하면 생략
         if (triggerPush) {
@@ -173,7 +170,7 @@ public class NotificationService {
                 .map(NotificationResponseDto::from);
     }
 
-    // 안 읽은 알림 수 — 조회/캐싱 로직은 UnreadCountService가 전담 (프록시 경유로 readOnly 트랜잭션 적용)
+    // 안 읽은 알림 수 — 조회/캐싱 로직은 UnreadCountService가 전담
     public UnreadCountResponseDto getUnreadCount(Long accountId) {
         return unreadCountService.getUnreadCount(accountId);
     }
@@ -190,10 +187,7 @@ public class NotificationService {
             notification.markAsRead();
             // Redis 감소·SSE 전송은 커밋 후 — 커밋 전에 하면 롤백 시 카운트가 어긋나고,
             // SSE를 받은 프론트가 재조회했을 때 아직 커밋되지 않은 이전 상태를 읽을 수 있다.
-            runAfterCommit(() -> {
-                unreadCountService.decrement(accountId);
-                pushUnreadCount(accountId);
-            });
+            synchronizeUnreadAfterCommit(accountId);
         }
     }
 
@@ -201,12 +195,22 @@ public class NotificationService {
     public void markAllAsRead(Long accountId) {
         int updated = notificationRepository.markAllAsReadByAccountId(accountId, LocalDateTime.now());
         if (updated > 0) {
-            runAfterCommit(() -> {
-                unreadCountService.clear(accountId);
-                pushUnreadCount(accountId);
-            });
+            synchronizeUnreadAfterCommit(accountId);
         }
         log.debug("모두 읽음: accountId={}, count={}", accountId, updated);
+    }
+
+    // 카테고리 탭 진입 시 해당 카테고리의 미읽음 알림을 일괄 읽음 처리하고
+    // 커밋 이후 Redis 전체/카테고리 카운트와 SSE 배지를 DB 기준으로 동기화한다.
+    @Transactional
+    public void markCategoryAsRead(Long accountId, NotificationCategory category) {
+        int updated = notificationRepository.markAsReadByAccountIdAndTypes(
+                accountId, category.getTypes(), LocalDateTime.now());
+        if (updated > 0) {
+            synchronizeUnreadAfterCommit(accountId);
+        }
+        log.debug("카테고리 읽음 처리: accountId={}, category={}, count={}",
+                accountId, category, updated);
     }
 
     // 참조 대상 기준 일괄 읽음 처리 — 예: 채팅방 읽음 시 해당 방의 CHAT_MESSAGE 알림 동기화
@@ -216,10 +220,7 @@ public class NotificationService {
         int updated = notificationRepository.markAsReadByAccountAndTypeAndRef(
                 accountId, type, refType, refId, LocalDateTime.now());
         if (updated > 0) {
-            runAfterCommit(() -> {
-                unreadCountService.refreshFromDb(accountId);
-                pushUnreadCount(accountId);
-            });
+            synchronizeUnreadAfterCommit(accountId);
         }
         log.debug("참조 기준 읽음 처리: accountId={}, type={}, refType={}, refId={}, count={}",
                 accountId, type, refType, refId, updated);
@@ -236,20 +237,14 @@ public class NotificationService {
         boolean wasUnread = notification.isUnread();
         notificationRepository.delete(notification);
         if (wasUnread) {
-            runAfterCommit(() -> {
-                unreadCountService.decrement(accountId);
-                pushUnreadCount(accountId);
-            });
+            synchronizeUnreadAfterCommit(accountId);
         }
     }
 
     @Transactional
     public void deleteAllByAccountId(Long accountId) {
         notificationRepository.deleteAllByAccount_AccountId(accountId);
-        runAfterCommit(() -> {
-            unreadCountService.clear(accountId);
-            pushUnreadCount(accountId);
-        });
+        synchronizeUnreadAfterCommit(accountId);
     }
 
     // 대상 도메인 삭제 시 연관 알림 일괄 삭제 (다른 서비스에서 호출)
@@ -264,6 +259,24 @@ public class NotificationService {
     private void pushUnreadCount(Long accountId) {
         if (!sseEmitterManager.isConnected(accountId)) return;
         sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
+    }
+
+    // DB 변경은 이미 커밋된 뒤이므로 Redis/SSE 실패를 API 실패로 전파하지 않는다.
+    // 동기화 실패 시 완성된 것처럼 보이는 오래된 캐시를 제거해 다음 조회가 DB에서 복구하도록 한다.
+    private void synchronizeUnreadAfterCommit(Long accountId) {
+        runAfterCommit(() -> {
+            try {
+                unreadCountService.refreshFromDb(accountId);
+                pushUnreadCount(accountId);
+            } catch (RuntimeException e) {
+                log.error("커밋 후 unread 동기화 실패: accountId={}", accountId, e);
+                try {
+                    unreadCountService.invalidateSnapshot(accountId);
+                } catch (RuntimeException invalidateError) {
+                    log.error("unread 캐시 무효화 실패: accountId={}", accountId, invalidateError);
+                }
+            }
+        });
     }
 
     private void publishPushEvent(Account account, NotificationCreateRequestDto request) {

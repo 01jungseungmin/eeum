@@ -13,6 +13,9 @@ public class NotificationSettingsUpdateRequestDto {
 
     //푸시 ON/OFF
 
+    @Schema(description = "전체 알림 ON/OFF (OFF이면 모든 카테고리 알림을 수신하지 않음)", example = "true")
+    private Boolean allEnabled;
+
     @Schema(description = "채팅 알림 ON/OFF", example = "true")
     private Boolean chatEnabled;
 
