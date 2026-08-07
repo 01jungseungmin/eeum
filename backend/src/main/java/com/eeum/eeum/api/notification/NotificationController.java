@@ -112,6 +112,21 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success());
     }
 
+    @Operation(
+            summary = "카테고리별 전체 읽음 처리",
+            description = "사장님 알림 카테고리 탭 진입 시 해당 카테고리의 미읽음 알림을 모두 읽음 처리합니다. " +
+                    "처리 후 전체·카테고리별 미읽음 수를 SSE unread-count 이벤트로 갱신합니다."
+    )
+    @PatchMapping("/categories/{category}/read")
+    public ResponseEntity<ApiResponse<Void>> markCategoryAsRead(
+            @Parameter(description = "읽음 처리할 카테고리 (ORDER·CHAT·REVIEW·RESERVATION·PRODUCT·COMMUNITY·SYSTEM)")
+            @PathVariable NotificationCategory category
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        notificationService.markCategoryAsRead(accountId, category);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
     // ===================== 삭제 =====================
 
     @Operation(summary = "알림 단건 삭제")
@@ -142,8 +157,9 @@ public class NotificationController {
 
     @Operation(
             summary = "알림 수신 설정 변경",
-            description = "카테고리별 ON/OFF, DND, 이메일, 알림음 설정을 변경합니다. " +
-                    "- 주문/예약/시스템 알림은 필수이므로 변경해도 서버에서 무시합니다. " +
+            description = "전체 또는 카테고리별 ON/OFF, DND, 이메일, 알림음 설정을 변경합니다. " +
+                    "- allEnabled=false이면 모든 카테고리 알림을 수신하지 않습니다. " +
+                    "- allEnabled=true일 때 주문/예약/시스템 알림은 필수이므로 개별 변경할 수 없습니다. " +
                     "- marketingEnabled=true 설정 시 marketingAgreedAt이 자동 기록됩니다 (법적 증빙). " +
                     "- null 필드는 변경하지 않습니다 (부분 업데이트)."
     )

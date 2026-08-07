@@ -1,28 +1,33 @@
 package com.eeum.eeum.application.notification.service;
 
 import com.eeum.eeum.application.notification.dto.response.UnreadCountResponseDto;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationCategory;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * unread 카운트 조회/갱신 전담 컴포넌트.
  * NotificationService에서 분리해 self-invocation 없이 프록시를 통해 호출되도록 하여
- * 조회 시 @Transactional(readOnly = true) 경계가 항상 적용된다.
+ * AFTER_COMMIT 호출도 REQUIRES_NEW 트랜잭션에서 Account 행 잠금을 획득한다.
  *
  * Redis 키:
- * - unread:account:{accountId}  — 전체 미읽음 수 (INCR/DECR로 유지, 미스 시 DB 복구)
- * - unread:category:{accountId} — 카테고리별 미읽음 수 hash (변경 시 무효화, 미스 시 DB 재집계)
+ * - unread:account:{accountId}  — 전체 미읽음 수
+ * - unread:category:{accountId} — 카테고리별 미읽음 수 hash
+ * 두 키는 DB 스냅샷을 기준으로 Lua에서 원자적으로 함께 교체한다.
  */
 @Slf4j
 @Service
@@ -31,94 +36,152 @@ public class UnreadCountService {
 
     private static final String UNREAD_KEY_PREFIX = "unread:account:";
     private static final String CATEGORY_KEY_PREFIX = "unread:category:";
+    @SuppressWarnings("rawtypes")
+    private static final DefaultRedisScript<List> READ_UNREAD_SNAPSHOT = new DefaultRedisScript<>(
+            "local total = redis.call('get', KEYS[1]) "
+                    + "if not total then return {} end "
+                    + "local result = {total} "
+                    + "local categories = redis.call('hgetall', KEYS[2]) "
+                    + "for i = 1, #categories do table.insert(result, categories[i]) end "
+                    + "return result",
+            List.class);
+    private static final DefaultRedisScript<Long> REPLACE_UNREAD_SNAPSHOT = new DefaultRedisScript<>(
+            "redis.call('set', KEYS[1], ARGV[1]) "
+                    + "redis.call('del', KEYS[2]) "
+                    + "for i = 2, #ARGV, 2 do redis.call('hset', KEYS[2], ARGV[i], ARGV[i + 1]) end "
+                    + "return 1",
+            Long.class);
 
     private final NotificationRepository notificationRepository;
+    private final AccountRepository accountRepository;
     private final StringRedisTemplate redisTemplate;
-
-    // 0보다 클 때만 DECR — GET→검사→DECR로 나누면 동시 읽음 처리 시 둘 다 검사를 통과해 -1이 될 수 있으므로
-    // Lua로 원자적으로 처리한다.
-    private static final DefaultRedisScript<Long> DECR_IF_POSITIVE = new DefaultRedisScript<>(
-            "local v = tonumber(redis.call('get', KEYS[1]) or '0') "
-                    + "if v > 0 then return redis.call('decr', KEYS[1]) else return 0 end",
-            Long.class);
 
     // ===================== 조회 =====================
 
-    // 전체는 Redis 우선(미스 시 DB 복구), 카테고리별은 hash 캐시 우선(미스 시 DB 집계 후 캐싱)
-    @Transactional(readOnly = true)
+    // 전체·카테고리 캐시가 모두 완성된 경우에만 캐시를 사용한다.
+    // 하나라도 미스면 Account 행을 잠근 뒤 동일 DB 스냅샷으로 두 캐시를 함께 복구한다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UnreadCountResponseDto getUnreadCount(Long accountId) {
-        String key = UNREAD_KEY_PREFIX + accountId;
-        String cached = redisTemplate.opsForValue().get(key);
+        List<?> cachedSnapshot = redisTemplate.execute(
+                READ_UNREAD_SNAPSHOT,
+                List.of(totalKey(accountId), categoryKey(accountId)));
+        CachedUnreadSnapshot cached = parseCachedSnapshot(cachedSnapshot);
 
-        long count;
-        if (cached != null) {
-            count = Long.parseLong(cached);
-        } else {
-            count = notificationRepository.countByAccount_AccountIdAndIsReadFalse(accountId);
-            redisTemplate.opsForValue().set(key, String.valueOf(count));
-            log.debug("unread 캐시 복구: accountId={}, count={}", accountId, count);
+        if (cached != null && hasAllCategories(cached.categoryCounts())) {
+            return UnreadCountResponseDto.of(
+                    cached.total(), parseCategoryCounts(cached.categoryCounts()));
         }
-        return UnreadCountResponseDto.of(count, getCategoryCounts(accountId));
+
+        return rebuildFromDbWithAccountLock(accountId);
     }
 
-    private Map<NotificationCategory, Long> getCategoryCounts(Long accountId) {
-        String categoryKey = CATEGORY_KEY_PREFIX + accountId;
-        Map<Object, Object> cached = redisTemplate.opsForHash().entries(categoryKey);
+    private CachedUnreadSnapshot parseCachedSnapshot(List<?> snapshot) {
+        if (snapshot == null || snapshot.isEmpty() || snapshot.size() % 2 == 0) return null;
 
-        // 모든 카테고리를 0으로 초기화 — 클라이언트가 누락 키 처리를 하지 않아도 되도록
+        try {
+            long total = Long.parseLong(snapshot.get(0).toString());
+            Map<Object, Object> categoryCounts = new java.util.HashMap<>();
+            for (int i = 1; i < snapshot.size(); i += 2) {
+                categoryCounts.put(snapshot.get(i), snapshot.get(i + 1));
+            }
+            return new CachedUnreadSnapshot(total, categoryCounts);
+        } catch (RuntimeException e) {
+            log.warn("unread 캐시 스냅샷 파싱 실패 — DB에서 복구", e);
+            return null;
+        }
+    }
+
+    private Map<NotificationCategory, Long> parseCategoryCounts(Map<Object, Object> cached) {
         Map<NotificationCategory, Long> result = new EnumMap<>(NotificationCategory.class);
         for (NotificationCategory category : NotificationCategory.values()) {
             result.put(category, 0L);
         }
-
-        if (!cached.isEmpty()) {
-            for (Map.Entry<Object, Object> entry : cached.entrySet()) {
-                try {
-                    result.put(NotificationCategory.valueOf(entry.getKey().toString()),
-                            Long.parseLong(entry.getValue().toString()));
-                } catch (IllegalArgumentException e) {
-                    log.warn("unread 카테고리 캐시 파싱 실패 — 무시: accountId={}, field={}", accountId, entry.getKey());
-                }
+        for (Map.Entry<Object, Object> entry : cached.entrySet()) {
+            try {
+                result.put(NotificationCategory.valueOf(entry.getKey().toString()),
+                        Long.parseLong(entry.getValue().toString()));
+            } catch (IllegalArgumentException e) {
+                log.warn("unread 카테고리 캐시 파싱 실패 — 무시: field={}", entry.getKey());
             }
-            return result;
         }
-
-        // 캐시 미스 — DB 집계 후 모든 카테고리(0 포함)를 저장해 "빈 캐시"와 "전부 0"을 구분한다
-        result.putAll(notificationRepository.countUnreadByCategory(accountId));
-        Map<String, String> toCache = new HashMap<>();
-        result.forEach((category, count) -> toCache.put(category.name(), String.valueOf(count)));
-        redisTemplate.opsForHash().putAll(categoryKey, toCache);
         return result;
     }
 
     // ===================== 갱신 (변경 트랜잭션 커밋 후 호출 전제) =====================
 
-    // 알림 생성 — 전체 +1, 카테고리 캐시는 무효화해 다음 조회 시 DB 기준으로 재집계
+    // increment/decrement와 DB count SET을 혼용하면 afterCommit 실행 순서가 뒤집힐 때 캐시가 틀어진다.
+    // 모든 변경 경로는 Account 행을 동일 mutex로 잠그고 현재 DB 상태로 전체 스냅샷을 재작성한다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void increment(Long accountId) {
-        redisTemplate.opsForValue().increment(UNREAD_KEY_PREFIX + accountId);
-        invalidateCategoryCache(accountId);
+        rebuildFromDbWithAccountLock(accountId);
     }
 
-    // 단건 읽음/삭제 — 전체 -1 (0 미만 방지), 카테고리 캐시 무효화
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void decrement(Long accountId) {
-        redisTemplate.execute(DECR_IF_POSITIVE, List.of(UNREAD_KEY_PREFIX + accountId));
-        invalidateCategoryCache(accountId);
+        rebuildFromDbWithAccountLock(accountId);
     }
 
-    // 전체 읽음/전체 삭제 — 캐시 제거 후 다음 조회 시 DB 기준 복구
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void clear(Long accountId) {
-        redisTemplate.delete(UNREAD_KEY_PREFIX + accountId);
-        invalidateCategoryCache(accountId);
+        rebuildFromDbWithAccountLock(accountId);
     }
 
-    // 일괄 읽음 처리처럼 감소량이 가변적인 경우 DB 기준으로 전체 캐시를 재설정
-    public void refreshFromDb(Long accountId) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public UnreadCountResponseDto refreshFromDb(Long accountId) {
+        return rebuildFromDbWithAccountLock(accountId);
+    }
+
+    public void invalidateSnapshot(Long accountId) {
+        redisTemplate.delete(List.of(totalKey(accountId), categoryKey(accountId)));
+    }
+
+    private UnreadCountResponseDto rebuildFromDbWithAccountLock(Long accountId) {
+        accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
         long dbCount = notificationRepository.countByAccount_AccountIdAndIsReadFalse(accountId);
-        redisTemplate.opsForValue().set(UNREAD_KEY_PREFIX + accountId, String.valueOf(dbCount));
-        invalidateCategoryCache(accountId);
+        Map<NotificationCategory, Long> categoryCounts = emptyCategoryCounts();
+        categoryCounts.putAll(notificationRepository.countUnreadByCategory(accountId));
+
+        List<String> snapshotArgs = new ArrayList<>();
+        snapshotArgs.add(String.valueOf(dbCount));
+        categoryCounts.forEach((category, count) -> {
+            snapshotArgs.add(category.name());
+            snapshotArgs.add(String.valueOf(count));
+        });
+        redisTemplate.execute(
+                REPLACE_UNREAD_SNAPSHOT,
+                List.of(totalKey(accountId), categoryKey(accountId)),
+                snapshotArgs.toArray());
+
+        log.debug("unread 캐시 동기화: accountId={}, count={}", accountId, dbCount);
+        return UnreadCountResponseDto.of(dbCount, categoryCounts);
     }
 
-    public void invalidateCategoryCache(Long accountId) {
-        redisTemplate.delete(CATEGORY_KEY_PREFIX + accountId);
+    private Map<NotificationCategory, Long> emptyCategoryCounts() {
+        Map<NotificationCategory, Long> counts = new EnumMap<>(NotificationCategory.class);
+        for (NotificationCategory category : NotificationCategory.values()) {
+            counts.put(category, 0L);
+        }
+        return counts;
+    }
+
+    private boolean hasAllCategories(Map<Object, Object> cached) {
+        if (cached.size() != NotificationCategory.values().length) return false;
+        for (NotificationCategory category : NotificationCategory.values()) {
+            if (!cached.containsKey(category.name())) return false;
+        }
+        return true;
+    }
+
+    private String totalKey(Long accountId) {
+        return UNREAD_KEY_PREFIX + accountId;
+    }
+
+    private String categoryKey(Long accountId) {
+        return CATEGORY_KEY_PREFIX + accountId;
+    }
+
+    private record CachedUnreadSnapshot(long total, Map<Object, Object> categoryCounts) {
     }
 }

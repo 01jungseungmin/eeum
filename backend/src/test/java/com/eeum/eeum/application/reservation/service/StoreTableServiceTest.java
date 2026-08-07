@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.reservation.service;
 
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
+import com.eeum.eeum.application.reservation.dto.response.StoreTableListResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableSummaryResponseDto;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -101,12 +102,12 @@ class StoreTableServiceTest {
                 .thenReturn(List.of(table1, table2));
 
         // when
-        List<StoreTableResponseDto> result = storeTableService.getTables(ownerAccountId).getTables();
+        StoreTableListResponseDto result = storeTableService.getTables(ownerAccountId);
 
         // then
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).getCapacity()).isEqualTo(2);
-        assertThat(result.get(1).getCapacity()).isEqualTo(4);
+        assertThat(result.getTables()).hasSize(2);
+        assertThat(result.getTables().get(0).getCapacity()).isEqualTo(2);
+        assertThat(result.getTables().get(1).getCapacity()).isEqualTo(4);
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.notification.entity.Notification;
 import com.eeum.eeum.domain.notification.entity.NotificationSettings;
+import com.eeum.eeum.domain.notification.enums.NotificationCategory;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
 import com.eeum.eeum.domain.notification.event.NotificationPushEvent;
@@ -25,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,8 +52,9 @@ class NotificationServiceTest {
     private static final Long ACCOUNT_ID = 6L;
 
     private void stubUnreadCount() {
-        lenient().when(unreadCountService.getUnreadCount(ACCOUNT_ID))
-                .thenReturn(UnreadCountResponseDto.of(1L, Map.of()));
+        UnreadCountResponseDto snapshot = UnreadCountResponseDto.of(1L, Map.of());
+        lenient().when(unreadCountService.getUnreadCount(ACCOUNT_ID)).thenReturn(snapshot);
+        lenient().when(unreadCountService.refreshFromDb(ACCOUNT_ID)).thenReturn(snapshot);
     }
 
     private Account stubAccount(String fcmToken) {
@@ -89,7 +92,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNotNull();
         verify(notificationRepository).save(any());
-        verify(unreadCountService).increment(ACCOUNT_ID);
+        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
         verify(eventPublisher).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -128,6 +131,31 @@ class NotificationServiceTest {
         verify(eventPublisher, never()).publishEvent(any(NotificationPushEvent.class));
     }
 
+    @Test
+    void 전체_알림_OFF이면_필수_알림도_생성하지_않는다() {
+        // given
+        Account account = stubAccount("valid-token");
+        NotificationSettings settings = NotificationSettings.createDefault(account);
+        settings.updateAllEnabled(false);
+        when(settingsRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.of(settings));
+
+        NotificationCreateRequestDto systemNotice = NotificationCreateRequestDto.builder()
+                .accountId(ACCOUNT_ID)
+                .type(NotificationType.SYSTEM_NOTICE)
+                .title("공지")
+                .content("내용")
+                .build();
+
+        // when
+        NotificationResponseDto result = notificationService.createNotification(systemNotice);
+
+        // then
+        assertThat(result).isNull();
+        verify(notificationRepository, never()).save(any());
+        verify(unreadCountService, never()).refreshFromDb(anyLong());
+        verify(eventPublisher, never()).publishEvent(any(NotificationPushEvent.class));
+    }
+
     // ===================== 읽음 처리 =====================
 
     @Test
@@ -146,7 +174,7 @@ class NotificationServiceTest {
 
         // then
         verify(notification).markAsRead();
-        verify(unreadCountService).decrement(ACCOUNT_ID);
+        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
         verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
@@ -164,7 +192,7 @@ class NotificationServiceTest {
 
         // then
         verify(notification, never()).markAsRead();
-        verify(unreadCountService, never()).decrement(anyLong());
+        verify(unreadCountService, never()).refreshFromDb(anyLong());
         verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
     }
 
@@ -180,8 +208,58 @@ class NotificationServiceTest {
         notificationService.markAllAsRead(ACCOUNT_ID);
 
         // then
-        verify(unreadCountService).clear(ACCOUNT_ID);
+        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
         verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+    }
+
+    @Test
+    void 카테고리_읽음_처리시_해당_타입들을_일괄_처리하고_SSE로_최신_카운트를_전송한다() {
+        // given
+        stubUnreadCount();
+        when(notificationRepository.markAsReadByAccountIdAndTypes(
+                eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class)))
+                .thenReturn(4);
+        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
+
+        // when
+        notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER);
+
+        // then
+        verify(notificationRepository).markAsReadByAccountIdAndTypes(
+                eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class));
+        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
+        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+    }
+
+    @Test
+    void 카테고리에_미읽음_알림이_없으면_캐시와_SSE를_갱신하지_않는다() {
+        // given
+        when(notificationRepository.markAsReadByAccountIdAndTypes(
+                eq(ACCOUNT_ID), eq(NotificationCategory.REVIEW.getTypes()), any(LocalDateTime.class)))
+                .thenReturn(0);
+
+        // when
+        notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.REVIEW);
+
+        // then
+        verify(unreadCountService, never()).refreshFromDb(anyLong());
+        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+    }
+
+    @Test
+    void 커밋_후_unread_동기화가_실패해도_성공한_읽음_처리를_실패로_바꾸지_않는다() {
+        // given
+        when(notificationRepository.markAsReadByAccountIdAndTypes(
+                eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class)))
+                .thenReturn(2);
+        when(unreadCountService.refreshFromDb(ACCOUNT_ID))
+                .thenThrow(new IllegalStateException("redis unavailable"));
+
+        // when & then: 단위 테스트에서는 활성 트랜잭션이 없어 afterCommit 작업이 즉시 실행된다.
+        assertThatCode(() -> notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER))
+                .doesNotThrowAnyException();
+        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
+        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
     }
 
     @Test

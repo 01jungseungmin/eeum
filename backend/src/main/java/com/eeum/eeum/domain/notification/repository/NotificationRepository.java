@@ -55,6 +55,21 @@ public interface NotificationRepository
             @Param("now") LocalDateTime now
     );
 
+    // 카테고리 기준 일괄 읽음 처리
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Notification n
+        SET n.isRead = true, n.readAt = :now
+        WHERE n.account.accountId = :accountId
+          AND n.type IN :types
+          AND n.isRead = false
+        """)
+    int markAsReadByAccountIdAndTypes(
+            @Param("accountId") Long accountId,
+            @Param("types") List<NotificationType> types,
+            @Param("now") LocalDateTime now
+    );
+
     // 참조 대상 기준 일괄 읽음 처리 (예: 채팅방 읽음 시 해당 방의 CHAT_MESSAGE 알림 동기화)
     @Modifying(clearAutomatically = true)
     @Query("""
