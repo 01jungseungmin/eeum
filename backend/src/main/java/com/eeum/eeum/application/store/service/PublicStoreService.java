@@ -339,6 +339,7 @@ public class PublicStoreService {
                 .thumbnailUrl(thumbnailUrl)
                 .eventPrice(activeEvent.map(EventProduct::getEventPrice).orElse(null))
                 .hasEvent(activeEvent.isPresent())
+                .productCategoryId(product.getProductCategory().getProductCategoryId())
                 .build();
     }
 

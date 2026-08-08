@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.product.dto.response;
 
+import com.eeum.eeum.domain.product.entity.ProductCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -40,4 +41,7 @@ public class ProductListResponseDto {
 
     @Schema(description = "진행 중인 이벤트 존재 여부", example = "true")
     private boolean hasEvent;
+
+    @Schema(description = "상품 카테고리 Id", example = "1")
+    private Long productCategoryId;
 }
