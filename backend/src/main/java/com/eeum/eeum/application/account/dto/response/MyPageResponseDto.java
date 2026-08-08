@@ -24,6 +24,9 @@ public class MyPageResponseDto {
     @Schema(description = "이름 (마스킹)", example = "홍*동")
     private String name;
 
+    @Schema(description = "전화번호", example = "010-0000-0001")
+    private String phone;
+
     @Schema(description = "프로필 이미지 URL", example = "https://s3.amazonaws.com/...")
     private String profileImageUrl;
 
