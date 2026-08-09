@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import styled from "styled-components";
-import { notificationApi } from "../../../api/owner/notificationApi";
-import NotificationList from "../../../components/owner/notification/NotificationList";
-import NotificationWidget from "../../../components/owner/notification/NotificationWidget";
+import { useState, useEffect } from 'react';
+import styled from 'styled-components';
+import { notificationApi } from '../../../api/owner/notificationApi';
+import NotificationList from '../../../components/owner/notification/NotificationList';
+import NotificationWidget from '../../../components/owner/notification/NotificationWidget';
 
 const MainContentContainer = styled.main`
   flex: 1;
@@ -26,30 +26,42 @@ const MainLayout = styled.div`
 
 const NotificationPage = () => {
   const [notifications, setNotifications] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState("ALL");
+  const [selectedFilter, setSelectedFilter] = useState('ALL');
   const [isGlobalNotificationOn, setIsGlobalNotificationOn] = useState(true);
   const [loading, setLoading] = useState(false);
   const [totalElements, setTotalElements] = useState(0);
 
-  // 알림 목록 조회 함수
+  // 초기 데이터(알림 목록 + 알림 설정) 병렬 조회
   useEffect(() => {
-    const fetchInitialNotifications = async () => {
+    const fetchInitialData = async () => {
       setLoading(true);
       try {
-        const response = await notificationApi.getNotifications("ALL");
-        const data = response.data?.data;
-        if (data) {
-          setNotifications(data.content || []);
-          setTotalElements(data.totalElements || 0);
+        const [notifRes, settingsRes] = await Promise.all([
+          notificationApi.getNotifications('ALL'),
+          notificationApi.getNotificationSettings(),
+        ]);
+
+        // 알림 목록 데이터 반영
+        const notifData = notifRes.data?.data;
+        if (notifData) {
+          setNotifications(notifData.content || []);
+          setTotalElements(notifData.totalElements || 0);
+        }
+
+        // 전체 알림 설정(allEnabled) 반영
+        const settingsData = settingsRes.data?.data;
+        if (settingsData && typeof settingsData.allEnabled === 'boolean') {
+          console.log(settingsData);
+          setIsGlobalNotificationOn(settingsData.allEnabled);
         }
       } catch (error) {
-        console.error("알림 목록 조회 실패:", error);
+        console.error('초기 데이터 로드 실패:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchInitialNotifications();
+    fetchInitialData();
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -60,7 +72,7 @@ const NotificationPage = () => {
       await notificationApi.readNotification();
       setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
     } catch (error) {
-      console.error("전체 읽음 처리 실패:", error);
+      console.error('전체 읽음 처리 실패:', error);
     }
   };
 
@@ -73,29 +85,27 @@ const NotificationPage = () => {
       );
       setTotalElements((prev) => Math.max(0, prev - 1));
     } catch (error) {
-      console.error("알림 삭제 실패:", error);
+      console.error('알림 삭제 실패:', error);
     }
   };
 
   // 전체 알림 삭제 (알림함 비우기)
   const handleDeleteAllNotifications = async () => {
-    if (!window.confirm("모든 알림을 삭제하시겠습니까?")) {
+    if (!window.confirm('모든 알림을 삭제하시겠습니까?')) {
       return;
     }
 
     try {
       await notificationApi.deleteAllNotifications();
-      // 삭제 성공 시 리스트 및 총 개수 초기화
       setNotifications([]);
       setTotalElements(0);
     } catch (error) {
-      console.error("전체 알림 삭제 실패:", error);
+      console.error('전체 알림 삭제 실패:', error);
     }
   };
 
   // 알림 클릭 시 읽음 처리
   const handleItemClick = async (item) => {
-    // 안 읽은 알림에 대해서만
     if (!item.read) {
       try {
         await notificationApi.readSingleNotification(item.notificationId);
@@ -105,13 +115,27 @@ const NotificationPage = () => {
           ),
         );
       } catch (error) {
-        console.error("개별 읽음 처리 실패:", error);
+        console.error('개별 읽음 처리 실패:', error);
       }
     }
   };
 
-  const handleToggleGlobalNotification = () => {
-    setIsGlobalNotificationOn((prev) => !prev);
+  // 전체 알림 토글 변경
+  const handleToggleGlobalNotification = async () => {
+    const nextState = !isGlobalNotificationOn;
+
+    setIsGlobalNotificationOn(nextState);
+
+    try {
+      await notificationApi.updateNotificationSettings({
+        allEnabled: nextState,
+      });
+    } catch (e) {
+      console.error('전체 알림 설정 변경 실패:', e);
+      // API 실패 시 이전 상태로 복구
+      setIsGlobalNotificationOn(!nextState);
+      alert('알림 설정 변경 중 오류가 발생했습니다.');
+    }
   };
 
   return (
@@ -123,7 +147,7 @@ const NotificationPage = () => {
           onSelectFilter={setSelectedFilter}
           onMarkAllAsRead={handleMarkAllAsRead}
           onDeleteNotification={handleDeleteNotification}
-          onDeleteAllNotifications={handleDeleteAllNotifications} // ✨ 함수 전달
+          onDeleteAllNotifications={handleDeleteAllNotifications}
           onItemClick={handleItemClick}
           unreadCount={unreadCount}
           totalElements={totalElements}
