@@ -53,7 +53,8 @@ public class ReportService {
                 request.getReason(),
                 request.getContent(),
                 target.getTitle(),
-                target.getContent()
+                target.getContent(),
+                target.getOwnerAccountId()
         );
 
         Report saved;

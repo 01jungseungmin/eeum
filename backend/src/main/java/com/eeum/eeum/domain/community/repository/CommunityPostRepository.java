@@ -5,24 +5,35 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+
 public interface CommunityPostRepository extends JpaRepository<CommunityPost, Long>, CommunityPostRepositoryCustom {
 
     // account, category, region 일괄 fetch — LazyInitializationException 방지
     @EntityGraph(attributePaths = {"account", "category", "region"})
-    Optional<CommunityPost> findById(Long id);
+    @Query("SELECT p FROM CommunityPost p WHERE p.postId = :id AND p.hidden = false")
+    Optional<CommunityPost> findById(@Param("id") Long id);
 
     // 신고 상세의 대상 스냅샷 — 작성자만 필요하므로 category/region까지 조인하지 않는다
     @EntityGraph(attributePaths = "account")
     Optional<CommunityPost> findWithAccountByPostId(Long postId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM CommunityPost p JOIN FETCH p.account WHERE p.postId = :postId")
+    Optional<CommunityPost> findWithAccountByPostIdForUpdate(@Param("postId") Long postId);
+
     @EntityGraph(attributePaths = {"account", "category", "region"})
-    Page<CommunityPost> findByAccount_AccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);
+    Page<CommunityPost> findByAccount_AccountIdAndHiddenFalseOrderByCreatedAtDesc(
+            Long accountId,
+            Pageable pageable
+    );
 
     // 동시 조회/좋아요/댓글 작성 시 lost update 방지 — DB 레벨 원자적 증감
     @Modifying(flushAutomatically = true, clearAutomatically = true)

@@ -68,7 +68,8 @@ public class CommunityPostService {
 
     @Transactional(readOnly = true)
     public Page<CommunityPostSummaryResponseDto> getMyPosts(Long accountId, Pageable pageable) {
-        Page<CommunityPost> posts = postRepository.findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable);
+        Page<CommunityPost> posts = postRepository
+                .findByAccount_AccountIdAndHiddenFalseOrderByCreatedAtDesc(accountId, pageable);
         return toSummaryPage(accountId, posts);
     }
 

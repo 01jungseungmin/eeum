@@ -1,15 +1,18 @@
 package com.eeum.eeum.application.report.service;
 
+import com.eeum.eeum.application.report.dto.request.ReportProcessRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.report.entity.Report;
+import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
 import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +38,7 @@ class AdminReportServiceTest {
 
     @Mock private ReportRepository reportRepository;
     @Mock private ReportTargetResolver reportTargetResolver;
+    @Mock private CommunityPostReportActionExecutor communityPostReportActionExecutor;
 
     private static final Long REPORT_ID = 1L;
     private static final Long REPORTER_ID = 10L;
@@ -186,7 +190,7 @@ class AdminReportServiceTest {
         Report report = createReport();
         ReportReviewRequestDto request = new ReportReviewRequestDto();
         ReflectionTestUtils.setField(request, "adminNote", "조치 완료");
-        when(reportRepository.findByReportId(REPORT_ID)).thenReturn(Optional.of(report));
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
         LocalDateTime processedAt = LocalDateTime.now();
         when(reportRepository.saveAndFlush(report)).thenAnswer(invocation -> {
             ReflectionTestUtils.setField(report, "modifiedAt", processedAt);
@@ -202,7 +206,7 @@ class AdminReportServiceTest {
         assertThat(result.getCreatedAt()).isNotNull();
         assertThat(result.getUpdatedAt()).isNotNull();
         assertThat(result.getUpdatedAt()).isEqualTo(processedAt);
-        assertThat(result.getProcessedAt()).isEqualTo(processedAt);
+        assertThat(result.getProcessedAt()).isNotNull();
         assertThat(result.getReportedAt()).isEqualTo(result.getCreatedAt());
         verify(reportRepository).saveAndFlush(report);
     }
@@ -214,7 +218,7 @@ class AdminReportServiceTest {
         ReportReviewRequestDto request = new ReportReviewRequestDto();
         ReflectionTestUtils.setField(request, "adminNote", "신고 기각");
         LocalDateTime processedAt = LocalDateTime.now();
-        when(reportRepository.findByReportId(REPORT_ID)).thenReturn(Optional.of(report));
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
         when(reportRepository.saveAndFlush(report)).thenAnswer(invocation -> {
             ReflectionTestUtils.setField(report, "modifiedAt", processedAt);
             return report;
@@ -227,7 +231,92 @@ class AdminReportServiceTest {
         assertThat(result.getStatus()).isEqualTo(ReportStatus.DISMISSED);
         assertThat(result.getAdminNote()).isEqualTo("신고 기각");
         assertThat(result.getUpdatedAt()).isEqualTo(processedAt);
-        assertThat(result.getProcessedAt()).isEqualTo(processedAt);
+        assertThat(result.getProcessedAt()).isNotNull();
         verify(reportRepository).saveAndFlush(report);
+    }
+
+    @Test
+    void 게시글_숨김_조치는_실제_조치와_신고_처리_이력을_함께_저장한다() {
+        // Given
+        Report report = createReport();
+        ReportProcessRequestDto request = processRequest(ReportAction.HIDE_POST, "게시글 숨김 처리");
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
+        when(communityPostReportActionExecutor.execute(
+                ReportAction.HIDE_POST, TARGET_ID, null, "게시글 숨김 처리"))
+                .thenReturn(20L);
+        when(reportRepository.saveAndFlush(report)).thenReturn(report);
+
+        // When
+        ReportResponseDto result = adminReportService.processReport(REPORT_ID, 99L, request);
+
+        // Then
+        assertThat(result.getStatus()).isEqualTo(ReportStatus.REVIEWED);
+        assertThat(result.getAction()).isEqualTo(ReportAction.HIDE_POST);
+        assertThat(result.getProcessedByAdminId()).isEqualTo(99L);
+        assertThat(result.getActionTargetAccountId()).isEqualTo(20L);
+        assertThat(result.getProcessedAt()).isNotNull();
+    }
+
+    @Test
+    void 신고_기각은_콘텐츠_조치_없이_DISMISSED로_처리한다() {
+        // Given
+        Report report = createReport();
+        ReportProcessRequestDto request = processRequest(ReportAction.DISMISS, "위반 사항 없음");
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
+        when(reportRepository.saveAndFlush(report)).thenReturn(report);
+
+        // When
+        ReportResponseDto result = adminReportService.processReport(REPORT_ID, 99L, request);
+
+        // Then
+        assertThat(result.getStatus()).isEqualTo(ReportStatus.DISMISSED);
+        assertThat(result.getAction()).isEqualTo(ReportAction.DISMISS);
+        verify(communityPostReportActionExecutor, never()).execute(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void 게시글이_아닌_대상에는_게시글_조치를_적용할_수_없다() {
+        // Given
+        Report report = createReport();
+        ReflectionTestUtils.setField(report, "targetType", ReportTargetType.STORE_REVIEW);
+        ReportProcessRequestDto request = processRequest(ReportAction.DELETE_POST, "삭제");
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
+
+        // When & Then
+        assertThatThrownBy(() -> adminReportService.processReport(REPORT_ID, 99L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
+    }
+
+    @Test
+    void 이미_처리된_신고는_대상_조치를_다시_실행하지_않는다() {
+        // Given
+        Report report = createReport();
+        report.review(99L, "기존 처리");
+        ReportProcessRequestDto request = processRequest(ReportAction.DELETE_POST, "재처리");
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
+
+        // When & Then
+        assertThatThrownBy(() -> adminReportService.processReport(REPORT_ID, 99L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REPORT_ALREADY_PROCESSED);
+        verify(communityPostReportActionExecutor, never()).execute(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    private ReportProcessRequestDto processRequest(ReportAction action, String adminNote) {
+        ReportProcessRequestDto request = new ReportProcessRequestDto();
+        ReflectionTestUtils.setField(request, "action", action);
+        ReflectionTestUtils.setField(request, "adminNote", adminNote);
+        return request;
     }
 }

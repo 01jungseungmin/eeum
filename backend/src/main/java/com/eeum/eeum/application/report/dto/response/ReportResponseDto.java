@@ -2,6 +2,7 @@ package com.eeum.eeum.application.report.dto.response;
 
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.report.entity.Report;
+import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
@@ -61,6 +62,15 @@ public class ReportResponseDto {
     @Schema(description = "관리자 메모")
     private String adminNote;
 
+    @Schema(description = "관리자 처리 조치")
+    private ReportAction action;
+
+    @Schema(description = "처리한 관리자 ID")
+    private Long processedByAdminId;
+
+    @Schema(description = "경고·정지 등 계정 조치 대상 ID")
+    private Long actionTargetAccountId;
+
     @Schema(description = "관리자 처리 시각 (PENDING이면 null)")
     private final LocalDateTime processedAt;
 
@@ -76,10 +86,12 @@ public class ReportResponseDto {
                 .content(report.getContent())
                 .status(report.getStatus())
                 .adminNote(report.getAdminNote())
+                .action(report.getAction())
+                .processedByAdminId(report.getProcessedByAdminId())
+                .actionTargetAccountId(report.getActionTargetAccountId())
                 .createdAt(report.getCreatedAt())
                 .updatedAt(report.getModifiedAt())
                 .reportedAt(report.getCreatedAt())
-                // 처리 시각 전용 컬럼이 없어 상태 전이 시 갱신되는 modifiedAt을 사용 (PENDING이면 미처리)
                 .processedAt(processed ? report.getModifiedAt() : null)
                 .build();
     }
@@ -103,7 +115,9 @@ public class ReportResponseDto {
                 .reportedAt(report.getCreatedAt())
                 .status(report.getStatus())
                 .adminNote(report.getAdminNote())
-                // 처리 시각 전용 컬럼이 없어 상태 전이 시 갱신되는 modifiedAt을 사용 (PENDING이면 미처리)
+                .action(report.getAction())
+                .processedByAdminId(report.getProcessedByAdminId())
+                .actionTargetAccountId(report.getActionTargetAccountId())
                 .processedAt(processed ? report.getModifiedAt() : null)
                 .build();
     }

@@ -74,5 +74,6 @@ class ReportServiceTest {
         assertThat(captor.getValue().getTargetTitleSnapshot()).isEqualTo("신고 당시 제목");
         assertThat(captor.getValue().getTargetContentSnapshot())
                 .isEqualTo("삭제돼도 남아야 하는 전체 본문");
+        assertThat(captor.getValue().getTargetOwnerAccountIdSnapshot()).isEqualTo(2L);
     }
 }

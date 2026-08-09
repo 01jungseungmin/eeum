@@ -69,6 +69,15 @@ public class ReportTargetSnapshotDto {
      */
     public static ReportTargetSnapshotDto withStoredContent(
             ReportTargetSnapshotDto current, String storedTitle, String storedContent) {
+        return withStoredContent(current, storedTitle, storedContent, null);
+    }
+
+    public static ReportTargetSnapshotDto withStoredContent(
+            ReportTargetSnapshotDto current,
+            String storedTitle,
+            String storedContent,
+            Long storedOwnerAccountId
+    ) {
         String title = storedTitle != null ? storedTitle : current.title;
         String content = storedContent != null ? storedContent : current.content;
         return ReportTargetSnapshotDto.builder()
@@ -78,7 +87,9 @@ public class ReportTargetSnapshotDto {
                 .title(title)
                 .content(content)
                 .contentPreview(preview(content))
-                .ownerAccountId(current.ownerAccountId)
+                .ownerAccountId(current.ownerAccountId != null
+                        ? current.ownerAccountId
+                        : storedOwnerAccountId)
                 .ownerName(current.ownerName)
                 .ownerNickname(current.ownerNickname)
                 .parentTitle(current.parentTitle)

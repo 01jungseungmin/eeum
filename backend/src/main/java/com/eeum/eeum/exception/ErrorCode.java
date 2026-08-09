@@ -235,6 +235,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     REPORT_ALREADY_EXISTS("REPORT_003", "이미 신고한 대상입니다.", HttpStatus.CONFLICT),
     REPORT_ALREADY_PROCESSED("REPORT_004", "이미 처리된 신고입니다.", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_005", "자기 자신 또는 자신의 콘텐츠는 신고할 수 없습니다.", HttpStatus.BAD_REQUEST),
+    REPORT_ACTION_NOT_ALLOWED("REPORT_006", "해당 신고 대상에 적용할 수 없는 조치입니다.", HttpStatus.BAD_REQUEST),
+    REPORT_TARGET_NOT_AVAILABLE("REPORT_007", "신고 대상이 삭제되었거나 조치할 수 없는 상태입니다.", HttpStatus.CONFLICT),
 
     // ===================== 이미지 (IMAGE) =====================
     IMAGE_INVALID_FORMAT("IMAGE_001", "지원하지 않는 이미지 형식입니다 (jpg, png, webp만 가능)", HttpStatus.BAD_REQUEST),
