@@ -1,0 +1,4 @@
+interface:
+  display_name: "백엔드 이슈 작성"
+  short_description: "검증 가능한 완료 조건을 갖춘 이슈 초안을 작성합니다"
+  default_prompt: "Use $issue to draft a backend GitHub issue for this work."

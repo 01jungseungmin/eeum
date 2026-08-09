@@ -17,6 +17,10 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPost, Lo
     @EntityGraph(attributePaths = {"account", "category", "region"})
     Optional<CommunityPost> findById(Long id);
 
+    // 신고 상세의 대상 스냅샷 — 작성자만 필요하므로 category/region까지 조인하지 않는다
+    @EntityGraph(attributePaths = "account")
+    Optional<CommunityPost> findWithAccountByPostId(Long postId);
+
     @EntityGraph(attributePaths = {"account", "category", "region"})
     Page<CommunityPost> findByAccount_AccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);
 

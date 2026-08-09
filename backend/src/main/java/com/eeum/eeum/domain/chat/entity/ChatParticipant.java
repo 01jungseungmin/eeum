@@ -12,7 +12,27 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter
-@Table(name = "chat_participant")
+@Table(
+        name = "chat_participant",
+        uniqueConstraints = {
+                // 참여자 등록은 "조회 후 없으면 INSERT"라 Redis 락이 만료되면 중복 행이 생긴다.
+                // 중복이 생기면 findByChatRoom_ChatroomIdAndAccount_AccountId(단건 Optional)가
+                // IncorrectResultSizeDataAccessException을 던져 그 방의 모든 요청이 500이 된다.
+                //
+                // 이름은 init.sql의 기존 제약(uk_chat_participant)과 반드시 일치시킨다.
+                // 다른 이름을 쓰면 init.sql로 만든 DB에 동일 컬럼 유니크 인덱스가 2개 생겨
+                // INSERT마다 불필요한 인덱스 유지 비용이 든다. 엔티티에서 제거하지는 않는다 —
+                // 테스트처럼 init.sql 없이 엔티티만으로 스키마를 만드는 환경에서는 이 선언이 유일한 근거다.
+                //
+                // [운영 주의] 이미 중복 행이 있으면 인덱스 생성이 실패하고 ddl-auto=update는 로그만 남긴다.
+                //   SELECT chat_room_id, account_id, COUNT(*) FROM chat_participant
+                //   GROUP BY chat_room_id, account_id HAVING COUNT(*) > 1;
+                @UniqueConstraint(
+                        name = "uk_chat_participant",
+                        columnNames = {"chat_room_id", "account_id"}
+                )
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ChatParticipant extends BaseEntity {
 

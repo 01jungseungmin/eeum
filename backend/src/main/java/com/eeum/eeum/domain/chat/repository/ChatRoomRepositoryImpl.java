@@ -29,7 +29,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     private final QChatParticipant participant = QChatParticipant.chatParticipant;
 
     @Override
-    public Slice<ChatRoom> findMyRooms(Long accountId, Pageable pageable) {
+    public Slice<ChatRoom> findMyRooms(Long accountId, Pageable pageable, boolean includeClosed) {
         int size = pageable.getPageSize();
         List<ChatRoom> content = queryFactory
                 .select(room)
@@ -38,7 +38,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
                 .where(
                         participant.account.accountId.eq(accountId),
                         participant.status.eq(ParticipantStatus.ACTIVE),
-                        room.isActive.isTrue()
+                        activeOnly(includeClosed)
                 )
                 .orderBy(room.lastMessageAt.desc().nullsLast(), room.chatroomId.desc())
                 .offset(pageable.getOffset())
@@ -104,6 +104,11 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     }
 
     // ===================== 조건 빌더 =====================
+
+    // includeClosed=true면 활성 조건을 걸지 않는다 (null 반환 시 QueryDSL이 조건에서 제외)
+    private BooleanExpression activeOnly(boolean includeClosed) {
+        return includeClosed ? null : room.isActive.isTrue();
+    }
 
     private BooleanExpression typeEq(ChatRoomType type) {
         return type != null ? room.type.eq(type) : null;
