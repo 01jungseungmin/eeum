@@ -55,6 +55,21 @@ public interface NotificationRepository
             @Param("now") LocalDateTime now
     );
 
+    // 카테고리 기준 일괄 읽음 처리
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Notification n
+        SET n.isRead = true, n.readAt = :now
+        WHERE n.account.accountId = :accountId
+          AND n.type IN :types
+          AND n.isRead = false
+        """)
+    int markAsReadByAccountIdAndTypes(
+            @Param("accountId") Long accountId,
+            @Param("types") List<NotificationType> types,
+            @Param("now") LocalDateTime now
+    );
+
     // 참조 대상 기준 일괄 읽음 처리 (예: 채팅방 읽음 시 해당 방의 CHAT_MESSAGE 알림 동기화)
     @Modifying(clearAutomatically = true)
     @Query("""
@@ -83,6 +98,26 @@ public interface NotificationRepository
     // 좋아요 알림 중복 방지 — 동일 (수신자, 타입, 참조) 알림이 이미 존재하면 skip
     boolean existsByAccount_AccountIdAndTypeAndRefTypeAndRefId(
             Long accountId, NotificationType type, NotificationRefType refType, Long refId);
+
+    // 여러 사용자의 동일 참조 알림 일괄 읽음 처리 (채팅방 종료 시 참여자 전원 동기화)
+    // 참여자 수만큼 UPDATE를 반복하지 않도록 IN 절 한 번으로 처리한다
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Notification n
+        SET n.isRead = true, n.readAt = :now
+        WHERE n.account.accountId IN :accountIds
+          AND n.type = :type
+          AND n.refType = :refType
+          AND n.refId = :refId
+          AND n.isRead = false
+        """)
+    int markAsReadByAccountsAndTypeAndRef(
+            @Param("accountIds") List<Long> accountIds,
+            @Param("type") NotificationType type,
+            @Param("refType") NotificationRefType refType,
+            @Param("refId") Long refId,
+            @Param("now") LocalDateTime now
+    );
 
     // 오래된 알림 정리 배치 (6개월 이전)
     @Modifying(clearAutomatically = true)

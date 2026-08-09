@@ -37,7 +37,6 @@ public class NotificationCleanupScheduler {
 
     // 5분마다 — Redis unread 키 스캔 후 DB 값과 불일치 시 Redis 보정 Redis key 패턴: unread:account:*
     @Scheduled(fixedRate = 300_000)
-    @Transactional(readOnly = true)
     public void recalculateUnreadCounts() {
         var keys = redisTemplate.keys(UNREAD_KEY_PREFIX + "*");
         if (keys == null || keys.isEmpty()) return;
@@ -48,14 +47,11 @@ public class NotificationCleanupScheduler {
                 String accountIdStr = key.replace(UNREAD_KEY_PREFIX, "");
                 Long accountId = Long.parseLong(accountIdStr);
 
-                long dbCount = notificationRepository.countByAccount_AccountIdAndIsReadFalse(accountId);
                 String cached = redisTemplate.opsForValue().get(key);
                 long redisCount = cached != null ? Long.parseLong(cached) : -1;
+                long dbCount = unreadCountService.refreshFromDb(accountId).getUnreadCount();
 
                 if (dbCount != redisCount) {
-                    redisTemplate.opsForValue().set(key, String.valueOf(dbCount));
-                    // 전체 카운트가 어긋났다면 카테고리 캐시도 신뢰할 수 없으므로 함께 무효화
-                    unreadCountService.invalidateCategoryCache(accountId);
                     mismatchCount++;
                     log.debug("[UnreadReconcile] 보정: accountId={}, redis={}, db={}", accountId, redisCount, dbCount);
                 }

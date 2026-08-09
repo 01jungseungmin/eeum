@@ -42,6 +42,7 @@ public class AccountMapper {
                 .email(MaskingUtil.maskEmail(account.getEmail()))
                 .nickname(account.getNickname())
                 .name(MaskingUtil.maskName(account.getName()))
+                .phone(account.getPhone())
                 .profileImageUrl(account.getProfileImageUrl())
                 .role(account.getRole().name())
                 .status(account.getStatus().name())

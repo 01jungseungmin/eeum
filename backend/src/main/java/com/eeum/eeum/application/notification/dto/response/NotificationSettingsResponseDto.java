@@ -15,6 +15,9 @@ public class NotificationSettingsResponseDto {
 
     // ─── 푸시 ON/OFF ───────────────────────────────────────────────────────
 
+    @Schema(description = "전체 알림 마스터 설정", example = "true")
+    private boolean allEnabled;
+
     @Schema(description = "주문/결제 알림 (필수, 변경 불가)", example = "true")
     private boolean orderEnabled;
 
@@ -104,6 +107,7 @@ public class NotificationSettingsResponseDto {
     public static NotificationSettingsResponseDto from(NotificationSettings notificationSettings) {
         return NotificationSettingsResponseDto.builder()
                 // 푸시
+                .allEnabled(notificationSettings.isAllEnabled())
                 .orderEnabled(notificationSettings.isOrderEnabled())
                 .reservationEnabled(notificationSettings.isReservationEnabled())
                 .chatEnabled(notificationSettings.isChatEnabled())

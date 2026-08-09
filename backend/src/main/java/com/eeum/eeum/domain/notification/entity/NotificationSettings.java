@@ -29,6 +29,10 @@ public class NotificationSettings extends BaseEntity {
 
     // 푸시 ON/OFF 토글
 
+    // 전체 알림 마스터 스위치 — 기존 데이터도 ON으로 유지되도록 DDL 기본값을 true로 둔다.
+    @Column(name = "all_enabled", nullable = false, columnDefinition = "boolean default true")
+    private boolean allEnabled = true;
+
     // 주문/결제 알림 (필수 — UI에서 비활성화 불가)
     @Column(name = "order_enabled", nullable = false)
     private boolean orderEnabled = true;
@@ -130,6 +134,7 @@ public class NotificationSettings extends BaseEntity {
     public static NotificationSettings createDefault(Account account) {
         NotificationSettings notificationSettings = new NotificationSettings();
         notificationSettings.account            = account;
+        notificationSettings.allEnabled         = true;
         notificationSettings.orderEnabled       = true;
         notificationSettings.reservationEnabled = true;
         notificationSettings.chatEnabled        = true;
@@ -164,8 +169,11 @@ public class NotificationSettings extends BaseEntity {
     // ===================== 도메인 메서드 =====================
 
     //  해당 타입의 푸시 수신 동의 여부
-    //  ORDER / RESERVATION / SYSTEM / 관리자 전용 알림은 항상 true (필수)
+    //  전체 알림이 OFF면 모든 타입을 차단한다.
+    //  전체 알림이 ON일 때 ORDER / RESERVATION / SYSTEM / 관리자 전용 알림은 필수 수신한다.
     public boolean isAllowed(NotificationType type) {
+        if (!allEnabled) return false;
+
         return switch (type) {
             // 필수 알림 (끌 수 없음)
             case ORDER_STATUS_CHANGED, PAYMENT_COMPLETED  -> true;
@@ -237,6 +245,7 @@ public class NotificationSettings extends BaseEntity {
 
     // ===================== 토글 메서드 =====================
 
+    public void updateAllEnabled(boolean allEnabled) { this.allEnabled = allEnabled; }
     public void toggleChatEnabled()        { this.chatEnabled = !this.chatEnabled; }
     public void toggleCommunityEnabled()   { this.communityEnabled = !this.communityEnabled; }
     public void toggleStoreReviewEnabled() { this.storeReviewEnabled = !this.storeReviewEnabled; }

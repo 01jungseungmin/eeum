@@ -55,6 +55,13 @@ public class Report extends BaseEntity {
     @Column(name = "content", length = 1000)
     private String content;
 
+    // 신고 접수 시점의 대상 콘텐츠. Polymorphic 대상이 수정/삭제돼도 관리자 검토 근거를 보존한다.
+    @Column(name = "target_title_snapshot", length = 255)
+    private String targetTitleSnapshot;
+
+    @Column(name = "target_content_snapshot", columnDefinition = "TEXT")
+    private String targetContentSnapshot;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ReportStatus status;
@@ -76,12 +83,26 @@ public class Report extends BaseEntity {
             ReportReason reason,
             String content
     ) {
+        return create(reporter, targetType, targetId, reason, content, null, null);
+    }
+
+    public static Report create(
+            Account reporter,
+            ReportTargetType targetType,
+            Long targetId,
+            ReportReason reason,
+            String content,
+            String targetTitleSnapshot,
+            String targetContentSnapshot
+    ) {
         Report report = new Report();
         report.reporter = reporter;
         report.targetType = targetType;
         report.targetId = targetId;
         report.reason = reason;
         report.content = content;
+        report.targetTitleSnapshot = targetTitleSnapshot;
+        report.targetContentSnapshot = targetContentSnapshot;
         report.status = ReportStatus.PENDING;
         return report;
     }

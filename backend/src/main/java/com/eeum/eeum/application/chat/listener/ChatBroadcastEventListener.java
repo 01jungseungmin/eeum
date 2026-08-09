@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.chat.listener;
 
+import com.eeum.eeum.application.chat.dto.response.ChatRoomClosedResponseDto;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
+import com.eeum.eeum.domain.chat.event.ChatRoomClosedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -22,5 +24,15 @@ public class ChatBroadcastEventListener {
     public void onBroadcast(ChatMessageBroadcastEvent event) {
         messagingTemplate.convertAndSend(
                 "/sub/chat/rooms/" + event.roomId(), event.payload());
+    }
+
+    // 채팅방 종료 통지 — 남아있는 구독자가 즉시 방을 닫도록 별도 채널로 전송.
+    // 종료 후에는 신규 SUBSCRIBE가 차단되지만 이미 열려 있는 세션은 끊기지 않으므로 필요하다.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onRoomClosed(ChatRoomClosedEvent event) {
+        messagingTemplate.convertAndSend(
+                "/sub/chat/rooms/" + event.roomId() + "/closed",
+                ChatRoomClosedResponseDto.of(
+                        event.roomId(), event.closedByAccountId(), event.closedAt()));
     }
 }
