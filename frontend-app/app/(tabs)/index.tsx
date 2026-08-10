@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
+import { StyleSheet, Alert, ActivityIndicator, View } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -19,8 +19,9 @@ export default function HomeScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   
   const [regions, setRegions] = useState<any[]>([]);
-  // 기존 대표 지역 상태를 '현재 보고 있는 동네' 상태로 변경
   const [viewingRegion, setViewingRegion] = useState<{id: number, name: string} | null>(null);
+  
+  const [isRegionLoading, setIsRegionLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -48,7 +49,6 @@ export default function HomeScreen() {
       
       const primary = normalizedData.find((r: any) => r.isPrimary);
     
-      // 처음에 화면을 켰을 때, 아직 보는 동네가 없다면 대표 동네로 세팅
       if (primary && !viewingRegion) {
         setViewingRegion({ id: primary.regionId || primary.id, name: primary.dong || primary.fullName });
       } else if (normalizedData.length === 0) {
@@ -61,36 +61,42 @@ export default function HomeScreen() {
     }
   };
 
-  // 모달에서 동네를 눌렀을 때 화면만 바꾸는 함수
   const handleSelectViewRegion = (region: any) => {
     setViewingRegion({ id: region.regionId || region.id, name: region.dong || region.fullName });
-    setModalVisible(false); // 모달 닫기
+    setModalVisible(false);
   };
 
   const handleSetPrimary = async (id: number) => {
+    if (isRegionLoading) return;
+    setIsRegionLoading(true);
     try {
       await regionApi.setPrimaryRegion(id);
-      loadRegions(); 
+      await loadRegions(); 
       Alert.alert("성공", "대표 동네가 변경되었습니다.");
     } catch (e) {
       Alert.alert("오류", "대표 지역 설정에 실패했습니다.");
+    } finally {
+      setIsRegionLoading(false);
     }
   };
 
   const handleDeleteRegion = (id: number) => {
+    if (isRegionLoading) return;
     Alert.alert("삭제", "이 동네를 삭제하시겠습니까?", [
       { text: "취소", style: "cancel" },
       {
         text: "삭제",
         style: "destructive",
         onPress: async () => {
+          setIsRegionLoading(true);
           try {
             await regionApi.deleteRegion(id);
-            // 삭제 후 현재 보고 있던 동네였다면 초기화
             if (viewingRegion?.id === id) setViewingRegion(null);
-            loadRegions(); 
+            await loadRegions(); 
           } catch (e) {
             Alert.alert("오류", "삭제에 실패했습니다.");
+          } finally {
+            setIsRegionLoading(false);
           }
         }
       }
@@ -98,6 +104,8 @@ export default function HomeScreen() {
   };
 
   const handleVerifyRegion = async (id: number) => {
+    if (isRegionLoading) return;
+    setIsRegionLoading(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -113,10 +121,12 @@ export default function HomeScreen() {
       await regionApi.verifyRegion(id, latitude, longitude);
       
       Alert.alert("인증 성공", "현재 위치 인증이 완료되었습니다! 이제 대표 지역으로 설정할 수 있습니다.");
-      loadRegions(); 
+      await loadRegions(); 
     } catch (e: any) {
       const serverMessage = e.response?.data?.message || "현재 위치가 등록된 동네와 일치하지 않거나 에러가 발생했습니다.";
       Alert.alert("인증 실패", serverMessage);
+    } finally {
+      setIsRegionLoading(false);
     }
   };
 
@@ -135,7 +145,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}> 
       <HomeHeader 
-        primaryRegionName={viewingRegion?.name || '동네 설정 필요'} // 헤더에 현재 보는 동네 표시
+        primaryRegionName={viewingRegion?.name || '동네 설정 필요'} 
         onOpenModal={() => setModalVisible(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -143,7 +153,7 @@ export default function HomeScreen() {
       />
       
       {activeTab === 'shop' 
-        ? <ShopView router={router} regionId={viewingRegion?.id} /> //ShopView에 현재 보는 동네 ID 전달
+        ? <ShopView router={router} regionId={viewingRegion?.id} /> 
         : <UsedTradeView router={router} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
       }
 
@@ -157,6 +167,7 @@ export default function HomeScreen() {
         onAddRegion={handleAddRegion}
         onDeleteRegion={handleDeleteRegion}
         onVerifyRegion={handleVerifyRegion}
+        isLoading={isRegionLoading}
       />
     </SafeAreaView>
   );
