@@ -125,12 +125,12 @@ export default function InquiryManagement() {
 
       if (res.data.success && res.data.data.roomId !== undefined) {
         const newRoomId = res.data.data.roomId;
-        console.log('채팅방 생성 성공, Room ID:', newRoomId);
+
         setMyRoomId(newRoomId);
-        setIsChatRoomCreated(true); // 💡 로컬 상태 즉시 반영
+        setIsChatRoomCreated(true);
 
         localStorage.setItem('storeChatRoom_id', String(newRoomId));
-        localStorage.setItem('storeChatRoomCreated', 'true'); // 💡 문자열 저장 연동
+        localStorage.setItem('storeChatRoomCreated', 'true');
 
         alert(
           '🎉 상점 대표 실시간 채팅방이 성공적으로 개설되었습니다! 왼쪽 [채팅] 메뉴에서 확인하세요.',
@@ -217,7 +217,10 @@ export default function InquiryManagement() {
       {loading ? (
         <LoadingText>문의 내역을 불러오는 중입니다...</LoadingText>
       ) : (
-        <InquiryList data={filteredInquiries} onRefresh={loadInquiries} />
+        <InquiryList
+          data={filteredInquiries}
+          onRefresh={loadInquiries}
+        />
       )}
     </Container>
   );

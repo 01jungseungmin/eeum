@@ -11,7 +11,6 @@ import { chatApi } from '../../../api/owner/chatApi';
 import useChatSocket from '../../../hooks/useChatSocket';
 import ImageUploaderGrid from '../../../components/common/ImageUploaderGrid';
 import ChatMessageItem from '../../../components/owner/chat/ChatMessageItem';
-import { useNotificationCounts } from '../../../hooks/useNotificationCounts';
 
 const PageContainer = styled.div`
   flex: 1;
@@ -283,7 +282,7 @@ const ModalOverlay = styled.div`
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vw;
+  height: 100vh;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
@@ -352,16 +351,16 @@ const LeaveButton = styled.button`
 `;
 
 export default function ShopChatManagement() {
-  const roomKey = localStorage.getItem('storeChatRoom_id') || '1';
+  const roomKey = localStorage.getItem('storeChatRoom_id');
   const ROOM_ID = parseInt(roomKey, 10);
-  const MY_ACCOUNT_ID = Number(localStorage.getItem('accountId')) || 4;
   const navigate = useNavigate();
 
-  // 채팅방 세부 정보 상태 추가
+  // 채팅방 세부 정보 상태 (createdBy를 accountId로 저장)
   const [roomInfo, setRoomInfo] = useState({
     name: '실시간 고객 문의 상담방',
     participantCount: 0,
     participants: [],
+    accountId: 0,
   });
 
   const [messages, setMessages] = useState([]);
@@ -379,39 +378,74 @@ export default function ShopChatManagement() {
   const scrollRef = useRef(null);
   const chatWrapperRef = useRef(null);
 
-  const { refetch } = useNotificationCounts();
+  // 소켓 수신 메시지 가공 및 중복 방지
+  const handleIncomingMessage = useCallback((newMsg) => {
+    setRoomInfo((prevRoom) => {
+      const isMyMessage =
+        Number(newMsg.createdBy ?? newMsg.senderAccountId) ===
+        Number(prevRoom.accountId);
 
-  // 데이터 로드 및 읽음 처리 통합
+      setMessages((prev) => {
+        // 이미 목록에 존재하는 메시지라면 추가하지 않음
+        const isAlreadyExist = prev.some(
+          (msg) => msg.messageId && msg.messageId === newMsg.messageId,
+        );
+        if (isAlreadyExist) return prev;
+
+        return [
+          ...prev,
+          {
+            ...newMsg,
+            isMe: isMyMessage,
+            isDeleted: newMsg.deleted || false,
+            unreadCount: newMsg.unreadCount || 0,
+          },
+        ];
+      });
+      return prevRoom;
+    });
+  }, []);
+
+  const { connected, sendMessage } = useChatSocket(
+    ROOM_ID,
+    handleIncomingMessage,
+    roomInfo.accountId,
+  );
+
+  // 데이터 로드 및 읽음 처리
   const initChat = async () => {
     try {
       setLoading(true);
 
-      // 읽음 처리 먼저 수행
       await chatApi.markRoomAsRead(ROOM_ID);
 
-      // 읽음 처리 후 카운트 갱신
-      refetch();
-
-      // 병렬로 방 정보와 메시지 조회
-      const [roomRes, msgRes] = await Promise.all([
-        chatApi.getRoomDetail(ROOM_ID),
-        chatApi.getMessages(ROOM_ID),
-      ]);
+      // 1) 방 정보 먼저 수신 후 createdBy 추출
+      const roomRes = await chatApi.getRoomDetail(ROOM_ID);
+      let roomOwnerId = 0;
 
       if (roomRes.data.success) {
+        const roomData = roomRes.data.data;
+        roomOwnerId = roomData.createdBy;
+
         setRoomInfo({
-          name: roomRes.data.data.name,
-          participantCount: roomRes.data.data.participantCount,
-          participants: roomRes.data.data.participants || [],
+          name: roomData.name,
+          participantCount: roomData.participantCount,
+          participants: roomData.participants || [],
+          accountId: roomData.createdBy,
         });
       }
+
+      // 2) 메시지 가져온 뒤 createdBy 비교하여 isMe 지정
+      const msgRes = await chatApi.getMessages(ROOM_ID);
 
       if (msgRes.data.success && msgRes.data.data.content) {
         const formatted = [...msgRes.data.data.content]
           .reverse()
           .map((msg) => ({
             ...msg,
-            isMe: msg.senderAccountId === MY_ACCOUNT_ID,
+            isMe:
+              Number(msg.createdBy ?? msg.senderAccountId) ===
+              Number(roomOwnerId),
             isDeleted: msg.deleted || false,
             unreadCount: msg.unreadCount || 0,
           }));
@@ -428,7 +462,7 @@ export default function ShopChatManagement() {
     initChat();
   }, [ROOM_ID]);
 
-  // 바깥쪽 클릭 시 컨텍스트 메뉴 및 참여자 드롭다운 닫기
+  // 바깥쪽 클릭 이벤트 처리
   useEffect(() => {
     const handleOutsideClick = () => {
       setContextMenu(null);
@@ -438,16 +472,6 @@ export default function ShopChatManagement() {
     return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  const handleIncomingMessage = useCallback((newMsg) => {
-    setMessages((prev) => [...prev, newMsg]);
-  }, []);
-
-  const { connected, sendMessage } = useChatSocket(
-    ROOM_ID,
-    handleIncomingMessage,
-    MY_ACCOUNT_ID,
-  );
-
   useLayoutEffect(() => {
     if (messages.length === 0) return;
     scrollRef.current?.scrollIntoView({
@@ -455,13 +479,11 @@ export default function ShopChatManagement() {
     });
   }, [messages, loading, connected]);
 
-  // 메시지 전송 핸들러
   const handleSend = () => {
     if (!inputValue || !inputValue.trim()) return;
     if (sendMessage(inputValue.trim())) setInputValue('');
   };
 
-  // 메시지 우클릭 컨텍스트 메뉴
   const handleContextMenu = (e, msg) => {
     if (!msg.isMe || msg.isDeleted) return;
     e.preventDefault();
@@ -476,7 +498,6 @@ export default function ShopChatManagement() {
     setSelectedMessageId(msg.messageId);
   };
 
-  // 채팅 삭제
   const handleConfirmDelete = async () => {
     if (!selectedMessageId) return;
     try {
@@ -489,7 +510,6 @@ export default function ShopChatManagement() {
     }
   };
 
-  // 이미지 업로드 후 전송
   const handleImagesSubmit = async () => {
     if (uploadImages.length === 0) return;
     setIsUploading(true);
@@ -513,18 +533,14 @@ export default function ShopChatManagement() {
     }
   };
 
-  // 채팅방 나가기
-  const handleLeaveRoom = async () => {
+  const handleCloseRoom = async () => {
     if (!window.confirm('정말로 이 채팅방을 나가시겠습니까?')) return;
 
     try {
-      await chatApi.leaveRoom(ROOM_ID);
+      await chatApi.closeRoom(ROOM_ID);
       alert('채팅방에서 나갔습니다.');
 
-      // 채팅방 개설 플래그를 문자열 'false'로 변경
       localStorage.setItem('storeChatRoomCreated', 'false');
-
-      // 저장되어 있던 상점 룸 ID 데이터도 깔끔하게 삭제
       localStorage.removeItem('storeChatRoom_id');
 
       navigate('/inquiry');
@@ -557,9 +573,8 @@ export default function ShopChatManagement() {
             <StatusIndicator $connected={connected}>
               {connected ? '실시간 연결됨' : '연결 끊김'}
             </StatusIndicator>
-            <LeaveButton onClick={handleLeaveRoom}>방 나가기</LeaveButton>
+            <LeaveButton onClick={handleCloseRoom}>방 나가기</LeaveButton>
           </div>
-          {/* 👥 누르면 열리는 참여자 목록 레이어 */}
           {showParticipants && (
             <ParticipantsDropdown>
               <DropdownTitle>
@@ -575,7 +590,7 @@ export default function ShopChatManagement() {
                     <ParticipantName>
                       {user.name} ({user.nickname})
                     </ParticipantName>
-                    {user.accountId === MY_ACCOUNT_ID && <MeTag>나</MeTag>}
+                    {user.accountId === roomInfo.accountId && <MeTag>나</MeTag>}
                   </ParticipantItem>
                 ))}
               </ParticipantList>
@@ -601,7 +616,10 @@ export default function ShopChatManagement() {
         </MessageArea>
 
         {contextMenu && (
-          <ContextMenu $x={contextMenu.x} $y={contextMenu.y}>
+          <ContextMenu
+            $x={contextMenu.x}
+            $y={contextMenu.y}
+          >
             <MenuButton
               onClick={() => {
                 setIsDeleteModalOpen(true);
@@ -613,10 +631,12 @@ export default function ShopChatManagement() {
           </ContextMenu>
         )}
 
-        {/* 하단 인풋 바 및 모달 영역은 그대로 유지 */}
         <InputBarContainer>
           <InputFieldWrapper>
-            <PlusButton type="button" onClick={() => setIsModalOpen(true)}>
+            <PlusButton
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+            >
               +
             </PlusButton>
             <MessageInput
@@ -628,7 +648,10 @@ export default function ShopChatManagement() {
                   handleSend();
               }}
             />
-            <SendIconButton onClick={handleSend} disabled={!inputValue.trim()}>
+            <SendIconButton
+              onClick={handleSend}
+              disabled={!inputValue.trim()}
+            >
               <svg
                 width="20"
                 height="20"
@@ -637,7 +660,12 @@ export default function ShopChatManagement() {
                 stroke="currentColor"
                 strokeWidth="2.5"
               >
-                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <line
+                  x1="22"
+                  y1="2"
+                  x2="11"
+                  y2="13"
+                ></line>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
               </svg>
             </SendIconButton>
@@ -645,7 +673,7 @@ export default function ShopChatManagement() {
         </InputBarContainer>
       </ChatWrapper>
 
-      {/* 모달 생략 - 이전과 동일 */}
+      {/* 모달 영역 */}
       {isModalOpen && (
         <ModalOverlay onClick={() => !isUploading && setIsModalOpen(false)}>
           <ModalContent onClick={(e) => e.stopPropagation()}>
@@ -689,7 +717,10 @@ export default function ShopChatManagement() {
               <CancelButton onClick={() => setIsDeleteModalOpen(false)}>
                 취소
               </CancelButton>
-              <ConfirmButton $isDelete={true} onClick={handleConfirmDelete}>
+              <ConfirmButton
+                $isDelete={true}
+                onClick={handleConfirmDelete}
+              >
                 정말 삭제
               </ConfirmButton>
             </ModalActionRow>
