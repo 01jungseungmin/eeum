@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const LoginWrapper = styled.div`
   min-height: 100vh;
@@ -108,6 +109,8 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  const { login } = useAuth();
+
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -125,8 +128,7 @@ export default function AdminLoginPage() {
       const { success, data, message } = response.data;
 
       if (success) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('role', data.role);
+        login(data.accessToken, data.role, data.refreshToken);
 
         alert(message);
 

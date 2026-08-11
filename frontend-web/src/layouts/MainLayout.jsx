@@ -42,14 +42,7 @@ function MainLayout() {
     // 초기 데이터 로드 함수
     const fetchInitialData = async () => {
       try {
-        if (role === 'ROLE_ADMIN') {
-          const approvalRes = await approvalApi.getOwnerStoreChecklist();
-          if (approvalRes.data && approvalRes.data.success) {
-            setApprovalStatus(approvalRes.data.data.approvalStatus);
-          }
-          setStatusLoading(false);
-          return;
-        }
+        if (role === 'ROLE_ADMIN') return;
 
         // 사장님 권한일 경우, 승인 상태와 대시보드 정보를 동시에 가져오기
         const [approvalRes, dashboardRes] = await Promise.all([
@@ -122,7 +115,12 @@ function MainLayout() {
   }
 
   if (!accessToken) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
   }
 
   return (
