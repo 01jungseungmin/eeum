@@ -59,8 +59,8 @@ class StoreReviewReportActionExecutorTest {
         // given
         StoreReview review = createReview();
         Store store = review.getStore();
-        when(reviewRepository.findWithAccountAndStoreByStorereviewId(REVIEW_ID))
-                .thenReturn(Optional.of(review));
+        when(reviewRepository.findStoreIdByStorereviewId(REVIEW_ID))
+                .thenReturn(Optional.of(STORE_ID));
         when(reviewRepository.findWithAccountAndStoreByStorereviewIdForUpdate(REVIEW_ID))
                 .thenReturn(Optional.of(review));
         when(storeRepository.findByIdWithPessimisticLock(STORE_ID)).thenReturn(Optional.of(store));
@@ -86,7 +86,7 @@ class StoreReviewReportActionExecutorTest {
                 imageRepository,
                 replyRepository
         );
-        order.verify(reviewRepository).findWithAccountAndStoreByStorereviewId(REVIEW_ID);
+        order.verify(reviewRepository).findStoreIdByStorereviewId(REVIEW_ID);
         order.verify(storeRepository).findByIdWithPessimisticLock(STORE_ID);
         order.verify(reviewRepository)
                 .findWithAccountAndStoreByStorereviewIdForUpdate(REVIEW_ID);
@@ -154,7 +154,7 @@ class StoreReviewReportActionExecutorTest {
     @Test
     void 삭제된_리뷰에_콘텐츠_삭제_조치를_적용할_수_없다() {
         // given
-        when(reviewRepository.findWithAccountAndStoreByStorereviewId(REVIEW_ID))
+        when(reviewRepository.findStoreIdByStorereviewId(REVIEW_ID))
                 .thenReturn(Optional.empty());
 
         // when & then

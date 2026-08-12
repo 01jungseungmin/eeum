@@ -22,6 +22,11 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
     @EntityGraph(attributePaths = {"account", "store"})
     Optional<StoreReview> findWithAccountAndStoreByStorereviewId(Long storereviewId);
 
+    // 리뷰 삭제 잠금 순서(Store → StoreReview) 결정용.
+    // Store 엔티티를 미리 적재하지 않아 동시 평점 수정 후 stale version 충돌을 방지한다.
+    @Query("SELECT r.store.storeId FROM StoreReview r WHERE r.storereviewId = :storereviewId")
+    Optional<Long> findStoreIdByStorereviewId(@Param("storereviewId") Long storereviewId);
+
     // 신고 조치 중 리뷰 수정·삭제와 경쟁하지 않도록 대상 행을 잠금
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM StoreReview r WHERE r.storereviewId = :storereviewId")

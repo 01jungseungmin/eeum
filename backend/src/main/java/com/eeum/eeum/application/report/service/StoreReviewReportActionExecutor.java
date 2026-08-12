@@ -56,9 +56,9 @@ public class StoreReviewReportActionExecutor implements ReportTargetActionExecut
     }
 
     private Long deleteReview(Long reviewId) {
-        StoreReview snapshot = reviewRepository.findWithAccountAndStoreByStorereviewId(reviewId)
+        Long storeId = reviewRepository.findStoreIdByStorereviewId(reviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
-        Store store = storeRepository.findByIdWithPessimisticLock(snapshot.getStore().getStoreId())
+        Store store = storeRepository.findByIdWithPessimisticLock(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
         StoreReview review = getReviewForUpdate(reviewId);
         Long authorAccountId = review.getAccount().getAccountId();
@@ -68,8 +68,8 @@ public class StoreReviewReportActionExecutor implements ReportTargetActionExecut
         reviewRepository.delete(review);
         reviewRepository.flush();
 
-        double averageRating = reviewRepository.calculateAverageRating(store.getStoreId());
-        int reviewCount = Math.toIntExact(reviewRepository.countByStoreId(store.getStoreId()));
+        double averageRating = reviewRepository.calculateAverageRating(storeId);
+        int reviewCount = Math.toIntExact(reviewRepository.countByStoreId(storeId));
         store.updateRating(averageRating, reviewCount);
 
         return authorAccountId;
