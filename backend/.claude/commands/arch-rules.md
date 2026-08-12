@@ -22,7 +22,15 @@ ArchUnit은 이 규칙들을 **컴파일된 바이트코드 기준으로 CI에�
    ```
    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
    ```
+   Spring Boot BOM이 관리하지 않는 의존성이라 버전 명시가 필요하다.
    추가했으면 `./gradlew compileTestJava`로 해석되는지 먼저 확인한다.
+4. `build.gradle`의 `test` 태스크에 실패 로그 설정이 있는지 확인한다. 없으면 추가한다:
+   ```gradle
+   testLogging { events 'failed'; exceptionFormat = 'full'; showStackTraces = false }
+   ```
+   **이 설정이 없으면 이 커맨드는 무의미하다.** ArchUnit은 위반 목록을 예외 메시지 본문에만 담기 때문에,
+   `exceptionFormat = 'full'` 없이는 "N개 실패"만 보이고 어느 클래스가 위반인지 알 수 없다.
+   즉 아래 "출력 형식"의 3번(핵심 산출물)을 만들 수 없다.
 
 ## 작성 위치와 구조
 
@@ -57,11 +65,19 @@ REQUIRES_NEW 호출 관계처럼 ArchUnit의 기본 조건으로 표현하기 �
 `ArchCondition`을 직접 구현하거나, 정확한 표현이 불가능하면 **규칙을 만들지 말고 제외 사유를 보고**한다.
 부정확한 규칙은 false positive를 낳고 결국 주석 처리되어 사라진다.
 
+#### 이미 표현 불가로 판정된 규칙 (재검토 불필요)
+
+아래 두 규칙은 실제 시도 후 ArchUnit으로 정확히 표현할 수 없다고 판정됐다. 다시 시도하지 말고 이 판정을 인용한다.
+
+- **`afterCommit` 콜백 안의 SSE/HTTP 호출 금지** — 이 프로젝트는 `runAfterCommit(() -> ...)` 람다를 거치므로 바이트코드상 호출자가 합성 메서드(`lambda$…`)이고 어노테이션이 없다. `afterCommit` 이름 기준 규칙으로는 아무것도 잡히지 않는다. 대신 "SSE 전송은 `@Async`여야 한다"가 같은 결함을 정확히 잡는다.
+- **`@Scheduled` 메서드의 반복문 안 비관적 락 호출 금지** — ArchUnit에 제어 흐름 분석이 없어 "반복문 안"을 표현할 수 없다. 이 항목은 `resource-test`의 R6 시나리오에서 동적으로 검증한다.
+
+
 ### EntityRuleTest
 
 - `domain..entity` 패키지의 `@Entity` 클래스는 `BaseEntity`를 상속한다 — 예외: `Location`, `Region`, `OrderItem`
 - Image 관련 엔티티는 `ImageBase`를 상속한다
-- 엔티티에 `@Setter`가 없다
+- 엔티티에 `setXxx` 메서드가 없다 — **`@Setter` 어노테이션으로 검사하지 말 것.** Lombok의 `@Setter`는 `RetentionPolicy.SOURCE`라 바이트코드에 남지 않아 ArchUnit이 볼 수 없다. 생성된 결과물인 `setXxx` 메서드를 검사한다 (손으로 쓴 setter까지 잡혀 더 강한 규칙이다)
 - `@ManyToOne` / `@OneToOne` 필드는 `fetch = FetchType.LAZY`다
 - `deletedAt` 필드는 허용 목록(`Account`, `ChatMessage`, `Category`) 밖의 엔티티에 없다
 - 가격 의미의 필드(`price`, `amount`, `totalPrice` 등)는 `BigDecimal`이다
@@ -89,6 +105,8 @@ REQUIRES_NEW 호출 관계처럼 ArchUnit의 기본 조건으로 표현하기 �
 - 기존 위반이 있어 즉시 통과시킬 수 없는 규칙은 삭제하거나 약화하지 말고, `@ArchIgnore`를 붙이고 **위반 목록과 함께 보고**한다. 규칙 자체는 코드에 남긴다.
 - 허용 예외(`Location`, `Region`, `OrderItem` 등)는 규칙 안에 상수 배열로 명시하고, 왜 예외인지 주석을 단다.
 - 하나의 `@ArchTest`가 여러 규칙을 검사하지 않는다 — 실패 시 원인을 특정할 수 없다.
+- **컴파일 전용 의존성을 클래스 리터럴(`X.class`)로 참조하지 않는다.** `@ArchTest` 필드는 클래스 초기화 시점에 평가되므로 해당 타입이 `testRuntimeClasspath`에 없으면 `NoClassDefFoundError`가 나고, **그 한 건이 ArchUnit 엔진의 discovery 전체를 실패시켜 다른 규칙까지 하나도 실행되지 않는다.** 이 프로젝트에서는 `lombok`이 `testCompileOnly`라 대표적인 함정이다. 런타임에 없는 어노테이션은 문자열 이름으로 검사하거나, 아예 바이트코드에 남는 다른 신호로 규칙을 바꾼다.
+- 규칙을 추가할 때마다 한 번씩 실행해 본다. 여러 규칙을 몰아 쓴 뒤 한 번에 돌리면 위 discovery 실패 시 원인 규칙을 특정하기 어렵다.
 
 ## 실행 및 확인
 

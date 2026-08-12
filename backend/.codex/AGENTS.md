@@ -98,6 +98,7 @@ Soft Delete (deletedAt 필드) 적용 대상:
 - `Account` — 탈퇴 후 30일 유예, `AccountCleanupScheduler`가 처리
 - `ChatMessage`
 - `Category`
+- `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
 
 그 외 엔티티는 Hard Delete (즉시 물리 삭제)
 

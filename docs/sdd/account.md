@@ -46,6 +46,7 @@ role | AccountRole | NOT NULL | ROLE_USER / ROLE_OWNER / ROLE_ADMIN
 status | AccountStatus | NOT NULL | PENDING / ACTIVE / SUSPENDED / WITHDRAWN
 emailVerified | boolean | NOT NULL, DEFAULT false | 이메일 인증 여부
 fcmToken | String | nullable | 푸시 발송용 디바이스 토큰
+version | Long | NOT NULL, DEFAULT 0 | 회원 정보 수정과 관리자 제재 간 stale write 방지용 낙관적 락 버전
 createdAt | LocalDateTime | NOT NULL | BaseEntity 상속
 modifiedAt | LocalDateTime | NOT NULL | BaseEntity 상속
 deletedAt | LocalDateTime | nullable | 탈퇴 시점
@@ -470,6 +471,7 @@ REJECTED | 승인 거절
 | status            | varchar(20)  | NOT NULL         | AccountStatus ENUM                                                  |
 | email_verified    | boolean      | NOT NULL         | 이메일 인증 여부                                                    |
 | fcm_token         | varchar(255) | nullable         | 푸시 발송용 디바이스 토큰                                           |
+| version           | bigint       | NOT NULL, DEFAULT 0 | 낙관적 락 버전; 동시 수정 충돌 시 뒤늦은 트랜잭션 거부                  |
 | created_at        | datetime     | NOT NULL         | BaseEntity 상속                                                     |
 | modified_at       | datetime     | NOT NULL         | BaseEntity 상속                                                     |
 | deleted_at        | datetime     | nullable         | 탈퇴 시점(Soft Delete, 30일 유예)                                   |
@@ -597,4 +599,6 @@ DB에 FK 제약은 없으며 서비스 레이어에서 관리된다.
 - JWT 토큰 정책(Access 30분 / Refresh 14일 / Re-auth / 이메일 인증 3분 / 비밀번호 재설정 10분)은 `common.md` 6.10.6 참조
 - 민감 정보 마스킹 규칙(이메일/전화번호/이름)은 `common.md` 6.10.5, 6.13.4 참조
 - Account Soft Delete 흐름(6.6.3)은 `common.md` 참조
+- `Account.version` 낙관적 락으로 일반 회원 정보·비밀번호·FCM 토큰 수정이 관리자 정지 상태를 덮어쓰지 못하게 한다.
+- 무효 FCM 토큰 정리 bulk update는 `fcm_token=NULL`과 `version=version+1`을 함께 수행해 낙관적 락을 우회하지 않는다.
 - 관리자 감사 로그(AdminAuditLog, AdminAuditAspect, AdminAuditService, AuditActionType, AuditResult) 상세 설계는 `common.md` 참조
