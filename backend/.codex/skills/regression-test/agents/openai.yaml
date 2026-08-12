@@ -1,0 +1,4 @@
+interface:
+  display_name: "회귀 테스트 고정"
+  short_description: "발생한 버그를 먼저 실패하는 재현 테스트로 고정합니다"
+  default_prompt: "Use $regression-test to lock a diagnosed bug into a failing reproduction test before fixing it."
