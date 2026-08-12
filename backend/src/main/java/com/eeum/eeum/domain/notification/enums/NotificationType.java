@@ -32,6 +32,7 @@ public enum NotificationType {
     // 상점/리뷰
     STORE_REVIEW,            // 새 리뷰 작성 (사장 수신)
     STORE_REVIEW_REPLY,      // 리뷰 답글 (구매자 수신)
+    STORE_REVIEW_ADMIN_ACTION, // 관리자 조치 (리뷰 작성자 수신)
 
     // 상품/재고
     STORE_PRODUCT_RESTOCK,   // 관심 상품 재입고
@@ -72,7 +73,7 @@ public enum NotificationType {
                     -> NotificationCategory.CHAT;
             case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE, COMMUNITY_ADMIN_ACTION
                     -> NotificationCategory.COMMUNITY;
-            case STORE_REVIEW, STORE_REVIEW_REPLY
+            case STORE_REVIEW, STORE_REVIEW_REPLY, STORE_REVIEW_ADMIN_ACTION
                     -> NotificationCategory.REVIEW;
             case STORE_PRODUCT_RESTOCK, STOCK_WARNING
                     -> NotificationCategory.PRODUCT;

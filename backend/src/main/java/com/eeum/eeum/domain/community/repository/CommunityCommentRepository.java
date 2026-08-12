@@ -5,10 +5,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 
 public interface CommunityCommentRepository extends JpaRepository<CommunityComment, Long> {
@@ -16,6 +18,10 @@ public interface CommunityCommentRepository extends JpaRepository<CommunityComme
     // 신고 상세의 대상 스냅샷 — 작성자/게시글을 함께 조회해 N+1 방지
     @EntityGraph(attributePaths = {"account", "post"})
     Optional<CommunityComment> findWithAccountAndPostByCommentId(Long commentId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM CommunityComment c WHERE c.commentId = :commentId")
+    Optional<CommunityComment> findWithAccountByCommentIdForUpdate(@Param("commentId") Long commentId);
 
     @EntityGraph(attributePaths = "account")
     Page<CommunityComment> findByPost_PostIdAndParentCommentIsNull(Long postId, Pageable pageable);

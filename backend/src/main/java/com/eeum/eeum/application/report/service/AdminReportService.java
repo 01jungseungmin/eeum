@@ -7,15 +7,14 @@ import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.report.entity.Report;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
-import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
-import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -24,7 +23,7 @@ public class AdminReportService {
 
     private final ReportRepository reportRepository;
     private final ReportTargetResolver reportTargetResolver;
-    private final CommunityPostReportActionExecutor communityPostReportActionExecutor;
+    private final ReportActionDispatcher reportActionDispatcher;
 
     @Transactional(readOnly = true)
     public Page<ReportResponseDto> getReports(ReportStatus status, Pageable pageable) {
@@ -85,7 +84,7 @@ public class AdminReportService {
         return ReportResponseDto.from(saved);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ReportResponseDto processReport(
             Long reportId,
             Long adminId,
@@ -97,10 +96,8 @@ public class AdminReportService {
 
         Long actionTargetAccountId = null;
         if (action != ReportAction.DISMISS) {
-            if (report.getTargetType() != ReportTargetType.COMMUNITY_POST) {
-                throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
-            }
-            actionTargetAccountId = communityPostReportActionExecutor.execute(
+            actionTargetAccountId = reportActionDispatcher.execute(
+                    report.getTargetType(),
                     action,
                     report.getTargetId(),
                     report.getTargetOwnerAccountIdSnapshot(),

@@ -1,8 +1,5 @@
 package com.eeum.eeum.application.report.service;
 
-import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.event.CommunityAdminActionEvent;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
@@ -12,6 +9,7 @@ import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.report.enums.ReportAction;
+import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -20,16 +18,22 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class CommunityPostReportActionExecutor {
+public class CommunityPostReportActionExecutor implements ReportTargetActionExecutor {
 
     private final CommunityPostRepository postRepository;
     private final CommunityPostLikeRepository postLikeRepository;
     private final CommunityCommentRepository commentRepository;
     private final CommunityCommentLikeRepository commentLikeRepository;
     private final CommunityImageRepository imageRepository;
-    private final AccountRepository accountRepository;
+    private final ReportedAccountActionService reportedAccountActionService;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Override
+    public ReportTargetType targetType() {
+        return ReportTargetType.COMMUNITY_POST;
+    }
+
+    @Override
     public Long execute(
             ReportAction action,
             Long postId,
@@ -39,16 +43,18 @@ public class CommunityPostReportActionExecutor {
         Long authorAccountId = switch (action) {
             case HIDE_POST -> hidePost(postId);
             case DELETE_POST -> deletePost(postId);
-            case WARN_AUTHOR -> resolveAuthorAccountId(postId, storedAuthorAccountId);
-            case SUSPEND_AUTHOR -> suspendAuthor(postId, storedAuthorAccountId);
-            case DISMISS -> throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
+            case WARN_AUTHOR, SUSPEND_AUTHOR -> applyAccountAction(
+                    action,
+                    resolveAuthorAccountId(postId, storedAuthorAccountId)
+            );
+            default -> throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
         };
 
         eventPublisher.publishEvent(new CommunityAdminActionEvent(
                 authorAccountId,
                 NotificationRefType.COMMUNITY_POST,
                 postId,
-                actionLabel(action) + ": " + adminNote
+                actionLabel(action)
         ));
         return authorAccountId;
     }
@@ -73,21 +79,8 @@ public class CommunityPostReportActionExecutor {
         return authorAccountId;
     }
 
-    private Long suspendAuthor(Long postId, Long storedAuthorAccountId) {
-        Long authorAccountId = resolveAuthorAccountId(postId, storedAuthorAccountId);
-        Account author = accountRepository.findByIdWithLock(authorAccountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
-
-        if (author.isAdmin()) {
-            throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
-        }
-        if (author.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
-
-        author.suspend();
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(authorAccountId));
-        return authorAccountId;
+    private Long applyAccountAction(ReportAction action, Long authorAccountId) {
+        return reportedAccountActionService.apply(action, authorAccountId);
     }
 
     private Long resolveAuthorAccountId(Long postId, Long storedAuthorAccountId) {
@@ -108,7 +101,7 @@ public class CommunityPostReportActionExecutor {
             case DELETE_POST -> "게시글 삭제";
             case WARN_AUTHOR -> "작성자 경고";
             case SUSPEND_AUTHOR -> "작성자 정지";
-            case DISMISS -> "신고 기각";
+            default -> throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
         };
     }
 }

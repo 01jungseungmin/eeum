@@ -198,7 +198,11 @@ public class CommunityCommentService {
 
     @Transactional
     public void deleteComment(Long accountId, Long commentId) {
-        CommunityComment comment = getCommentOrThrow(commentId);
+        CommunityComment snapshot = getCommentOrThrow(commentId);
+        postRepository.findWithAccountByPostIdForUpdate(snapshot.getPost().getPostId())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+        CommunityComment comment = commentRepository.findWithAccountByCommentIdForUpdate(commentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
         validateOwner(comment, accountId);
         // 이미 삭제된 댓글 재삭제 차단 — 검증 없이 재실행하면 decreaseCommentCount가 중복 호출되어
         // 게시글 commentCount가 실제 댓글 수보다 작아진다(중복 클릭/다기기 동시 삭제).

@@ -11,8 +11,8 @@ import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
-import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,7 +38,7 @@ class AdminReportServiceTest {
 
     @Mock private ReportRepository reportRepository;
     @Mock private ReportTargetResolver reportTargetResolver;
-    @Mock private CommunityPostReportActionExecutor communityPostReportActionExecutor;
+    @Mock private ReportActionDispatcher reportActionDispatcher;
 
     private static final Long REPORT_ID = 1L;
     private static final Long REPORTER_ID = 10L;
@@ -241,7 +241,8 @@ class AdminReportServiceTest {
         Report report = createReport();
         ReportProcessRequestDto request = processRequest(ReportAction.HIDE_POST, "게시글 숨김 처리");
         when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
-        when(communityPostReportActionExecutor.execute(
+        when(reportActionDispatcher.execute(
+                ReportTargetType.COMMUNITY_POST,
                 ReportAction.HIDE_POST, TARGET_ID, null, "게시글 숨김 처리"))
                 .thenReturn(20L);
         when(reportRepository.saveAndFlush(report)).thenReturn(report);
@@ -271,7 +272,8 @@ class AdminReportServiceTest {
         // Then
         assertThat(result.getStatus()).isEqualTo(ReportStatus.DISMISSED);
         assertThat(result.getAction()).isEqualTo(ReportAction.DISMISS);
-        verify(communityPostReportActionExecutor, never()).execute(
+        verify(reportActionDispatcher, never()).execute(
+                org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.any(),
@@ -279,18 +281,61 @@ class AdminReportServiceTest {
     }
 
     @Test
-    void 게시글이_아닌_대상에는_게시글_조치를_적용할_수_없다() {
+    void 게시글이_아닌_대상도_전용_실행기로_조치를_위임한다() {
         // Given
         Report report = createReport();
         ReflectionTestUtils.setField(report, "targetType", ReportTargetType.STORE_REVIEW);
         ReportProcessRequestDto request = processRequest(ReportAction.DELETE_POST, "삭제");
         when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
+        when(reportActionDispatcher.execute(
+                ReportTargetType.STORE_REVIEW,
+                ReportAction.DELETE_POST,
+                TARGET_ID,
+                null,
+                "삭제"
+        )).thenThrow(new com.eeum.eeum.exception.BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED));
 
         // When & Then
         assertThatThrownBy(() -> adminReportService.processReport(REPORT_ID, 99L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
+    }
+
+    @Test
+    void 리뷰_삭제_조치는_리뷰_실행기_결과를_신고_처리_이력에_저장한다() {
+        // Given
+        Report report = createReport();
+        ReflectionTestUtils.setField(report, "targetType", ReportTargetType.STORE_REVIEW);
+        ReflectionTestUtils.setField(report, "targetOwnerAccountIdSnapshot", 30L);
+        ReportProcessRequestDto request = processRequest(
+                ReportAction.DELETE_STORE_REVIEW,
+                "정책 위반 리뷰 삭제"
+        );
+        when(reportRepository.findByReportIdForUpdate(REPORT_ID)).thenReturn(Optional.of(report));
+        when(reportActionDispatcher.execute(
+                ReportTargetType.STORE_REVIEW,
+                ReportAction.DELETE_STORE_REVIEW,
+                TARGET_ID,
+                30L,
+                "정책 위반 리뷰 삭제"
+        )).thenReturn(30L);
+        when(reportRepository.saveAndFlush(report)).thenReturn(report);
+
+        // When
+        ReportResponseDto result = adminReportService.processReport(REPORT_ID, 99L, request);
+
+        // Then
+        assertThat(result.getStatus()).isEqualTo(ReportStatus.REVIEWED);
+        assertThat(result.getAction()).isEqualTo(ReportAction.DELETE_STORE_REVIEW);
+        assertThat(result.getActionTargetAccountId()).isEqualTo(30L);
+        verify(reportActionDispatcher).execute(
+                ReportTargetType.STORE_REVIEW,
+                ReportAction.DELETE_STORE_REVIEW,
+                TARGET_ID,
+                30L,
+                "정책 위반 리뷰 삭제"
+        );
     }
 
     @Test
@@ -306,7 +351,8 @@ class AdminReportServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.REPORT_ALREADY_PROCESSED);
-        verify(communityPostReportActionExecutor, never()).execute(
+        verify(reportActionDispatcher, never()).execute(
+                org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.any(),

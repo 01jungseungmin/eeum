@@ -552,6 +552,10 @@ class CommunityCommentServiceTest {
         CommunityComment comment = createComment(commentId, post, account);
 
         when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(commentId))
+                .thenReturn(Optional.of(comment));
 
         // when
         commentService.deleteComment(accountId, commentId);
@@ -573,6 +577,10 @@ class CommunityCommentServiceTest {
         CommunityComment reply = createReply(replyId, post, account, parent);
 
         when(commentRepository.findById(replyId)).thenReturn(Optional.of(reply));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(replyId))
+                .thenReturn(Optional.of(reply));
 
         // when
         commentService.deleteComment(accountId, replyId);
@@ -593,6 +601,10 @@ class CommunityCommentServiceTest {
         CommunityComment comment = createComment(commentId, post, owner);
 
         when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(commentId))
+                .thenReturn(Optional.of(comment));
 
         // when & then
         assertThatThrownBy(() -> commentService.deleteComment(otherId, commentId))

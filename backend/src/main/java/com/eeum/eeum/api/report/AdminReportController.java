@@ -76,8 +76,13 @@ public class AdminReportController {
 
     @Operation(
             summary = "[관리자] 신고 조치 처리",
-            description = "게시글 숨김·삭제, 작성자 경고·정지, 신고 기각 중 하나를 적용합니다. " +
-                    "기각 외 조치는 COMMUNITY_POST 신고에만 적용할 수 있습니다."
+            description = "신고 대상 종류에 따라 게시글 숨김·삭제, 댓글 삭제, 리뷰 삭제, " +
+                    "작성자 경고·정지, 상점 정지 또는 신고 기각을 적용합니다. " +
+                    "허용 조합: COMMUNITY_POST=HIDE_POST/DELETE_POST/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "COMMUNITY_COMMENT=DELETE_COMMENT/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "STORE_REVIEW=DELETE_STORE_REVIEW/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "STORE=SUSPEND_STORE/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "ACCOUNT=WARN_AUTHOR/SUSPEND_AUTHOR, 모든 대상=DISMISS."
     )
     @PatchMapping("/{reportId}/process")
     public ResponseEntity<ApiResponse<ReportResponseDto>> processReport(

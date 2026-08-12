@@ -1,9 +1,6 @@
 package com.eeum.eeum.application.report.service;
 
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.enums.AccountStatus;
-import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.event.CommunityAdminActionEvent;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
@@ -12,6 +9,7 @@ import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.report.enums.ReportAction;
+import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -28,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,11 +42,17 @@ class CommunityPostReportActionExecutorTest {
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityImageRepository imageRepository;
-    @Mock private AccountRepository accountRepository;
+    @Mock private ReportedAccountActionService reportedAccountActionService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private static final Long POST_ID = 10L;
     private static final Long AUTHOR_ID = 20L;
+
+    @Test
+    void 게시글_대상_실행기를_반환한다() {
+        // when & then
+        assertThat(executor.targetType()).isEqualTo(ReportTargetType.COMMUNITY_POST);
+    }
 
     @Test
     void 게시글_숨김_조치는_게시글을_숨기고_작성자에게_알림한다() {
@@ -93,28 +98,61 @@ class CommunityPostReportActionExecutorTest {
 
     @Test
     void 작성자_경고는_신고_접수_시_저장한_작성자_ID를_사용한다() {
+        // given
+        when(reportedAccountActionService.apply(ReportAction.WARN_AUTHOR, AUTHOR_ID))
+                .thenReturn(AUTHOR_ID);
+
         // when
         Long result = executor.execute(ReportAction.WARN_AUTHOR, POST_ID, AUTHOR_ID, "1차 경고");
 
         // then
         assertThat(result).isEqualTo(AUTHOR_ID);
         verify(postRepository, never()).findWithAccountByPostIdForUpdate(POST_ID);
+        verify(reportedAccountActionService).apply(ReportAction.WARN_AUTHOR, AUTHOR_ID);
         verify(eventPublisher).publishEvent(isA(CommunityAdminActionEvent.class));
     }
 
     @Test
-    void 작성자_정지는_계정을_잠금하고_토큰_정리_이벤트를_발행한다() {
+    void 작성자_정지는_공통_계정_제재_서비스에_위임한다() {
         // given
-        Account author = createAuthor();
-        when(accountRepository.findByIdWithLock(AUTHOR_ID)).thenReturn(Optional.of(author));
+        when(reportedAccountActionService.apply(ReportAction.SUSPEND_AUTHOR, AUTHOR_ID))
+                .thenReturn(AUTHOR_ID);
 
         // when
         executor.execute(ReportAction.SUSPEND_AUTHOR, POST_ID, AUTHOR_ID, "반복 위반");
 
         // then
-        assertThat(author.getStatus()).isEqualTo(AccountStatus.SUSPENDED);
-        verify(eventPublisher).publishEvent(isA(AccountTokenCleanupEvent.class));
+        verify(reportedAccountActionService).apply(ReportAction.SUSPEND_AUTHOR, AUTHOR_ID);
         verify(eventPublisher).publishEvent(isA(CommunityAdminActionEvent.class));
+    }
+
+    @Test
+    void 저장된_작성자_ID가_없으면_게시글에서_작성자를_확인한다() {
+        // given
+        CommunityPost post = createPost();
+        when(postRepository.findWithAccountByPostIdForUpdate(POST_ID))
+                .thenReturn(Optional.of(post));
+        when(reportedAccountActionService.apply(ReportAction.WARN_AUTHOR, AUTHOR_ID))
+                .thenReturn(AUTHOR_ID);
+
+        // when
+        Long result = executor.execute(ReportAction.WARN_AUTHOR, POST_ID, null, "1차 경고");
+
+        // then
+        assertThat(result).isEqualTo(AUTHOR_ID);
+        verify(reportedAccountActionService).apply(ReportAction.WARN_AUTHOR, AUTHOR_ID);
+    }
+
+    @Test
+    void 게시글에_허용되지_않는_조치는_거부한다() {
+        // when & then
+        assertThatThrownBy(() ->
+                executor.execute(ReportAction.DISMISS, POST_ID, AUTHOR_ID, "신고 기각"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
+        verify(reportedAccountActionService, never()).apply(eq(ReportAction.DISMISS), eq(AUTHOR_ID));
+        verify(eventPublisher, never()).publishEvent(isA(CommunityAdminActionEvent.class));
     }
 
     @Test

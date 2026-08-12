@@ -22,7 +22,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     Optional<Report> findByReportId(Long reportId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT r FROM Report r JOIN FETCH r.reporter WHERE r.reportId = :reportId")
+    @Query("SELECT r FROM Report r WHERE r.reportId = :reportId")
     Optional<Report> findByReportIdForUpdate(@Param("reportId") Long reportId);
 
     @EntityGraph(attributePaths = {"reporter"})

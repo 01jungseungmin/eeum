@@ -28,7 +28,7 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPost, Lo
     Optional<CommunityPost> findWithAccountByPostId(Long postId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT p FROM CommunityPost p JOIN FETCH p.account WHERE p.postId = :postId")
+    @Query("SELECT p FROM CommunityPost p WHERE p.postId = :postId")
     Optional<CommunityPost> findWithAccountByPostIdForUpdate(@Param("postId") Long postId);
 
     @EntityGraph(attributePaths = {"account", "category", "region"})

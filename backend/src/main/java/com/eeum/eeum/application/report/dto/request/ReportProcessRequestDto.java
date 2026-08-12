@@ -13,9 +13,16 @@ public class ReportProcessRequestDto {
 
     @NotNull
     @Schema(
-            description = "처리 조치",
+            description = "처리 조치. 게시글=HIDE_POST/DELETE_POST/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "댓글=DELETE_COMMENT/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "리뷰=DELETE_STORE_REVIEW/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "상점=SUSPEND_STORE/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "회원=WARN_AUTHOR/SUSPEND_AUTHOR, 공통=DISMISS",
             example = "HIDE_POST",
-            allowableValues = {"HIDE_POST", "DELETE_POST", "WARN_AUTHOR", "SUSPEND_AUTHOR", "DISMISS"}
+            allowableValues = {
+                    "HIDE_POST", "DELETE_POST", "DELETE_COMMENT", "DELETE_STORE_REVIEW",
+                    "WARN_AUTHOR", "SUSPEND_AUTHOR", "SUSPEND_STORE", "DISMISS"
+            }
     )
     private ReportAction action;
 
