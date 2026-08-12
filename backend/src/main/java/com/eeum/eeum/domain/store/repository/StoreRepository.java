@@ -15,6 +15,8 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
 
     boolean existsByAccount_AccountId(Long accountId);
 
+    boolean existsByCategory_CategoryId(Long categoryId);
+
     // 가게 단톡방 생성/종료/입장/초대의 DB 공통 mutex.
     // ACTIVE 조건 인덱스를 직접 잠그면 종료 시 생성 컬럼 갱신과 next-key lock 교착이 날 수 있어
     // 식별자가 변하지 않는 Store 행을 먼저 잠근다.

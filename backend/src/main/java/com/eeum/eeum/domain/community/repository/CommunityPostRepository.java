@@ -16,6 +16,8 @@ import jakarta.persistence.LockModeType;
 
 public interface CommunityPostRepository extends JpaRepository<CommunityPost, Long>, CommunityPostRepositoryCustom {
 
+    boolean existsByCategory_CategoryId(Long categoryId);
+
     // account, category, region 일괄 fetch — LazyInitializationException 방지
     @EntityGraph(attributePaths = {"account", "category", "region"})
     @Query("SELECT p FROM CommunityPost p WHERE p.postId = :id AND p.hidden = false")

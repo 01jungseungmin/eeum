@@ -210,6 +210,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CATEGORY_NOT_FOUND("CATEGORY_001", "존재하지 않는 카테고리입니다", HttpStatus.NOT_FOUND),
     CATEGORY_IN_USE("CATEGORY_002", "사용 중인 카테고리는 삭제할 수 없습니다", HttpStatus.BAD_REQUEST),
     CATEGORY_DUPLICATE("CATEGORY_003", "이미 존재하는 카테고리입니다", HttpStatus.CONFLICT),
+    CATEGORY_MAX_DEPTH_EXCEEDED("CATEGORY_004", "카테고리는 최대 3단계까지만 생성할 수 있습니다", HttpStatus.BAD_REQUEST),
+    CATEGORY_PARENT_TYPE_MISMATCH("CATEGORY_006", "상위 카테고리와 카테고리 타입이 일치하지 않습니다", HttpStatus.BAD_REQUEST),
+    CATEGORY_INVALID_ORDER("CATEGORY_007", "카테고리 순서 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 찜 (FAVORITE) =====================
     FAVORITE_NOT_FOUND("FAVORITE_001", "존재하지 않는 찜 정보입니다", HttpStatus.NOT_FOUND),

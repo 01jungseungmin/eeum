@@ -19,6 +19,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Category extends BaseEntity {
 
+    public static final int MAX_DEPTH = 3;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "category_id")
@@ -83,11 +85,23 @@ public class Category extends BaseEntity {
         this.displayOrder = displayOrder;
     }
 
+    public void updateDisplayOrder(int displayOrder) {
+        this.displayOrder = displayOrder;
+    }
+
     public void activate() {
         this.isActive = true;
     }
 
     public void deactivate() {
         this.isActive = false;
+    }
+
+    public boolean isRoot() {
+        return parentId == null;
+    }
+
+    public boolean canHaveChild() {
+        return depth < MAX_DEPTH;
     }
 }
