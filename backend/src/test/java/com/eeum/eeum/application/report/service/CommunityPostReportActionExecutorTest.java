@@ -1,12 +1,9 @@
 package com.eeum.eeum.application.report.service;
 
+import com.eeum.eeum.application.community.service.CommunityPostDeletionProcessor;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.event.CommunityAdminActionEvent;
-import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
-import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
-import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
-import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
@@ -14,7 +11,6 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -27,7 +23,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,10 +33,7 @@ class CommunityPostReportActionExecutorTest {
     @InjectMocks private CommunityPostReportActionExecutor executor;
 
     @Mock private CommunityPostRepository postRepository;
-    @Mock private CommunityPostLikeRepository postLikeRepository;
-    @Mock private CommunityCommentRepository commentRepository;
-    @Mock private CommunityCommentLikeRepository commentLikeRepository;
-    @Mock private CommunityImageRepository imageRepository;
+    @Mock private CommunityPostDeletionProcessor postDeletionProcessor;
     @Mock private ReportedAccountActionService reportedAccountActionService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -71,7 +63,7 @@ class CommunityPostReportActionExecutorTest {
     }
 
     @Test
-    void 게시글_삭제_조치는_자식_데이터를_먼저_삭제한다() {
+    void 게시글_삭제_조치는_잠긴_게시글을_공통_삭제_처리기에_위임한다() {
         // given
         CommunityPost post = createPost();
         when(postRepository.findWithAccountByPostIdForUpdate(POST_ID))
@@ -81,19 +73,8 @@ class CommunityPostReportActionExecutorTest {
         executor.execute(ReportAction.DELETE_POST, POST_ID, AUTHOR_ID, "악성 게시글");
 
         // then
-        InOrder order = inOrder(
-                commentLikeRepository,
-                commentRepository,
-                postLikeRepository,
-                imageRepository,
-                postRepository
-        );
-        order.verify(commentLikeRepository).deleteByComment_Post_PostId(POST_ID);
-        order.verify(commentRepository).deleteRepliesByPost_PostId(POST_ID);
-        order.verify(commentRepository).deleteTopLevelCommentsByPost_PostId(POST_ID);
-        order.verify(postLikeRepository).deleteByPost_PostId(POST_ID);
-        order.verify(imageRepository).deleteByPost_PostId(POST_ID);
-        order.verify(postRepository).delete(post);
+        verify(postRepository).findWithAccountByPostIdForUpdate(POST_ID);
+        verify(postDeletionProcessor).deleteLockedPost(post);
     }
 
     @Test

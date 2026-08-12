@@ -1,11 +1,8 @@
 package com.eeum.eeum.application.report.service;
 
+import com.eeum.eeum.application.community.service.CommunityPostDeletionProcessor;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.event.CommunityAdminActionEvent;
-import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
-import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
-import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
-import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.report.enums.ReportAction;
@@ -21,10 +18,7 @@ import org.springframework.stereotype.Component;
 public class CommunityPostReportActionExecutor implements ReportTargetActionExecutor {
 
     private final CommunityPostRepository postRepository;
-    private final CommunityPostLikeRepository postLikeRepository;
-    private final CommunityCommentRepository commentRepository;
-    private final CommunityCommentLikeRepository commentLikeRepository;
-    private final CommunityImageRepository imageRepository;
+    private final CommunityPostDeletionProcessor postDeletionProcessor;
     private final ReportedAccountActionService reportedAccountActionService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -68,13 +62,7 @@ public class CommunityPostReportActionExecutor implements ReportTargetActionExec
     private Long deletePost(Long postId) {
         CommunityPost post = getPostForUpdate(postId);
         Long authorAccountId = post.getAccount().getAccountId();
-
-        commentLikeRepository.deleteByComment_Post_PostId(postId);
-        commentRepository.deleteRepliesByPost_PostId(postId);
-        commentRepository.deleteTopLevelCommentsByPost_PostId(postId);
-        postLikeRepository.deleteByPost_PostId(postId);
-        imageRepository.deleteByPost_PostId(postId);
-        postRepository.delete(post);
+        postDeletionProcessor.deleteLockedPost(post);
 
         return authorAccountId;
     }

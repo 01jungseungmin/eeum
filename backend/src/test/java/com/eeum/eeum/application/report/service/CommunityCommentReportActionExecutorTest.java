@@ -14,6 +14,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,8 +58,8 @@ class CommunityCommentReportActionExecutorTest {
     void 댓글_삭제_조치는_댓글을_잠금_조회해_soft_delete하고_작성자에게_알림한다() {
         // given
         CommunityComment comment = createComment();
-        when(commentRepository.findWithAccountAndPostByCommentId(COMMENT_ID))
-                .thenReturn(Optional.of(comment));
+        when(commentRepository.findPostIdByCommentId(COMMENT_ID))
+                .thenReturn(Optional.of(comment.getPost().getPostId()));
         when(postRepository.findWithAccountByPostIdForUpdate(comment.getPost().getPostId()))
                 .thenReturn(Optional.of(comment.getPost()));
         when(commentRepository.findWithAccountByCommentIdForUpdate(COMMENT_ID))
@@ -71,6 +73,10 @@ class CommunityCommentReportActionExecutorTest {
         assertThat(comment.isDeleted()).isTrue();
         assertThat(comment.getContent()).isEqualTo("삭제된 댓글입니다.");
         verify(postRepository).decreaseCommentCount(comment.getPost().getPostId());
+        InOrder lockOrder = inOrder(postRepository, commentRepository);
+        lockOrder.verify(postRepository)
+                .findWithAccountByPostIdForUpdate(comment.getPost().getPostId());
+        lockOrder.verify(commentRepository).findWithAccountByCommentIdForUpdate(COMMENT_ID);
         verify(reportedAccountActionService, never()).apply(ReportAction.DELETE_COMMENT, AUTHOR_ID);
         assertAdminActionEvent(ReportAction.DELETE_COMMENT, "댓글 삭제");
     }
@@ -130,8 +136,8 @@ class CommunityCommentReportActionExecutorTest {
         // given
         CommunityComment comment = createComment();
         comment.softDelete();
-        when(commentRepository.findWithAccountAndPostByCommentId(COMMENT_ID))
-                .thenReturn(Optional.of(comment));
+        when(commentRepository.findPostIdByCommentId(COMMENT_ID))
+                .thenReturn(Optional.of(comment.getPost().getPostId()));
         when(postRepository.findWithAccountByPostIdForUpdate(comment.getPost().getPostId()))
                 .thenReturn(Optional.of(comment.getPost()));
         when(commentRepository.findWithAccountByCommentIdForUpdate(COMMENT_ID))
@@ -180,6 +186,7 @@ class CommunityCommentReportActionExecutorTest {
         ReflectionTestUtils.setField(author, "accountId", AUTHOR_ID);
 
         CommunityPost post = CommunityPost.create(author, null, null, "제목", "본문");
+        ReflectionTestUtils.setField(post, "postId", 10L);
         CommunityComment comment = CommunityComment.createComment(post, author, "신고된 댓글");
         ReflectionTestUtils.setField(comment, "commentId", COMMENT_ID);
         return comment;

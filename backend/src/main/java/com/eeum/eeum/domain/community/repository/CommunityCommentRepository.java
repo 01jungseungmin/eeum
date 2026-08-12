@@ -19,6 +19,9 @@ public interface CommunityCommentRepository extends JpaRepository<CommunityComme
     @EntityGraph(attributePaths = {"account", "post"})
     Optional<CommunityComment> findWithAccountAndPostByCommentId(Long commentId);
 
+    @Query("SELECT c.post.postId FROM CommunityComment c WHERE c.commentId = :commentId")
+    Optional<Long> findPostIdByCommentId(@Param("commentId") Long commentId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT c FROM CommunityComment c WHERE c.commentId = :commentId")
     Optional<CommunityComment> findWithAccountByCommentIdForUpdate(@Param("commentId") Long commentId);

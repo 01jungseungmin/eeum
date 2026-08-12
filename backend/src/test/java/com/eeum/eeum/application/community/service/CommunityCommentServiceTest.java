@@ -301,7 +301,7 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("댓글 내용");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentRepository.save(any(CommunityComment.class))).thenAnswer(inv -> {
             CommunityComment saved = inv.getArgument(0);
@@ -343,7 +343,7 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("내용");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.empty());
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> commentService.createComment(accountId, postId, request))
@@ -363,7 +363,7 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("내용");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
 
         // when & then
@@ -388,7 +388,12 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("대댓글 내용");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(commentRepository.findPostIdByCommentId(parentCommentId))
+                .thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(parentCommentId))
+                .thenReturn(Optional.of(parent));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentRepository.save(any(CommunityComment.class))).thenAnswer(inv -> {
             CommunityComment saved = inv.getArgument(0);
@@ -429,13 +434,44 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("내용");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(999L)).thenReturn(Optional.empty());
+        when(commentRepository.findPostIdByCommentId(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> commentService.createReply(accountId, 999L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+    }
+
+    @Test
+    void 삭제된_부모댓글에는_대댓글을_작성할_수_없다() {
+        // given
+        Long accountId = 1L;
+        Long parentCommentId = 20L;
+        Account account = createAccount(accountId, 100L);
+        CommunityPost post = createPost(10L, account, 100L);
+        CommunityComment parent = createComment(parentCommentId, post, account);
+        parent.softDelete();
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(commentRepository.findPostIdByCommentId(parentCommentId))
+                .thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(parentCommentId))
+                .thenReturn(Optional.of(parent));
+
+        // when & then
+        assertThatThrownBy(() -> commentService.createReply(
+                accountId,
+                parentCommentId,
+                createCommentRequest("대댓글")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        verify(commentRepository, never()).save(any());
+        verify(postRepository, never()).increaseCommentCount(anyLong());
     }
 
     @Test
@@ -449,7 +485,11 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("3depth 시도");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(30L)).thenReturn(Optional.of(replyAsParent));
+        when(commentRepository.findPostIdByCommentId(30L)).thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(30L))
+                .thenReturn(Optional.of(replyAsParent));
 
         // when & then
         assertThatThrownBy(() -> commentService.createReply(accountId, 30L, request))
@@ -472,7 +512,12 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("내용");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(commentRepository.findPostIdByCommentId(parentCommentId))
+                .thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(parentCommentId))
+                .thenReturn(Optional.of(parent));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
 
         // when & then
@@ -496,7 +541,11 @@ class CommunityCommentServiceTest {
         CommunityCommentUpdateRequestDto request = new CommunityCommentUpdateRequestDto();
         ReflectionTestUtils.setField(request, "content", "수정된 내용");
 
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(commentRepository.findPostIdByCommentId(commentId)).thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(commentId))
+                .thenReturn(Optional.of(comment));
         when(commentLikeRepository.existsByAccount_AccountIdAndComment_CommentId(accountId, commentId))
                 .thenReturn(false);
 
@@ -519,7 +568,11 @@ class CommunityCommentServiceTest {
 
         CommunityCommentUpdateRequestDto request = new CommunityCommentUpdateRequestDto();
 
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(commentRepository.findPostIdByCommentId(commentId)).thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(commentId))
+                .thenReturn(Optional.of(comment));
 
         // when & then
         assertThatThrownBy(() -> commentService.updateComment(otherId, commentId, request))
@@ -531,7 +584,7 @@ class CommunityCommentServiceTest {
     @Test
     void 댓글_수정_댓글_없으면_COMMUNITY_COMMENT_NOT_FOUND() {
         // given
-        when(commentRepository.findById(999L)).thenReturn(Optional.empty());
+        when(commentRepository.findPostIdByCommentId(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> commentService.updateComment(1L, 999L, new CommunityCommentUpdateRequestDto()))
@@ -551,7 +604,7 @@ class CommunityCommentServiceTest {
         CommunityPost post = createPost(10L, account, 100L);
         CommunityComment comment = createComment(commentId, post, account);
 
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(commentRepository.findPostIdByCommentId(commentId)).thenReturn(Optional.of(post.getPostId()));
         when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
                 .thenReturn(Optional.of(post));
         when(commentRepository.findWithAccountByCommentIdForUpdate(commentId))
@@ -576,7 +629,7 @@ class CommunityCommentServiceTest {
         CommunityComment parent = createComment(parentId, post, account);
         CommunityComment reply = createReply(replyId, post, account, parent);
 
-        when(commentRepository.findById(replyId)).thenReturn(Optional.of(reply));
+        when(commentRepository.findPostIdByCommentId(replyId)).thenReturn(Optional.of(post.getPostId()));
         when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
                 .thenReturn(Optional.of(post));
         when(commentRepository.findWithAccountByCommentIdForUpdate(replyId))
@@ -600,7 +653,7 @@ class CommunityCommentServiceTest {
         CommunityPost post = createPost(10L, owner, 100L);
         CommunityComment comment = createComment(commentId, post, owner);
 
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(commentRepository.findPostIdByCommentId(commentId)).thenReturn(Optional.of(post.getPostId()));
         when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
                 .thenReturn(Optional.of(post));
         when(commentRepository.findWithAccountByCommentIdForUpdate(commentId))
@@ -616,13 +669,28 @@ class CommunityCommentServiceTest {
     @Test
     void 댓글_삭제_댓글_없으면_COMMUNITY_COMMENT_NOT_FOUND() {
         // given
-        when(commentRepository.findById(999L)).thenReturn(Optional.empty());
+        when(commentRepository.findPostIdByCommentId(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> commentService.deleteComment(1L, 999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+    }
+
+    @Test
+    void 댓글_삭제_도중_게시글이_없으면_COMMUNITY_POST_NOT_FOUND() {
+        // given
+        Long commentId = 20L;
+        when(commentRepository.findPostIdByCommentId(commentId)).thenReturn(Optional.of(10L));
+        when(postRepository.findWithAccountByPostIdForUpdate(10L)).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> commentService.deleteComment(1L, commentId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        verify(commentRepository, never()).findWithAccountByCommentIdForUpdate(commentId);
     }
 
     // ──────────────────── 자기 알림 방지 ────────────────────
@@ -637,7 +705,7 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("셀프 댓글");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentRepository.save(any(CommunityComment.class))).thenAnswer(inv -> {
             CommunityComment saved = inv.getArgument(0);
@@ -664,7 +732,7 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("댓글");
 
         when(accountRepository.findById(commenterId)).thenReturn(Optional.of(commenter));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         stubVerifiedPrimaryRegion(commenterId, 100L, commenter, 100L);
         when(commentRepository.save(any(CommunityComment.class))).thenAnswer(inv -> {
             CommunityComment saved = inv.getArgument(0);
@@ -690,7 +758,12 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("셀프 답글");
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(commentRepository.findPostIdByCommentId(parentCommentId))
+                .thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(parentCommentId))
+                .thenReturn(Optional.of(parent));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentRepository.save(any(CommunityComment.class))).thenAnswer(inv -> {
             CommunityComment saved = inv.getArgument(0);
@@ -718,7 +791,12 @@ class CommunityCommentServiceTest {
         CommunityCommentCreateRequestDto request = createCommentRequest("답글");
 
         when(accountRepository.findById(replierId)).thenReturn(Optional.of(replier));
-        when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(commentRepository.findPostIdByCommentId(parentCommentId))
+                .thenReturn(Optional.of(post.getPostId()));
+        when(postRepository.findWithAccountByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+        when(commentRepository.findWithAccountByCommentIdForUpdate(parentCommentId))
+                .thenReturn(Optional.of(parent));
         stubVerifiedPrimaryRegion(replierId, 100L, replier, 100L);
         when(commentRepository.save(any(CommunityComment.class))).thenAnswer(inv -> {
             CommunityComment saved = inv.getArgument(0);

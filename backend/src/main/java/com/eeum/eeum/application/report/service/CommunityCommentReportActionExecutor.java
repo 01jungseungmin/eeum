@@ -56,9 +56,9 @@ public class CommunityCommentReportActionExecutor implements ReportTargetActionE
     }
 
     private Long deleteComment(Long commentId) {
-        CommunityComment snapshot = commentRepository.findWithAccountAndPostByCommentId(commentId)
+        Long postId = commentRepository.findPostIdByCommentId(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
-        postRepository.findWithAccountByPostIdForUpdate(snapshot.getPost().getPostId())
+        postRepository.findWithAccountByPostIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
         CommunityComment comment = getCommentForUpdate(commentId);
         if (comment.isDeleted()) {
@@ -66,7 +66,6 @@ public class CommunityCommentReportActionExecutor implements ReportTargetActionE
         }
 
         Long authorAccountId = comment.getAccount().getAccountId();
-        Long postId = comment.getPost().getPostId();
         comment.softDelete();
         postRepository.decreaseCommentCount(postId);
         return authorAccountId;

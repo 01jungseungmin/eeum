@@ -52,6 +52,7 @@ class CommunityPostServiceTest {
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityImageRepository imageRepository;
+    @Mock private CommunityPostDeletionProcessor postDeletionProcessor;
     @Mock private AccountRepository accountRepository;
     @Mock private CategoryRepository categoryRepository;
     @Mock private AccountRegionRepository accountRegionRepository;
@@ -574,18 +575,14 @@ class CommunityPostServiceTest {
         Account account = createAccount(accountId, 100L);
         CommunityPost post = createPost(postId, account, 100L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when
         postService.deletePost(accountId, postId);
 
         // then
-        verify(imageRepository).deleteByPost_PostId(postId);
-        verify(postLikeRepository).deleteByPost_PostId(postId);
-        verify(commentLikeRepository).deleteByComment_Post_PostId(postId);
-        verify(commentRepository).deleteRepliesByPost_PostId(postId);
-        verify(commentRepository).deleteTopLevelCommentsByPost_PostId(postId);
-        verify(postRepository).delete(post);
+        verify(postRepository).findWithAccountByPostIdForUpdate(postId);
+        verify(postDeletionProcessor).deleteLockedPost(post);
     }
 
     @Test
@@ -597,7 +594,7 @@ class CommunityPostServiceTest {
         Account owner = createAccount(ownerId, 100L);
         CommunityPost post = createPost(postId, owner, 100L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when & then
         assertThatThrownBy(() -> postService.deletePost(otherId, postId))
@@ -605,13 +602,13 @@ class CommunityPostServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
 
-        verify(postRepository, never()).delete(any());
+        verify(postDeletionProcessor, never()).deleteLockedPost(any());
     }
 
     @Test
     void 게시글_삭제_없는_게시글_COMMUNITY_POST_NOT_FOUND() {
         // given
-        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+        when(postRepository.findWithAccountByPostIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> postService.deletePost(1L, 999L))

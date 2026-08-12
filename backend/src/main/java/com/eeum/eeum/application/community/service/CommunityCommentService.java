@@ -22,6 +22,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
@@ -99,14 +100,14 @@ public class CommunityCommentService {
         );
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CommunityCommentResponseDto createComment(
             Long accountId,
             Long postId,
             CommunityCommentCreateRequestDto request
     ) {
         Account account = getAccountOrThrow(accountId);
-        CommunityPost post = getPostOrThrow(postId);
+        CommunityPost post = getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_POST_NOT_FOUND);
 
         validateSameRegion(post, account);
 
@@ -117,74 +118,84 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(comment);
+        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(comment, false);
+        Long postAuthorAccountId = post.getAccount().getAccountId();
+        String postTitle = post.getTitle();
         postRepository.increaseCommentCount(postId);
 
         log.info("댓글 작성: accountId={}, postId={}, commentId={}",
                 accountId, postId, comment.getCommentId());
 
-        if (!accountId.equals(post.getAccount().getAccountId())) {
+        if (!accountId.equals(postAuthorAccountId)) {
             eventPublisher.publishEvent(new CommunityCommentCreatedEvent(
-                    post.getAccount().getAccountId(),
+                    postAuthorAccountId,
                     accountId,
                     postId,
                     comment.getCommentId(),
                     account.getNickname(),
-                    post.getTitle()
+                    postTitle
             ));
         }
 
-        return CommunityCommentResponseDto.of(comment, false);
+        return response;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CommunityCommentResponseDto createReply(
             Long accountId,
             Long parentCommentId,
             CommunityCommentCreateRequestDto request
     ) {
         Account account = getAccountOrThrow(accountId);
-        CommunityComment parent = getCommentOrThrow(parentCommentId);
+        Long postId = getPostIdByCommentOrThrow(parentCommentId);
+        CommunityPost post = getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        CommunityComment parent = getCommentForUpdateOrThrow(parentCommentId);
 
+        validateNotDeleted(parent);
         if (parent.isReply()) {
             throw new BadRequestException(ErrorCode.COMMUNITY_REPLY_DEPTH_EXCEEDED);
         }
 
-        validateSameRegion(parent.getPost(), account);
+        validateSameRegion(post, account);
 
         CommunityComment reply = CommunityComment.createReply(
-                parent.getPost(),
+                post,
                 account,
                 parent,
                 request.getContent()
         );
 
         commentRepository.save(reply);
-        postRepository.increaseCommentCount(parent.getPost().getPostId());
+        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(reply, false);
+        Long parentAuthorAccountId = parent.getAccount().getAccountId();
+        postRepository.increaseCommentCount(postId);
 
         log.info("대댓글 작성: accountId={}, parentCommentId={}, replyId={}",
                 accountId, parentCommentId, reply.getCommentId());
 
-        if (!accountId.equals(parent.getAccount().getAccountId())) {
+        if (!accountId.equals(parentAuthorAccountId)) {
             eventPublisher.publishEvent(new CommunityReplyCreatedEvent(
-                    parent.getAccount().getAccountId(),
+                    parentAuthorAccountId,
                     accountId,
-                    parent.getPost().getPostId(),
+                    postId,
                     parentCommentId,
                     reply.getCommentId(),
                     account.getNickname()
             ));
         }
 
-        return CommunityCommentResponseDto.of(reply, false);
+        return response;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CommunityCommentResponseDto updateComment(
             Long accountId,
             Long commentId,
             CommunityCommentUpdateRequestDto request
     ) {
-        CommunityComment comment = getCommentOrThrow(commentId);
+        Long postId = getPostIdByCommentOrThrow(commentId);
+        getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        CommunityComment comment = getCommentForUpdateOrThrow(commentId);
         validateOwner(comment, accountId);
         validateNotDeleted(comment);
 
@@ -196,20 +207,18 @@ public class CommunityCommentService {
         return CommunityCommentResponseDto.of(comment, likedByMe);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteComment(Long accountId, Long commentId) {
-        CommunityComment snapshot = getCommentOrThrow(commentId);
-        postRepository.findWithAccountByPostIdForUpdate(snapshot.getPost().getPostId())
-                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
-        CommunityComment comment = commentRepository.findWithAccountByCommentIdForUpdate(commentId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+        Long postId = getPostIdByCommentOrThrow(commentId);
+        getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        CommunityComment comment = getCommentForUpdateOrThrow(commentId);
         validateOwner(comment, accountId);
         // 이미 삭제된 댓글 재삭제 차단 — 검증 없이 재실행하면 decreaseCommentCount가 중복 호출되어
         // 게시글 commentCount가 실제 댓글 수보다 작아진다(중복 클릭/다기기 동시 삭제).
         validateNotDeleted(comment);
 
         comment.softDelete();
-        postRepository.decreaseCommentCount(comment.getPost().getPostId());
+        postRepository.decreaseCommentCount(postId);
 
         log.info("댓글/대댓글 soft-delete: accountId={}, commentId={}",
                 accountId, commentId);
@@ -232,6 +241,16 @@ public class CommunityCommentService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
     }
 
+    private Long getPostIdByCommentOrThrow(Long commentId) {
+        return commentRepository.findPostIdByCommentId(commentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+    }
+
+    private CommunityComment getCommentForUpdateOrThrow(Long commentId) {
+        return commentRepository.findWithAccountByCommentIdForUpdate(commentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+    }
+
     private void validateNotDeleted(CommunityComment comment) {
         if (comment.isDeleted()) {
             throw new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
@@ -241,6 +260,11 @@ public class CommunityCommentService {
     private CommunityPost getPostOrThrow(Long postId) {
         return postRepository.findById(postId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+    }
+
+    private CommunityPost getPostForUpdateOrThrow(Long postId, ErrorCode errorCode) {
+        return postRepository.findWithAccountByPostIdForUpdate(postId)
+                .orElseThrow(() -> new NotFoundException(errorCode));
     }
 
     private Account getAccountOrThrow(Long accountId) {
