@@ -16,7 +16,9 @@ $ARGUMENTS 로 계층 이름(`arch`, `unit`, `integration`, `resource`)이나 �
 ## 선행 작업
 
 1. `.claude/skills/references/resource-budget.md`를 읽는다 — 장애 모드 R1~R6 판정 기준이다.
-2. Docker 가용 여부를 확인한다: `docker info > /dev/null 2>&1 && echo OK || echo NO_DOCKER`
+2. `build.gradle`의 `test` 태스크에 `testLogging { exceptionFormat = 'full' }`이 있는지 확인한다.
+   없으면 ArchUnit 위반 목록과 assertion 상세를 볼 수 없으므로 먼저 추가한다.
+3. Docker 가용 여부를 확인한다: `docker info > /dev/null 2>&1 && echo OK || echo NO_DOCKER`
    Docker가 없으면 통합/자원 계층은 자동으로 건너뛰어진다(`@EnabledIfDockerAvailable`). 이 경우 **"통과"가 아니라 "미실행"으로 보고**한다. 이걸 통과로 보고하는 것이 이 커맨드의 최악의 실패다.
 
 ## 실행 순서
@@ -32,6 +34,16 @@ $ARGUMENTS 로 계층 이름(`arch`, `unit`, `integration`, `resource`)이나 �
 
 각 명령은 타임아웃을 넉넉히(자원 계층은 최대 10분) 잡되, 무한 대기를 방치하지 않는다.
 빌드 자체가 깨져서 컴파일이 안 되면 즉시 중단하고 보고한다 — 이때는 `build-fixer` 에이전트를 쓰라고 안내한다.
+
+### 결과를 stdout에서 읽는다
+
+`build/test-results/**/*.xml`과 `build/reports/tests/`에 의존하지 않는다.
+WSL/NTFS 환경에서는 Gradle이 리포트 파일 쓰기에 실패하는 경우가 있다
+(`NoSuchFileException: .../binary/in-progress-results-*.bin`, `Cannot access output property 'destinationDirectory'`).
+`testLogging`으로 stdout에 나온 내용을 1차 근거로 삼고, 명령 출력을 파일로 리다이렉트해 보관한다.
+
+빌드 산출물이 깨진 상태(위 예외가 반복)라면 `build/classes/java/test`, `build/test-results`,
+`build/reports/tests`를 지우고 재실행한다. 이건 테스트 실패가 아니라 **인프라 문제**로 분류한다.
 
 ## 실패 원인 분류
 
