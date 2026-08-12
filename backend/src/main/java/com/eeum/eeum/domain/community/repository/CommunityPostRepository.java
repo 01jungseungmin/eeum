@@ -31,6 +31,11 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPost, Lo
     @Query("SELECT p FROM CommunityPost p WHERE p.postId = :postId")
     Optional<CommunityPost> findWithAccountByPostIdForUpdate(@Param("postId") Long postId);
 
+    // 일반 사용자 쓰기 전용 잠금. 관리자 숨김이 먼저 커밋되면 대상 없음으로 처리한다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM CommunityPost p WHERE p.postId = :postId AND p.hidden = false")
+    Optional<CommunityPost> findVisibleByPostIdForUpdate(@Param("postId") Long postId);
+
     @EntityGraph(attributePaths = {"account", "category", "region"})
     Page<CommunityPost> findByAccount_AccountIdAndHiddenFalseOrderByCreatedAtDesc(
             Long accountId,

@@ -107,7 +107,10 @@ public class CommunityCommentService {
             CommunityCommentCreateRequestDto request
     ) {
         Account account = getAccountOrThrow(accountId);
-        CommunityPost post = getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(
+                postId,
+                ErrorCode.COMMUNITY_POST_NOT_FOUND
+        );
 
         validateSameRegion(post, account);
 
@@ -148,7 +151,10 @@ public class CommunityCommentService {
     ) {
         Account account = getAccountOrThrow(accountId);
         Long postId = getPostIdByCommentOrThrow(parentCommentId);
-        CommunityPost post = getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(
+                postId,
+                ErrorCode.COMMUNITY_COMMENT_NOT_FOUND
+        );
         CommunityComment parent = getCommentForUpdateOrThrow(parentCommentId);
 
         validateNotDeleted(parent);
@@ -194,7 +200,7 @@ public class CommunityCommentService {
             CommunityCommentUpdateRequestDto request
     ) {
         Long postId = getPostIdByCommentOrThrow(commentId);
-        getPostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        getVisiblePostForUpdateOrThrow(postId, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
         CommunityComment comment = getCommentForUpdateOrThrow(commentId);
         validateOwner(comment, accountId);
         validateNotDeleted(comment);
@@ -264,6 +270,11 @@ public class CommunityCommentService {
 
     private CommunityPost getPostForUpdateOrThrow(Long postId, ErrorCode errorCode) {
         return postRepository.findWithAccountByPostIdForUpdate(postId)
+                .orElseThrow(() -> new NotFoundException(errorCode));
+    }
+
+    private CommunityPost getVisiblePostForUpdateOrThrow(Long postId, ErrorCode errorCode) {
+        return postRepository.findVisibleByPostIdForUpdate(postId)
                 .orElseThrow(() -> new NotFoundException(errorCode));
     }
 

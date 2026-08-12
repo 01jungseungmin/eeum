@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -133,13 +134,13 @@ public class CommunityPostService {
         return CommunityPostDetailResponseDto.of(post, false, List.of());
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CommunityPostDetailResponseDto updatePost(
             Long accountId,
             Long postId,
             CommunityPostUpdateRequestDto request
     ) {
-        CommunityPost post = getPostOrThrow(postId);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(postId);
         validateOwner(post, accountId);
 
         Category category = getCategoryOrThrow(request.getCategoryId());
@@ -169,6 +170,11 @@ public class CommunityPostService {
 
     private CommunityPost getPostForUpdateOrThrow(Long postId) {
         return postRepository.findWithAccountByPostIdForUpdate(postId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+    }
+
+    private CommunityPost getVisiblePostForUpdateOrThrow(Long postId) {
+        return postRepository.findVisibleByPostIdForUpdate(postId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
     }
 
