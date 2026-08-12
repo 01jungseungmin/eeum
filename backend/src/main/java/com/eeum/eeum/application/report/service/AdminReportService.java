@@ -4,10 +4,13 @@ import com.eeum.eeum.application.report.dto.request.ReportProcessRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.domain.report.entity.Report;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
+import com.eeum.eeum.domain.sanction.enums.SanctionAction;
+import com.eeum.eeum.domain.sanction.enums.SanctionTargetType;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ public class AdminReportService {
     private final ReportRepository reportRepository;
     private final ReportTargetResolver reportTargetResolver;
     private final ReportActionDispatcher reportActionDispatcher;
+    private final SanctionHistoryService sanctionHistoryService;
 
     @Transactional(readOnly = true)
     public Page<ReportResponseDto> getReports(ReportStatus status, Pageable pageable) {
@@ -103,6 +107,13 @@ public class AdminReportService {
                     report.getTargetOwnerAccountIdSnapshot(),
                     request.getAdminNote()
             );
+            recordSanctionHistory(
+                    report,
+                    action,
+                    actionTargetAccountId,
+                    adminId,
+                    request.getAdminNote()
+            );
         }
 
         report.process(action, request.getAdminNote(), adminId, actionTargetAccountId);
@@ -120,5 +131,42 @@ public class AdminReportService {
     private Report getReportForUpdateOrThrow(Long reportId) {
         return reportRepository.findByReportIdForUpdate(reportId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.REPORT_NOT_FOUND));
+    }
+
+    private void recordSanctionHistory(
+            Report report,
+            ReportAction action,
+            Long actionTargetAccountId,
+            Long adminId,
+            String adminNote
+    ) {
+        switch (action) {
+            case WARN_AUTHOR -> sanctionHistoryService.recordReportAction(
+                    SanctionTargetType.ACCOUNT,
+                    actionTargetAccountId,
+                    SanctionAction.WARN,
+                    adminNote,
+                    adminId,
+                    report.getReportId()
+            );
+            case SUSPEND_AUTHOR -> sanctionHistoryService.recordReportAction(
+                    SanctionTargetType.ACCOUNT,
+                    actionTargetAccountId,
+                    SanctionAction.SUSPEND,
+                    adminNote,
+                    adminId,
+                    report.getReportId()
+            );
+            case SUSPEND_STORE -> sanctionHistoryService.recordReportAction(
+                    SanctionTargetType.STORE,
+                    report.getTargetId(),
+                    SanctionAction.SUSPEND,
+                    adminNote,
+                    adminId,
+                    report.getReportId()
+            );
+            default -> {
+            }
+        }
     }
 }

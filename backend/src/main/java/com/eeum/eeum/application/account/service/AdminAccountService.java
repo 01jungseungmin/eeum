@@ -9,6 +9,7 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationListRespon
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
@@ -23,6 +24,7 @@ import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
+import com.eeum.eeum.domain.sanction.enums.SanctionAction;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -56,6 +58,7 @@ public class AdminAccountService {
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    private final SanctionHistoryService sanctionHistoryService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
@@ -104,6 +107,11 @@ public class AdminAccountService {
         }
 
         target.suspend();
+        sanctionHistoryService.recordDirectAccountAction(
+                targetAccountId,
+                SanctionAction.SUSPEND,
+                adminId
+        );
 
         // DB 커밋 성공 후 Refresh Token 삭제
         eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
@@ -121,6 +129,11 @@ public class AdminAccountService {
         }
 
         target.activate();
+        sanctionHistoryService.recordDirectAccountAction(
+                targetAccountId,
+                SanctionAction.ACTIVATE,
+                adminId
+        );
 
         log.info("회원 정지 해제: adminId={}, targetId={}", adminId, targetAccountId);
     }

@@ -4,6 +4,7 @@ import com.eeum.eeum.application.report.dto.request.ReportProcessRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.report.entity.Report;
 import com.eeum.eeum.domain.report.enums.ReportAction;
@@ -39,6 +40,7 @@ class AdminReportServiceTest {
     @Mock private ReportRepository reportRepository;
     @Mock private ReportTargetResolver reportTargetResolver;
     @Mock private ReportActionDispatcher reportActionDispatcher;
+    @Mock private SanctionHistoryService sanctionHistoryService;
 
     private static final Long REPORT_ID = 1L;
     private static final Long REPORTER_ID = 10L;
