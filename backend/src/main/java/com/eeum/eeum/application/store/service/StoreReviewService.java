@@ -308,14 +308,15 @@ public class StoreReviewService {
     // ===================== 리뷰 이미지 관리 =====================
 
     // 리뷰 이미지 추가
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewResponseDto addReviewImages(
             Long accountId,
             Long storeId,
             Long reviewId,
             List<String> imageUrls
     ) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         if (imageUrls == null || imageUrls.isEmpty()) {
@@ -342,9 +343,10 @@ public class StoreReviewService {
     }
 
     // 리뷰 이미지 삭제
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteReviewImage(Long accountId, Long storeId, Long reviewId, Long imageId) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         StoreReviewImage image = storeReviewImageRepository.findById(imageId)
@@ -368,11 +370,12 @@ public class StoreReviewService {
     }
 
     // 리뷰 대표 이미지 지정
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void setReviewImageThumbnail(
             Long accountId, Long storeId, Long reviewId, Long imageId
     ) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         StoreReviewImage newThumbnail = storeReviewImageRepository.findById(imageId)
@@ -393,15 +396,16 @@ public class StoreReviewService {
     // ===================== 사장 답글 (ROLE_OWNER) =====================
 
     // 답글 작성 — 해당 상점의 사장만 가능, 1리뷰 1답글
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewReplyResponseDto createReply(
             Long accountId,
             Long storeId,
             Long reviewId,
             StoreReviewReplyRequestDto request
     ) {
-        checkStoreOwnership(storeId, accountId);
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        Store lockedStore = getStoreForUpdateOrThrow(storeId);
+        checkStoreOwnership(lockedStore, accountId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
 
         if (storeReviewReplyRepository.existsByStoreReview_StorereviewId(reviewId)) {
             throw new BusinessException(ErrorCode.STORE_REVIEW_REPLY_ALREADY_EXISTS);
@@ -428,15 +432,16 @@ public class StoreReviewService {
     }
 
     // 답글 수정 — 해당 상점의 사장만 가능
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewReplyResponseDto updateReply(
             Long accountId,
             Long storeId,
             Long reviewId,
             StoreReviewReplyRequestDto request
     ) {
-        checkStoreOwnership(storeId, accountId);
-        getReviewOrThrow(storeId, reviewId); // 리뷰 존재 확인
+        Store lockedStore = getStoreForUpdateOrThrow(storeId);
+        checkStoreOwnership(lockedStore, accountId);
+        getReviewForUpdateOrThrow(storeId, reviewId);
 
         StoreReviewReply reply = storeReviewReplyRepository
                 .findByStoreReview_StorereviewId(reviewId)
@@ -449,10 +454,11 @@ public class StoreReviewService {
     }
 
     // 답글 삭제 — 해당 상점의 사장만 가능
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteReply(Long accountId, Long storeId, Long reviewId) {
-        checkStoreOwnership(storeId, accountId);
-        getReviewOrThrow(storeId, reviewId); // 리뷰 존재 확인
+        Store lockedStore = getStoreForUpdateOrThrow(storeId);
+        checkStoreOwnership(lockedStore, accountId);
+        getReviewForUpdateOrThrow(storeId, reviewId);
 
         StoreReviewReply reply = storeReviewReplyRepository
                 .findByStoreReview_StorereviewId(reviewId)
@@ -544,6 +550,10 @@ public class StoreReviewService {
     private void checkStoreOwnership(Long storeId, Long accountId) {
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        checkStoreOwnership(store, accountId);
+    }
+
+    private void checkStoreOwnership(Store store, Long accountId) {
         if (!store.isOwnedBy(accountId)) {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
         }

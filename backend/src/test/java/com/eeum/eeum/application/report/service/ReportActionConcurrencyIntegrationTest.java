@@ -4,8 +4,12 @@ import com.eeum.eeum.application.account.dto.request.UpdateInfoRequestDto;
 import com.eeum.eeum.application.account.service.AccountService;
 import com.eeum.eeum.application.community.dto.request.CommunityCommentCreateRequestDto;
 import com.eeum.eeum.application.community.dto.request.CommunityCommentUpdateRequestDto;
+import com.eeum.eeum.application.community.dto.request.CommunityPostUpdateRequestDto;
 import com.eeum.eeum.application.community.service.CommunityCommentService;
+import com.eeum.eeum.application.community.service.CommunityLikeService;
+import com.eeum.eeum.application.community.service.CommunityPostService;
 import com.eeum.eeum.application.report.dto.request.ReportProcessRequestDto;
+import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
 import com.eeum.eeum.application.store.service.StoreReviewService;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -20,7 +24,9 @@ import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
+import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
+import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -48,6 +54,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -99,10 +107,14 @@ class ReportActionConcurrencyIntegrationTest {
     private final AdminReportService adminReportService;
     private final AccountService accountService;
     private final CommunityCommentService communityCommentService;
+    private final CommunityLikeService communityLikeService;
+    private final CommunityPostService communityPostService;
     private final StoreReviewService storeReviewService;
     private final ReportRepository reportRepository;
     private final CommunityCommentRepository commentRepository;
+    private final CommunityCommentLikeRepository commentLikeRepository;
     private final CommunityPostRepository postRepository;
+    private final CommunityPostLikeRepository postLikeRepository;
     private final StoreReviewImageRepository reviewImageRepository;
     private final StoreReviewReplyRepository reviewReplyRepository;
     private final StoreReviewRepository reviewRepository;
@@ -112,9 +124,12 @@ class ReportActionConcurrencyIntegrationTest {
     private final RegionRepository regionRepository;
     private final NotificationRepository notificationRepository;
     private final AccountRepository accountRepository;
+    private final PlatformTransactionManager transactionManager;
 
     private Account reporter;
     private Account author;
+    private Account owner;
+    private Category category;
     private CommunityPost post;
     private CommunityComment comment;
     private Store store;
@@ -126,7 +141,7 @@ class ReportActionConcurrencyIntegrationTest {
                 "reporter-concurrency@test.com", "encoded", "신고자", "신고자동시성", "010-1000-0001"));
         author = accountRepository.save(Account.createUser(
                 "author-concurrency@test.com", "encoded", "작성자", "작성자동시성", "010-1000-0002"));
-        Account owner = accountRepository.save(Account.createOwner(
+        owner = accountRepository.save(Account.createOwner(
                 "owner-concurrency@test.com", "encoded", "점주", "010-1000-0003"));
 
         Region region = regionRepository.save(
@@ -137,7 +152,7 @@ class ReportActionConcurrencyIntegrationTest {
         author.setPrimaryRegion(authorRegion.getAccountRegionId());
         author = accountRepository.saveAndFlush(author);
 
-        Category category = categoryRepository.save(
+        category = categoryRepository.save(
                 Category.createRoot(CategoryType.COMMUNITY, "신고 동시성", 1));
         post = postRepository.saveAndFlush(
                 CommunityPost.create(author, category, region, "동시성 게시글", "본문"));
@@ -156,6 +171,8 @@ class ReportActionConcurrencyIntegrationTest {
         reviewImageRepository.deleteAll();
         reviewReplyRepository.deleteAll();
         reviewRepository.deleteAll();
+        commentLikeRepository.deleteAll();
+        postLikeRepository.deleteAll();
         commentRepository.deleteAll();
         postRepository.deleteAll();
         storeRepository.deleteAll();
@@ -317,6 +334,191 @@ class ReportActionConcurrencyIntegrationTest {
         Store storedStore = storeRepository.findById(store.getStoreId()).orElseThrow();
         assertThat(storedStore.getReviewCount()).isZero();
         assertThat(storedStore.getRating()).isZero();
+    }
+
+    @Test
+    void 게시글_숨김_잠금을_기다린_수정은_숨김_커밋_후_거부된다() throws InterruptedException {
+        CommunityPostUpdateRequestDto request = new CommunityPostUpdateRequestDto();
+        ReflectionTestUtils.setField(request, "categoryId", category.getCategoryId());
+        ReflectionTestUtils.setField(request, "title", "숨김 중 수정");
+        ReflectionTestUtils.setField(request, "content", "수정 본문");
+
+        Throwable error = contendWithHeldTransaction(
+                this::hidePostUnderLock,
+                () -> communityPostService.updatePost(author.getAccountId(), post.getPostId(), request)
+        );
+
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        CommunityPost stored = postRepository.findWithAccountByPostId(post.getPostId()).orElseThrow();
+        assertThat(stored.isHidden()).isTrue();
+        assertThat(stored.getTitle()).isEqualTo("동시성 게시글");
+    }
+
+    @Test
+    void 게시글_숨김_잠금을_기다린_댓글_생성은_숨김_커밋_후_거부된다() throws InterruptedException {
+        CommunityCommentCreateRequestDto request = new CommunityCommentCreateRequestDto();
+        ReflectionTestUtils.setField(request, "content", "숨김 중 댓글");
+
+        Throwable error = contendWithHeldTransaction(
+                this::hidePostUnderLock,
+                () -> communityCommentService.createComment(author.getAccountId(), post.getPostId(), request)
+        );
+
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        assertThat(commentRepository.count()).isEqualTo(1L);
+    }
+
+    @Test
+    void 게시글_숨김_잠금을_기다린_좋아요는_숨김_커밋_후_거부된다() throws InterruptedException {
+        Throwable error = contendWithHeldTransaction(
+                this::hidePostUnderLock,
+                () -> communityLikeService.likePost(author.getAccountId(), post.getPostId())
+        );
+
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        assertThat(postLikeRepository.count()).isZero();
+    }
+
+    @Test
+    void 댓글_삭제_잠금을_기다린_좋아요는_삭제_커밋_후_거부된다() throws InterruptedException {
+        Throwable error = contendWithHeldTransaction(
+                this::softDeleteCommentUnderLocks,
+                () -> communityLikeService.likeComment(author.getAccountId(), comment.getCommentId())
+        );
+
+        assertBusinessError(error, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        assertThat(commentLikeRepository.count()).isZero();
+        CommunityComment stored = commentRepository.findById(comment.getCommentId()).orElseThrow();
+        assertThat(stored.isDeleted()).isTrue();
+    }
+
+    @Test
+    void 리뷰_삭제_잠금을_기다린_답글_생성은_삭제_커밋_후_대상없음으로_거부된다() throws InterruptedException {
+        StoreReviewReplyRequestDto request = new StoreReviewReplyRequestDto();
+        ReflectionTestUtils.setField(request, "content", "삭제 경쟁 답글");
+
+        Throwable error = contendWithHeldTransaction(
+                this::deleteReviewUnderLocks,
+                () -> storeReviewService.createReply(
+                        owner.getAccountId(), store.getStoreId(), review.getStorereviewId(), request
+                )
+        );
+
+        assertBusinessError(error, ErrorCode.STORE_REVIEW_NOT_FOUND);
+        assertThat(reviewReplyRepository.count()).isZero();
+    }
+
+    @Test
+    void 리뷰_삭제_잠금을_기다린_이미지_추가는_삭제_커밋_후_대상없음으로_거부된다() throws InterruptedException {
+        Throwable error = contendWithHeldTransaction(
+                this::deleteReviewUnderLocks,
+                () -> storeReviewService.addReviewImages(
+                        author.getAccountId(),
+                        store.getStoreId(),
+                        review.getStorereviewId(),
+                        java.util.List.of("https://example.com/race.jpg")
+                )
+        );
+
+        assertBusinessError(error, ErrorCode.STORE_REVIEW_NOT_FOUND);
+        assertThat(reviewImageRepository.count()).isZero();
+    }
+
+    private void hidePostUnderLock() {
+        CommunityPost locked = postRepository.findWithAccountByPostIdForUpdate(post.getPostId())
+                .orElseThrow();
+        locked.hide();
+        postRepository.flush();
+    }
+
+    private void softDeleteCommentUnderLocks() {
+        postRepository.findWithAccountByPostIdForUpdate(post.getPostId()).orElseThrow();
+        CommunityComment locked = commentRepository
+                .findWithAccountByCommentIdForUpdate(comment.getCommentId())
+                .orElseThrow();
+        locked.softDelete();
+        postRepository.decreaseCommentCount(post.getPostId());
+    }
+
+    private void deleteReviewUnderLocks() {
+        storeRepository.findByIdWithPessimisticLock(store.getStoreId()).orElseThrow();
+        StoreReview locked = reviewRepository
+                .findWithAccountAndStoreByStorereviewIdForUpdate(review.getStorereviewId())
+                .orElseThrow();
+        reviewImageRepository.deleteAllByStoreReview_StorereviewId(review.getStorereviewId());
+        reviewReplyRepository.deleteByStoreReview_StorereviewId(review.getStorereviewId());
+        reviewRepository.delete(locked);
+        reviewRepository.flush();
+    }
+
+    private Throwable contendWithHeldTransaction(
+            Runnable lockedMutation,
+            ThrowingRunnable contender
+    ) throws InterruptedException {
+        CountDownLatch lockAcquired = new CountDownLatch(1);
+        CountDownLatch releaseLock = new CountDownLatch(1);
+        CountDownLatch holderDone = new CountDownLatch(1);
+        CountDownLatch contenderStarted = new CountDownLatch(1);
+        CountDownLatch contenderDone = new CountDownLatch(1);
+        AtomicReference<Throwable> holderError = new AtomicReference<>();
+        AtomicReference<Throwable> contenderError = new AtomicReference<>();
+
+        Thread holderThread = new Thread(() -> {
+            try {
+                TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+                transaction.executeWithoutResult(status -> {
+                    lockedMutation.run();
+                    lockAcquired.countDown();
+                    awaitRelease(releaseLock);
+                });
+            } catch (Throwable throwable) {
+                holderError.set(throwable);
+                lockAcquired.countDown();
+            } finally {
+                holderDone.countDown();
+            }
+        });
+        Thread contenderThread = new Thread(() -> {
+            contenderStarted.countDown();
+            try {
+                contender.run();
+            } catch (Throwable throwable) {
+                contenderError.set(throwable);
+            } finally {
+                contenderDone.countDown();
+            }
+        });
+
+        holderThread.start();
+        assertThat(lockAcquired.await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(holderError.get()).isNull();
+        contenderThread.start();
+        assertThat(contenderStarted.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(contenderDone.await(300, TimeUnit.MILLISECONDS))
+                .as("경쟁 요청은 실제 DB 행 잠금에서 대기해야 한다")
+                .isFalse();
+
+        releaseLock.countDown();
+        assertThat(holderDone.await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(contenderDone.await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(holderError.get()).isNull();
+        return contenderError.get();
+    }
+
+    private void awaitRelease(CountDownLatch releaseLock) {
+        try {
+            if (!releaseLock.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("테스트 DB 잠금 해제 대기 시간 초과");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("테스트 DB 잠금 대기 중 중단", e);
+        }
+    }
+
+    private void assertBusinessError(Throwable error, ErrorCode expectedCode) {
+        assertThat(error).isInstanceOf(BusinessException.class);
+        assertThat(((BusinessException) error).getErrorCode()).isEqualTo(expectedCode);
     }
 
     private Report saveReport(ReportTargetType targetType, Long targetId, Long ownerAccountId) {
