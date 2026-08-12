@@ -710,6 +710,7 @@ public FavoriteToggleResponseDto toggleFavorite(Long accountId, FavoriteToggleRe
 | Account         | Soft Delete (30일 유예)   | 복구 + 법적 보존 + 다수 참조 |
 | ChatMessage     | Soft Delete (isDeleted)   | 대화 맥락 유지               |
 | Category        | Soft Delete (isActive)    | 참조 데이터 보호             |
+| CommunityComment | Soft Delete (isDeleted)  | 대댓글 스레드 문맥·참조 유지 |
 | ProductCategory | Soft + 조건부 Hard Delete | 미사용 시 물리 삭제          |
 | 기타 도메인     | Hard Delete + CASCADE     | 단순 데이터                  |
 
@@ -788,7 +789,7 @@ public void hardDeleteCategory(Long categoryId) {
 | 상품 삭제   | Option, Image                | deleteAllByProductId       |
 | 리뷰 삭제   | Reply, Image                 | deleteAllByReviewId        |
 | 게시글 삭제 | Comment, Like                | deleteAllByPostId          |
-| 댓글 삭제   | Reply                        | deleteAllByCommentId       |
+| 개별 댓글 삭제 | CommunityComment             | isDeleted tombstone (대댓글 유지) |
 | 채팅방 삭제 | Message, Participant         | deleteAllByRoomId          |
 | 공통 삭제   | Favorite, Report             | deleteAllByRefTypeAndRefId |
 | 기타 도메인 | Hard Delete + CASCADE        | 단순 데이터                |

@@ -58,4 +58,10 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// ArchUnit 위반 목록은 예외 메시지 본문에만 담긴다 — full로 출력해야 어떤 클래스가 위반인지 보인다
+	testLogging {
+		events 'failed'
+		exceptionFormat = 'full'
+		showStackTraces = false
+	}
 }
