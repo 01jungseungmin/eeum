@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.ai.scheduler;
 
+import com.eeum.eeum.application.ai.service.AiMessageCommandExecutor;
 import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
 import com.eeum.eeum.domain.ai.enums.AiActionType;
@@ -21,6 +22,7 @@ public class AiScheduledMessageProcessor {
 
     private final AiGeneratedMessageRepository aiGeneratedMessageRepository;
     private final AiActionLogRepository aiActionLogRepository;
+    private final AiMessageCommandExecutor messageCommandExecutor;
 
     // 발송 가능 여부만 확인 — 상태는 바꾸지 않는다 (취소/수정/이미 처리된 메시지는 건너뛰기 위한 재확인용)
     @Transactional(readOnly = true)
@@ -38,6 +40,7 @@ public class AiScheduledMessageProcessor {
         if (message == null) {
             return;
         }
+        messageCommandExecutor.applyLinkedDomainSideEffectInCurrentTransaction(message);
         message.send(now);
         aiActionLogRepository.save(AiActionLog.record(
                 message.getStore(), message.getOwnerAccount(), AiActionType.MESSAGE_SENT,

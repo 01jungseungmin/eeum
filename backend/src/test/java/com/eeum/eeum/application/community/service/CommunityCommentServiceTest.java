@@ -209,6 +209,7 @@ class CommunityCommentServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(postRepository.findById(post.getPostId())).thenReturn(Optional.of(post));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentRepository.findByParentComment_CommentId(parentCommentId, pageable)).thenReturn(replyPage);
         when(commentLikeRepository.findLikedCommentIds(eq(accountId), anyList())).thenReturn(Set.of());
@@ -281,6 +282,7 @@ class CommunityCommentServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(postRepository.findById(post.getPostId())).thenReturn(Optional.of(post));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
 
         // when & then
@@ -288,6 +290,25 @@ class CommunityCommentServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
+    }
+
+    @Test
+    void 숨김_게시글의_대댓글_목록은_COMMUNITY_POST_NOT_FOUND() {
+        Long accountId = 1L;
+        Long parentCommentId = 20L;
+        Account account = createAccount(accountId, 100L);
+        CommunityPost post = createPost(10L, account, 100L);
+        CommunityComment parent = createComment(parentCommentId, post, account);
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(commentRepository.findById(parentCommentId)).thenReturn(Optional.of(parent));
+        when(postRepository.findById(post.getPostId())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> commentService.getReplies(
+                accountId, parentCommentId, PageRequest.of(0, 10)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
     }
 
     // ──────────────────── createComment ────────────────────

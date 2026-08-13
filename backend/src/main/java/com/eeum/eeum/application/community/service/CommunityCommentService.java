@@ -85,7 +85,8 @@ public class CommunityCommentService {
             throw new BadRequestException(ErrorCode.COMMUNITY_REPLY_DEPTH_EXCEEDED);
         }
 
-        validateSameRegion(parent.getPost(), account);
+        CommunityPost visiblePost = getPostOrThrow(parent.getPost().getPostId());
+        validateSameRegion(visiblePost, account);
 
         Page<CommunityComment> replies = commentRepository
                 .findByParentComment_CommentId(commentId, pageable);

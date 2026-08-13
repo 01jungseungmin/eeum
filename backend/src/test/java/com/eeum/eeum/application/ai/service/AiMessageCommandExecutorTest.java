@@ -17,6 +17,7 @@ import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewReplyRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -50,6 +51,7 @@ class AiMessageCommandExecutorTest {
     @Mock private AiActionLogRepository aiActionLogRepository;
     @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
     @Mock private StoreNoticeRepository storeNoticeRepository;
+    @Mock private StoreRepository storeRepository;
     @Mock private InquiryRepository inquiryRepository;
     @Mock private InquiryAnswerRepository inquiryAnswerRepository;
     @Mock private StoreReviewRepository storeReviewRepository;
@@ -191,7 +193,8 @@ class AiMessageCommandExecutorTest {
         Order order = mock(Order.class);
         StoreReview review = StoreReview.createForOrder(store, reviewer, order, 5, "좋아요");
         ReflectionTestUtils.setField(review, "storereviewId", reviewId);
-        when(storeReviewRepository.findByStorereviewIdAndStore_StoreId(reviewId, STORE_ID))
+        when(storeRepository.findByIdWithPessimisticLock(STORE_ID)).thenReturn(Optional.of(store));
+        when(storeReviewRepository.findWithAccountAndStoreByStorereviewIdForUpdate(reviewId))
                 .thenReturn(Optional.of(review));
         when(storeReviewReplyRepository.existsByStoreReview_StorereviewId(reviewId)).thenReturn(false);
 
@@ -217,7 +220,8 @@ class AiMessageCommandExecutorTest {
         Order order = mock(Order.class);
         StoreReview review = StoreReview.createForOrder(store, reviewer, order, 5, "좋아요");
         ReflectionTestUtils.setField(review, "storereviewId", reviewId);
-        when(storeReviewRepository.findByStorereviewIdAndStore_StoreId(reviewId, STORE_ID))
+        when(storeRepository.findByIdWithPessimisticLock(STORE_ID)).thenReturn(Optional.of(store));
+        when(storeReviewRepository.findWithAccountAndStoreByStorereviewIdForUpdate(reviewId))
                 .thenReturn(Optional.of(review));
         when(storeReviewReplyRepository.existsByStoreReview_StorereviewId(reviewId)).thenReturn(true);
 
@@ -238,7 +242,8 @@ class AiMessageCommandExecutorTest {
         AiGeneratedMessage message = createReviewedMessage(
                 store, owner, AiMessageType.REVIEW_REPLY, "STORE_REVIEW", reviewId, "답글 내용");
         when(supportService.getOwnedMessage(OWNER_ID, MESSAGE_ID)).thenReturn(message);
-        when(storeReviewRepository.findByStorereviewIdAndStore_StoreId(reviewId, STORE_ID))
+        when(storeRepository.findByIdWithPessimisticLock(STORE_ID)).thenReturn(Optional.of(store));
+        when(storeReviewRepository.findWithAccountAndStoreByStorereviewIdForUpdate(reviewId))
                 .thenReturn(Optional.empty());
 
         // when & then

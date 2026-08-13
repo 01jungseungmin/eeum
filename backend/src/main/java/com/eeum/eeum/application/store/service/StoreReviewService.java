@@ -6,7 +6,10 @@ import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.*;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.enums.AccountStatus;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.OrderItem;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
@@ -20,6 +23,7 @@ import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.entity.StoreReviewImage;
 import com.eeum.eeum.domain.store.entity.StoreReviewReply;
 import com.eeum.eeum.domain.store.enums.StoreReviewType;
+import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.event.StoreReviewCreatedEvent;
 import com.eeum.eeum.domain.store.event.StoreReviewReplyCreatedEvent;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -56,6 +60,7 @@ public class StoreReviewService {
     private final OrderItemRepository orderItemRepository;
     private final VisitReservationRepository visitReservationRepository;
     private final AccountRepository accountRepository;
+    private final OwnerInfoRepository ownerInfoRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 공개 조회 =====================
@@ -63,7 +68,7 @@ public class StoreReviewService {
     //상점 리뷰 목록 조회 (비회원 포함)
     @Transactional(readOnly = true)
     public Page<StoreReviewResponseDto> getReviews(Long storeId, Pageable pageable) {
-        getStoreOrThrow(storeId);
+        getPublicVisibleStoreOrThrow(storeId);
         Page<StoreReview> reviews = storeReviewRepository
                 .findByStore_StoreIdOrderByCreatedAtDesc(storeId, pageable);
         return reviews.map(this::toResponseDto);
@@ -72,6 +77,7 @@ public class StoreReviewService {
     // 상점 리뷰 단건 상세 조회 (비회원 포함)
     @Transactional(readOnly = true)
     public StoreReviewDetailResponseDto getReviewDetail(Long storeId, Long reviewId) {
+        getPublicVisibleStoreOrThrow(storeId);
         StoreReview review = getReviewOrThrow(storeId, reviewId);
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
@@ -582,6 +588,17 @@ public class StoreReviewService {
     private Store getStoreOrThrow(Long storeId) {
         return storeRepository.findById(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+    }
+
+    private Store getPublicVisibleStoreOrThrow(Long storeId) {
+        Store store = getStoreOrThrow(storeId);
+        if (store.getAccount().getStatus() != AccountStatus.ACTIVE
+                || store.getStatus() == StoreStatus.SUSPENDED
+                || !ownerInfoRepository.existsByAccount_AccountIdAndApprovalStatus(
+                        store.getAccount().getAccountId(), ApprovalStatus.APPROVED)) {
+            throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
+        }
+        return store;
     }
 
     private Store getStoreForUpdateOrThrow(Long storeId) {

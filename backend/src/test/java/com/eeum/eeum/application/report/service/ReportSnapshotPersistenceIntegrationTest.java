@@ -5,6 +5,7 @@ import com.eeum.eeum.application.community.service.CommunityPostService;
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
+import com.eeum.eeum.application.report.dto.response.MyReportResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -170,7 +171,7 @@ class ReportSnapshotPersistenceIntegrationTest {
     @Test
     void 신고_검토_응답은_JPA_flush_후_갱신된_처리시각을_반환한다() throws InterruptedException {
         // given: 접수 시각과 처리 시각을 분명히 구분한다.
-        ReportResponseDto created = reportService.createReport(
+        MyReportResponseDto created = reportService.createReport(
                 reporterId,
                 reportRequest(ReportTargetType.COMMUNITY_POST, postId));
         Thread.sleep(10);

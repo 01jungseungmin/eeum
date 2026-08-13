@@ -242,6 +242,7 @@ class CommunityPostServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.increaseViewCountIfVisible(postId)).thenReturn(1);
         stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
         when(imageRepository.findByPost_PostIdOrderByDisplayOrder(postId)).thenReturn(List.of());
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(true);
@@ -251,7 +252,28 @@ class CommunityPostServiceTest {
 
         // then
         assertThat(result.isLikedByMe()).isTrue();
-        verify(postRepository).increaseViewCount(postId);
+        verify(postRepository).increaseViewCountIfVisible(postId);
+    }
+
+    @Test
+    void 지역_검증_후_게시글이_숨김되면_조회수를_올리지_않고_NOT_FOUND() {
+        Long accountId = 1L;
+        Long postId = 10L;
+        Long regionId = 100L;
+        Account account = createAccount(accountId, regionId);
+        CommunityPost post = createPost(postId, account, regionId);
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.increaseViewCountIfVisible(postId)).thenReturn(0);
+        stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
+
+        assertThatThrownBy(() -> postService.getPost(accountId, postId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+
+        verify(imageRepository, never()).findByPost_PostIdOrderByDisplayOrder(postId);
     }
 
     @Test

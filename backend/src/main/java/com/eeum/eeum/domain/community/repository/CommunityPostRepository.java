@@ -44,8 +44,13 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPost, Lo
 
     // 동시 조회/좋아요/댓글 작성 시 lost update 방지 — DB 레벨 원자적 증감
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("UPDATE CommunityPost p SET p.viewCount = p.viewCount + 1 WHERE p.postId = :postId")
-    void increaseViewCount(@Param("postId") Long postId);
+    @Query("""
+        UPDATE CommunityPost p
+        SET p.viewCount = p.viewCount + 1
+        WHERE p.postId = :postId
+          AND p.hidden = false
+        """)
+    int increaseViewCountIfVisible(@Param("postId") Long postId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE CommunityPost p SET p.likeCount = p.likeCount + 1 WHERE p.postId = :postId")

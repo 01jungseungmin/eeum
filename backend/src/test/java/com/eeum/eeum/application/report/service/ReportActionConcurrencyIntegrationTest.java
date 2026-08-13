@@ -7,7 +7,10 @@ import com.eeum.eeum.application.community.dto.request.CommunityCommentUpdateReq
 import com.eeum.eeum.application.community.dto.request.CommunityPostUpdateRequestDto;
 import com.eeum.eeum.application.community.service.CommunityCommentService;
 import com.eeum.eeum.application.community.service.CommunityLikeService;
+import com.eeum.eeum.application.community.service.CommunityPostImageService;
 import com.eeum.eeum.application.community.service.CommunityPostService;
+import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
+import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportProcessRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
@@ -23,7 +26,9 @@ import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
+import com.eeum.eeum.domain.community.entity.CommunityImage;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
+import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
@@ -49,6 +54,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -66,8 +72,10 @@ import org.testcontainers.utility.DockerImageName;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -87,7 +95,9 @@ class ReportActionConcurrencyIntegrationTest {
     @Container
     static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
             .withDatabaseName("eeum")
-            .withUsername("test")
+            // performance_schema.data_lock_waits로 실제 잠금 대기 진입을 검증해야 하므로
+            // 이 계측 전용 컨테이너에서만 root 계정을 사용한다.
+            .withUsername("root")
             .withPassword("test");
 
     @Container
@@ -108,12 +118,14 @@ class ReportActionConcurrencyIntegrationTest {
     private final AccountService accountService;
     private final CommunityCommentService communityCommentService;
     private final CommunityLikeService communityLikeService;
+    private final CommunityPostImageService communityPostImageService;
     private final CommunityPostService communityPostService;
     private final StoreReviewService storeReviewService;
     private final ReportRepository reportRepository;
     private final CommunityCommentRepository commentRepository;
     private final CommunityCommentLikeRepository commentLikeRepository;
     private final CommunityPostRepository postRepository;
+    private final CommunityImageRepository communityImageRepository;
     private final CommunityPostLikeRepository postLikeRepository;
     private final StoreReviewImageRepository reviewImageRepository;
     private final StoreReviewReplyRepository reviewReplyRepository;
@@ -125,6 +137,7 @@ class ReportActionConcurrencyIntegrationTest {
     private final NotificationRepository notificationRepository;
     private final AccountRepository accountRepository;
     private final PlatformTransactionManager transactionManager;
+    private final JdbcTemplate jdbcTemplate;
 
     private Account reporter;
     private Account author;
@@ -137,12 +150,15 @@ class ReportActionConcurrencyIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
         reporter = accountRepository.save(Account.createUser(
-                "reporter-concurrency@test.com", "encoded", "신고자", "신고자동시성", "010-1000-0001"));
+                "reporter-" + suffix + "@test.com", "encoded", "신고자",
+                "신고자" + suffix, "010-1000-0001"));
         author = accountRepository.save(Account.createUser(
-                "author-concurrency@test.com", "encoded", "작성자", "작성자동시성", "010-1000-0002"));
+                "author-" + suffix + "@test.com", "encoded", "작성자",
+                "작성자" + suffix, "010-1000-0002"));
         owner = accountRepository.save(Account.createOwner(
-                "owner-concurrency@test.com", "encoded", "점주", "010-1000-0003"));
+                "owner-" + suffix + "@test.com", "encoded", "점주", "010-1000-0003"));
 
         Region region = regionRepository.save(
                 Region.create("REPORT-CONCURRENCY", "서울특별시", "강남구", "역삼동", 3));
@@ -168,6 +184,7 @@ class ReportActionConcurrencyIntegrationTest {
     @AfterEach
     void tearDown() {
         reportRepository.deleteAll();
+        communityImageRepository.deleteAll();
         reviewImageRepository.deleteAll();
         reviewReplyRepository.deleteAll();
         reviewRepository.deleteAll();
@@ -185,8 +202,12 @@ class ReportActionConcurrencyIntegrationTest {
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(50, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
-                    notificationRepository.deleteAll();
-                    accountRepository.deleteAll();
+                    // 비동기 알림이 두 DELETE 사이에 삽입되면 FK 예외가 날 수 있다. 예외도 AssertionError로
+                    // 바꿔 Awaitility가 동일한 FK 순서로 다시 정리하도록 한다.
+                    assertThatCode(() -> {
+                        notificationRepository.deleteAllInBatch();
+                        accountRepository.deleteAllInBatch();
+                    }).doesNotThrowAnyException();
                     assertThat(notificationRepository.count()).isZero();
                     assertThat(accountRepository.count()).isZero();
                 });
@@ -380,6 +401,54 @@ class ReportActionConcurrencyIntegrationTest {
     }
 
     @Test
+    void 게시글_숨김_잠금을_기다린_이미지_추가는_숨김_커밋_후_거부된다() throws InterruptedException {
+        ImageUploadListRequestDto request = imageRequest("https://example.com/race.jpg");
+
+        Throwable error = contendWithHeldTransaction(
+                this::hidePostUnderLock,
+                () -> communityPostImageService.addImages(
+                        author.getAccountId(), post.getPostId(), request)
+        );
+
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        assertThat(communityImageRepository.count()).isZero();
+    }
+
+    @Test
+    void 게시글_숨김_잠금을_기다린_상세조회는_조회수를_올리지_않고_거부된다() throws InterruptedException {
+        int initialViewCount = post.getViewCount();
+
+        Throwable error = contendWithHeldTransaction(
+                this::hidePostUnderLock,
+                () -> communityPostService.getPost(author.getAccountId(), post.getPostId())
+        );
+
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        CommunityPost stored = postRepository.findWithAccountByPostId(post.getPostId()).orElseThrow();
+        assertThat(stored.getViewCount()).isEqualTo(initialViewCount);
+    }
+
+    @Test
+    void 이미지_19장인_게시글에_동시에_1장씩_추가해도_최대_20장을_넘지_않는다() throws InterruptedException {
+        for (int order = 1; order <= 19; order++) {
+            communityImageRepository.save(CommunityImage.create(
+                    post, "https://example.com/initial-" + order + ".jpg", order));
+        }
+        communityImageRepository.flush();
+
+        RaceOutcome outcome = race(
+                () -> communityPostImageService.addImages(
+                        author.getAccountId(), post.getPostId(), imageRequest("https://example.com/a.jpg")),
+                () -> communityPostImageService.addImages(
+                        author.getAccountId(), post.getPostId(), imageRequest("https://example.com/b.jpg"))
+        );
+
+        assertThat(outcome.successCount()).isEqualTo(1);
+        assertBusinessError(outcome.failure(), ErrorCode.IMAGE_LIMIT_EXCEEDED);
+        assertThat(communityImageRepository.countByPost_PostId(post.getPostId())).isEqualTo(20);
+    }
+
+    @Test
     void 댓글_삭제_잠금을_기다린_좋아요는_삭제_커밋_후_거부된다() throws InterruptedException {
         Throwable error = contendWithHeldTransaction(
                 this::softDeleteCommentUnderLocks,
@@ -458,7 +527,6 @@ class ReportActionConcurrencyIntegrationTest {
         CountDownLatch lockAcquired = new CountDownLatch(1);
         CountDownLatch releaseLock = new CountDownLatch(1);
         CountDownLatch holderDone = new CountDownLatch(1);
-        CountDownLatch contenderStarted = new CountDownLatch(1);
         CountDownLatch contenderDone = new CountDownLatch(1);
         AtomicReference<Throwable> holderError = new AtomicReference<>();
         AtomicReference<Throwable> contenderError = new AtomicReference<>();
@@ -479,7 +547,6 @@ class ReportActionConcurrencyIntegrationTest {
             }
         });
         Thread contenderThread = new Thread(() -> {
-            contenderStarted.countDown();
             try {
                 contender.run();
             } catch (Throwable throwable) {
@@ -493,12 +560,21 @@ class ReportActionConcurrencyIntegrationTest {
         assertThat(lockAcquired.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(holderError.get()).isNull();
         contenderThread.start();
-        assertThat(contenderStarted.await(1, TimeUnit.SECONDS)).isTrue();
-        assertThat(contenderDone.await(300, TimeUnit.MILLISECONDS))
-                .as("경쟁 요청은 실제 DB 행 잠금에서 대기해야 한다")
-                .isFalse();
-
-        releaseLock.countDown();
+        try {
+            await().atMost(5, TimeUnit.SECONDS)
+                    .pollInterval(25, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        Integer waitCount = jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM performance_schema.data_lock_waits",
+                                Integer.class);
+                        assertThat(waitCount)
+                                .as("경쟁 요청이 MySQL 행 잠금 대기열에 진입해야 한다")
+                                .isPositive();
+                    });
+            assertThat(contenderDone.getCount()).isEqualTo(1L);
+        } finally {
+            releaseLock.countDown();
+        }
         assertThat(holderDone.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(contenderDone.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(holderError.get()).isNull();
@@ -519,6 +595,14 @@ class ReportActionConcurrencyIntegrationTest {
     private void assertBusinessError(Throwable error, ErrorCode expectedCode) {
         assertThat(error).isInstanceOf(BusinessException.class);
         assertThat(((BusinessException) error).getErrorCode()).isEqualTo(expectedCode);
+    }
+
+    private ImageUploadListRequestDto imageRequest(String imageUrl) {
+        ImageUploadRequestDto image = new ImageUploadRequestDto();
+        ReflectionTestUtils.setField(image, "imageUrl", imageUrl);
+        ImageUploadListRequestDto request = new ImageUploadListRequestDto();
+        ReflectionTestUtils.setField(request, "images", java.util.List.of(image));
+        return request;
     }
 
     private Report saveReport(ReportTargetType targetType, Long targetId, Long ownerAccountId) {

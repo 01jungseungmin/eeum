@@ -102,7 +102,10 @@ public class CommunityPostService {
 
         validateSameRegion(post, account);
 
-        postRepository.increaseViewCount(postId);  // clearAutomatically = true → 캐시 초기화
+        int updatedRows = postRepository.increaseViewCountIfVisible(postId);
+        if (updatedRows == 0) {
+            throw new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        }
         post = getPostOrThrow(postId);              // 최신 viewCount 반영된 엔티티 재조회
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);

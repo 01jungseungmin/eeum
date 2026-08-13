@@ -24,6 +24,10 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
     @Query("SELECT s FROM Store s WHERE s.storeId = :storeId")
     Optional<Store> findByIdWithPessimisticLock(@Param("storeId") Long storeId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Store s WHERE s.account.accountId = :accountId")
+    Optional<Store> findByAccountIdWithPessimisticLock(@Param("accountId") Long accountId);
+
     // 신고 상세의 대상 스냅샷 — 소유자를 함께 조회해 N+1 방지
     @EntityGraph(attributePaths = "account")
     Optional<Store> findWithAccountByStoreId(Long storeId);

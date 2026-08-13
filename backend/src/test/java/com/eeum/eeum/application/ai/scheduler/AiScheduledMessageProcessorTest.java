@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.ai.scheduler;
 
+import com.eeum.eeum.application.ai.service.AiMessageCommandExecutor;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.ai.entity.AiActionLog;
 import com.eeum.eeum.domain.ai.entity.AiGeneratedMessage;
@@ -35,6 +36,7 @@ class AiScheduledMessageProcessorTest {
 
     @Mock private AiGeneratedMessageRepository aiGeneratedMessageRepository;
     @Mock private AiActionLogRepository aiActionLogRepository;
+    @Mock private AiMessageCommandExecutor messageCommandExecutor;
 
     private static final Long MESSAGE_ID = 1L;
 
@@ -110,6 +112,7 @@ class AiScheduledMessageProcessorTest {
         assertThat(message.getStatus()).isEqualTo(AiMessageStatus.SENT);
         assertThat(message.getSentAt()).isEqualTo(now);
         assertThat(message.getScheduledAt()).isNull();
+        verify(messageCommandExecutor).applyLinkedDomainSideEffectInCurrentTransaction(message);
 
         ArgumentCaptor<AiActionLog> logCaptor = ArgumentCaptor.forClass(AiActionLog.class);
         verify(aiActionLogRepository).save(logCaptor.capture());
@@ -126,6 +129,7 @@ class AiScheduledMessageProcessorTest {
 
         // then
         verify(aiActionLogRepository, never()).save(any());
+        verify(messageCommandExecutor, never()).applyLinkedDomainSideEffectInCurrentTransaction(any());
     }
 
     // ──────────────────── recordFailure ────────────────────

@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.report.service;
 
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
-import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
+import com.eeum.eeum.application.report.dto.response.MyReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -31,7 +31,7 @@ public class ReportService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public ReportResponseDto createReport(Long accountId, ReportCreateRequestDto request) {
+    public MyReportResponseDto createReport(Long accountId, ReportCreateRequestDto request) {
         Account reporter = accountRepository.findById(accountId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
 
@@ -72,20 +72,20 @@ public class ReportService {
                 saved.getTargetId()
         ));
 
-        return ReportResponseDto.from(saved);
+        return MyReportResponseDto.from(saved);
     }
 
     @Transactional(readOnly = true)
-    public Slice<ReportResponseDto> getMyReports(Long accountId, Pageable pageable) {
+    public Slice<MyReportResponseDto> getMyReports(Long accountId, Pageable pageable) {
         return reportRepository.findByReporter_AccountId(accountId, pageable)
-                .map(ReportResponseDto::from);
+                .map(MyReportResponseDto::from);
     }
 
     @Transactional(readOnly = true)
-    public ReportResponseDto getMyReportDetail(Long accountId, Long reportId) {
+    public MyReportResponseDto getMyReportDetail(Long accountId, Long reportId) {
         Report report = getReportOrThrow(reportId);
         validateOwner(report, accountId);
-        return ReportResponseDto.from(report);
+        return MyReportResponseDto.from(report);
     }
 
     // ===================== 내부 유틸 =====================
