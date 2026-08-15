@@ -16,6 +16,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,7 +54,10 @@ public class AdminCategoryService {
         int depth = 1;
 
         if (parentId != null) {
-            Category parent = getCategoryOrThrow(parentId);
+            // 부모 행을 잠근다. 잠그지 않으면 hardDeleteCategory가 "자식 없음"을 확인한 직후
+            // 이 트랜잭션이 자식을 INSERT해 삭제된 부모를 가리키는 고아 카테고리가 남는다.
+            // parent_id는 FK 없는 스칼라라 DB가 막아주지 못하므로 잠금이 유일한 방어선이다.
+            Category parent = getCategoryForUpdateOrThrow(parentId);
             validateParent(parent, request.getType());
             depth = parent.getDepth() + 1;
         }
@@ -64,7 +68,7 @@ public class AdminCategoryService {
                 ? Category.createRoot(request.getType(), name, request.getDisplayOrder())
                 : Category.createChild(request.getType(), parentId, name, request.getDisplayOrder(), depth);
 
-        Category saved = categoryRepository.save(category);
+        Category saved = saveWithDuplicateGuard(category);
         log.info("관리자 카테고리 생성: categoryId={}, type={}, parentId={}",
                 saved.getCategoryId(), saved.getType(), saved.getParentId());
         return categoryMapper.toResponseDto(saved);
@@ -72,7 +76,7 @@ public class AdminCategoryService {
 
     @Transactional
     public CategoryResponseDto updateCategory(Long categoryId, CategoryUpdateRequestDto request) {
-        Category category = getCategoryOrThrow(categoryId);
+        Category category = getCategoryForUpdateOrThrow(categoryId);
         String name = normalizeName(request.getName());
 
         if (categoryRepository.existsByTypeAndParentIdAndNameAndCategoryIdNot(
@@ -81,20 +85,21 @@ public class AdminCategoryService {
         }
 
         category.updateInfo(name, request.getDisplayOrder());
+        flushWithDuplicateGuard();
         log.info("관리자 카테고리 수정: categoryId={}", categoryId);
         return categoryMapper.toResponseDto(category);
     }
 
     @Transactional
     public void activateCategory(Long categoryId) {
-        Category category = getCategoryOrThrow(categoryId);
+        Category category = getCategoryForUpdateOrThrow(categoryId);
         category.activate();
         log.info("관리자 카테고리 활성화: categoryId={}", categoryId);
     }
 
     @Transactional
     public void deactivateCategory(Long categoryId) {
-        Category category = getCategoryOrThrow(categoryId);
+        Category category = getCategoryForUpdateOrThrow(categoryId);
         category.deactivate();
         log.info("관리자 카테고리 비활성화: categoryId={}", categoryId);
     }
@@ -142,6 +147,30 @@ public class AdminCategoryService {
     private Category getCategoryOrThrow(Long categoryId) {
         return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    // 모든 카테고리 변경은 대상 행을 잠근 뒤 수행한다 — hardDeleteCategory와 동일한 잠금 규칙.
+    private Category getCategoryForUpdateOrThrow(Long categoryId) {
+        return categoryRepository.findByIdForUpdate(categoryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    // exists 검사와 INSERT 사이에는 항상 틈이 있다. 최종 판정은 DB 유니크 제약이 하고,
+    // 여기서는 그 제약 위반을 도메인 에러로 번역하기만 한다.
+    private Category saveWithDuplicateGuard(Category category) {
+        try {
+            return categoryRepository.saveAndFlush(category);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(ErrorCode.CATEGORY_DUPLICATE);
+        }
+    }
+
+    private void flushWithDuplicateGuard() {
+        try {
+            categoryRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(ErrorCode.CATEGORY_DUPLICATE);
+        }
     }
 
     private void validateParent(Category parent, CategoryType childType) {

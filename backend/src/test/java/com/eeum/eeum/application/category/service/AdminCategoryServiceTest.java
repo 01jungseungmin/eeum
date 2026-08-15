@@ -69,7 +69,7 @@ class AdminCategoryServiceTest {
                 CategoryType.COMMUNITY, null, "  동네 이야기  ", 0);
         when(categoryRepository.existsByTypeAndParentIdAndName(
                 CategoryType.COMMUNITY, null, "동네 이야기")).thenReturn(false);
-        when(categoryRepository.save(any(Category.class))).thenAnswer(invocation -> {
+        when(categoryRepository.saveAndFlush(any(Category.class))).thenAnswer(invocation -> {
             Category saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "categoryId", 1L);
             return saved;
@@ -87,10 +87,10 @@ class AdminCategoryServiceTest {
     void 하위_카테고리는_부모보다_한_단계_깊게_생성한다() {
         Category parent = category(1L, CategoryType.STORE, null, "음식점", 0, 1);
         CategoryCreateRequestDto request = createRequest(CategoryType.STORE, 1L, "한식", 0);
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(parent));
+        when(categoryRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(parent));
         when(categoryRepository.existsByTypeAndParentIdAndName(CategoryType.STORE, 1L, "한식"))
                 .thenReturn(false);
-        when(categoryRepository.save(any(Category.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(categoryRepository.saveAndFlush(any(Category.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CategoryResponseDto result = adminCategoryService.createCategory(request);
 
@@ -102,14 +102,14 @@ class AdminCategoryServiceTest {
     void 깊이_3인_카테고리에는_자식을_생성할_수_없다() {
         Category parent = category(3L, CategoryType.STORE, 2L, "한식", 0, 3);
         CategoryCreateRequestDto request = createRequest(CategoryType.STORE, 3L, "찌개", 0);
-        when(categoryRepository.findById(3L)).thenReturn(Optional.of(parent));
+        when(categoryRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(parent));
 
         assertThatThrownBy(() -> adminCategoryService.createCategory(request))
                 .isInstanceOf(BadRequestException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CATEGORY_MAX_DEPTH_EXCEEDED);
 
-        verify(categoryRepository, never()).save(any());
+        verify(categoryRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -128,7 +128,7 @@ class AdminCategoryServiceTest {
     void 카테고리_이름과_표시_순서를_수정한다() {
         Category category = category(1L, CategoryType.COMMUNITY, null, "기존", 0, 1);
         CategoryUpdateRequestDto request = updateRequest(" 변경 ", 4);
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(category));
         when(categoryRepository.existsByTypeAndParentIdAndNameAndCategoryIdNot(
                 CategoryType.COMMUNITY, null, "변경", 1L)).thenReturn(false);
 
