@@ -172,7 +172,8 @@ class CommunityCommentReportActionExecutorTest {
         assertThat(event.targetAccountId()).isEqualTo(AUTHOR_ID);
         assertThat(event.refType()).isEqualTo(NotificationRefType.COMMUNITY_COMMENT);
         assertThat(event.refId()).isEqualTo(COMMENT_ID);
-        assertThat(event.reason()).isEqualTo(expectedReason);
+        assertThat(event.actionLabel()).isEqualTo(expectedReason);
+        assertThat(event.adminNote()).isEqualTo(ADMIN_NOTE);
         assertThat(action).isIn(
                 ReportAction.DELETE_COMMENT,
                 ReportAction.WARN_AUTHOR,

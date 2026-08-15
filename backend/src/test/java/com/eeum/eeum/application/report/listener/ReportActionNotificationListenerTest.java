@@ -29,7 +29,8 @@ class ReportActionNotificationListenerTest {
                 10L,
                 NotificationRefType.STORE,
                 20L,
-                "상점 정지"
+                "상점 정지",
+                "허위 정보 반복 게시"
         );
 
         // When
@@ -44,6 +45,8 @@ class ReportActionNotificationListenerTest {
         assertThat(request.getType()).isEqualTo(NotificationType.SYSTEM_NOTICE);
         assertThat(request.getRefType()).isEqualTo(NotificationRefType.STORE);
         assertThat(request.getRefId()).isEqualTo(20L);
-        assertThat(request.getContent()).contains("상점 정지");
+        assertThat(request.getContent())
+                .contains("상점 정지")
+                .contains("허위 정보 반복 게시");
     }
 }

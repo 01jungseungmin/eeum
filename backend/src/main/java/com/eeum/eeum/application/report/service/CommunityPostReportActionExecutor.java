@@ -48,7 +48,8 @@ public class CommunityPostReportActionExecutor implements ReportTargetActionExec
                 authorAccountId,
                 NotificationRefType.COMMUNITY_POST,
                 postId,
-                actionLabel(action)
+                actionLabel(action),
+                adminNote
         ));
         return authorAccountId;
     }

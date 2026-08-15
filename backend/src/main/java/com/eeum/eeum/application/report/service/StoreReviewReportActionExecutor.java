@@ -50,7 +50,8 @@ public class StoreReviewReportActionExecutor implements ReportTargetActionExecut
         eventPublisher.publishEvent(new StoreReviewAdminActionEvent(
                 authorAccountId,
                 reviewId,
-                actionLabel(action)
+                actionLabel(action),
+                adminNote
         ));
         return authorAccountId;
     }

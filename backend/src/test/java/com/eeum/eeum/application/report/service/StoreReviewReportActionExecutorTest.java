@@ -102,7 +102,8 @@ class StoreReviewReportActionExecutorTest {
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().targetAccountId()).isEqualTo(AUTHOR_ID);
         assertThat(eventCaptor.getValue().reviewId()).isEqualTo(REVIEW_ID);
-        assertThat(eventCaptor.getValue().reason()).isEqualTo("리뷰 삭제");
+        assertThat(eventCaptor.getValue().actionLabel()).isEqualTo("리뷰 삭제");
+        assertThat(eventCaptor.getValue().adminNote()).isEqualTo("조작된 리뷰");
     }
 
     @Test

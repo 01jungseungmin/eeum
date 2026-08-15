@@ -56,6 +56,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
     ACCOUNT_PRIMARY_REGION_NOT_FOUND("ACCOUNT_013","대표 지역이 없습니다.",HttpStatus.NOT_FOUND),
+    ACCOUNT_ALREADY_SUSPENDED("ACCOUNT_014", "이미 정지된 회원입니다", HttpStatus.CONFLICT),
+    ACCOUNT_NOT_SUSPENDED("ACCOUNT_015", "정지 상태가 아닌 회원입니다", HttpStatus.CONFLICT),
 
     // ===================== 사장 추가정보 기입 =====================
     OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),

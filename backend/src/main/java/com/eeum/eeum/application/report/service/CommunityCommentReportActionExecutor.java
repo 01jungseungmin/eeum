@@ -50,7 +50,8 @@ public class CommunityCommentReportActionExecutor implements ReportTargetActionE
                 authorAccountId,
                 NotificationRefType.COMMUNITY_COMMENT,
                 commentId,
-                actionLabel(action)
+                actionLabel(action),
+                adminNote
         ));
         return authorAccountId;
     }

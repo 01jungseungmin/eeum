@@ -44,7 +44,8 @@ public class StoreReportActionExecutor implements ReportTargetActionExecutor {
                 ownerAccountId,
                 NotificationRefType.STORE,
                 storeId,
-                actionLabel(action)
+                actionLabel(action),
+                adminNote
         ));
         return ownerAccountId;
     }

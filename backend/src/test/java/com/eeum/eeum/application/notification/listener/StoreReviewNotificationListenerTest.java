@@ -55,7 +55,8 @@ class StoreReviewNotificationListenerTest {
         StoreReviewAdminActionEvent event = new StoreReviewAdminActionEvent(
                 authorAccountId,
                 reviewId,
-                "리뷰 삭제"
+                "리뷰 삭제",
+                "허위 리뷰"
         );
         ArgumentCaptor<NotificationCreateRequestDto> captor =
                 ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
@@ -71,6 +72,8 @@ class StoreReviewNotificationListenerTest {
         assertThat(dto.getRefType()).isEqualTo(NotificationRefType.STORE_REVIEW);
         assertThat(dto.getRefId()).isEqualTo(reviewId);
         assertThat(dto.getLinkUrl()).isNull();
-        assertThat(dto.getContent()).contains("리뷰 삭제");
+        assertThat(dto.getContent())
+                .contains("리뷰 삭제")
+                .contains("허위 리뷰");
     }
 }

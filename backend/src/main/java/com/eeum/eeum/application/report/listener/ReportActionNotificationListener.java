@@ -23,7 +23,9 @@ public class ReportActionNotificationListener {
                 .accountId(event.targetAccountId())
                 .type(NotificationType.SYSTEM_NOTICE)
                 .title("관리자 조치 안내")
-                .content("신고 검토 결과 관리자 조치가 적용되었습니다. 사유: " + event.reason())
+                .content(String.format(
+                        "신고 검토 결과 관리자 조치가 적용되었습니다. 조치: %s, 사유: %s",
+                        event.actionLabel(), event.adminNote()))
                 .refType(event.refType())
                 .refId(event.refId())
                 .linkUrl(null)

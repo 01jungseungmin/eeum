@@ -214,23 +214,20 @@ class ReportActionConcurrencyIntegrationTest {
     }
 
     @Test
-    void 동일_신고를_동시에_처리하면_정확히_한_요청만_성공한다() throws InterruptedException {
+    void 신고_처리_잠금을_기다린_두번째_처리는_첫_처리_커밋_후_거부된다() throws InterruptedException {
         // given
         Report report = saveReport(ReportTargetType.ACCOUNT, author.getAccountId(), author.getAccountId());
         ReportProcessRequestDto requestA = processRequest(ReportAction.DISMISS, "중복 처리 A");
         ReportProcessRequestDto requestB = processRequest(ReportAction.DISMISS, "중복 처리 B");
 
-        // when
-        RaceOutcome outcome = race(
+        // when: 첫 처리가 신고 행 잠금을 쥔 상태에서 두 번째 처리를 진입시킨다
+        Throwable error = contendWithHeldTransaction(
                 () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, requestA),
                 () -> adminReportService.processReport(report.getReportId(), ADMIN_ID + 1, requestB)
         );
 
         // then
-        assertThat(outcome.successCount()).isEqualTo(1);
-        assertThat(outcome.failure()).isInstanceOf(BusinessException.class);
-        assertThat(((BusinessException) outcome.failure()).getErrorCode())
-                .isEqualTo(ErrorCode.REPORT_ALREADY_PROCESSED);
+        assertBusinessError(error, ErrorCode.REPORT_ALREADY_PROCESSED);
 
         Report stored = reportRepository.findById(report.getReportId()).orElseThrow();
         assertThat(stored.getStatus()).isEqualTo(ReportStatus.DISMISSED);
@@ -245,7 +242,9 @@ class ReportActionConcurrencyIntegrationTest {
         ReflectionTestUtils.setField(updateRequest, "nickname", "수정된작성자");
         ReportProcessRequestDto suspendRequest = processRequest(ReportAction.SUSPEND_AUTHOR, "계정 정지");
 
-        // when
+        // when: accountService.updateMyInfo는 행 잠금을 쓰지 않고 @Version 낙관적 락에 의존하므로
+        // 다른 테스트처럼 "잠금 대기열 진입"을 관찰할 수 없다. 여기서는 동시 실행 후 최종 상태만 검증하고,
+        // stale write 거부 자체는 AccountOptimisticLockIntegrationTest가 결정적으로 검증한다.
         RaceOutcome outcome = race(
                 () -> accountService.updateMyInfo(author.getAccountId(), updateRequest),
                 () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, suspendRequest)
@@ -274,7 +273,7 @@ class ReportActionConcurrencyIntegrationTest {
     }
 
     @Test
-    void 댓글_수정과_관리자_삭제가_경쟁해도_삭제_상태가_되돌아가지_않는다() throws InterruptedException {
+    void 댓글_삭제_잠금을_기다린_댓글_수정은_삭제_커밋_후_거부된다() throws InterruptedException {
         // given
         Report report = saveReport(
                 ReportTargetType.COMMUNITY_COMMENT, comment.getCommentId(), author.getAccountId());
@@ -282,59 +281,61 @@ class ReportActionConcurrencyIntegrationTest {
         ReflectionTestUtils.setField(updateRequest, "content", "동시에 수정된 댓글");
         ReportProcessRequestDto deleteRequest = processRequest(ReportAction.DELETE_COMMENT, "댓글 삭제");
 
-        // when
-        RaceOutcome outcome = race(
-                () -> communityCommentService.updateComment(author.getAccountId(), comment.getCommentId(), updateRequest),
-                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest)
+        // when: 관리자 삭제가 잠금을 쥔 상태에서 사용자 수정을 진입시킨다
+        Throwable error = contendWithHeldTransaction(
+                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest),
+                () -> communityCommentService.updateComment(
+                        author.getAccountId(), comment.getCommentId(), updateRequest)
         );
 
-        // then: 삭제가 먼저 끝난 경우 사용자 수정은 대상 없음으로 거부될 수 있다.
-        assertOnlyExpectedFailure(outcome, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        // then
+        assertBusinessError(error, ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
         CommunityComment stored = commentRepository.findById(comment.getCommentId()).orElseThrow();
         assertThat(stored.isDeleted()).isTrue();
         assertThat(stored.getContent()).isEqualTo("삭제된 댓글입니다.");
     }
 
     @Test
-    void 게시글_삭제와_댓글_생성이_경쟁해도_고아_댓글이_남지_않는다() throws InterruptedException {
+    void 게시글_삭제_잠금을_기다린_댓글_생성은_삭제_커밋_후_거부된다() throws InterruptedException {
         // given
         Report report = saveReport(ReportTargetType.COMMUNITY_POST, post.getPostId(), author.getAccountId());
         CommunityCommentCreateRequestDto createRequest = new CommunityCommentCreateRequestDto();
         ReflectionTestUtils.setField(createRequest, "content", "동시에 생성한 댓글");
         ReportProcessRequestDto deleteRequest = processRequest(ReportAction.DELETE_POST, "게시글 삭제");
 
-        // when
-        RaceOutcome outcome = race(
-                () -> communityCommentService.createComment(author.getAccountId(), post.getPostId(), createRequest),
-                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest)
+        // when: 관리자 삭제가 잠금을 쥔 상태에서 댓글 생성을 진입시킨다
+        Throwable error = contendWithHeldTransaction(
+                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest),
+                () -> communityCommentService.createComment(
+                        author.getAccountId(), post.getPostId(), createRequest)
         );
 
-        // then: 게시글 삭제가 먼저 끝난 경우 댓글 생성은 대상 없음으로 거부될 수 있다.
-        assertOnlyExpectedFailure(outcome, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        // then
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
         assertThat(postRepository.findById(post.getPostId())).isEmpty();
         assertThat(commentRepository.count()).isZero();
     }
 
     @Test
-    void 게시글_삭제와_댓글_삭제가_경쟁해도_게시글과_댓글이_모두_정리된다() throws InterruptedException {
+    void 게시글_삭제_잠금을_기다린_댓글_삭제는_삭제_커밋_후_거부된다() throws InterruptedException {
         // given
         Report report = saveReport(ReportTargetType.COMMUNITY_POST, post.getPostId(), author.getAccountId());
         ReportProcessRequestDto deleteRequest = processRequest(ReportAction.DELETE_POST, "게시글 삭제");
 
-        // when
-        RaceOutcome outcome = race(
-                () -> communityCommentService.deleteComment(author.getAccountId(), comment.getCommentId()),
-                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest)
+        // when: 관리자 삭제가 잠금을 쥔 상태에서 사용자 댓글 삭제를 진입시킨다
+        Throwable error = contendWithHeldTransaction(
+                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest),
+                () -> communityCommentService.deleteComment(author.getAccountId(), comment.getCommentId())
         );
 
-        // then: 게시글 삭제가 먼저 끝난 경우 댓글 삭제는 게시글 없음으로 거부될 수 있다.
-        assertOnlyExpectedFailure(outcome, ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        // then
+        assertBusinessError(error, ErrorCode.COMMUNITY_POST_NOT_FOUND);
         assertThat(postRepository.findById(post.getPostId())).isEmpty();
         assertThat(commentRepository.count()).isZero();
     }
 
     @Test
-    void 리뷰_수정과_관리자_삭제가_경쟁해도_리뷰는_삭제되고_평점이_재계산된다() throws InterruptedException {
+    void 리뷰_삭제_잠금을_기다린_리뷰_수정은_삭제_커밋_후_거부되고_평점이_재계산된다() throws InterruptedException {
         // given
         Report report = saveReport(ReportTargetType.STORE_REVIEW, review.getStorereviewId(), author.getAccountId());
         StoreReviewUpdateRequestDto updateRequest = new StoreReviewUpdateRequestDto();
@@ -342,15 +343,15 @@ class ReportActionConcurrencyIntegrationTest {
         ReflectionTestUtils.setField(updateRequest, "content", "동시에 수정된 리뷰");
         ReportProcessRequestDto deleteRequest = processRequest(ReportAction.DELETE_STORE_REVIEW, "리뷰 삭제");
 
-        // when
-        RaceOutcome outcome = race(
+        // when: 관리자 삭제가 잠금을 쥔 상태에서 사용자 리뷰 수정을 진입시킨다
+        Throwable error = contendWithHeldTransaction(
+                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest),
                 () -> storeReviewService.updateReview(
-                        author.getAccountId(), store.getStoreId(), review.getStorereviewId(), updateRequest),
-                () -> adminReportService.processReport(report.getReportId(), ADMIN_ID, deleteRequest)
+                        author.getAccountId(), store.getStoreId(), review.getStorereviewId(), updateRequest)
         );
 
-        // then: 관리자 삭제가 먼저 끝난 경우 사용자 수정은 리뷰 없음으로 거부될 수 있다.
-        assertOnlyExpectedFailure(outcome, ErrorCode.STORE_REVIEW_NOT_FOUND);
+        // then
+        assertBusinessError(error, ErrorCode.STORE_REVIEW_NOT_FOUND);
         assertThat(reviewRepository.findById(review.getStorereviewId())).isEmpty();
         Store storedStore = storeRepository.findById(store.getStoreId()).orElseThrow();
         assertThat(storedStore.getReviewCount()).isZero();

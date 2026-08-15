@@ -61,7 +61,8 @@ public class StoreReviewNotificationListener {
                 .accountId(event.targetAccountId())
                 .type(NotificationType.STORE_REVIEW_ADMIN_ACTION)
                 .title("관리자 조치 안내")
-                .content(String.format("회원님의 리뷰에 관리자 조치가 취해졌습니다. 사유: %s", event.reason()))
+                .content(String.format("회원님의 리뷰에 관리자 조치가 취해졌습니다. 조치: %s, 사유: %s",
+                        event.actionLabel(), event.adminNote()))
                 .refType(NotificationRefType.STORE_REVIEW)
                 .refId(event.reviewId())
                 .linkUrl(null)
