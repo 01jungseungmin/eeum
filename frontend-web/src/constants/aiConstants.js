@@ -31,6 +31,23 @@ export const AI_MESSAGE_STATUS_MAP = {
   CANCELLED: '취소',
 };
 
+// 발송 상태별 배지 색상 (배경 / 글자)
+export const AI_MESSAGE_STATUS_COLOR = {
+  DRAFT: { bg: '#f1f3f5', color: '#8e94a0' },
+  REVIEWED: { bg: '#e6f4ff', color: '#1890ff' },
+  SENT: { bg: '#e6f7ee', color: '#00a651' },
+  SCHEDULED: { bg: '#fffbe6', color: '#faad14' },
+  FAILED: { bg: '#fff1f0', color: '#ff4d4f' },
+  CANCELLED: { bg: '#f1f3f5', color: '#c2c7d0' },
+};
+
+// 백엔드 AiGeneratedMessage 상태 전이 규칙과 동일하게 유지할 것
+// 수정 가능: DRAFT / REVIEWED / SCHEDULED
+export const AI_EDITABLE_STATUSES = ['DRAFT', 'REVIEWED', 'SCHEDULED'];
+// 발송·예약·취소 가능: REVIEWED / SCHEDULED 만 허용.
+// DRAFT는 직접 발송 불가하므로 먼저 수정(PATCH)해 REVIEWED로 전환해야 한다.
+export const AI_TRANSITABLE_STATUSES = ['REVIEWED', 'SCHEDULED'];
+
 // AiMessageType — AI 생성 메시지 유형
 export const AI_MESSAGE_TYPE_MAP = {
   CUSTOMER_CARE: '고객 케어',
