@@ -3,6 +3,7 @@ package com.eeum.eeum.application.account.service;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
@@ -52,6 +53,7 @@ class AdminAccountServiceTokenCleanupTest {
     @Mock AccountMapper accountMapper;
     @Mock OwnerApplicationMapper ownerApplicationMapper;
     @Mock StoreApprovalMapper storeApprovalMapper;
+    @Mock SanctionHistoryService sanctionHistoryService;
     @Mock ApplicationEventPublisher eventPublisher;
 
     // ─────────────────── suspendAccount ───────────────────
@@ -244,6 +246,8 @@ class AdminAccountServiceTokenCleanupTest {
         Long targetId = 10L;
         Account target = mock(Account.class);
         when(target.isWithdrawn()).thenReturn(false);
+        // 정지 해제는 SUSPENDED 상태에서만 허용된다
+        when(target.isSuspended()).thenReturn(true);
         when(accountRepository.findByIdWithLock(targetId)).thenReturn(Optional.of(target));
 
         // when

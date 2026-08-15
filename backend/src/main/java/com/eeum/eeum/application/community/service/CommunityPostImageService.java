@@ -13,6 +13,7 @@ import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -28,9 +29,9 @@ public class CommunityPostImageService {
     private final CommunityPostRepository postRepository;
     private final CommunityImageRepository imageRepository;
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<CommunityImageResponseDto> addImages(Long accountId, Long postId, ImageUploadListRequestDto request) {
-        CommunityPost post = getPostWithOwnerCheck(accountId, postId);
+        CommunityPost post = getVisiblePostWithOwnerCheckForUpdate(accountId, postId);
 
         int currentCount = imageRepository.countByPost_PostId(postId);
         if (currentCount + request.getImages().size() > MAX_IMAGE_COUNT) {
@@ -51,9 +52,9 @@ public class CommunityPostImageService {
         return saved.stream().map(CommunityImageResponseDto::from).toList();
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteImage(Long accountId, Long postId, Long imageId) {
-        getPostWithOwnerCheck(accountId, postId);
+        getPostWithOwnerCheckForUpdate(accountId, postId);
 
         CommunityImage image = imageRepository.findById(imageId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.IMAGE_NOT_FOUND));
@@ -72,12 +73,23 @@ public class CommunityPostImageService {
         log.info("커뮤니티 이미지 삭제: imageId={}", imageId);
     }
 
-    private CommunityPost getPostWithOwnerCheck(Long accountId, Long postId) {
-        CommunityPost post = postRepository.findById(postId)
+    private CommunityPost getVisiblePostWithOwnerCheckForUpdate(Long accountId, Long postId) {
+        CommunityPost post = postRepository.findVisibleByPostIdForUpdate(postId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+        validateOwner(post, accountId);
+        return post;
+    }
+
+    private CommunityPost getPostWithOwnerCheckForUpdate(Long accountId, Long postId) {
+        CommunityPost post = postRepository.findWithAccountByPostIdForUpdate(postId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+        validateOwner(post, accountId);
+        return post;
+    }
+
+    private void validateOwner(CommunityPost post, Long accountId) {
         if (!post.isOwnedBy(accountId)) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
-        return post;
     }
 }

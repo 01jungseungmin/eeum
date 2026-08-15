@@ -1,7 +1,7 @@
 package com.eeum.eeum.api.report;
 
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
-import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
+import com.eeum.eeum.application.report.dto.response.MyReportResponseDto;
 import com.eeum.eeum.application.report.service.ReportService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -32,7 +32,7 @@ public class ReportController {
 
     @Operation(summary = "신고 접수", description = "대상(targetType, targetId)에 대해 신고를 접수합니다. 동일 대상 중복 신고 불가.")
     @PostMapping
-    public ResponseEntity<ApiResponse<ReportResponseDto>> createReport(
+    public ResponseEntity<ApiResponse<MyReportResponseDto>> createReport(
             @Valid @RequestBody ReportCreateRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
@@ -42,7 +42,7 @@ public class ReportController {
 
     @Operation(summary = "내 신고 목록 조회", description = "본인이 접수한 신고 목록을 최신순으로 조회합니다.")
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<Slice<ReportResponseDto>>> getMyReports(
+    public ResponseEntity<ApiResponse<Slice<MyReportResponseDto>>> getMyReports(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
@@ -51,7 +51,7 @@ public class ReportController {
 
     @Operation(summary = "내 신고 상세 조회", description = "본인이 접수한 신고 상세를 조회합니다.")
     @GetMapping("/{reportId}")
-    public ResponseEntity<ApiResponse<ReportResponseDto>> getMyReportDetail(
+    public ResponseEntity<ApiResponse<MyReportResponseDto>> getMyReportDetail(
             @Parameter(description = "신고 ID") @PathVariable Long reportId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();

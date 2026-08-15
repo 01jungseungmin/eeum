@@ -81,6 +81,10 @@ public class Account extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Version
+    @Column(name = "version", nullable = false, columnDefinition = "BIGINT NOT NULL DEFAULT 0")
+    private Long version;
+
     public static Account createUser(
             String email,
             String encodedPassword,
@@ -220,6 +224,10 @@ public class Account extends BaseEntity {
 
     public boolean isWithdrawn() {
         return this.status == AccountStatus.WITHDRAWN;
+    }
+
+    public boolean isSuspended() {
+        return this.status == AccountStatus.SUSPENDED;
     }
 
     public boolean isAdmin() {

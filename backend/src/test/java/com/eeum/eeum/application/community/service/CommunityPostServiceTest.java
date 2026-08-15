@@ -52,6 +52,8 @@ class CommunityPostServiceTest {
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityImageRepository imageRepository;
+    @Mock private CommunityPostDeletionProcessor postDeletionProcessor;
+
     @Mock private AccountRepository accountRepository;
     @Mock private CategoryRepository categoryRepository;
     @Mock private AccountRegionRepository accountRegionRepository;
@@ -240,6 +242,7 @@ class CommunityPostServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.increaseViewCountIfVisible(postId)).thenReturn(1);
         stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
         when(imageRepository.findByPost_PostIdOrderByDisplayOrder(postId)).thenReturn(List.of());
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(true);
@@ -249,7 +252,28 @@ class CommunityPostServiceTest {
 
         // then
         assertThat(result.isLikedByMe()).isTrue();
-        verify(postRepository).increaseViewCount(postId);
+        verify(postRepository).increaseViewCountIfVisible(postId);
+    }
+
+    @Test
+    void 지역_검증_후_게시글이_숨김되면_조회수를_올리지_않고_NOT_FOUND() {
+        Long accountId = 1L;
+        Long postId = 10L;
+        Long regionId = 100L;
+        Account account = createAccount(accountId, regionId);
+        CommunityPost post = createPost(postId, account, regionId);
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.increaseViewCountIfVisible(postId)).thenReturn(0);
+        stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
+
+        assertThatThrownBy(() -> postService.getPost(accountId, postId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+
+        verify(imageRepository, never()).findByPost_PostIdOrderByDisplayOrder(postId);
     }
 
     @Test
@@ -497,7 +521,7 @@ class CommunityPostServiceTest {
         ReflectionTestUtils.setField(request, "title", "수정 제목");
         ReflectionTestUtils.setField(request, "content", "수정 내용");
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findVisibleByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(2L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(false);
@@ -521,7 +545,7 @@ class CommunityPostServiceTest {
 
         CommunityPostUpdateRequestDto request = new CommunityPostUpdateRequestDto();
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findVisibleByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when & then
         assertThatThrownBy(() -> postService.updatePost(otherId, postId, request))
@@ -533,7 +557,7 @@ class CommunityPostServiceTest {
     @Test
     void 게시글_수정_게시글_없으면_COMMUNITY_POST_NOT_FOUND() {
         // given
-        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+        when(postRepository.findVisibleByPostIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> postService.updatePost(1L, 999L, new CommunityPostUpdateRequestDto()))
@@ -553,7 +577,7 @@ class CommunityPostServiceTest {
         CommunityPostUpdateRequestDto request = new CommunityPostUpdateRequestDto();
         ReflectionTestUtils.setField(request, "categoryId", 999L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findVisibleByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(999L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.empty());
 
@@ -574,18 +598,14 @@ class CommunityPostServiceTest {
         Account account = createAccount(accountId, 100L);
         CommunityPost post = createPost(postId, account, 100L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when
         postService.deletePost(accountId, postId);
 
         // then
-        verify(imageRepository).deleteByPost_PostId(postId);
-        verify(postLikeRepository).deleteByPost_PostId(postId);
-        verify(commentLikeRepository).deleteByComment_Post_PostId(postId);
-        verify(commentRepository).deleteRepliesByPost_PostId(postId);
-        verify(commentRepository).deleteTopLevelCommentsByPost_PostId(postId);
-        verify(postRepository).delete(post);
+        verify(postRepository).findWithAccountByPostIdForUpdate(postId);
+        verify(postDeletionProcessor).deleteLockedPost(post);
     }
 
     @Test
@@ -597,7 +617,7 @@ class CommunityPostServiceTest {
         Account owner = createAccount(ownerId, 100L);
         CommunityPost post = createPost(postId, owner, 100L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when & then
         assertThatThrownBy(() -> postService.deletePost(otherId, postId))
@@ -605,13 +625,13 @@ class CommunityPostServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
 
-        verify(postRepository, never()).delete(any());
+        verify(postDeletionProcessor, never()).deleteLockedPost(any());
     }
 
     @Test
     void 게시글_삭제_없는_게시글_COMMUNITY_POST_NOT_FOUND() {
         // given
-        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+        when(postRepository.findWithAccountByPostIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> postService.deletePost(1L, 999L))

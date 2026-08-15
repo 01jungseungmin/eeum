@@ -2,6 +2,7 @@ package com.eeum.eeum.domain.report.entity;
 
 import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
@@ -62,6 +63,9 @@ public class Report extends BaseEntity {
     @Column(name = "target_content_snapshot", columnDefinition = "TEXT")
     private String targetContentSnapshot;
 
+    @Column(name = "target_owner_account_id_snapshot")
+    private Long targetOwnerAccountIdSnapshot;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ReportStatus status;
@@ -69,6 +73,16 @@ public class Report extends BaseEntity {
     // 관리자 검토 메모 (선택)
     @Column(name = "admin_note", columnDefinition = "TEXT")
     private String adminNote;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "admin_action", length = 30)
+    private ReportAction action;
+
+    @Column(name = "processed_by_admin_id")
+    private Long processedByAdminId;
+
+    @Column(name = "action_target_account_id")
+    private Long actionTargetAccountId;
 
     @Version
     @Column(name = "version", nullable = false)
@@ -95,6 +109,28 @@ public class Report extends BaseEntity {
             String targetTitleSnapshot,
             String targetContentSnapshot
     ) {
+        return create(
+                reporter,
+                targetType,
+                targetId,
+                reason,
+                content,
+                targetTitleSnapshot,
+                targetContentSnapshot,
+                null
+        );
+    }
+
+    public static Report create(
+            Account reporter,
+            ReportTargetType targetType,
+            Long targetId,
+            ReportReason reason,
+            String content,
+            String targetTitleSnapshot,
+            String targetContentSnapshot,
+            Long targetOwnerAccountIdSnapshot
+    ) {
         Report report = new Report();
         report.reporter = reporter;
         report.targetType = targetType;
@@ -103,6 +139,7 @@ public class Report extends BaseEntity {
         report.content = content;
         report.targetTitleSnapshot = targetTitleSnapshot;
         report.targetContentSnapshot = targetContentSnapshot;
+        report.targetOwnerAccountIdSnapshot = targetOwnerAccountIdSnapshot;
         report.status = ReportStatus.PENDING;
         return report;
     }
@@ -110,19 +147,50 @@ public class Report extends BaseEntity {
     // ===================== 도메인 메서드 =====================
 
     public void review(String adminNote) {
+        review(null, adminNote);
+    }
+
+    public void review(Long adminId, String adminNote) {
         validatePending();
         this.status = ReportStatus.REVIEWED;
         this.adminNote = adminNote;
+        this.processedByAdminId = adminId;
     }
 
     public void dismiss(String adminNote) {
+        dismiss(null, adminNote);
+    }
+
+    public void dismiss(Long adminId, String adminNote) {
         validatePending();
         this.status = ReportStatus.DISMISSED;
         this.adminNote = adminNote;
+        this.action = ReportAction.DISMISS;
+        this.processedByAdminId = adminId;
+    }
+
+    public void process(
+            ReportAction action,
+            String adminNote,
+            Long adminId,
+            Long actionTargetAccountId
+    ) {
+        validatePending();
+        this.status = action == ReportAction.DISMISS
+                ? ReportStatus.DISMISSED
+                : ReportStatus.REVIEWED;
+        this.action = action;
+        this.adminNote = adminNote;
+        this.processedByAdminId = adminId;
+        this.actionTargetAccountId = actionTargetAccountId;
     }
 
     public boolean isOwnedBy(Long accountId) {
         return this.reporter.getAccountId().equals(accountId);
+    }
+
+    public void validateProcessable() {
+        validatePending();
     }
 
     private void validatePending() {

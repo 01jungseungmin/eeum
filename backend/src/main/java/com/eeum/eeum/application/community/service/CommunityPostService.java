@@ -14,8 +14,6 @@ import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.community.entity.CommunityImage;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
-import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
-import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
@@ -28,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -40,9 +39,8 @@ public class CommunityPostService {
 
     private final CommunityPostRepository postRepository;
     private final CommunityPostLikeRepository postLikeRepository;
-    private final CommunityCommentRepository commentRepository;
-    private final CommunityCommentLikeRepository commentLikeRepository;
     private final CommunityImageRepository imageRepository;
+    private final CommunityPostDeletionProcessor postDeletionProcessor;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
@@ -68,7 +66,8 @@ public class CommunityPostService {
 
     @Transactional(readOnly = true)
     public Page<CommunityPostSummaryResponseDto> getMyPosts(Long accountId, Pageable pageable) {
-        Page<CommunityPost> posts = postRepository.findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable);
+        Page<CommunityPost> posts = postRepository
+                .findByAccount_AccountIdAndHiddenFalseOrderByCreatedAtDesc(accountId, pageable);
         return toSummaryPage(accountId, posts);
     }
 
@@ -103,7 +102,10 @@ public class CommunityPostService {
 
         validateSameRegion(post, account);
 
-        postRepository.increaseViewCount(postId);  // clearAutomatically = true → 캐시 초기화
+        int updatedRows = postRepository.increaseViewCountIfVisible(postId);
+        if (updatedRows == 0) {
+            throw new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+        }
         post = getPostOrThrow(postId);              // 최신 viewCount 반영된 엔티티 재조회
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
@@ -135,13 +137,13 @@ public class CommunityPostService {
         return CommunityPostDetailResponseDto.of(post, false, List.of());
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CommunityPostDetailResponseDto updatePost(
             Long accountId,
             Long postId,
             CommunityPostUpdateRequestDto request
     ) {
-        CommunityPost post = getPostOrThrow(postId);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(postId);
         validateOwner(post, accountId);
 
         Category category = getCategoryOrThrow(request.getCategoryId());
@@ -157,21 +159,25 @@ public class CommunityPostService {
 
     @Transactional
     public void deletePost(Long accountId, Long postId) {
-        CommunityPost post = getPostOrThrow(postId);
+        CommunityPost post = getPostForUpdateOrThrow(postId);
         validateOwner(post, accountId);
-
-        commentLikeRepository.deleteByComment_Post_PostId(postId);
-        commentRepository.deleteRepliesByPost_PostId(postId);
-        commentRepository.deleteTopLevelCommentsByPost_PostId(postId);
-        postLikeRepository.deleteByPost_PostId(postId);
-        imageRepository.deleteByPost_PostId(postId);
-        postRepository.delete(post);
+        postDeletionProcessor.deleteLockedPost(post);
 
         log.info("커뮤니티 게시글 삭제: accountId={}, postId={}", accountId, postId);
     }
 
     private CommunityPost getPostOrThrow(Long postId) {
         return postRepository.findById(postId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+    }
+
+    private CommunityPost getPostForUpdateOrThrow(Long postId) {
+        return postRepository.findWithAccountByPostIdForUpdate(postId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+    }
+
+    private CommunityPost getVisiblePostForUpdateOrThrow(Long postId) {
+        return postRepository.findVisibleByPostIdForUpdate(postId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
     }
 

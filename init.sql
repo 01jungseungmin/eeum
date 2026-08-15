@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS account (
     created_at          DATETIME      NOT NULL,
     modified_at         DATETIME      NOT NULL,
     deleted_at          DATETIME,
+    version             BIGINT        NOT NULL DEFAULT 0,
     PRIMARY KEY (account_id),
     INDEX idx_account_primary_region (primary_region_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

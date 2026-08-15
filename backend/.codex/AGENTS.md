@@ -98,6 +98,7 @@ Soft Delete (deletedAt 필드) 적용 대상:
 - `Account` — 탈퇴 후 30일 유예, `AccountCleanupScheduler`가 처리
 - `ChatMessage`
 - `Category`
+- `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
 
 그 외 엔티티는 Hard Delete (즉시 물리 삭제)
 
@@ -131,6 +132,9 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - 단위 테스트는 외부 의존성(Repository, Redis, FCM, PortOne) 전부 Mocking — `@ExtendWith(MockitoExtension.class)`
 - 검증은 AssertJ `assertThat` 사용 — JUnit `assertEquals` 금지
 - 테스트 위치는 프로덕션 코드와 동일한 패키지 구조: `src/test/java/com/eeum/eeum/application/order/...`
+- 단위 테스트는 외부 의존성을 전부 Mocking하므로 **스레드·DB 커넥션·소켓 같은 런타임 자원 문제를 구조적으로 검증하지 못한다.**
+  서버 무응답, 요청 타임아웃, 커넥션 풀 고갈, 연결 누수를 다룰 때는
+  `.codex/references/resource-budget.md`를 읽고 `resource-test` skill을 사용한다.
 
 ### 스케줄러 목록
 새 스케줄러 추가 전 반드시 기존 목록 확인 (위치: `application/{domain}/scheduler/`):

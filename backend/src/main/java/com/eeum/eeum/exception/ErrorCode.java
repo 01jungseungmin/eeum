@@ -56,6 +56,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
     ACCOUNT_PRIMARY_REGION_NOT_FOUND("ACCOUNT_013","대표 지역이 없습니다.",HttpStatus.NOT_FOUND),
+    ACCOUNT_ALREADY_SUSPENDED("ACCOUNT_014", "이미 정지된 회원입니다", HttpStatus.CONFLICT),
+    ACCOUNT_NOT_SUSPENDED("ACCOUNT_015", "정지 상태가 아닌 회원입니다", HttpStatus.CONFLICT),
 
     // ===================== 사장 추가정보 기입 =====================
     OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),
@@ -210,6 +212,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CATEGORY_NOT_FOUND("CATEGORY_001", "존재하지 않는 카테고리입니다", HttpStatus.NOT_FOUND),
     CATEGORY_IN_USE("CATEGORY_002", "사용 중인 카테고리는 삭제할 수 없습니다", HttpStatus.BAD_REQUEST),
     CATEGORY_DUPLICATE("CATEGORY_003", "이미 존재하는 카테고리입니다", HttpStatus.CONFLICT),
+    CATEGORY_MAX_DEPTH_EXCEEDED("CATEGORY_004", "카테고리는 최대 3단계까지만 생성할 수 있습니다", HttpStatus.BAD_REQUEST),
+    CATEGORY_PARENT_TYPE_MISMATCH("CATEGORY_006", "상위 카테고리와 카테고리 타입이 일치하지 않습니다", HttpStatus.BAD_REQUEST),
+    CATEGORY_INVALID_ORDER("CATEGORY_007", "카테고리 순서 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 찜 (FAVORITE) =====================
     FAVORITE_NOT_FOUND("FAVORITE_001", "존재하지 않는 찜 정보입니다", HttpStatus.NOT_FOUND),
@@ -235,6 +240,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     REPORT_ALREADY_EXISTS("REPORT_003", "이미 신고한 대상입니다.", HttpStatus.CONFLICT),
     REPORT_ALREADY_PROCESSED("REPORT_004", "이미 처리된 신고입니다.", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_005", "자기 자신 또는 자신의 콘텐츠는 신고할 수 없습니다.", HttpStatus.BAD_REQUEST),
+    REPORT_ACTION_NOT_ALLOWED("REPORT_006", "해당 신고 대상에 적용할 수 없는 조치입니다.", HttpStatus.BAD_REQUEST),
+    REPORT_TARGET_NOT_AVAILABLE("REPORT_007", "신고 대상이 삭제되었거나 조치할 수 없는 상태입니다.", HttpStatus.CONFLICT),
 
     // ===================== 이미지 (IMAGE) =====================
     IMAGE_INVALID_FORMAT("IMAGE_001", "지원하지 않는 이미지 형식입니다 (jpg, png, webp만 가능)", HttpStatus.BAD_REQUEST),

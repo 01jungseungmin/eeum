@@ -1,9 +1,11 @@
 package com.eeum.eeum.api.report;
 
+import com.eeum.eeum.application.report.dto.request.ReportProcessRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
 import com.eeum.eeum.application.report.service.AdminReportService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,7 +58,9 @@ public class AdminReportController {
             @Parameter(description = "신고 ID") @PathVariable Long reportId,
             @Valid @RequestBody ReportReviewRequestDto request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(adminReportService.reviewReport(reportId, request)));
+        Long adminId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                adminReportService.reviewReport(reportId, adminId, request)));
     }
 
     @Operation(summary = "[관리자] 신고 기각", description = "신고를 DISMISSED 상태로 처리합니다.")
@@ -65,6 +69,28 @@ public class AdminReportController {
             @Parameter(description = "신고 ID") @PathVariable Long reportId,
             @Valid @RequestBody ReportReviewRequestDto request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(adminReportService.dismissReport(reportId, request)));
+        Long adminId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                adminReportService.dismissReport(reportId, adminId, request)));
+    }
+
+    @Operation(
+            summary = "[관리자] 신고 조치 처리",
+            description = "신고 대상 종류에 따라 게시글 숨김·삭제, 댓글 삭제, 리뷰 삭제, " +
+                    "작성자 경고·정지, 상점 정지 또는 신고 기각을 적용합니다. " +
+                    "허용 조합: COMMUNITY_POST=HIDE_POST/DELETE_POST/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "COMMUNITY_COMMENT=DELETE_COMMENT/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "STORE_REVIEW=DELETE_STORE_REVIEW/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "STORE=SUSPEND_STORE/WARN_AUTHOR/SUSPEND_AUTHOR, " +
+                    "ACCOUNT=WARN_AUTHOR/SUSPEND_AUTHOR, 모든 대상=DISMISS."
+    )
+    @PatchMapping("/{reportId}/process")
+    public ResponseEntity<ApiResponse<ReportResponseDto>> processReport(
+            @Parameter(description = "신고 ID") @PathVariable Long reportId,
+            @Valid @RequestBody ReportProcessRequestDto request
+    ) {
+        Long adminId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                adminReportService.processReport(reportId, adminId, request)));
     }
 }

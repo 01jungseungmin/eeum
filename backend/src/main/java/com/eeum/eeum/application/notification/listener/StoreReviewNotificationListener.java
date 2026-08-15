@@ -4,6 +4,7 @@ import com.eeum.eeum.application.notification.dto.request.NotificationCreateRequ
 import com.eeum.eeum.application.notification.service.NotificationService;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
+import com.eeum.eeum.domain.store.event.StoreReviewAdminActionEvent;
 import com.eeum.eeum.domain.store.event.StoreReviewCreatedEvent;
 import com.eeum.eeum.domain.store.event.StoreReviewReplyCreatedEvent;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,22 @@ public class StoreReviewNotificationListener {
                 .refType(NotificationRefType.STORE_REVIEW)
                 .refId(event.reviewId())
                 .linkUrl("/stores/" + event.storeId() + "/reviews/" + event.reviewId())
+                .build());
+    }
+
+    // 관리자 조치 → 리뷰 작성자에게 필수 알림
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onAdminAction(StoreReviewAdminActionEvent event) {
+        notificationService.createNotification(NotificationCreateRequestDto.builder()
+                .accountId(event.targetAccountId())
+                .type(NotificationType.STORE_REVIEW_ADMIN_ACTION)
+                .title("관리자 조치 안내")
+                .content(String.format("회원님의 리뷰에 관리자 조치가 취해졌습니다. 조치: %s, 사유: %s",
+                        event.actionLabel(), event.adminNote()))
+                .refType(NotificationRefType.STORE_REVIEW)
+                .refId(event.reviewId())
+                .linkUrl(null)
                 .build());
     }
 }

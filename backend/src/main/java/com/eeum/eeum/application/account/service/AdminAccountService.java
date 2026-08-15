@@ -9,6 +9,7 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationListRespon
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
@@ -23,6 +24,7 @@ import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
+import com.eeum.eeum.domain.sanction.enums.SanctionAction;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -56,6 +58,7 @@ public class AdminAccountService {
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    private final SanctionHistoryService sanctionHistoryService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
@@ -102,8 +105,18 @@ public class AdminAccountService {
         if (target.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
+        // 잠금을 얻은 뒤 현재 상태를 확인한다. 이 검사가 없으면 동시 요청이 직렬화된 뒤에도
+        // 두 번째 요청이 SUSPEND 제재 이력을 한 건 더 남긴다.
+        if (target.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_SUSPENDED);
+        }
 
         target.suspend();
+        sanctionHistoryService.recordDirectAccountAction(
+                targetAccountId,
+                SanctionAction.SUSPEND,
+                adminId
+        );
 
         // DB 커밋 성공 후 Refresh Token 삭제
         eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
@@ -119,8 +132,18 @@ public class AdminAccountService {
         if (target.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
+        // 정지 해제는 정지 상태에서만 의미가 있다. 이 검사가 없으면 PENDING 계정에 해제를 호출했을 때
+        // Account.activate()가 status를 ACTIVE로 바꿔 가입 절차를 건너뛴 채 활성 계정이 된다.
+        if (!target.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_SUSPENDED);
+        }
 
         target.activate();
+        sanctionHistoryService.recordDirectAccountAction(
+                targetAccountId,
+                SanctionAction.ACTIVATE,
+                adminId
+        );
 
         log.info("회원 정지 해제: adminId={}, targetId={}", adminId, targetAccountId);
     }

@@ -48,6 +48,7 @@ class CommunityLikeServiceTest {
     @Mock private AccountRegionRepository accountRegionRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
 
+
     // ──────────────────── Helpers ────────────────────
 
     private Account createAccount(Long accountId, Long primaryRegionId) {
@@ -96,6 +97,20 @@ class CommunityLikeServiceTest {
                 .thenReturn(Optional.of(accountRegion));
     }
 
+    private void stubPostWriteLock(CommunityPost post) {
+        when(postRepository.findVisibleByPostIdForUpdate(post.getPostId()))
+                .thenReturn(Optional.of(post));
+    }
+
+    private void stubCommentWriteLocks(CommunityComment comment) {
+        CommunityPost post = comment.getPost();
+        when(commentRepository.findPostIdByCommentId(comment.getCommentId()))
+                .thenReturn(Optional.of(post.getPostId()));
+        stubPostWriteLock(post);
+        when(commentRepository.findWithAccountByCommentIdForUpdate(comment.getCommentId()))
+                .thenReturn(Optional.of(comment));
+    }
+
     // ──────────────────── likePost ────────────────────
 
     @Test
@@ -107,7 +122,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(false);
         when(postLikeRepository.saveAndFlush(any(CommunityPostLike.class)))
@@ -141,7 +156,7 @@ class CommunityLikeServiceTest {
         Account account = createAccount(accountId, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+        when(postRepository.findVisibleByPostIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> likeService.likePost(accountId, 999L))
@@ -160,7 +175,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, writer, 200L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
 
         // when & then
@@ -181,7 +196,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
 
         // when & then
         assertThatThrownBy(() -> likeService.likePost(accountId, postId))
@@ -199,7 +214,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(true);
 
@@ -221,7 +236,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(false);
         doThrow(new DataIntegrityViolationException("uk"))
@@ -246,6 +261,7 @@ class CommunityLikeServiceTest {
         CommunityPostLike like = CommunityPostLike.create(account, post);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPostWriteLock(post);
         when(postLikeRepository.findByAccount_AccountIdAndPost_PostId(accountId, postId))
                 .thenReturn(Optional.of(like));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
@@ -264,8 +280,10 @@ class CommunityLikeServiceTest {
         Long accountId = 1L;
         Long postId = 10L;
         Account account = createAccount(accountId, 100L);
+        CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPostWriteLock(post);
         when(postLikeRepository.findByAccount_AccountIdAndPost_PostId(accountId, postId))
                 .thenReturn(Optional.empty());
 
@@ -287,6 +305,7 @@ class CommunityLikeServiceTest {
         CommunityPostLike like = CommunityPostLike.create(account, post);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPostWriteLock(post);
         when(postLikeRepository.findByAccount_AccountIdAndPost_PostId(accountId, postId))
                 .thenReturn(Optional.of(like));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
@@ -312,7 +331,7 @@ class CommunityLikeServiceTest {
         CommunityComment comment = createComment(commentId, post, account);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        stubCommentWriteLocks(comment);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentLikeRepository.existsByAccount_AccountIdAndComment_CommentId(accountId, commentId)).thenReturn(false);
         when(commentLikeRepository.saveAndFlush(any(CommunityCommentLike.class)))
@@ -337,7 +356,7 @@ class CommunityLikeServiceTest {
         CommunityComment comment = createComment(commentId, post, writer);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        stubCommentWriteLocks(comment);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
 
         // when & then
@@ -357,7 +376,7 @@ class CommunityLikeServiceTest {
         CommunityComment comment = createComment(commentId, post, account);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        stubCommentWriteLocks(comment);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentLikeRepository.existsByAccount_AccountIdAndComment_CommentId(accountId, commentId)).thenReturn(true);
 
@@ -380,7 +399,7 @@ class CommunityLikeServiceTest {
         CommunityComment comment = createComment(commentId, post, account);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        stubCommentWriteLocks(comment);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(commentLikeRepository.existsByAccount_AccountIdAndComment_CommentId(accountId, commentId)).thenReturn(false);
         doThrow(new DataIntegrityViolationException("uk"))
@@ -400,7 +419,7 @@ class CommunityLikeServiceTest {
         Account account = createAccount(accountId, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(commentRepository.findById(999L)).thenReturn(Optional.empty());
+        when(commentRepository.findPostIdByCommentId(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> likeService.likeComment(accountId, 999L))
@@ -423,6 +442,7 @@ class CommunityLikeServiceTest {
         CommunityCommentLike like = CommunityCommentLike.create(account, comment);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubCommentWriteLocks(comment);
         when(commentLikeRepository.findByAccount_AccountIdAndComment_CommentId(accountId, commentId))
                 .thenReturn(Optional.of(like));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
@@ -441,8 +461,11 @@ class CommunityLikeServiceTest {
         Long accountId = 1L;
         Long commentId = 20L;
         Account account = createAccount(accountId, 100L);
+        CommunityPost post = createPost(10L, account, 100L);
+        CommunityComment comment = createComment(commentId, post, account);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubCommentWriteLocks(comment);
         when(commentLikeRepository.findByAccount_AccountIdAndComment_CommentId(accountId, commentId))
                 .thenReturn(Optional.empty());
 
@@ -464,7 +487,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, account, 100L); // 좋아요 누른 사람 == 게시글 작성자
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(false);
         when(postLikeRepository.saveAndFlush(any(CommunityPostLike.class)))
@@ -490,7 +513,7 @@ class CommunityLikeServiceTest {
         CommunityPost post = createPost(postId, author, 100L); // 좋아요 누른 사람 != 게시글 작성자
 
         when(accountRepository.findById(likerId)).thenReturn(Optional.of(liker));
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        stubPostWriteLock(post);
         stubVerifiedPrimaryRegion(likerId, 100L, liker, 100L);
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(likerId, postId)).thenReturn(false);
         when(postLikeRepository.saveAndFlush(any(CommunityPostLike.class)))
@@ -515,6 +538,7 @@ class CommunityLikeServiceTest {
         CommunityCommentLike like = CommunityCommentLike.create(account, comment);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubCommentWriteLocks(comment);
         when(commentLikeRepository.findByAccount_AccountIdAndComment_CommentId(accountId, commentId))
                 .thenReturn(Optional.of(like));
         stubVerifiedPrimaryRegion(accountId, 100L, account, 100L);

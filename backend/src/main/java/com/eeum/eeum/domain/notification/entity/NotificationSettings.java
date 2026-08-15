@@ -191,6 +191,7 @@ public class NotificationSettings extends BaseEntity {
             case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE -> communityEnabled;
             case COMMUNITY_ADMIN_ACTION                              -> true;
             case STORE_REVIEW, STORE_REVIEW_REPLY, STORE_PRODUCT_RESTOCK -> storeReviewEnabled;
+            case STORE_REVIEW_ADMIN_ACTION                              -> true;
             case USED_PRODUCT_INQUIRY, USED_REVIEW        -> usedProductEnabled;
             case STOCK_WARNING                            -> stockEnabled;
             case SETTLEMENT_COMPLETED                     -> settlementEnabled;
