@@ -25,6 +25,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,6 +71,8 @@ class AdminAccountSanctionHistoryTest {
         // Given
         Account account = mock(Account.class);
         when(account.isWithdrawn()).thenReturn(false);
+        // 정지 해제는 SUSPENDED 상태에서만 허용된다
+        when(account.isSuspended()).thenReturn(true);
         when(accountRepository.findByIdWithLock(10L)).thenReturn(Optional.of(account));
 
         // When
@@ -78,6 +82,46 @@ class AdminAccountSanctionHistoryTest {
         verify(account).activate();
         verify(sanctionHistoryService)
                 .recordDirectAccountAction(10L, SanctionAction.ACTIVATE, 1L);
+    }
+
+    @Test
+    void 이미_정지된_회원을_다시_정지하면_거부되고_제재_이력이_중복_기록되지_않는다() {
+        // Given
+        Account account = mock(Account.class);
+        when(account.isWithdrawn()).thenReturn(false);
+        when(account.isSuspended()).thenReturn(true);
+        when(accountRepository.findByIdWithLock(10L)).thenReturn(Optional.of(account));
+
+        // When & Then
+        assertThatThrownBy(() -> adminAccountService.suspendAccount(1L, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_ALREADY_SUSPENDED);
+
+        verify(account, never()).suspend();
+        verify(sanctionHistoryService, never())
+                .recordDirectAccountAction(anyLong(), any(SanctionAction.class), anyLong());
+    }
+
+    @Test
+    void 정지_상태가_아닌_회원의_해제는_거부되고_해제_이력이_기록되지_않는다() {
+        // Given: PENDING/ACTIVE 회원이 해제 대상으로 들어온 경우
+        Account account = mock(Account.class);
+        when(account.isWithdrawn()).thenReturn(false);
+        when(account.isSuspended()).thenReturn(false);
+        when(accountRepository.findByIdWithLock(10L)).thenReturn(Optional.of(account));
+
+        // When & Then
+        assertThatThrownBy(() -> adminAccountService.activateAccount(1L, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_NOT_SUSPENDED);
+
+        // Account.activate()는 status를 ACTIVE로 바꾸고 deletedAt까지 지우므로
+        // 호출되면 PENDING 회원이 가입 절차를 건너뛰고 활성화된다.
+        verify(account, never()).activate();
+        verify(sanctionHistoryService, never())
+                .recordDirectAccountAction(anyLong(), any(SanctionAction.class), anyLong());
     }
 
     @Test
