@@ -105,6 +105,11 @@ public class AdminAccountService {
         if (target.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
+        // 잠금을 얻은 뒤 현재 상태를 확인한다. 이 검사가 없으면 동시 요청이 직렬화된 뒤에도
+        // 두 번째 요청이 SUSPEND 제재 이력을 한 건 더 남긴다.
+        if (target.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_SUSPENDED);
+        }
 
         target.suspend();
         sanctionHistoryService.recordDirectAccountAction(
@@ -126,6 +131,11 @@ public class AdminAccountService {
 
         if (target.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
+        // 정지 해제는 정지 상태에서만 의미가 있다. 이 검사가 없으면 PENDING 계정에 해제를 호출했을 때
+        // Account.activate()가 status를 ACTIVE로 바꿔 가입 절차를 건너뛴 채 활성 계정이 된다.
+        if (!target.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_SUSPENDED);
         }
 
         target.activate();

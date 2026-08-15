@@ -226,6 +226,10 @@ public class Account extends BaseEntity {
         return this.status == AccountStatus.WITHDRAWN;
     }
 
+    public boolean isSuspended() {
+        return this.status == AccountStatus.SUSPENDED;
+    }
+
     public boolean isAdmin() {
         return this.role == AccountRole.ROLE_ADMIN;
     }

@@ -37,7 +37,8 @@ public class AccountReportActionExecutor implements ReportTargetActionExecutor {
                 actionTargetAccountId,
                 NotificationRefType.SYSTEM,
                 null,
-                actionLabel(action)
+                actionLabel(action),
+                adminNote
         ));
         return actionTargetAccountId;
     }

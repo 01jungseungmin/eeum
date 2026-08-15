@@ -246,6 +246,8 @@ class AdminAccountServiceTokenCleanupTest {
         Long targetId = 10L;
         Account target = mock(Account.class);
         when(target.isWithdrawn()).thenReturn(false);
+        // 정지 해제는 SUSPENDED 상태에서만 허용된다
+        when(target.isSuspended()).thenReturn(true);
         when(accountRepository.findByIdWithLock(targetId)).thenReturn(Optional.of(target));
 
         // when
