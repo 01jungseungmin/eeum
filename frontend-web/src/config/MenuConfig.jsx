@@ -18,6 +18,7 @@ import {
   FolderTree,
   UserCheck,
   Settings,
+  Sparkles,
   LogOut,
 } from 'lucide-react';
 
@@ -61,6 +62,18 @@ export const OWNER_MENU_CONFIG = [
         path: '/events',
         icon: <Tag {...iconProps} />,
         subtitle: '특가 및 시간 제한 이벤트 상품을 관리하세요',
+      },
+    ],
+  },
+  {
+    group: 'AI 매니저',
+    items: [
+      {
+        id: 'ai-manager',
+        name: 'AI 매니저',
+        path: '/ai-manager',
+        icon: <Sparkles {...iconProps} />,
+        subtitle: 'AI가 정리한 오늘의 할 일을 확인하세요',
       },
     ],
   },
