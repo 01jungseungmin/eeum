@@ -15,263 +15,9 @@ import {
   ACTION_OPTIONS,
 } from '../../../constants/reportConstants';
 
-const ReportDetailPage = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-
-  const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [status, setStatus] = useState('');
-  const [adminNote, setAdminNote] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  useEffect(() => {
-    const fetchDetail = async () => {
-      setLoading(true);
-      try {
-        const res = await reportApi.getReportDetail(id);
-        const data = res.data || res;
-        if (data.success) {
-          setReport(data.data);
-          setStatus('');
-          setAdminNote(data.data.adminNote || '');
-        }
-      } catch (error) {
-        console.error('신고 상세 조회 실패:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) fetchDetail();
-  }, [id]);
-
-  // 신고 조치 저장
-  const handleSubmit = async () => {
-    if (!status) {
-      alert('처리 조치를 선택해주세요.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      let res;
-
-      // '신고 기각'인 경우 /dismiss 호출, 그 외(숨김, 삭제, 경고, 정지 등)는 /review 호출
-      if (status === 'DISMISS' || status === 'DISMISSED') {
-        res = await reportApi.dismissReport(id, adminNote);
-      } else {
-        res = await reportApi.reviewReport(id, adminNote);
-      }
-
-      const responseData = res.data || res;
-      if (responseData.success) {
-        alert('신고 처리가 성공적으로 완료되었습니다.');
-        navigate('/admin/reports');
-      } else {
-        alert(responseData.message || '처리에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error('신고 처리 실패:', error);
-      alert('처리에 실패했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  if (loading) {
-    return <LoadingWrapper>상세 정보를 불러오는 중입니다...</LoadingWrapper>;
-  }
-
-  if (!report) {
-    return (
-      <EmptyWrapper>
-        <p>해당 신고 정보를 찾을 수 없습니다.</p>
-        <Button onClick={() => navigate(-1)}>목록으로 돌아가기</Button>
-      </EmptyWrapper>
-    );
-  }
-
-  return (
-    <Container>
-      <HeaderNav>
-        <BackButton onClick={() => navigate(-1)}>
-          <ArrowLeft size={20} />
-        </BackButton>
-        <div>
-          <h1>신고 상세 및 조치</h1>
-          <p>신고 ID #{report.reportId}</p>
-        </div>
-      </HeaderNav>
-
-      <DetailGrid>
-        <LeftSection>
-          <SectionCard>
-            <CardHeader>
-              <h2>신고 내역</h2>
-              <StatusBadge $status={report.status}>
-                {STATUS_MAP[report.status] || report.status}
-              </StatusBadge>
-            </CardHeader>
-
-            <InfoGrid>
-              <InfoGroup>
-                <label>신고 대상 유형</label>
-                <div className="bold">
-                  {TARGET_TYPE_MAP[report.targetType] || report.targetType}
-                </div>
-              </InfoGroup>
-              <InfoGroup>
-                <label>신고 사유</label>
-                <div className="bold">
-                  {REASON_MAP[report.reason] || report.reason}
-                </div>
-              </InfoGroup>
-              <InfoGroup>
-                <label>접수 일시</label>
-                <div>{formatDate(report.createdAt)}</div>
-              </InfoGroup>
-              <InfoGroup>
-                <label>최종 수정 일시</label>
-                <div>{formatDate(report.updatedAt)}</div>
-              </InfoGroup>
-            </InfoGrid>
-
-            <ContentGroup>
-              <label>신고 상세 내용</label>
-              <ContentBox>
-                {report.content || '작성된 내용이 없습니다.'}
-              </ContentBox>
-            </ContentGroup>
-          </SectionCard>
-
-          <SectionCard>
-            <h2>조치 및 메모 입력</h2>
-
-            <FormGroup>
-              <label>처리 상태 선택</label>
-              <CustomSelectContainer>
-                <SelectHeader
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                >
-                  <SelectText $hasValue={!!status}>
-                    {ACTION_OPTIONS.find((opt) => opt.value === status)
-                      ?.label || '조치를 선택하세요'}
-                  </SelectText>
-                  <ChevronDown
-                    size={18}
-                    color="#6B7280"
-                  />
-                </SelectHeader>
-
-                {isDropdownOpen && (
-                  <SelectList>
-                    {ACTION_OPTIONS.map((opt) => (
-                      <SelectItem
-                        key={opt.value}
-                        $isSelected={status === opt.value}
-                        onClick={() => {
-                          setStatus(opt.value);
-                          setIsDropdownOpen(false);
-                        }}
-                      >
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectList>
-                )}
-              </CustomSelectContainer>
-            </FormGroup>
-
-            <FormGroup>
-              <label>관리자 메모</label>
-              <AlertNotice>
-                <AlertTriangle
-                  size={16}
-                  color="#D97706"
-                />
-                <span>처리 사유 및 조치 내역을 상세히 남겨주세요.</span>
-              </AlertNotice>
-              <TextArea
-                placeholder="처리 관련 관리자 메모를 입력하세요..."
-                value={adminNote}
-                onChange={(e) => setAdminNote(e.target.value)}
-              />
-            </FormGroup>
-
-            <ButtonGroup>
-              <Button
-                type="button"
-                onClick={() => navigate(-1)}
-              >
-                취소
-              </Button>
-              <Button
-                $primary
-                type="button"
-                disabled={isSubmitting}
-                onClick={handleSubmit}
-              >
-                <CheckCircle2 size={16} />
-                {isSubmitting ? '저장 중...' : '저장하기'}
-              </Button>
-            </ButtonGroup>
-          </SectionCard>
-        </LeftSection>
-
-        <RightSection>
-          <SectionCard>
-            <h2>신고자 정보</h2>
-            <SideRow>
-              <span>신고자 ID</span>
-              <strong>#{report.reporterId}</strong>
-            </SideRow>
-            <SideRow>
-              <span>신고자 이름</span>
-              <strong>{report.reporterName}</strong>
-            </SideRow>
-          </SectionCard>
-
-          <SectionCard>
-            <h2>신고 대상 정보</h2>
-            <SideRow>
-              <span>대상 ID</span>
-              <strong>#{report.targetId}</strong>
-            </SideRow>
-            <SideRow>
-              <span>대상 유형</span>
-              <strong>
-                {TARGET_TYPE_MAP[report.targetType] || report.targetType}
-              </strong>
-            </SideRow>
-          </SectionCard>
-        </RightSection>
-      </DetailGrid>
-    </Container>
-  );
-};
-
-export default ReportDetailPage;
-
-// --- STYLED COMPONENTS ---
-
 const Container = styled.div`
-  max-width: 1100px;
   margin: 0 auto;
-  padding: 8px 0;
+  padding: 32px;
 `;
 
 const LoadingWrapper = styled.div`
@@ -557,3 +303,254 @@ const SideRow = styled.div`
     color: #111827;
   }
 `;
+
+const ReportDetailPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [status, setStatus] = useState('');
+  const [adminNote, setAdminNote] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchDetail = async () => {
+      setLoading(true);
+      try {
+        const res = await reportApi.getReportDetail(id);
+        const data = res.data || res;
+        if (data.success) {
+          setReport(data.data);
+          setStatus('');
+          setAdminNote(data.data.adminNote || '');
+        }
+      } catch (error) {
+        console.error('신고 상세 조회 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) fetchDetail();
+  }, [id]);
+
+  // 신고 조치 저장
+  const handleSubmit = async () => {
+    if (!status) {
+      alert('처리 조치를 선택해주세요.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let res;
+
+      // '신고 기각'인 경우 /dismiss 호출, 그 외(숨김, 삭제, 경고, 정지 등)는 /review 호출
+      if (status === 'DISMISS' || status === 'DISMISSED') {
+        res = await reportApi.dismissReport(id, adminNote);
+      } else {
+        res = await reportApi.reviewReport(id, adminNote);
+      }
+
+      const responseData = res.data || res;
+      if (responseData.success) {
+        alert('신고 처리가 성공적으로 완료되었습니다.');
+        navigate('/admin/reports');
+      } else {
+        alert(responseData.message || '처리에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('신고 처리 실패:', error);
+      alert('처리에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  if (loading) {
+    return <LoadingWrapper>상세 정보를 불러오는 중입니다...</LoadingWrapper>;
+  }
+
+  if (!report) {
+    return (
+      <EmptyWrapper>
+        <p>해당 신고 정보를 찾을 수 없습니다.</p>
+        <Button onClick={() => navigate(-1)}>목록으로 돌아가기</Button>
+      </EmptyWrapper>
+    );
+  }
+
+  return (
+    <Container>
+      <HeaderNav>
+        <BackButton onClick={() => navigate(-1)}>
+          <ArrowLeft size={20} />
+        </BackButton>
+        <div>
+          <h1>신고 상세 및 조치</h1>
+          <p>신고 ID #{report.reportId}</p>
+        </div>
+      </HeaderNav>
+
+      <DetailGrid>
+        <LeftSection>
+          <SectionCard>
+            <CardHeader>
+              <h2>신고 내역</h2>
+              <StatusBadge $status={report.status}>
+                {STATUS_MAP[report.status] || report.status}
+              </StatusBadge>
+            </CardHeader>
+
+            <InfoGrid>
+              <InfoGroup>
+                <label>신고 대상 유형</label>
+                <div className="bold">
+                  {TARGET_TYPE_MAP[report.targetType] || report.targetType}
+                </div>
+              </InfoGroup>
+              <InfoGroup>
+                <label>신고 사유</label>
+                <div className="bold">
+                  {REASON_MAP[report.reason] || report.reason}
+                </div>
+              </InfoGroup>
+              <InfoGroup>
+                <label>접수 일시</label>
+                <div>{formatDate(report.createdAt)}</div>
+              </InfoGroup>
+              <InfoGroup>
+                <label>최종 수정 일시</label>
+                <div>{formatDate(report.updatedAt)}</div>
+              </InfoGroup>
+            </InfoGrid>
+
+            <ContentGroup>
+              <label>신고 상세 내용</label>
+              <ContentBox>
+                {report.content || '작성된 내용이 없습니다.'}
+              </ContentBox>
+            </ContentGroup>
+          </SectionCard>
+
+          <SectionCard>
+            <h2>조치 및 메모 입력</h2>
+
+            <FormGroup>
+              <label>처리 상태 선택</label>
+              <CustomSelectContainer>
+                <SelectHeader
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                >
+                  <SelectText $hasValue={!!status}>
+                    {ACTION_OPTIONS.find((opt) => opt.value === status)
+                      ?.label || '조치를 선택하세요'}
+                  </SelectText>
+                  <ChevronDown
+                    size={18}
+                    color="#6B7280"
+                  />
+                </SelectHeader>
+
+                {isDropdownOpen && (
+                  <SelectList>
+                    {ACTION_OPTIONS.map((opt) => (
+                      <SelectItem
+                        key={opt.value}
+                        $isSelected={status === opt.value}
+                        onClick={() => {
+                          setStatus(opt.value);
+                          setIsDropdownOpen(false);
+                        }}
+                      >
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                )}
+              </CustomSelectContainer>
+            </FormGroup>
+
+            <FormGroup>
+              <label>관리자 메모</label>
+              <AlertNotice>
+                <AlertTriangle
+                  size={16}
+                  color="#D97706"
+                />
+                <span>처리 사유 및 조치 내역을 상세히 남겨주세요.</span>
+              </AlertNotice>
+              <TextArea
+                placeholder="처리 관련 관리자 메모를 입력하세요..."
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+              />
+            </FormGroup>
+
+            <ButtonGroup>
+              <Button
+                type="button"
+                onClick={() => navigate(-1)}
+              >
+                취소
+              </Button>
+              <Button
+                $primary
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit}
+              >
+                <CheckCircle2 size={16} />
+                {isSubmitting ? '저장 중...' : '저장하기'}
+              </Button>
+            </ButtonGroup>
+          </SectionCard>
+        </LeftSection>
+
+        <RightSection>
+          <SectionCard>
+            <h2>신고자 정보</h2>
+            <SideRow>
+              <span>신고자 ID</span>
+              <strong>#{report.reporterId}</strong>
+            </SideRow>
+            <SideRow>
+              <span>신고자 이름</span>
+              <strong>{report.reporterName}</strong>
+            </SideRow>
+          </SectionCard>
+
+          <SectionCard>
+            <h2>신고 대상 정보</h2>
+            <SideRow>
+              <span>대상 ID</span>
+              <strong>#{report.targetId}</strong>
+            </SideRow>
+            <SideRow>
+              <span>대상 유형</span>
+              <strong>
+                {TARGET_TYPE_MAP[report.targetType] || report.targetType}
+              </strong>
+            </SideRow>
+          </SectionCard>
+        </RightSection>
+      </DetailGrid>
+    </Container>
+  );
+};
+
+export default ReportDetailPage;

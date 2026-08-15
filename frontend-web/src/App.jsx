@@ -25,6 +25,8 @@ import OwnerReportManagementPage from './pages/owner/main/ReportManagementPage';
 import AdminReportManagementPage from './pages/admin/main/ReportManagementPage';
 import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
+import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
+import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
@@ -121,6 +123,14 @@ function App() {
         <Route
           path="/admin/reports/:id"
           element={<AdminReportDetailPage />}
+        />
+        <Route
+          path="/admin/inquiry"
+          element={<AdminInquiryManagementPage />}
+        />
+        <Route
+          path="/admin/inquiry/:id"
+          element={<AdminInquiryDetailPage />}
         />
 
         {/* 심사 중에도 접근 허용을 위해 보호막 외부에 배치 */}

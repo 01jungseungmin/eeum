@@ -5,9 +5,8 @@ import ReportList from '../../../components/admin/report/ReportList';
 import { reportApi } from '../../../api/admin/reportApi';
 
 const Container = styled.div`
-  max-width: 1100px;
   margin: 0 auto;
-  padding: 8px 0;
+  padding: 32px;
 `;
 
 const ReportManagementPage = () => {
