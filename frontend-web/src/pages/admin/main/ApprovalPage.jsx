@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Clock, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
 import ApprovalListContainer from '../../../components/admin/approval/ApprovalListContainer';
-import axios from 'axios';
+import { approvalApi } from '../../../api/admin/approvalApi';
 
 const PageWrapper = styled.div`
   padding: 30px;
@@ -94,38 +94,28 @@ const SummaryCard = styled.div`
   }
 `;
 
-function AdminApprovalPage() {
+function ApprovalPage() {
   const [approvalData, setApprovalData] = useState([]);
 
-  const fetchApplications = () => {
-    const token =
-      localStorage.getItem('accessToken') ||
-      sessionStorage.getItem('accessToken');
+  // 신청 목록 불러오기
+  const fetchApplications = async () => {
+    try {
+      const response = await approvalApi.getApplications();
 
-    axios
-      .get('http://localhost:8080/admin/accounts/owners/applications', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
-      .then((response) => {
-        // 백엔드 응답 구조(success 여부 등)에 맞춰 안전하게 체크
-        if (response.data?.success && response.data?.data?.content) {
-          setApprovalData(response.data.data.content);
-        } else if (response.data?.data?.content) {
-          // 혹시 success 필드가 없는 구조일 경우를 대비한 예비 로직
-          setApprovalData(response.data.data.content);
-        }
-      })
-      .catch((error) => {
-        console.error('데이터 로드 실패:', error);
-        const statusCode = error.response?.status;
-        if (statusCode === 401 || statusCode === 403) {
-          alert(
-            '목록을 불러올 권한이 없습니다. 관리자 계정으로 다시 로그인해 주세요.',
-          );
-        }
-      });
+      if (response.data?.success && response.data?.data?.content) {
+        setApprovalData(response.data.data.content);
+      } else if (response.data?.data?.content) {
+        setApprovalData(response.data.data.content);
+      }
+    } catch (error) {
+      console.error('데이터 로드 실패:', error);
+      const statusCode = error.response?.status;
+      if (statusCode === 401 || statusCode === 403) {
+        alert(
+          '목록을 불러올 권한이 없습니다. 관리자 계정으로 다시 로그인해 주세요.',
+        );
+      }
+    }
   };
 
   useEffect(() => {
@@ -146,22 +136,9 @@ function AdminApprovalPage() {
     if (!confirmApprove) return;
 
     try {
-      // 저장소에서 토큰 꺼내오기 (관리자 권환인지 확인)
-      const token =
-        localStorage.getItem('accessToken') ||
-        sessionStorage.getItem('accessToken');
+      const response = await approvalApi.approveOwner(targetId);
 
-      const response = await axios.patch(
-        `http://localhost:8080/admin/accounts/owners/${targetId}/approve`,
-        {}, // PATCH나 POST 요청 시 보낼 바디가 없다면 빈 객체{}로 명시적으로 전달
-        {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '', // 토큰이 존재할 때만 Bearer 형태로 주입
-          },
-        },
-      );
-
-      if (response.data.success) {
+      if (response.data?.success) {
         alert(`${account.name} 사장님의 가입이 승인되었습니다.`);
         fetchApplications();
       }
@@ -191,32 +168,16 @@ function AdminApprovalPage() {
       `${account.name} 사장님의 가입을 거부하는 사유를 입력해주세요:`,
     );
 
-    // 취소 버튼을 누른 경우
-    if (userInputReason === null) return;
-
+    if (userInputReason === null) return; // 취소 클릭
     if (userInputReason.trim() === '') {
       alert('거부 사유를 반드시 입력해야 합니다.');
       return;
     }
 
     try {
-      // 저장소에서 토큰 꺼내오기 (관리자 권환인지 확인)
-      const token =
-        localStorage.getItem('accessToken') ||
-        sessionStorage.getItem('accessToken');
+      const response = await approvalApi.rejectOwner(targetId, userInputReason);
 
-      // 관리자 권환으로만 접근 가능한 API 엔드포인트에 PATCH 요청 보내기
-      const response = await axios.patch(
-        `http://localhost:8080/admin/accounts/owners/${targetId}/reject`,
-        { reason: userInputReason },
-        {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        },
-      );
-
-      if (response.data.success) {
+      if (response.data?.success) {
         alert(`${account.name} 사장님의 가입 신청이 거절되었습니다.`);
         fetchApplications(); // 목록 새로고침
       }
@@ -254,7 +215,7 @@ function AdminApprovalPage() {
           $subColor="#faad14"
         >
           <div className="info">
-            <span>대기 대기</span>
+            <span>승인 대기</span>
             <h2>12</h2>
             <p>평균 대기 4시간</p>
           </div>
@@ -318,4 +279,4 @@ function AdminApprovalPage() {
   );
 }
 
-export default AdminApprovalPage;
+export default ApprovalPage;

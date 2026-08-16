@@ -67,30 +67,41 @@ const ListWrapper = styled.div`
   gap: 14px;
 `;
 
-function AdminApprovalListContainer({ listData, onApprove, onReject }) {
+function ApprovalListContainer({ listData, onApprove, onReject }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [selectedId, setSelectedId] = useState(null);
 
-  const safeList = listData || [];
+  const safeList = Array.isArray(listData) ? listData : [];
 
   const handleSearchSubmit = () => {
     setSubmittedKeyword(keyword);
   };
 
-  // 검색어 필터링 로직
-  const filteredList = safeList.filter(
-    (account) =>
-      account.name?.toLowerCase().includes(submittedKeyword.toLowerCase()) ||
-      account.email?.toLowerCase().includes(submittedKeyword.toLowerCase()) ||
-      account.nickname?.toLowerCase().includes(submittedKeyword.toLowerCase()),
-  );
+  // 검색어 필터링 로직 (소문자 변환 및 방어 코드)
+  const filteredList = safeList.filter((account) => {
+    const searchTarget = submittedKeyword.toLowerCase().trim();
+    if (!searchTarget) return true; // 검색어가 비어 있으면 전체 출력
+
+    const name = account?.name?.toLowerCase() || '';
+    const email = account?.email?.toLowerCase() || '';
+    const nickname = account?.nickname?.toLowerCase() || '';
+
+    return (
+      name.includes(searchTarget) ||
+      email.includes(searchTarget) ||
+      nickname.includes(searchTarget)
+    );
+  });
 
   return (
     <SectionContainer>
       <FilterBar>
         <div className="search-wrapper">
-          <Search className="search-icon" size={16} />
+          <Search
+            className="search-icon"
+            size={16}
+          />
           <input
             type="text"
             placeholder="신청자명, 닉네임, 이메일로 검색"
@@ -101,7 +112,10 @@ function AdminApprovalListContainer({ listData, onApprove, onReject }) {
             }}
           />
         </div>
-        <button className="btn-search" onClick={handleSearchSubmit}>
+        <button
+          className="btn-search"
+          onClick={handleSearchSubmit}
+        >
           검색
         </button>
       </FilterBar>
@@ -119,20 +133,28 @@ function AdminApprovalListContainer({ listData, onApprove, onReject }) {
             가입 승인 대기 내역이 존재하지 않습니다.
           </div>
         ) : (
-          filteredList.map((account) => (
-            <ApprovalItem
-              key={account.ownerInfo?.ownerInfoId}
-              account={account}
-              isSelected={selectedId === account.ownerInfo?.ownerInfoId}
-              onSelect={() => setSelectedId(account.ownerInfo?.ownerInfoId)}
-              onApprove={onApprove}
-              onReject={onReject}
-            />
-          ))
+          filteredList.map((account, index) => {
+            const itemKey =
+              account?.ownerInfo?.ownerInfoId ||
+              account?.id ||
+              account?.accountId ||
+              `approval-item-${index}`;
+
+            return (
+              <ApprovalItem
+                key={itemKey}
+                account={account}
+                isSelected={selectedId === itemKey}
+                onSelect={() => setSelectedId(itemKey)}
+                onApprove={onApprove}
+                onReject={onReject}
+              />
+            );
+          })
         )}
       </ListWrapper>
     </SectionContainer>
   );
 }
 
-export default AdminApprovalListContainer;
+export default ApprovalListContainer;

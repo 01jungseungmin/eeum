@@ -68,14 +68,6 @@ const ApprovalRowItem = styled.div`
         background: #1f3f2f;
       }
     }
-    .btn-hold {
-      background: white;
-      color: #595959;
-      border-color: #d9d9d9;
-      &:hover {
-        background: #f5f5f5;
-      }
-    }
     .btn-reject {
       background: white;
       color: #ff4d4f;
@@ -107,10 +99,37 @@ const StatusBadge = styled.span`
 `;
 
 function ApprovalItem({ account, isSelected, onApprove, onReject }) {
-  const navigate = useNavigate(); // 🔥 내비게이트 함수 선언
+  const navigate = useNavigate();
 
-  const { ownerInfo, nickname, name, email } = account;
-  const ownerInfoId = ownerInfo?.ownerInfoId; // 🔥 라우팅에 사용할 고유 ID 추출
+  // 실제 전달되는 백엔드 데이터 필드 직접 추출
+  const {
+    ownerInfoId,
+    accountId,
+    storeName,
+    ownerName,
+    email,
+    phone,
+    createdAt,
+    reviewRequestedAt,
+    approvalStatus,
+    // 호환용 fallback
+    ownerInfo,
+    name,
+    nickname,
+  } = account || {};
+
+  // 바인딩 데이터 정리
+  const displayStoreName =
+    storeName || nickname || ownerInfo?.storeName || '상점명 없음';
+  const displayOwnerName = ownerName || name || ownerInfo?.ownerName || '-';
+  const displayPhone = phone || ownerInfo?.phone || '-';
+  const displayStatus =
+    approvalStatus || ownerInfo?.approvalStatus || 'PENDING';
+  const displayCreatedDate =
+    createdAt || reviewRequestedAt || ownerInfo?.createdAt;
+
+  // 상세 이동용 ID
+  const targetId = ownerInfoId || accountId || ownerInfo?.ownerInfoId;
 
   const statusMap = {
     PENDING: '대기중',
@@ -118,47 +137,49 @@ function ApprovalItem({ account, isSelected, onApprove, onReject }) {
     APPROVED: '승인완료',
   };
 
-  // 날짜 포맷터 함수
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '-';
     return `${date.getFullYear()}년 ${String(date.getMonth() + 1).padStart(2, '0')}월 ${String(date.getDate()).padStart(2, '0')}일`;
   };
 
   const handleItemClick = () => {
-    if (!ownerInfoId) {
+    if (!targetId) {
       alert('유효한 신청 ID를 찾을 수 없습니다.');
       return;
     }
-
-    navigate(`/admin/approval/${ownerInfoId}`);
+    navigate(`/admin/approval/${targetId}`);
   };
 
   return (
-    <ApprovalRowItem $isSelected={isSelected} onClick={handleItemClick}>
+    <ApprovalRowItem
+      $isSelected={isSelected}
+      onClick={handleItemClick}
+    >
       <div className="store-info-zone">
         <div className="title-row">
-          <h3>{nickname || '상점명 없음'}</h3>
-          <StatusBadge $status={ownerInfo?.approvalStatus}>
-            {statusMap[ownerInfo?.approvalStatus] || '알 수 없음'}
+          <h3>{displayStoreName}</h3>
+          <StatusBadge $status={displayStatus}>
+            {statusMap[displayStatus] || '대기중'}
           </StatusBadge>
         </div>
         <div className="details-row">
           <span>
             <strong>대표자명:</strong>
-            {name}
+            {displayOwnerName}
           </span>
           <span>
             <strong>이메일:</strong>
-            {email}
+            {email || '-'}
           </span>
           <span>
             <strong>연락처:</strong>
-            {ownerInfo?.phone || '-'}
+            {displayPhone}
           </span>
           <span>
             <strong>신청일:</strong>
-            {formatDate(ownerInfo?.createdAt)}
+            {formatDate(displayCreatedDate)}
           </span>
         </div>
       </div>

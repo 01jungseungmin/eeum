@@ -58,11 +58,11 @@ const TabButton = styled.button`
   font-weight: ${(props) => (props.$active ? '700' : '500')};
 `;
 
-// ⭐️ 부모 컨테이너 크기 지정
 const ChartContainer = styled.div`
   width: 100%;
   height: 200px;
   position: relative;
+  min-width: 0; /* CSS Grid 크기 계산 오류 방지 */
 `;
 
 const mockData = [
@@ -102,7 +102,12 @@ function AdminUserChart() {
       </CardHeader>
 
       <ChartContainer>
-        <ResponsiveContainer width="100%" height="100%" aspect={2}>
+        {/* 2. minWidth={0} 추가 및 height를 숫자로 직접 지정 */}
+        <ResponsiveContainer
+          width="100%"
+          height={200}
+          minWidth={0}
+        >
           <BarChart
             data={mockData}
             margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
