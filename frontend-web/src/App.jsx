@@ -27,6 +27,7 @@ import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
+import AiManagerPage from './pages/owner/main/AiManagerPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
@@ -192,6 +193,10 @@ function App() {
           <Route
             path="/notifications"
             element={<NotificationPage />}
+          />
+          <Route
+            path="/ai-manager"
+            element={<AiManagerPage />}
           />
         </Route>
       </Route>
