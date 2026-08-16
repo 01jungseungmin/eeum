@@ -27,6 +27,7 @@ import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
+import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
 import AiManagerPage from './pages/owner/main/AiManagerPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
@@ -138,6 +139,10 @@ function App() {
         <Route
           path="/approval-status"
           element={<ApprovalStatus />}
+        />
+        <Route
+          path="/admin/categories"
+          element={<AdminCategoryManagementPage />}
         />
 
         {/* 최종 입점 승인(APPROVED)이 완료된 사장님만 탐색 허용 */}
