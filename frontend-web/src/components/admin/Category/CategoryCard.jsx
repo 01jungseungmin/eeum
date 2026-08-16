@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Plus, SquarePen, Trash2 } from 'lucide-react';
+import { Plus, SquarePen, Trash2, GripVertical } from 'lucide-react';
 
-// --- Styled Components ---
 const Card = styled.div`
   background: #ffffff;
   border-radius: 16px;
@@ -50,7 +49,6 @@ const ItemList = styled.div`
   gap: 10px;
 `;
 
-// 1. $isSelected 적용
 const ItemRow = styled.div`
   display: flex;
   justify-content: space-between;
@@ -60,13 +58,38 @@ const ItemRow = styled.div`
   border: 1px solid
     ${({ $isSelected }) => ($isSelected ? '#00b074' : '#f1f5f9')};
   border-radius: 12px;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
+  opacity: ${({ $isDragging }) => ($isDragging ? 0.4 : 1)};
+
+  &:hover {
+    border-color: #cbd5e1;
+  }
 `;
 
 const ItemLeft = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
+`;
+
+const DragHandle = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  cursor: grab;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #64748b;
+    background-color: #f1f5f9;
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
 `;
 
 const ItemNumber = styled.span`
@@ -102,7 +125,6 @@ const Count = styled.span`
   margin-right: 4px;
 `;
 
-// 2. $danger 적용
 const IconButton = styled.button`
   background: none;
   border: none;
@@ -119,7 +141,6 @@ const IconButton = styled.button`
   }
 `;
 
-// 3. $active 적용
 const ToggleContainer = styled.div`
   width: 44px;
   height: 24px;
@@ -132,7 +153,6 @@ const ToggleContainer = styled.div`
   transition: background-color 0.2s;
 `;
 
-// 4. $active 적용
 const ToggleHandle = styled.div`
   width: 20px;
   height: 20px;
@@ -144,40 +164,91 @@ const ToggleHandle = styled.div`
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 `;
 
-// --- Component ---
-export default function CategoryCard({ title, items, onToggle }) {
+export default function CategoryCard({
+  title,
+  items = [],
+  onToggle,
+  onEdit,
+  onDelete,
+  onAdd,
+  onReorder,
+}) {
+  const [draggedIdx, setDraggedIdx] = useState(null);
+
+  const handleDragStart = (e, index) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIndex) return;
+    onReorder && onReorder(draggedIdx, targetIndex);
+    setDraggedIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <AddButton>
+        <AddButton onClick={onAdd}>
           <Plus size={14} />
           추가
         </AddButton>
       </CardHeader>
       <ItemList>
-        {items.map((item) => (
+        {items.map((item, index) => (
           <ItemRow
             key={item.id}
             $isSelected={!!item.isSelected}
+            $isDragging={draggedIdx === index}
+            draggable={!!onReorder}
+            onDragStart={(e) => handleDragStart(e, index)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, index)}
+            onDragEnd={handleDragEnd}
           >
             <ItemLeft>
+              {/* 📌 드래그용 점 아이콘 (드래그 지원하는 카테고리만) */}
+              {onReorder && (
+                <DragHandle title="드래그하여 순서 변경">
+                  <GripVertical size={16} />
+                </DragHandle>
+              )}
               <ItemNumber>#{item.id}</ItemNumber>
               <ItemName>{item.name}</ItemName>
               {item.isHot && <HotBadge>HOT</HotBadge>}
             </ItemLeft>
             <ItemRight>
               <Count>{item.count}</Count>
+
+              {/* 활성화 토글 */}
               <ToggleContainer
                 $active={!!item.active}
-                onClick={() => onToggle(item.id)}
+                onClick={() => onToggle && onToggle(item.id)}
               >
                 <ToggleHandle $active={!!item.active} />
               </ToggleContainer>
-              <IconButton>
+
+              {/* 수정 버튼 */}
+              <IconButton onClick={() => onEdit && onEdit(item)}>
                 <SquarePen size={16} />
               </IconButton>
-              <IconButton $danger>
+
+              {/* 삭제 버튼 */}
+              <IconButton
+                $danger
+                onClick={() => onDelete && onDelete(item.id)}
+              >
                 <Trash2 size={16} />
               </IconButton>
             </ItemRight>

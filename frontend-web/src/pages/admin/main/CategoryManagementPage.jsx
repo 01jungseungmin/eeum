@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import CategoryCard from '../../../components/admin/category/CategoryCard';
 import AutoFilterSection from '../../../components/admin/category/AutoFilterSection';
+import CategoryModal from '../../../components/admin/category/CategoryModal';
+import { adminCategoryApi } from '../../../api/admin/CategoryApi';
 
 const Container = styled.div`
   width: 100%;
@@ -24,74 +26,253 @@ const CardGrid = styled.div`
   }
 `;
 
-// --- 초기 데이터 ---
-const initialCategories = {
-  store: [
-    { id: 1, name: '음식점', count: '1,842건', active: true },
-    { id: 2, name: '카페/디저트', count: '963건', active: true },
-    { id: 3, name: '편의시설', count: '745건', active: true },
-  ],
-  board: [
-    { id: 1, name: '공구/기획', count: '1,643건', active: true, isHot: true },
-    { id: 2, name: '맛집', count: '965건', active: true },
-    { id: 3, name: '일반', count: '2,104건', active: true },
-  ],
-  market: [
-    { id: 1, name: '전자기기', count: '234건', active: true },
-    { id: 2, name: '가구/인테리어', count: '189건', active: true },
-    {
-      id: 3,
-      name: '의류/잡화',
-      count: '456건',
-      active: true,
-      isSelected: true,
-    },
-  ],
-  report: [
-    { id: 1, name: '사기/허위정보', count: '283건', active: true, isHot: true },
-    { id: 2, name: '욕설/비방', count: '432건', active: true },
-    { id: 3, name: '스팸/광고', count: '1,063건', active: true },
-  ],
-};
+const initialReportCategories = [
+  { id: 1, name: '사기/허위정보', count: '283건', active: true, isHot: true },
+  { id: 2, name: '욕설/비방', count: '432건', active: true },
+  { id: 3, name: '스팸/광고', count: '1,063건', active: true },
+];
 
 export default function CategoryManagementPage() {
-  const [categories, setCategories] = useState(initialCategories);
+  const [storeCategories, setStoreCategories] = useState([]);
+  const [boardCategories, setBoardCategories] = useState([]);
+  const [marketCategories, setMarketCategories] = useState([]);
+  const [reportCategories, setReportCategories] = useState(
+    initialReportCategories,
+  );
 
-  const handleToggle = (section, id) => {
-    setCategories((prev) => ({
-      ...prev,
-      [section]: prev[section].map((item) =>
-        item.id === id ? { ...item, active: !item.active } : item,
-      ),
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    mode: 'ADD',
+    type: null,
+    targetCategory: null,
+  });
+
+  const mapCategoryData = (dataList = []) => {
+    return dataList.map((item) => ({
+      id: item.categoryId,
+      name: item.name,
+      type: item.type,
+      parentId: item.parentId,
+      displayOrder: item.displayOrder,
+      count: '-',
+      active: item.active,
     }));
+  };
+
+  const fetchAllCategories = async () => {
+    try {
+      const [storeRes, boardRes, marketRes] = await Promise.all([
+        adminCategoryApi.getCategories('STORE'),
+        adminCategoryApi.getCategories('COMMUNITY'),
+        adminCategoryApi.getCategories('USED'),
+      ]);
+
+      if (storeRes.data?.success)
+        setStoreCategories(mapCategoryData(storeRes.data.data));
+      if (boardRes.data?.success)
+        setBoardCategories(mapCategoryData(boardRes.data.data));
+      if (marketRes.data?.success)
+        setMarketCategories(mapCategoryData(marketRes.data.data));
+    } catch (error) {
+      console.error('카테고리 목록 불러오기 실패:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllCategories();
+  }, []);
+
+  // 📌 드래그 앤 드롭 순서 변경 핸들러
+  const handleReorder = async (type, fromIndex, toIndex) => {
+    let targetList = [];
+    if (type === 'STORE') targetList = [...storeCategories];
+    if (type === 'COMMUNITY') targetList = [...boardCategories];
+    if (type === 'USED') targetList = [...marketCategories];
+
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= targetList.length)
+      return;
+
+    // 리스트 위치 이동
+    const updatedList = [...targetList];
+    const [movedItem] = updatedList.splice(fromIndex, 1);
+    updatedList.splice(toIndex, 0, movedItem);
+
+    // 변경된 순서의 ID 배열 생성
+    const categoryIds = updatedList.map((item) => item.id);
+
+    const payload = {
+      type: type,
+      parentId: null,
+      categoryIds: categoryIds,
+    };
+
+    try {
+      const res = await adminCategoryApi.updateCategoryOrder(payload);
+      if (res.data?.success) {
+        fetchAllCategories();
+      }
+    } catch (error) {
+      console.error('순서 변경 실패:', error);
+      alert('순서 변경 실패했습니다.');
+    }
+  };
+
+  const handleOpenAddModal = (type) => {
+    setModalState({ isOpen: true, mode: 'ADD', type, targetCategory: null });
+  };
+
+  const handleOpenEditModal = (item) => {
+    setModalState({
+      isOpen: true,
+      mode: 'EDIT',
+      type: null,
+      targetCategory: item,
+    });
+  };
+
+  const handleCloseModal = () => {
+    setModalState({
+      isOpen: false,
+      mode: 'ADD',
+      type: null,
+      targetCategory: null,
+    });
+  };
+
+  const handleModalSubmit = async (name) => {
+    try {
+      if (modalState.mode === 'ADD') {
+        let currentLength = 0;
+        if (modalState.type === 'STORE') currentLength = storeCategories.length;
+        if (modalState.type === 'COMMUNITY')
+          currentLength = boardCategories.length;
+        if (modalState.type === 'USED') currentLength = marketCategories.length;
+
+        const payload = {
+          type: modalState.type,
+          parentId: null,
+          name: name,
+          displayOrder: currentLength,
+        };
+
+        const res = await adminCategoryApi.createCategory(payload);
+        if (res.data?.success) fetchAllCategories();
+      } else if (modalState.mode === 'EDIT') {
+        const target = modalState.targetCategory;
+        const payload = {
+          type: target.type,
+          parentId: target.parentId || null,
+          name: name,
+          displayOrder: target.displayOrder || 0,
+        };
+
+        const res = await adminCategoryApi.updateCategory(target.id, payload);
+        if (res.data?.success) fetchAllCategories();
+      }
+      handleCloseModal();
+    } catch (error) {
+      console.error('카테고리 저장 실패:', error);
+      alert(
+        error.response?.data?.message || '요청 처리 중 오류가 발생했습니다.',
+      );
+    }
+  };
+
+  const handleToggle = async (categoryId, currentActive) => {
+    try {
+      if (currentActive) {
+        await adminCategoryApi.deactivateCategory(categoryId);
+      } else {
+        await adminCategoryApi.activateCategory(categoryId);
+      }
+      fetchAllCategories();
+    } catch (error) {
+      console.error('상태 변경 실패:', error);
+    }
+  };
+
+  const handleDelete = async (categoryId) => {
+    if (!window.confirm('해당 카테고리를 삭제하시겠습니까?')) return;
+    try {
+      await adminCategoryApi.deleteCategory(categoryId);
+      fetchAllCategories();
+    } catch (error) {
+      console.error('카테고리 삭제 실패:', error);
+    }
   };
 
   return (
     <Container>
       <CardGrid>
+        {/* 1. 가게 카테고리 */}
         <CategoryCard
           title="가게 카테고리"
-          items={categories.store}
-          onToggle={(id) => handleToggle('store', id)}
+          items={storeCategories}
+          onToggle={(id) => {
+            const item = storeCategories.find((c) => c.id === id);
+            if (item) handleToggle(id, item.active);
+          }}
+          onEdit={handleOpenEditModal}
+          onDelete={handleDelete}
+          onAdd={() => handleOpenAddModal('STORE')}
+          onReorder={(fromIdx, toIdx) => handleReorder('STORE', fromIdx, toIdx)}
         />
+
+        {/* 2. 커뮤니티 게시판 */}
         <CategoryCard
           title="커뮤니티 게시판"
-          items={categories.board}
-          onToggle={(id) => handleToggle('board', id)}
+          items={boardCategories}
+          onToggle={(id) => {
+            const item = boardCategories.find((c) => c.id === id);
+            if (item) handleToggle(id, item.active);
+          }}
+          onEdit={handleOpenEditModal}
+          onDelete={handleDelete}
+          onAdd={() => handleOpenAddModal('COMMUNITY')}
+          onReorder={(fromIdx, toIdx) =>
+            handleReorder('COMMUNITY', fromIdx, toIdx)
+          }
         />
+
+        {/* 3. 중고거래 카테고리 */}
         <CategoryCard
           title="중고거래 카테고리"
-          items={categories.market}
-          onToggle={(id) => handleToggle('market', id)}
+          items={marketCategories}
+          onToggle={(id) => {
+            const item = marketCategories.find((c) => c.id === id);
+            if (item) handleToggle(id, item.active);
+          }}
+          onEdit={handleOpenEditModal}
+          onDelete={handleDelete}
+          onAdd={() => handleOpenAddModal('USED')}
+          onReorder={(fromIdx, toIdx) => handleReorder('USED', fromIdx, toIdx)}
         />
+
+        {/* 4. 신고 사유 */}
         <CategoryCard
           title="신고 사유"
-          items={categories.report}
-          onToggle={(id) => handleToggle('report', id)}
+          items={reportCategories}
+          onToggle={(id) => {
+            setReportCategories((prev) =>
+              prev.map((item) =>
+                item.id === id ? { ...item, active: !item.active } : item,
+              ),
+            );
+          }}
         />
       </CardGrid>
 
       <AutoFilterSection />
+
+      <CategoryModal
+        isOpen={modalState.isOpen}
+        mode={modalState.mode}
+        initialValue={
+          modalState.targetCategory ? modalState.targetCategory.name : ''
+        }
+        onClose={handleCloseModal}
+        onSubmit={handleModalSubmit}
+      />
     </Container>
   );
 }
