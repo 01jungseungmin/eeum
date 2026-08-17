@@ -78,6 +78,12 @@ public class AdminInquiryService {
         if (!inquiry.isAnswerable()) {
             throw new ConflictException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
         }
+        // 재오픈된 문의는 상태가 PENDING으로 돌아가지만 기존 답변은 그대로 남아 있다.
+        // 답변은 문의당 1건이므로(uk_inquiry_answer_inquiry_id) 여기서 막지 않으면
+        // DB 제약 위반이 그대로 새어 나간다. 정정이 필요하면 updateAnswer를 쓴다.
+        if (inquiryAnswerRepository.existsByInquiry_InquiryId(inquiryId)) {
+            throw new ConflictException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+        }
 
         Account admin = accountRepository.findById(adminId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
@@ -103,6 +109,9 @@ public class AdminInquiryService {
      *
      * <p>수정 시각은 BaseEntity가 자동 갱신하며, 응답 DTO의 {@code edited} 플래그로 노출된다.
      * 알림은 재발송하지 않는다 — 오타 정정마다 푸시가 나가면 알림 피로를 부른다.
+     *
+     * <p>종료된 문의의 답변도 정정할 수 있다 — 이미 사용자에게 노출된 잘못된 안내를 바로잡는 일은
+     * 문의를 다시 여는 것과 무관하다. 새 답변을 다는 것만 종료 상태에서 막힌다.
      */
     @Transactional
     public InquiryAnswerResponseDto updateAnswer(
