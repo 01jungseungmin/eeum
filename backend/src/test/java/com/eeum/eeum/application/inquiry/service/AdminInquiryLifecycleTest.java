@@ -119,7 +119,39 @@ class AdminInquiryLifecycleTest {
                 .isEqualTo(ErrorCode.INQUIRY_CLOSED);
     }
 
+    @Test
+    void 재오픈된_문의에_답변이_남아있으면_재답변_대신_수정을_요구한다() {
+        // given — 답변까지 끝난 뒤 종료됐다가 재오픈되어 상태만 PENDING으로 돌아온 문의
+        Inquiry inquiry = adminInquiry(InquiryStatus.PENDING);
+        when(inquiryRepository.findByInquiryId(INQUIRY_ID)).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.existsByInquiry_InquiryId(INQUIRY_ID)).thenReturn(true);
+
+        // when & then — DB 유니크 제약이 아니라 비즈니스 에러로 걸러야 한다
+        assertThatThrownBy(() -> adminInquiryService.answerInquiry(
+                99L, INQUIRY_ID, answerRequest("두 번째 답변")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+    }
+
     // ─────────────────── 답변 수정 ───────────────────
+
+    @Test
+    void 종료된_문의의_답변도_정정할_수_있다() {
+        // given — 종료는 새 답변만 막고, 이미 나간 잘못된 안내의 정정은 막지 않는다
+        Inquiry inquiry = adminInquiry(InquiryStatus.CLOSED);
+        InquiryAnswer answer = adminAnswer(inquiry, "잘못된 안내");
+        when(inquiryRepository.findByInquiryId(INQUIRY_ID)).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.findById(ANSWER_ID)).thenReturn(Optional.of(answer));
+
+        // when
+        InquiryAnswerResponseDto result =
+                adminInquiryService.updateAnswer(INQUIRY_ID, ANSWER_ID, answerRequest("바로잡은 안내"));
+
+        // then
+        assertThat(result.getContent()).isEqualTo("바로잡은 안내");
+        assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.CLOSED);
+    }
 
     @Test
     void 관리자_답변을_수정하면_본문이_바뀐다() {
