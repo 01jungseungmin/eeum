@@ -5,6 +5,7 @@ import com.eeum.eeum.application.order.dto.request.PaymentWebhookRequestDto;
 import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.PaymentResponseDto;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.config.PortOneProperties;
@@ -16,6 +17,7 @@ import com.eeum.eeum.domain.order.enums.RefundStatus;
 import com.eeum.eeum.domain.order.event.OrderPaidEvent;
 import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.exception.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -49,6 +51,7 @@ public class PaymentService {
     private final PortOnePaymentClient portOnePaymentClient;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final OperationFailureRecorder operationFailureRecorder;
     private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
@@ -67,6 +70,11 @@ public class PaymentService {
     public void handleWebhook(String rawBody, String signature) {
         if (rawBody == null || rawBody.isBlank()) {
             log.warn("빈 Webhook body 수신");
+            operationFailureRecorder.record(
+                    OperationFailureCategory.PAYMENT_WEBHOOK,
+                    "PaymentService.handleWebhook",
+                    null, null,
+                    "WEBHOOK_EMPTY_BODY", "Webhook body가 비어 있음", null);
             return;
         }
 
@@ -83,6 +91,11 @@ public class PaymentService {
 
         if (request.getPaymentId() == null || request.getPaymentId().isBlank()) {
             log.warn("paymentId 없는 Webhook 수신");
+            operationFailureRecorder.record(
+                    OperationFailureCategory.PAYMENT_WEBHOOK,
+                    "PaymentService.handleWebhook",
+                    null, null,
+                    "WEBHOOK_NO_PAYMENT_ID", "Webhook에 paymentId가 없음", maskWebhookBody(rawBody));
             return;
         }
 
@@ -123,8 +136,20 @@ public class PaymentService {
                 ? payment.getRefundReason()
                 : "고객 요청 취소";
 
-        // PortOne 취소 API 호출
-        portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(), reason);
+        // PortOne 취소 API 호출 — 실패하면 결제는 PAID로 남으므로 반드시 이력을 남긴다.
+        // 이 기록이 없으면 "환불이 왜 안 됐는지"를 서버 로그에서만 찾아야 한다.
+        try {
+            portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(), reason);
+        } catch (RuntimeException e) {
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND,
+                    "PaymentService.cancelPayment",
+                    "PAYMENT", String.valueOf(payment.getPaymentId()),
+                    e,
+                    "portonePaymentId=" + payment.getPortonePaymentId()
+                            + ", amount=" + payment.getAmount());
+            throw e;
+        }
 
         payment.cancel();
 
@@ -236,10 +261,12 @@ public class PaymentService {
         String secret = portOneProperties.webhookSecret();
         if (!StringUtils.hasText(secret)) {
             log.error("PortOne Webhook Secret이 설정되지 않았습니다.");
+            recordWebhookSignatureFailure("Webhook Secret 미설정", null);
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
 
         if (!StringUtils.hasText(signature)) {
+            recordWebhookSignatureFailure("요청에 서명 헤더가 없음", rawBody);
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
 
@@ -371,11 +398,36 @@ public class PaymentService {
         return value;
     }
 
+    private void recordWebhookSignatureFailure(String message, String rawBody) {
+        operationFailureRecorder.record(
+                OperationFailureCategory.PAYMENT_WEBHOOK,
+                "PaymentService.validateWebhookSignature",
+                null, null,
+                ErrorCode.PAYMENT_WEBHOOK_INVALID.name(), message,
+                maskWebhookBody(rawBody));
+    }
+
+    // 실패 이력은 관리자 화면에 그대로 노출되므로 원문을 통째로 넣지 않는다.
+    // 재현에 필요한 앞부분만 남기고 자른다.
+    private String maskWebhookBody(String rawBody) {
+        if (rawBody == null) {
+            return null;
+        }
+        int limit = Math.min(rawBody.length(), 500);
+        return rawBody.substring(0, limit);
+    }
+
     private PaymentWebhookRequestDto parseWebhookBody(String rawBody) {
         try {
             return objectMapper.readValue(rawBody, PaymentWebhookRequestDto.class);
         } catch (JsonProcessingException e) {
             log.warn("Webhook body 파싱 실패: rawBody={}", rawBody);
+            operationFailureRecorder.record(
+                    OperationFailureCategory.PAYMENT_WEBHOOK,
+                    "PaymentService.parseWebhookBody",
+                    null, null,
+                    ErrorCode.PAYMENT_VERIFY_FAILED.name(), e.getOriginalMessage(),
+                    maskWebhookBody(rawBody));
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
     }

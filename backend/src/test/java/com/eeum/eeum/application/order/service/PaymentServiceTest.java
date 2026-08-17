@@ -53,6 +53,7 @@ class PaymentServiceTest {
     @Mock private PortOnePaymentClient portOnePaymentClient;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
+    @Mock private com.eeum.eeum.application.operation.service.OperationFailureRecorder operationFailureRecorder;
 
     @BeforeEach
     void setUp() {
@@ -66,6 +67,7 @@ class PaymentServiceTest {
                 portOnePaymentClient,
                 new ObjectMapper(),
                 eventPublisher,
+                operationFailureRecorder,
                 aiPlanSubscriptionService
         );
     }

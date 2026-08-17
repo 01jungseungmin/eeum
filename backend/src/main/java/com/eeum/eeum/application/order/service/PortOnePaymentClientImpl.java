@@ -2,7 +2,9 @@ package com.eeum.eeum.application.order.service;
 
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentResponse;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.config.PortOneProperties;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import java.util.Map;
 public class PortOnePaymentClientImpl implements PortOnePaymentClient {
 
     private final PortOneProperties portOneProperties;
+    private final OperationFailureRecorder operationFailureRecorder;
 
     @Override
     public PortOnePaymentInfo getPayment(String paymentId) {
@@ -49,6 +52,11 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
 
         } catch (RestClientException e) {
             log.error("PortOne 결제 조회 실패: paymentId={}", paymentId, e);
+            operationFailureRecorder.record(
+                    OperationFailureCategory.EXTERNAL_API,
+                    "PortOnePaymentClient.getPayment",
+                    "PAYMENT", paymentId,
+                    e, null);
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
     }
@@ -70,6 +78,11 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
 
         } catch (RestClientException e) {
             log.error("PortOne 결제 취소 실패: paymentId={}", paymentId, e);
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND,
+                    "PortOnePaymentClient.cancelPayment",
+                    "PAYMENT", paymentId,
+                    e, "amount=" + amount + ", reason=" + reason);
             throw new BusinessException(ErrorCode.PAYMENT_REFUND_FAILED);
         }
     }
