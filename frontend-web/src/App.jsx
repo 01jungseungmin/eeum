@@ -29,6 +29,7 @@ import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AiManagerPage from './pages/owner/main/AiManagerPage';
 import AiMessagePage from './pages/owner/main/AiMessagePage';
+import AiCustomerCarePage from './pages/owner/main/AiCustomerCarePage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
@@ -198,6 +199,10 @@ function App() {
           <Route
             path="/ai-manager"
             element={<AiManagerPage />}
+          />
+          <Route
+            path="/ai-manager/customer-care"
+            element={<AiCustomerCarePage />}
           />
           <Route
             path="/ai-manager/messages"
