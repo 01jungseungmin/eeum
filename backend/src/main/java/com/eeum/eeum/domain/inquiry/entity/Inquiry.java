@@ -81,11 +81,31 @@ public class Inquiry extends BaseEntity {
         this.status = InquiryStatus.ANSWERED;
     }
 
+    /**
+     * 관리자가 문의를 강제 종료한다. 스팸이거나 답변이 불필요한 문의를 목록에서 걷어내는 용도다.
+     * 종료된 문의는 {@link #isAnswerable()}이 false가 되어 답변이 달리지 않는다.
+     */
+    public void close() {
+        this.status = InquiryStatus.CLOSED;
+    }
+
+    /**
+     * 종료된 문의를 다시 연다. 재오픈은 "답변이 다시 필요하다"는 뜻이므로
+     * 기존 답변 유무와 무관하게 PENDING으로 되돌린다 — 그래야 미답변 필터에 다시 잡힌다.
+     */
+    public void reopen() {
+        this.status = InquiryStatus.PENDING;
+    }
+
     public boolean isOwnedBy(Long accountId) {
         return this.writer.getAccountId().equals(accountId);
     }
 
     public boolean isAnswerable() {
         return this.status == InquiryStatus.PENDING;
+    }
+
+    public boolean isClosed() {
+        return this.status == InquiryStatus.CLOSED;
     }
 }

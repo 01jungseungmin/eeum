@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
+public interface InquiryRepository extends JpaRepository<Inquiry, Long>, InquiryRepositoryCustom {
 
     @EntityGraph(attributePaths = {"writer", "store"})
     Page<Inquiry> findByWriter_AccountId(Long accountId, Pageable pageable);

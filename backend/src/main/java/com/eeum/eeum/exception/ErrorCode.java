@@ -233,6 +233,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     INQUIRY_TARGET_TYPE_MISMATCH("INQUIRY_006", "해당 문의 유형에 대한 답변 권한이 없습니다", HttpStatus.FORBIDDEN),
     INQUIRY_ANSWER_NOT_FOUND("INQUIRY_007", "존재하지 않는 답변입니다", HttpStatus.NOT_FOUND),
     INQUIRY_STORE_NOT_ALLOWED("INQUIRY_008", "관리자 문의에는 storeId를 포함할 수 없습니다", HttpStatus.BAD_REQUEST),
+    INQUIRY_ALREADY_CLOSED("INQUIRY_009", "이미 종료된 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_NOT_CLOSED("INQUIRY_010", "종료 상태가 아닌 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_CLOSED("INQUIRY_011", "종료된 문의에는 답변할 수 없습니다", HttpStatus.CONFLICT),
 
     // ===================== 신고 (REPORT) =====================
     REPORT_NOT_FOUND("REPORT_001", "존재하지 않는 신고입니다.", HttpStatus.NOT_FOUND),
