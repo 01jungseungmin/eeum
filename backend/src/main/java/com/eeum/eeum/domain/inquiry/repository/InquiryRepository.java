@@ -36,4 +36,7 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long>, Inquiry
 
     // AI 매니저 — 최근 기간 문의 조회 (안전 키워드 감지용, 상태 무관)
     List<Inquiry> findByStore_StoreIdAndCreatedAtAfter(Long storeId, LocalDateTime after);
+
+    // 대시보드 요약 — 미답변 관리자 문의 건수
+    long countByTargetTypeAndStatus(InquiryTargetType targetType, InquiryStatus status);
 }

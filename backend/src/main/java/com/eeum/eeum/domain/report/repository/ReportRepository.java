@@ -39,4 +39,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             ReportTargetType targetType,
             Long targetId
     );
+
+    // 대시보드 요약 — 미처리(PENDING) 신고 건수
+    long countByStatus(ReportStatus status);
 }
