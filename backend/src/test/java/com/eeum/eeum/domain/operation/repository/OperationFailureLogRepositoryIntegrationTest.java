@@ -9,11 +9,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -21,6 +22,7 @@ import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +64,14 @@ class OperationFailureLogRepositoryIntegrationTest {
     }
 
     private final OperationFailureLogRepository repository;
+
+    // createdAt은 updatable = false다. JPA 경로로는 과거 시각을 심을 수 없어 SQL로 직접 갱신한다.
+    private final JdbcTemplate jdbcTemplate;
+
+    // deleteOlderThan은 @Modifying 벌크 쿼리라 활성 트랜잭션이 필요하다.
+    // 운영에서는 OperationFailureLogCleanupScheduler의 @Transactional이 그 역할을 하므로
+    // 테스트도 같은 방식으로 트랜잭션을 열어 호출한다.
+    private final TransactionTemplate transactionTemplate;
 
     @BeforeEach
     void setUp() {
@@ -149,7 +159,8 @@ class OperationFailureLogRepositoryIntegrationTest {
         backdate(old, LocalDateTime.now().minusMonths(4));
         save(OperationFailureCategory.REFUND, "recent", "RECENT");
 
-        int deleted = repository.deleteOlderThan(LocalDateTime.now().minusMonths(3));
+        LocalDateTime threshold = LocalDateTime.now().minusMonths(3);
+        int deleted = transactionTemplate.execute(status -> repository.deleteOlderThan(threshold));
 
         assertThat(deleted).isEqualTo(1);
         assertThat(repository.findAll()).hasSize(1);
@@ -164,9 +175,17 @@ class OperationFailureLogRepositoryIntegrationTest {
                 category, operation, "PAYMENT", "1", errorCode, "메시지", "payload"));
     }
 
-    // createdAt은 JPA Auditing이 채우므로 과거 시각 검증에는 직접 갱신이 필요하다.
+    /**
+     * createdAt을 과거로 옮긴다.
+     *
+     * <p>BaseEntity의 createdAt은 {@code updatable = false}라 엔티티 필드를 고쳐 저장해도
+     * Hibernate가 UPDATE 문에서 그 컬럼을 빼버린다 — 그래서 SQL로 직접 갱신한다.
+     * 조회 검증이 뒤따르므로 영속성 컨텍스트에 남은 낡은 값도 함께 비운다.
+     */
     private void backdate(OperationFailureLog log, LocalDateTime createdAt) {
-        ReflectionTestUtils.setField(log, "createdAt", createdAt);
-        repository.saveAndFlush(log);
+        int updated = jdbcTemplate.update(
+                "update operation_failure_log set created_at = ? where operation_failure_log_id = ?",
+                Timestamp.valueOf(createdAt), log.getOperationFailureLogId());
+        assertThat(updated).isEqualTo(1);
     }
 }
