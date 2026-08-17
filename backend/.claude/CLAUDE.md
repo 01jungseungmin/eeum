@@ -96,6 +96,7 @@ Soft Delete (deletedAt 필드) 적용 대상:
 - `Account` — 탈퇴 후 30일 유예, `AccountCleanupScheduler`가 처리
 - `ChatMessage`
 - `Category`
+- `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
 
 그 외 엔티티는 Hard Delete (즉시 물리 삭제)
 
@@ -109,6 +110,14 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 ### 멱등성 처리
 - PortOne Webhook: Redis + DB Unique 제약으로 중복 처리 방지
 - ChatRoom 생성: 동일 참여자 조합으로 중복 생성 방지
+
+### 결제·정산 검토 게이트
+- 결제, 환불, 취소, 수익 원장, 정산, PortOne 변경 및 전체 리뷰는
+  `.claude/skills/references/payment-settlement.md`를 반드시 읽고 적용한다.
+- 외부 API 요청·응답·Webhook·상태 enum은 리뷰 시점의 공식 문서와 다시 대조한다.
+- PortOne Mock 단위 테스트만으로 계약 검증을 완료했다고 판단하지 않는다.
+- 계약 변경은 실제 PortOne 호출 대신 공식 fixture와 로컬 HTTP Stub을 사용한 계약 테스트를 추가한다.
+- 사용자가 "결제·정산 전체 리뷰"를 요청하면 Git diff로 범위를 축소하지 않는다.
 
 ### 페이징 선택 기준
 - 무한 스크롤 (모바일 앱): `Slice<T>`
@@ -197,3 +206,8 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - PR 베이스 브랜치는 `develop` (`main` 직접 머지 금지)
 - 브랜치 네이밍: `feature/{기능명}` (예: `feature/chat`, `feature/notification`)
 - 커밋 메시지: `feat:`, `fix:`, `refactor:` prefix + 한글 설명
+
+## 마무리
+
+- 모든 기능이 종료된 후 바뀐 부분에 대한 설명과 이유를 작성해서 정리
+- 테스트면 테스트로 기능이면 기능으로 묶어서 출력
