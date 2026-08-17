@@ -19,6 +19,7 @@ import {
   UserCheck,
   Settings,
   Sparkles,
+  MessageSquareText,
   LogOut,
 } from 'lucide-react';
 
@@ -74,6 +75,13 @@ export const OWNER_MENU_CONFIG = [
         path: '/ai-manager',
         icon: <Sparkles {...iconProps} />,
         subtitle: 'AI가 정리한 오늘의 할 일을 확인하세요',
+      },
+      {
+        id: 'ai-messages',
+        name: 'AI 생성 메시지',
+        path: '/ai-manager/messages',
+        icon: <MessageSquareText {...iconProps} />,
+        subtitle: 'AI가 만든 초안을 검토하고 발송하세요',
       },
     ],
   },
