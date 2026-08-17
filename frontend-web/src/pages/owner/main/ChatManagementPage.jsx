@@ -351,7 +351,7 @@ const LeaveButton = styled.button`
 `;
 
 export default function ShopChatManagement() {
-  const roomKey = localStorage.getItem('storeChatRoom_id');
+  const roomKey = sessionStorage.getItem('storeChatRoom_id');
   const ROOM_ID = parseInt(roomKey, 10);
   const navigate = useNavigate();
 
@@ -540,8 +540,8 @@ export default function ShopChatManagement() {
       await chatApi.closeRoom(ROOM_ID);
       alert('채팅방에서 나갔습니다.');
 
-      localStorage.setItem('storeChatRoomCreated', 'false');
-      localStorage.removeItem('storeChatRoom_id');
+      sessionStorage.setItem('storeChatRoomCreated', 'false');
+      sessionStorage.removeItem('storeChatRoom_id');
 
       navigate('/inquiry');
       window.location.reload();
