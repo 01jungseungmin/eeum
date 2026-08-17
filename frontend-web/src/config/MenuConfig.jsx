@@ -243,6 +243,7 @@ export const ADMIN_MENU_CONFIG = [
         id: 'admin-categories',
         name: '카테고리',
         path: '/admin/categories',
+        subtitle: '가게, 게시판, 중고거래, 신고사유 카테고리를 관리합니다.',
         icon: <FolderTree {...iconProps} />,
       },
       {
