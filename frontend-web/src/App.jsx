@@ -28,6 +28,8 @@ import NotificationPage from './pages/owner/main/NotificationPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
+import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
+import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AiManagerPage from './pages/owner/main/AiManagerPage';
 import AiMessagePage from './pages/owner/main/AiMessagePage';
 
@@ -135,15 +137,23 @@ function App() {
           path="/admin/inquiry/:id"
           element={<AdminInquiryDetailPage />}
         />
+        <Route
+          path="/admin/categories"
+          element={<AdminCategoryManagementPage />}
+        />
+        <Route
+          path="/admin/posts"
+          element={<AdminPostManagementPage />}
+        />
+        <Route
+          path="/admin/posts/:id"
+          element={<AdminPostDetailPage />}
+        />
 
         {/* 심사 중에도 접근 허용을 위해 보호막 외부에 배치 */}
         <Route
           path="/approval-status"
           element={<ApprovalStatus />}
-        />
-        <Route
-          path="/admin/categories"
-          element={<AdminCategoryManagementPage />}
         />
 
         {/* 최종 입점 승인(APPROVED)이 완료된 사장님만 탐색 허용 */}
