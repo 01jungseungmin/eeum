@@ -37,7 +37,7 @@ import { approvalApi } from './api/owner/ApprovalApi';
 // 루트 경로("/")에서 유저 상태에 맞춰 대시보드 또는 심사창으로 스위칭해주는 지능형 컴포넌트
 function InitialRedirect() {
   const [targetPath, setTargetPath] = useState(null);
-  const role = localStorage.getItem('role');
+  const role = sessionStorage.getItem('role');
 
   useEffect(() => {
     if (role === 'ROLE_ADMIN') {

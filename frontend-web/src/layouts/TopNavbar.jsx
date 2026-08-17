@@ -104,7 +104,7 @@ function TopNavbar() {
   const { pathname } = useLocation();
 
   const userRole = useMemo(() => {
-    return localStorage.getItem('role') || 'ROLE_OWNER';
+    return sessionStorage.getItem('role') || 'ROLE_OWNER';
   }, []);
 
   // 유저 권한과 라우터 경로를 기반으로 매칭되는 메뉴 객체 색인
@@ -136,12 +136,21 @@ function TopNavbar() {
 
       <RightSection>
         <SearchBar>
-          <Search size={18} color="#bbb" />
-          <input type="text" placeholder="검색..." />
+          <Search
+            size={18}
+            color="#bbb"
+          />
+          <input
+            type="text"
+            placeholder="검색..."
+          />
         </SearchBar>
 
         <IconBadge>
-          <Bell size={22} color="#666" />
+          <Bell
+            size={22}
+            color="#666"
+          />
           <span className="badge">8</span>
         </IconBadge>
 
@@ -153,7 +162,10 @@ function TopNavbar() {
               {userRole === 'ROLE_USER' ? '사장 회원' : '플랫폼 관리자'}
             </div>
           </div>
-          <ChevronDown size={16} color="#bbb" />
+          <ChevronDown
+            size={16}
+            color="#bbb"
+          />
         </ProfileBox>
       </RightSection>
     </NavContainer>

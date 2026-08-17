@@ -126,7 +126,7 @@ function Sidebar({ approvalStatus }) {
   const location = useLocation();
   const { logout } = useAuth();
 
-  const role = localStorage.getItem('role');
+  const role = sessionStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
 
   // 알림 수량 실시간 상태
@@ -192,7 +192,8 @@ function Sidebar({ approvalStatus }) {
   // 메뉴 클릭 핸들러
   const handleMenuClick = async (e, item) => {
     if (item.path === '/chat') {
-      const isCreated = localStorage.getItem('storeChatRoomCreated') === 'true';
+      const isCreated =
+        sessionStorage.getItem('storeChatRoomCreated') === 'true';
 
       if (!isCreated) {
         e.preventDefault();
@@ -226,7 +227,7 @@ function Sidebar({ approvalStatus }) {
 
     if (item.action === 'LOGOUT') {
       const refreshToken = localStorage.getItem('refreshToken');
-      const currentRole = localStorage.getItem('role');
+      const currentRole = sessionStorage.getItem('role');
       const targetPath =
         currentRole === 'ROLE_ADMIN' ? '/admin/login' : '/login';
 
