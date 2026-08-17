@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { ChevronDown } from 'lucide-react';
 
 const FilterWrapper = styled.div`
   background: white;
@@ -38,18 +37,8 @@ const SearchRow = styled.div`
     font-size: 14px;
     cursor: pointer;
     outline: none;
-  }
-
-  .btn-filter {
-    padding: 0 20px;
-    background: white;
-    border: 1px solid #d9d9d9;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    &:hover {
-      background: #f5f5f5;
+    &:focus {
+      border-color: #2d5a43;
     }
   }
 `;
@@ -95,10 +84,23 @@ function MemberFilterBar({
   onApplyFilter,
 }) {
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [keyword, setKeyword] = useState('');
 
-  const handleFilterSubmit = () => {
+  // 검색어 변경 시 즉시 상위 컴포넌트로 전달
+  const handleKeywordChange = (e) => {
+    const nextKeyword = e.target.value;
+    setKeyword(nextKeyword);
     if (onApplyFilter) {
-      onApplyFilter(statusFilter);
+      onApplyFilter({ status: statusFilter, keyword: nextKeyword });
+    }
+  };
+
+  // 상태 변경 시 즉시 상위 컴포넌트로 전달
+  const handleStatusChange = (e) => {
+    const nextStatus = e.target.value;
+    setStatusFilter(nextStatus);
+    if (onApplyFilter) {
+      onApplyFilter({ status: nextStatus, keyword });
     }
   };
 
@@ -109,26 +111,24 @@ function MemberFilterBar({
           className="search-input"
           type="text"
           placeholder="이름, 이메일, 전화번호로 검색"
+          value={keyword}
+          onChange={handleKeywordChange}
         />
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={handleStatusChange}
         >
           <option value="ALL">전체 상태</option>
           <option value="ACTIVE">활성</option>
           <option value="SUSPENDED">정지</option>
         </select>
-
-        <button className="btn-filter" onClick={handleFilterSubmit}>
-          필터 적용
-        </button>
       </SearchRow>
 
       {selectedCount > 0 && (
         <ActionRow>
           <span className="selected-count">{selectedCount}명 선택됨</span>
           <div className="action-buttons">
-            <button onClick={onBulkSuspend}>일결 정지</button>
+            <button onClick={onBulkSuspend}>일괄 정지</button>
             <button onClick={onBulkActivate}>일괄 해제</button>
           </div>
         </ActionRow>

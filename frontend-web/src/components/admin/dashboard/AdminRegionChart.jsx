@@ -43,6 +43,7 @@ const ChartContainer = styled.div`
   width: 100%;
   height: 200px;
   position: relative;
+  min-width: 0; /* CSS Grid 크기 계산 오류 방지 */
 `;
 
 const chartData = [
@@ -65,13 +66,21 @@ function AdminRegionChart() {
       </Header>
 
       <ChartContainer>
-        <ResponsiveContainer width="100%" height="100%" aspect={2}>
+        {/* 2. minWidth={0} 추가 및 height를 숫자로 직접 지정 */}
+        <ResponsiveContainer
+          width="100%"
+          height={200}
+          minWidth={0}
+        >
           <BarChart
             layout="vertical"
             data={chartData}
             margin={{ top: 0, right: 10, left: 10, bottom: 0 }}
           >
-            <XAxis type="number" hide />
+            <XAxis
+              type="number"
+              hide
+            />
             <YAxis
               dataKey="name"
               type="category"

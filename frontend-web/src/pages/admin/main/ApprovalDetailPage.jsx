@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import styled from 'styled-components';
-import { ArrowLeft, FileText, Image as ImageIcon, Check } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import ApprovalProfileCard from '../../../components/admin/approval/ApprovalProfileCard';
 import ApprovalDetailPanel from '../../../components/admin/approval/ApprovalDetailPanel';
+import { approvalApi } from '../../../api/admin/approvalApi'; // 경로에 맞게 수정
 
 const DetailContainer = styled.div`
-  padding: 30px; /* AdminApprovalPage와 동일한 패딩값 매칭 */
+  padding: 30px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -70,17 +70,9 @@ function ApprovalDetailPage() {
     const fetchDetailData = async () => {
       try {
         setIsLoading(true);
-        const token =
-          localStorage.getItem('accessToken') ||
-          sessionStorage.getItem('accessToken');
-        const response = await axios.get(
-          `http://localhost:8080/admin/accounts/owners/${id}`,
-          {
-            headers: { Authorization: token ? `Bearer ${token}` : '' },
-          },
-        );
+        const response = await approvalApi.getOwnerDetail(id);
 
-        if (response.data?.success && response.data?.data) {
+        if (response.data.success && response.data.data) {
           setAccount(response.data.data);
         } else {
           alert('상세 정보를 불러올 수 없습니다.');
@@ -106,27 +98,17 @@ function ApprovalDetailPage() {
     );
   if (!account) return null;
 
-  const { ownerInfo, nickname, name, email } = account;
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
-  };
+  // 평탄화된 데이터에 맞게 name 추출 (ownerName -> name)
+  const displayName = account.ownerName || account.name || '사장님';
 
   const handleApprove = async () => {
-    if (!window.confirm(`${name} 사장님의 가입 신청을 승인하시겠습니까?`))
+    if (
+      !window.confirm(`${displayName} 사장님의 가입 신청을 승인하시겠습니까?`)
+    )
       return;
     try {
-      const token =
-        localStorage.getItem('accessToken') ||
-        sessionStorage.getItem('accessToken');
-      const response = await axios.patch(
-        `http://localhost:8080/admin/accounts/owners/${id}/approve`,
-        {},
-        { headers: { Authorization: token ? `Bearer ${token}` : '' } },
-      );
-      if (response.data?.success) {
+      const response = await approvalApi.approveOwner(id);
+      if (response.data?.success || response.status === 200) {
         alert('성공적으로 승인되었습니다.');
         navigate('/admin/approval');
       }
@@ -148,15 +130,8 @@ function ApprovalDetailPage() {
     if (!reason.trim()) return alert('거부 사유 입력은 필수입니다.');
 
     try {
-      const token =
-        localStorage.getItem('accessToken') ||
-        sessionStorage.getItem('accessToken');
-      const response = await axios.patch(
-        `http://localhost:8080/admin/accounts/owners/${id}/reject`,
-        { reason: reason },
-        { headers: { Authorization: token ? `Bearer ${token}` : '' } },
-      );
-      if (response.data?.success) {
+      const response = await approvalApi.rejectOwner(id, reason);
+      if (response.data?.success || response.status === 200) {
         alert('가입 신청이 거절 처리되었습니다.');
         navigate('/admin/approval');
       }
@@ -183,7 +158,6 @@ function ApprovalDetailPage() {
       <MainGrid>
         <ApprovalProfileCard account={account} />
 
-        {/* 우측 패널 컴포넌트에 버튼 클릭 콜백들 그대로 주입 */}
         <ApprovalDetailPanel
           account={account}
           memo={adminMemo}
