@@ -175,6 +175,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_PRODUCT_INVALID_PRICE("USED_010", "거래 유형과 가격이 맞지 않습니다", HttpStatus.BAD_REQUEST),
     USED_PRODUCT_DELETE_NOT_ALLOWED("USED_011", "예약 중인 게시글은 삭제할 수 없습니다", HttpStatus.CONFLICT),
     USED_PRODUCT_REGION_REQUIRED("USED_012", "조회할 지역을 지정해 주세요", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_NOT_HIDDEN("USED_013", "숨김 처리된 게시글이 아닙니다", HttpStatus.CONFLICT),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),

@@ -32,7 +32,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
-@RequestMapping("/used-products")
+@RequestMapping("/used")
 @RequiredArgsConstructor
 @Tag(name = "31. Used Product", description = "중고거래 게시글 API")
 public class UsedProductController {
