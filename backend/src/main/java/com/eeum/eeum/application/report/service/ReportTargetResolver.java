@@ -3,6 +3,8 @@ package com.eeum.eeum.application.report.service;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
@@ -19,10 +21,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * 신고 대상(Polymorphic 참조)을 targetType에 맞는 도메인에서 조회해 스냅샷으로 변환한다.
- * <p>
  * 대상 조회는 타입별 전용 fetch join 메서드를 사용해 소유자/상위 컨텍스트를 한 번에 로드하므로
  * 신고 1건당 대상 조회 쿼리는 1회다 (LAZY 연관 접근으로 인한 N+1 없음).
- * <p>
  * 신고 접수 이후 대상이 삭제될 수 있으므로 미존재는 예외가 아닌 exists=false 스냅샷으로 처리한다 —
  * 관리자는 삭제된 콘텐츠에 대한 신고도 열람/처리할 수 있어야 한다.
  */
@@ -35,6 +35,7 @@ public class ReportTargetResolver {
     private final CommunityPostRepository communityPostRepository;
     private final CommunityCommentRepository communityCommentRepository;
     private final AccountRepository accountRepository;
+    private final UsedProductRepository usedProductRepository;
 
     public ReportTargetSnapshotDto resolve(ReportTargetType targetType, Long targetId) {
         return switch (targetType) {
@@ -50,6 +51,9 @@ public class ReportTargetResolver {
             case COMMUNITY_COMMENT -> communityCommentRepository.findWithAccountAndPostByCommentId(targetId)
                     .filter(comment -> !comment.isDeleted())
                     .map(this::fromCommunityComment)
+                    .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
+            case USED_PRODUCT -> usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(targetId)
+                    .map(this::fromUsedProduct)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case ACCOUNT -> accountRepository.findById(targetId)
                     .filter(account -> account.getDeletedAt() == null)
@@ -70,6 +74,7 @@ public class ReportTargetResolver {
             case COMMUNITY_POST -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND);
             case COMMUNITY_COMMENT -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
             case ACCOUNT -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND);
+            case USED_PRODUCT -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
         };
     }
 
@@ -117,6 +122,20 @@ public class ReportTargetResolver {
                 .ownerName(author.getName())
                 .ownerNickname(author.getNickname())
                 .targetCreatedAt(post.getCreatedAt())
+                .build();
+    }
+
+    private ReportTargetSnapshotDto fromUsedProduct(UsedProduct product) {
+        Account seller = product.getSeller();
+        String content = product.getContent();
+        return base(ReportTargetType.USED_PRODUCT, product.getUsedProductId())
+                .title(product.getTitle())
+                .content(content)
+                .contentPreview(ReportTargetSnapshotDto.preview(content))
+                .ownerAccountId(seller.getAccountId())
+                .ownerName(seller.getName())
+                .ownerNickname(seller.getNickname())
+                .targetCreatedAt(product.getCreatedAt())
                 .build();
     }
 
