@@ -3,7 +3,10 @@ package com.eeum.eeum.api.used;
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
+import com.eeum.eeum.application.used.service.UsedProductImageService;
 import com.eeum.eeum.application.used.service.UsedProductService;
+import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,6 +20,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/used-products")
 @RequiredArgsConstructor
@@ -24,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 public class UsedProductController {
 
     private final UsedProductService usedProductService;
+    private final UsedProductImageService usedProductImageService;
 
     @PostMapping
     @PreAuthorize("isAuthenticated()")
@@ -84,6 +90,54 @@ public class UsedProductController {
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         usedProductService.delete(sellerId, usedProductId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // ===================== 사진 =====================
+
+    @PostMapping("/{usedProductId}/images")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "중고 게시글 사진 등록",
+            description = "게시글당 최대 10장입니다. 사진이 없던 게시글의 첫 장은 자동으로 대표 사진이 됩니다."
+    )
+    public ResponseEntity<ApiResponse<List<UsedProductImageResponseDto>>> addImages(
+            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
+            @Valid @RequestBody ImageUploadListRequestDto request
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(
+                        usedProductImageService.addImages(sellerId, usedProductId, request)));
+    }
+
+    @DeleteMapping("/{usedProductId}/images/{imageId}")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "중고 게시글 사진 삭제",
+            description = "삭제 후 노출 순서가 1부터 다시 매겨집니다. 대표 사진을 삭제하면 남은 첫 사진이 대표가 됩니다."
+    )
+    public ResponseEntity<ApiResponse<Void>> deleteImage(
+            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
+            @Parameter(description = "이미지 ID") @PathVariable Long imageId
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        usedProductImageService.deleteImage(sellerId, usedProductId, imageId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @PatchMapping("/{usedProductId}/images/{imageId}/thumbnail")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "대표 사진 변경", description = "지정한 사진을 대표로 바꿉니다. 대표는 항상 한 장입니다.")
+    public ResponseEntity<ApiResponse<Void>> changeThumbnail(
+            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
+            @Parameter(description = "이미지 ID") @PathVariable Long imageId
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        usedProductImageService.changeThumbnail(sellerId, usedProductId, imageId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 }

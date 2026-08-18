@@ -9,6 +9,7 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -66,7 +67,13 @@ public class UsedProductDetailResponseDto {
     @Schema(description = "최종 수정일시")
     private LocalDateTime modifiedAt;
 
-    public static UsedProductDetailResponseDto from(UsedProduct product) {
+    @Schema(description = "사진 목록. 노출 순서대로 정렬된다")
+    private List<UsedProductImageResponseDto> images;
+
+    public static UsedProductDetailResponseDto from(
+            UsedProduct product,
+            List<UsedProductImageResponseDto> images
+    ) {
         return UsedProductDetailResponseDto.builder()
                 .usedProductId(product.getUsedProductId())
                 .sellerId(product.getSeller().getAccountId())
@@ -85,6 +92,7 @@ public class UsedProductDetailResponseDto {
                 .favoriteCount(product.getFavoriteCount())
                 .createdAt(product.getCreatedAt())
                 .modifiedAt(product.getModifiedAt())
+                .images(images)
                 .build();
     }
 }

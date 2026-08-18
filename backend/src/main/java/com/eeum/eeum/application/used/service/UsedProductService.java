@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class UsedProductService {
@@ -29,6 +31,7 @@ public class UsedProductService {
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
+    private final UsedProductImageService usedProductImageService;
 
     @Transactional
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
@@ -48,7 +51,8 @@ public class UsedProductService {
                 request.getPrice()
         );
 
-        return UsedProductDetailResponseDto.from(usedProductRepository.save(product));
+        // 등록 직후에는 사진이 없다 — 사진은 별도 엔드포인트로 올린다.
+        return UsedProductDetailResponseDto.from(usedProductRepository.save(product), List.of());
     }
 
     @Transactional(readOnly = true)
@@ -61,7 +65,8 @@ public class UsedProductService {
             throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
         }
 
-        return UsedProductDetailResponseDto.from(product);
+        return UsedProductDetailResponseDto.from(
+                product, usedProductImageService.getImages(usedProductId));
     }
 
     @Transactional
@@ -81,7 +86,8 @@ public class UsedProductService {
                 request.getPrice()
         );
 
-        return UsedProductDetailResponseDto.from(product);
+        return UsedProductDetailResponseDto.from(
+                product, usedProductImageService.getImages(usedProductId));
     }
 
     @Transactional

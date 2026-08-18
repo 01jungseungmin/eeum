@@ -47,6 +47,7 @@ class UsedProductServiceTest {
     @Mock private AccountRepository accountRepository;
     @Mock private CategoryRepository categoryRepository;
     @Mock private AccountRegionRepository accountRegionRepository;
+    @Mock private UsedProductImageService usedProductImageService;
 
     @InjectMocks
     private UsedProductService usedProductService;
@@ -144,6 +145,8 @@ class UsedProductServiceTest {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(java.util.List.of());
+
         // when & then — 작성자는 볼 수 있다
         assertThat(usedProductService.getDetail(SELLER_ID, PRODUCT_ID).isHidden()).isTrue();
     }
@@ -170,6 +173,7 @@ class UsedProductServiceTest {
                 .thenReturn(Optional.of(product()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(java.util.List.of());
 
         UsedProductDetailResponseDto result = usedProductService.update(
                 SELLER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.NEGOTIABLE, null));
