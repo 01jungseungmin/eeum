@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -59,6 +60,7 @@ class UsedProductServiceTest {
     @Mock private AccountRegionRepository accountRegionRepository;
     @Mock private UsedProductImageService usedProductImageService;
     @Mock private UsedProductImageRepository usedProductImageRepository;
+    @Mock private RegionRepository regionRepository;
 
     @InjectMocks
     private UsedProductService usedProductService;
@@ -192,8 +194,63 @@ class UsedProductServiceTest {
     }
 
     @Test
-    void 선택한_동네가_없으면_목록을_볼_수_없다() {
-        // given — 빈 목록을 주면 "매물이 없다"고 오해한다. 동네 선택이 전제임을 알린다.
+    void 비회원도_지역을_지정하면_목록을_볼_수_있다() {
+        // given — 둘러보기는 열어둔다. 지역 인증은 실제 거래(채팅) 단계에서 요구한다.
+        when(regionRepository.existsById(REGION_ID)).thenReturn(true);
+        when(usedProductRepository.findByRegion(eq(REGION_ID), any())).thenReturn(emptySlice());
+
+        // when — viewerId가 null인 비로그인 상태
+        usedProductService.getRegionProducts(null, REGION_ID, PageRequest.of(0, 20));
+
+        // then
+        verify(usedProductRepository).findByRegion(eq(REGION_ID), any());
+    }
+
+    @Test
+    void 지역_인증을_받지_않았어도_선택한_동네_목록은_볼_수_있다() {
+        // given — verified=false여도 조회는 막지 않는다
+        givenSelectedRegion(false);
+        when(usedProductRepository.findByRegion(eq(REGION_ID), any())).thenReturn(emptySlice());
+
+        // when
+        usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20));
+
+        // then
+        verify(usedProductRepository).findByRegion(eq(REGION_ID), any());
+    }
+
+    @Test
+    void 내_활동_지역이_아닌_동네도_지정해서_둘러볼_수_있다() {
+        // given — 조회 단계에서는 소속 여부를 따지지 않는다
+        Long otherRegionId = 7777L;
+        when(regionRepository.existsById(otherRegionId)).thenReturn(true);
+        when(usedProductRepository.findByRegion(eq(otherRegionId), any())).thenReturn(emptySlice());
+
+        usedProductService.getRegionProducts(SELLER_ID, otherRegionId, PageRequest.of(0, 20));
+
+        verify(usedProductRepository).findByRegion(eq(otherRegionId), any());
+    }
+
+    @Test
+    void 존재하지_않는_지역은_조회할_수_없다() {
+        when(regionRepository.existsById(REGION_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(null, REGION_ID, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REGION_NOT_FOUND);
+    }
+
+    @Test
+    void 비회원이_지역을_지정하지_않으면_어느_동네인지_알_수_없어_거부한다() {
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(null, null, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_REGION_REQUIRED);
+    }
+
+    @Test
+    void 선택한_동네가_없는_회원도_지역을_지정하지_않으면_거부한다() {
         Account account = seller();
         ReflectionTestUtils.setField(account, "primaryRegionId", null);
         when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(account));
@@ -201,17 +258,7 @@ class UsedProductServiceTest {
         assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
-    }
-
-    @Test
-    void 선택한_동네가_인증되지_않았으면_목록을_볼_수_없다() {
-        givenSelectedRegion(false);
-
-        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20)))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.REGION_NOT_VERIFIED);
+                .isEqualTo(ErrorCode.USED_PRODUCT_REGION_REQUIRED);
     }
 
     @Test
@@ -233,17 +280,6 @@ class UsedProductServiceTest {
 
         // then
         assertThat(result.getRegionId()).isEqualTo(REGION_ID);
-    }
-
-    @Test
-    void 내_활동_지역이_아닌_동네는_지정해서_볼_수_없다() {
-        when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
-                .thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, REGION_ID, PageRequest.of(0, 20)))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.REGION_ACCESS_REQUIRED);
     }
 
     @Test
@@ -309,6 +345,20 @@ class UsedProductServiceTest {
 
         // then
         verify(usedProductRepository, never()).increaseViewCount(any());
+    }
+
+    @Test
+    void 비회원_상세_조회도_조회수가_오른다() {
+        // given — 판매자 본인만 제외한다
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+
+        // when
+        usedProductService.getDetailAndCountView(null, PRODUCT_ID);
+
+        // then
+        verify(usedProductRepository).increaseViewCount(PRODUCT_ID);
     }
 
     // ─────────────────── 수정 ───────────────────

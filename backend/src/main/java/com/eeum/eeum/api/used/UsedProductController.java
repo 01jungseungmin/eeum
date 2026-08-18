@@ -37,11 +37,10 @@ public class UsedProductController {
     private final UsedProductImageService usedProductImageService;
 
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
-    @SecurityRequirement(name = "bearerAuth")
     @Operation(
-            summary = "내 동네 중고 게시글 목록",
-            description = "regionId를 지정하면 해당 동네만, 생략하면 내 인증 활동 지역 전체를 조회합니다. " +
+            summary = "동네 중고 게시글 목록",
+            description = "로그인 없이 조회할 수 있습니다. regionId를 지정하면 해당 동네를, " +
+                    "생략하면 내가 선택한 동네를 조회합니다(비회원이거나 선택한 동네가 없으면 regionId가 필요합니다). " +
                     "삭제되거나 숨김 처리된 게시글은 제외됩니다. 무한 스크롤용 Slice로 반환합니다. " +
                     "정렬은 createdAt·price·favoriteCount·viewCount만 지원하며, 그 외 값은 무시하고 최신순으로 조회합니다."
     )
@@ -50,7 +49,8 @@ public class UsedProductController {
             @RequestParam(required = false) Long regionId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        Long viewerId = SecurityUtil.getCurrentAccountId();
+        // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.
+        Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(
                 usedProductService.getRegionProducts(viewerId, regionId, pageable)));
     }
@@ -72,17 +72,15 @@ public class UsedProductController {
     }
 
     @GetMapping("/{usedProductId}")
-    @PreAuthorize("isAuthenticated()")
-    @SecurityRequirement(name = "bearerAuth")
     @Operation(
             summary = "중고 게시글 상세 조회",
-            description = "삭제된 게시글은 조회되지 않습니다. 관리자가 숨긴 게시글은 작성자 본인에게만 보입니다. " +
-                    "본인 글이 아닌 경우 조회수가 1 증가합니다."
+            description = "로그인 없이 조회할 수 있습니다. 삭제된 게시글은 조회되지 않고, " +
+                    "관리자가 숨긴 게시글은 작성자 본인에게만 보입니다. 본인 글이 아니면 조회수가 1 증가합니다."
     )
     public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> getUsedProduct(
             @Parameter(description = "게시글 ID") @PathVariable Long usedProductId
     ) {
-        Long viewerId = SecurityUtil.getCurrentAccountId();
+        Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(
                 usedProductService.getDetailAndCountView(viewerId, usedProductId)));
     }

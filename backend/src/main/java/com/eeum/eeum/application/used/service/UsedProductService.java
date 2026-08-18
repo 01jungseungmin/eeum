@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
@@ -40,6 +41,7 @@ public class UsedProductService {
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
+    private final RegionRepository regionRepository;
     private final UsedProductImageService usedProductImageService;
     private final UsedProductImageRepository usedProductImageRepository;
 
@@ -49,7 +51,8 @@ public class UsedProductService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
-        // 지역을 지정하지 않으면 선택한 동네에 올린다 — 앱에서 동네를 고른 뒤 글을 쓰는 흐름과 맞춘다.
+        // 등록은 조회와 달리 GPS 인증된 지역을 요구한다 — 아무 동네에나 매물을 뿌리는 것을 막는다.
+        // 지역을 지정하지 않으면 선택한 동네에 올린다 (앱에서 동네를 고른 뒤 글을 쓰는 흐름과 맞춤).
         AccountRegion sellerRegion = request.getRegionId() == null
                 ? getSelectedRegionOrThrow(sellerId)
                 : getVerifiedRegionOrThrow(sellerId, request.getRegionId());
@@ -81,7 +84,7 @@ public class UsedProductService {
             Long regionId,
             Pageable pageable
     ) {
-        Long targetRegionId = resolveSelectedRegionId(viewerId, regionId);
+        Long targetRegionId = resolveViewRegionId(viewerId, regionId);
         Slice<UsedProduct> products = usedProductRepository.findByRegion(targetRegionId, pageable);
 
         Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());
@@ -109,6 +112,7 @@ public class UsedProductService {
     public UsedProductDetailResponseDto getDetailAndCountView(Long viewerId, Long usedProductId) {
         UsedProductDetailResponseDto detail = getDetail(viewerId, usedProductId);
 
+        // 비회원 조회도 센다. 판매자 본인 조회만 제외한다.
         if (!detail.getSellerId().equals(viewerId)) {
             usedProductRepository.increaseViewCount(usedProductId);
         }
@@ -154,11 +158,37 @@ public class UsedProductService {
     // 조회 대상 지역을 정한다. regionId를 주면 그 지역이 내 인증 지역인지 확인하고,
     // 생략하면 내가 선택해 둔 동네(대표 지역)를 쓴다.
     // 활동 지역은 최대 2개지만 사용자는 그중 하나를 골라 쓰므로 둘을 합쳐 보여주지 않는다.
-    private Long resolveSelectedRegionId(Long accountId, Long regionId) {
+    private Long resolveViewRegionId(Long accountId, Long regionId) {
+        // 지역을 지정하면 그대로 본다. 내 활동 지역이 아니어도 막지 않는다 —
+        // 둘러보기는 열어두고, 실제 거래(채팅)에서 지역 인증을 요구한다.
         if (regionId != null) {
-            return getVerifiedRegionOrThrow(accountId, regionId).getRegion().getRegionId();
+            if (!regionRepository.existsById(regionId)) {
+                throw new NotFoundException(ErrorCode.REGION_NOT_FOUND);
+            }
+            return regionId;
         }
-        return getSelectedRegionOrThrow(accountId).getRegion().getRegionId();
+
+        // 지정하지 않았으면 내가 선택해 둔 동네를 쓴다. 비회원이거나 선택한 동네가 없으면
+        // 어느 동네를 보여줄지 알 수 없으므로 지역을 지정하라고 알린다.
+        Long selectedRegionId = findSelectedRegionId(accountId);
+        if (selectedRegionId == null) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_REGION_REQUIRED);
+        }
+        return selectedRegionId;
+    }
+
+    // 조회용 — 선택한 동네가 없거나 비회원이면 null. GPS 인증 여부는 보지 않는다.
+    private Long findSelectedRegionId(Long accountId) {
+        if (accountId == null) {
+            return null;
+        }
+
+        return accountRepository.findById(accountId)
+                .map(Account::getPrimaryRegionId)
+                .flatMap(selectedAccountRegionId -> accountRegionRepository
+                        .findByAccountRegionIdAndAccount_AccountId(selectedAccountRegionId, accountId))
+                .map(accountRegion -> accountRegion.getRegion().getRegionId())
+                .orElse(null);
     }
 
     // 사용자가 선택해 둔 동네(대표 지역)를 찾는다.
