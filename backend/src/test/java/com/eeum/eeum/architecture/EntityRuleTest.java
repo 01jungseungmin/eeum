@@ -38,7 +38,8 @@ class EntityRuleTest {
     private static final String[] SOFT_DELETE_ALLOWED = {
             "com.eeum.eeum.domain.account.entity.Account",
             "com.eeum.eeum.domain.chat.entity.ChatMessage",
-            "com.eeum.eeum.domain.category.entity.Category"
+            "com.eeum.eeum.domain.category.entity.Category",
+            "com.eeum.eeum.domain.used.entity.UsedProduct"
     };
 
     @ArchTest

@@ -97,6 +97,7 @@ Soft Delete (deletedAt 필드) 적용 대상:
 - `ChatMessage`
 - `Category`
 - `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
+- `UsedProduct` — 판매완료 글에 후기·채팅·신고 이력이 매달려 물리 삭제 시 참조가 끊김
 
 그 외 엔티티는 Hard Delete (즉시 물리 삭제)
 
@@ -184,6 +185,7 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - **notification** — `Notification`, `NotificationSettings`; push via FCM, real-time via SSE
 - **favorite** — Polymorphic `Favorite` keyed by `FavoriteRefType`
 - **region** — `Region` (administrative region lookup), `Location` for GPS coordinate storage
+- **used** — `UsedProduct` (C2C 중고거래 게시글). 거래 상태(`SELLING`/`RESERVED`/`SOLD`)·관리자 숨김(`hidden`)·Soft Delete(`deletedAt`)를 독립된 세 축으로 관리한다. 카테고리는 `CategoryType.USED`를 재사용하고, 거래 희망 지역은 작성 시점 `Region`을 복사해 고정한다.
 
 ### Key design patterns
 
