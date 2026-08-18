@@ -31,6 +31,20 @@ public class RateLimitService {
         return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, "1", cooldown));
     }
 
+    // 쿨다운 반납 — 획득해 놓고 실제로는 아무 일도 하지 않은 경우 되돌린다.
+    public void releaseCooldown(String key) {
+        redisTemplate.delete(key);
+    }
+
+    // 카운터 증가 후 현재 값 반환 — 시간 구간별 발생량 집계용(Webhook 서명 실패 등)
+    public long incrementAndGet(String key, Duration window) {
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, window);
+        }
+        return count == null ? 0L : count;
+    }
+
     // 카운터형 — window 동안 누적된 실패 횟수가 maxAttempts 이상이면 차단 (로그인 실패 등)
     public void checkNotBlocked(String key, int maxAttempts, ErrorCode errorCode) {
         String value = redisTemplate.opsForValue().get(key);

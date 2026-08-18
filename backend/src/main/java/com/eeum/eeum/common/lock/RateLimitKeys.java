@@ -48,6 +48,16 @@ public final class RateLimitKeys {
         return "rate-limit:operation-failure-alert:" + (category == null ? "UNKNOWN" : category);
     }
 
+    // Webhook 서명 검증 실패 누적 카운터 — 인증 없는 엔드포인트라 건별 DB 기록 대신 집계한다.
+    public static String webhookSignatureFailureCount() {
+        return "rate-limit:webhook-signature-fail:count";
+    }
+
+    // Webhook 서명 검증 실패의 DB 이력 기록 쿨다운 — 구간당 1건만 남긴다.
+    public static String webhookSignatureFailureRecord() {
+        return "rate-limit:webhook-signature-fail:record";
+    }
+
     private static String normalize(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }

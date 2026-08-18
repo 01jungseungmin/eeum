@@ -4,7 +4,9 @@ import com.eeum.eeum.application.order.service.OrderService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.common.service.RedisLockService;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.OrderItem;
 import com.eeum.eeum.domain.order.entity.Payment;
@@ -44,6 +46,7 @@ public class StoreOrderService {
     private final RedisLockService redisLockService;
     private final OrderService orderService;
     private final PortOnePaymentClient portOnePaymentClient;
+    private final OperationFailureRecorder operationFailureRecorder;
 
     private static final Duration ORDER_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
@@ -205,8 +208,12 @@ public class StoreOrderService {
             throw new BusinessException(ErrorCode.PAYMENT_REFUND_NOT_REQUESTED);
         }
 
-        portOnePaymentClient.cancelPayment(
-                payment.getPortonePaymentId(), payment.getAmount(), payment.getRefundReason());
+        recordPortOneFailure(
+                "StoreOrderService.approveRefund",
+                String.valueOf(payment.getPaymentId()),
+                "orderId=" + orderId + ", amount=" + payment.getAmount(),
+                () -> portOnePaymentClient.cancelPayment(
+                        payment.getPortonePaymentId(), payment.getAmount(), payment.getRefundReason()));
 
         payment.completeRefund();
         orderService.restoreStockForOrder(orderId);
@@ -267,7 +274,12 @@ public class StoreOrderService {
 
         if (payment.getStatus() == PaymentStatus.PAID) {
             // 온라인 결제 완료 건은 PortOne 취소 성공 시에만 CANCELLED로 전환
-            portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(), reason);
+            recordPortOneFailure(
+                    "StoreOrderService.rejectOrder",
+                    String.valueOf(payment.getPaymentId()),
+                    "orderId=" + orderId + ", amount=" + payment.getAmount(),
+                    () -> portOnePaymentClient.cancelPayment(
+                            payment.getPortonePaymentId(), payment.getAmount(), reason));
             payment.cancel();
         } else if (payment.getStatus() == PaymentStatus.PENDING) {
             // 온라인 결제 대기 중(아직 결제 안 됨) — PortOne 호출 없이 취소
@@ -307,6 +319,20 @@ public class StoreOrderService {
 
         if (payment.getStatus() != PaymentStatus.PAID) {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
+        }
+    }
+
+    /**
+     * PortOne 취소 실패를 업무 맥락과 함께 한 번만 기록하고 예외를 그대로 다시 던진다.
+     * 클라이언트는 이력을 남기지 않으므로(PortOnePaymentClientImpl) 이 지점이 유일한 기록 책임자다.
+     */
+    private void recordPortOneFailure(String operation, String refId, String payload, Runnable call) {
+        try {
+            call.run();
+        } catch (RuntimeException e) {
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND, operation, "PAYMENT", refId, e, payload);
+            throw e;
         }
     }
 }

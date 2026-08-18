@@ -17,6 +17,7 @@ import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.exception.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +36,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -54,6 +59,7 @@ class PaymentServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
     @Mock private com.eeum.eeum.application.operation.service.OperationFailureRecorder operationFailureRecorder;
+    @Mock private com.eeum.eeum.common.service.RateLimitService rateLimitService;
 
     @BeforeEach
     void setUp() {
@@ -68,6 +74,7 @@ class PaymentServiceTest {
                 new ObjectMapper(),
                 eventPublisher,
                 operationFailureRecorder,
+                rateLimitService,
                 aiPlanSubscriptionService
         );
     }
@@ -225,5 +232,64 @@ class PaymentServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ORDER_EXPIRED);
+    }
+
+    // ──────────────────── Webhook 실패 이력 3단계 정책 ────────────────────
+
+    @Test
+    void 빈_body_Webhook은_이력을_남기지_않고_400을_반환한다() {
+        // given — permitAll 엔드포인트라 건별 기록 시 익명 요청만으로 이력 테이블이 불어난다
+
+        // when & then
+        assertThatThrownBy(() -> paymentService.handleWebhook("", "sig"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
+
+        verifyNoInteractions(operationFailureRecorder);
+    }
+
+    @Test
+    void 서명_헤더가_없는_Webhook은_이력을_남기지_않고_400을_반환한다() {
+        // given — PortOne이 보낸 요청이 아니다. 1단계로 걸러 기록하지 않는다.
+
+        // when & then
+        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
+
+        verifyNoInteractions(operationFailureRecorder);
+    }
+
+    @Test
+    void 서명이_불일치하면_카운터를_올리고_쿨다운을_통과할_때만_이력을_남긴다() {
+        // given — 2단계: 전량 집계하되 DB 이력은 구간당 1건
+        when(rateLimitService.incrementAndGet(anyString(), any(Duration.class))).thenReturn(7L);
+        when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(true);
+
+        // when & then — 서명 불일치는 인증 실패(401)로 남는다
+        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", "wrong-signature"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_INVALID);
+
+        verify(operationFailureRecorder).record(
+                eq(OperationFailureCategory.PAYMENT_WEBHOOK),
+                eq("PaymentService.validateWebhookSignature"),
+                isNull(), isNull(), anyString(), contains("누적 7건"), anyString());
+    }
+
+    @Test
+    void 서명_불일치가_쿨다운에_막히면_이력을_남기지_않는다() {
+        // given — 폭주해도 이력은 구간당 1건만 남는다
+        when(rateLimitService.incrementAndGet(anyString(), any(Duration.class))).thenReturn(500L);
+        when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", "wrong-signature"))
+                .isInstanceOf(BusinessException.class);
+
+        verifyNoInteractions(operationFailureRecorder);
     }
 }
