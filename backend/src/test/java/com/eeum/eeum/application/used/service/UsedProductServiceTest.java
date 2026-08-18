@@ -3,6 +3,7 @@ package com.eeum.eeum.application.used.service;
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
@@ -12,6 +13,8 @@ import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.entity.UsedProductImage;
+import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -23,7 +26,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
+
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +57,7 @@ class UsedProductServiceTest {
     @Mock private CategoryRepository categoryRepository;
     @Mock private AccountRegionRepository accountRegionRepository;
     @Mock private UsedProductImageService usedProductImageService;
+    @Mock private UsedProductImageRepository usedProductImageRepository;
 
     @InjectMocks
     private UsedProductService usedProductService;
@@ -165,6 +175,116 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
     }
 
+    // ─────────────────── 목록 ───────────────────
+
+    @Test
+    void 지역을_지정하지_않으면_내_인증_지역_전체를_조회한다() {
+        // given — 인증된 지역만 대상이다
+        AccountRegion verified = accountRegion(true);
+        AccountRegion notVerified = accountRegion(false);
+        ReflectionTestUtils.setField(notVerified.getRegion(), "regionId", 2000L);
+
+        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID))
+                .thenReturn(List.of(verified, notVerified));
+        when(usedProductRepository.findByRegions(eq(List.of(REGION_ID)), any()))
+                .thenReturn(emptySlice());
+
+        // when
+        usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20));
+
+        // then — 미인증 지역(2000)은 대상에서 빠진다
+        verify(usedProductRepository).findByRegions(eq(List.of(REGION_ID)), any());
+    }
+
+    @Test
+    void 인증된_활동_지역이_하나도_없으면_목록을_볼_수_없다() {
+        // given — 빈 목록을 주면 "매물이 없다"고 오해한다. 동네 인증이 전제임을 알린다.
+        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REGION_ACCESS_REQUIRED);
+    }
+
+    @Test
+    void 내_활동_지역이_아닌_동네는_지정해서_볼_수_없다() {
+        when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, REGION_ID, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REGION_ACCESS_REQUIRED);
+    }
+
+    @Test
+    void 목록의_대표_사진은_한_번의_조회로_모아_붙인다() {
+        // given — 게시글마다 사진을 조회하면 페이지 크기만큼 쿼리가 나간다(N+1)
+        UsedProduct product = product();
+        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID))
+                .thenReturn(List.of(accountRegion(true)));
+        when(usedProductRepository.findByRegions(any(), any()))
+                .thenReturn(new SliceImpl<>(List.of(product), PageRequest.of(0, 20), false));
+        when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
+                .thenReturn(List.of(UsedProductImage.create(product, "thumb.jpg", 1, true)));
+
+        // when
+        Slice<UsedProductSummaryResponseDto> result =
+                usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20));
+
+        // then
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("thumb.jpg");
+        verify(usedProductImageRepository, times(1))
+                .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(any());
+    }
+
+    @Test
+    void 사진이_없는_게시글의_대표_사진은_null이다() {
+        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID))
+                .thenReturn(List.of(accountRegion(true)));
+        when(usedProductRepository.findByRegions(any(), any()))
+                .thenReturn(new SliceImpl<>(List.of(product()), PageRequest.of(0, 20), false));
+        when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
+                .thenReturn(List.of());
+
+        Slice<UsedProductSummaryResponseDto> result =
+                usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20));
+
+        assertThat(result.getContent().get(0).getThumbnailUrl()).isNull();
+    }
+
+    // ─────────────────── 조회수 ───────────────────
+
+    @Test
+    void 남의_글을_보면_조회수가_원자_UPDATE로_증가한다() {
+        // given — 읽어서 +1 후 저장하면 동시 조회가 서로의 증가분을 덮어쓴다
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+
+        // when
+        usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
+
+        // then
+        verify(usedProductRepository).increaseViewCount(PRODUCT_ID);
+    }
+
+    @Test
+    void 판매자가_자기_글을_봐도_조회수는_오르지_않는다() {
+        // given — 새로고침할 때마다 오르면 지표가 무의미해진다
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+
+        // when
+        usedProductService.getDetailAndCountView(SELLER_ID, PRODUCT_ID);
+
+        // then
+        verify(usedProductRepository, never()).increaseViewCount(any());
+    }
+
     // ─────────────────── 수정 ───────────────────
 
     @Test
@@ -268,6 +388,10 @@ class UsedProductServiceTest {
     }
 
     // ─────────────────── 헬퍼 ───────────────────
+
+    private Slice<UsedProduct> emptySlice() {
+        return new SliceImpl<>(List.of(), PageRequest.of(0, 20), false);
+    }
 
     private UsedProductCreateRequestDto createRequest(UsedProductPriceType priceType, BigDecimal price) {
         UsedProductCreateRequestDto request = new UsedProductCreateRequestDto();

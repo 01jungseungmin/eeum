@@ -3,6 +3,7 @@ package com.eeum.eeum.application.used.service;
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
@@ -11,7 +12,9 @@ import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
+import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -21,7 +24,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +41,7 @@ public class UsedProductService {
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final UsedProductImageService usedProductImageService;
+    private final UsedProductImageRepository usedProductImageRepository;
 
     @Transactional
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
@@ -55,6 +65,28 @@ public class UsedProductService {
         return UsedProductDetailResponseDto.from(usedProductRepository.save(product), List.of());
     }
 
+    /**
+     * 내 동네 중고 목록.
+     *
+     * <p>지역을 지정하지 않으면 내 인증 활동 지역 전체를 본다. 인증된 지역이 하나도 없으면
+     * 빈 목록이 아니라 오류로 막는다 — 동네 인증이 이 서비스의 전제이고,
+     * 빈 목록을 주면 사용자는 "매물이 없다"고 오해한다.
+     */
+    @Transactional(readOnly = true)
+    public Slice<UsedProductSummaryResponseDto> getRegionProducts(
+            Long viewerId,
+            Long regionId,
+            Pageable pageable
+    ) {
+        List<Long> regionIds = resolveViewableRegionIds(viewerId, regionId);
+        Slice<UsedProduct> products = usedProductRepository.findByRegions(regionIds, pageable);
+
+        Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());
+
+        return products.map(product -> UsedProductSummaryResponseDto.of(
+                product, thumbnails.get(product.getUsedProductId())));
+    }
+
     @Transactional(readOnly = true)
     public UsedProductDetailResponseDto getDetail(Long viewerId, Long usedProductId) {
         UsedProduct product = getActiveOrThrow(usedProductId);
@@ -67,6 +99,17 @@ public class UsedProductService {
 
         return UsedProductDetailResponseDto.from(
                 product, usedProductImageService.getImages(usedProductId));
+    }
+
+    // 상세 조회 + 조회수 증가.
+    @Transactional
+    public UsedProductDetailResponseDto getDetailAndCountView(Long viewerId, Long usedProductId) {
+        UsedProductDetailResponseDto detail = getDetail(viewerId, usedProductId);
+
+        if (!detail.getSellerId().equals(viewerId)) {
+            usedProductRepository.increaseViewCount(usedProductId);
+        }
+        return detail;
     }
 
     @Transactional
@@ -104,6 +147,39 @@ public class UsedProductService {
     }
 
     // ===================== 내부 헬퍼 =====================
+
+    // 조회 대상 지역을 정한다. regionId를 주면 그 지역이 내 인증 지역인지 확인한다.
+    private List<Long> resolveViewableRegionIds(Long accountId, Long regionId) {
+        if (regionId != null) {
+            return List.of(getVerifiedRegionOrThrow(accountId, regionId).getRegion().getRegionId());
+        }
+
+        List<Long> verifiedRegionIds = accountRegionRepository.findByAccount_AccountId(accountId).stream()
+                .filter(AccountRegion::isVerified)
+                .map(accountRegion -> accountRegion.getRegion().getRegionId())
+                .toList();
+
+        if (verifiedRegionIds.isEmpty()) {
+            throw new ForbiddenException(ErrorCode.REGION_ACCESS_REQUIRED);
+        }
+        return verifiedRegionIds;
+    }
+
+    // 대표 사진을 한 번의 IN 쿼리로 모아 온다 — 게시글마다 조회하면 N+1이다.
+    private Map<Long, String> findThumbnailUrls(List<UsedProduct> products) {
+        if (products.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> productIds = products.stream().map(UsedProduct::getUsedProductId).toList();
+
+        return usedProductImageRepository
+                .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
+                .collect(Collectors.toMap(
+                        image -> image.getUsedProduct().getUsedProductId(),
+                        UsedProductImage::getImageUrl,
+                        (first, second) -> first));
+    }
 
     private UsedProduct getActiveOrThrow(Long usedProductId) {
         return usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(usedProductId)

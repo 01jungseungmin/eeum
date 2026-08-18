@@ -10,4 +10,7 @@ public interface UsedProductImageRepository extends JpaRepository<UsedProductIma
     List<UsedProductImage> findByUsedProduct_UsedProductIdOrderByDisplayOrderAsc(Long usedProductId);
 
     int countByUsedProduct_UsedProductId(Long usedProductId);
+
+    // 여러 게시글의 대표 사진을 한 번에 읽기
+    List<UsedProductImage> findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List<Long> usedProductIds);
 }

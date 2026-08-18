@@ -4,6 +4,7 @@ import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedProductImageService;
 import com.eeum.eeum.application.used.service.UsedProductService;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
@@ -15,6 +16,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,6 +35,25 @@ public class UsedProductController {
 
     private final UsedProductService usedProductService;
     private final UsedProductImageService usedProductImageService;
+
+    @GetMapping
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "내 동네 중고 게시글 목록",
+            description = "regionId를 지정하면 해당 동네만, 생략하면 내 인증 활동 지역 전체를 조회합니다. " +
+                    "삭제되거나 숨김 처리된 게시글은 제외됩니다. 무한 스크롤용 Slice로 반환합니다. " +
+                    "정렬은 createdAt·price·favoriteCount·viewCount만 지원하며, 그 외 값은 무시하고 최신순으로 조회합니다."
+    )
+    public ResponseEntity<ApiResponse<Slice<UsedProductSummaryResponseDto>>> getRegionProducts(
+            @Parameter(description = "거래 지역 ID. 생략 시 내 인증 지역 전체")
+            @RequestParam(required = false) Long regionId,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        Long viewerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                usedProductService.getRegionProducts(viewerId, regionId, pageable)));
+    }
 
     @PostMapping
     @PreAuthorize("isAuthenticated()")
@@ -52,14 +76,15 @@ public class UsedProductController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(
             summary = "중고 게시글 상세 조회",
-            description = "삭제된 게시글은 조회되지 않습니다. 관리자가 숨긴 게시글은 작성자 본인에게만 보입니다."
+            description = "삭제된 게시글은 조회되지 않습니다. 관리자가 숨긴 게시글은 작성자 본인에게만 보입니다. " +
+                    "본인 글이 아닌 경우 조회수가 1 증가합니다."
     )
     public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> getUsedProduct(
             @Parameter(description = "게시글 ID") @PathVariable Long usedProductId
     ) {
         Long viewerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                usedProductService.getDetail(viewerId, usedProductId)));
+                usedProductService.getDetailAndCountView(viewerId, usedProductId)));
     }
 
     @PatchMapping("/{usedProductId}")
