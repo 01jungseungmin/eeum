@@ -119,11 +119,7 @@ public class UsedProductService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_INVALID_CATEGORY));
     }
 
-    /**
-     * 거래 희망 지역이 본인의 GPS 인증 완료 활동 지역인지 확인한다.
-     *
-     * <p>이 검증이 없으면 아무 regionId나 실어 보내 남의 동네에 글을 올릴 수 있다.
-     */
+    // 거래 희망 지역이 본인의 GPS 인증 완료 활동 지역인지 확인
     private AccountRegion getVerifiedRegionOrThrow(Long accountId, Long regionId) {
         AccountRegion accountRegion = accountRegionRepository
                 .findByAccount_AccountIdAndRegion_RegionId(accountId, regionId)
