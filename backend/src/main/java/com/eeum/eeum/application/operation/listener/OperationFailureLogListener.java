@@ -2,9 +2,11 @@ package com.eeum.eeum.application.operation.listener;
 
 import com.eeum.eeum.domain.operation.entity.OperationFailureLog;
 import com.eeum.eeum.domain.operation.event.OperationFailedEvent;
+import com.eeum.eeum.domain.operation.event.OperationFailureRecordedEvent;
 import com.eeum.eeum.domain.operation.repository.OperationFailureLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -36,13 +38,14 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class OperationFailureLogListener {
 
     private final OperationFailureLogRepository operationFailureLogRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMPLETION, fallbackExecution = true)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onOperationFailed(OperationFailedEvent event) {
         try {
-            operationFailureLogRepository.save(OperationFailureLog.create(
+            OperationFailureLog saved = operationFailureLogRepository.save(OperationFailureLog.create(
                     event.category(),
                     event.operation(),
                     event.refType(),
@@ -50,6 +53,15 @@ public class OperationFailureLogListener {
                     event.errorCode(),
                     event.errorMessage(),
                     event.payload()
+            ));
+
+            // 관리자 알림은 이 REQUIRES_NEW 트랜잭션이 커밋된 뒤에 나간다.
+            // 알림 발송이 실패해도 이력은 이미 남아 있고, 이력 저장이 실패하면 알림도 나가지 않는다.
+            eventPublisher.publishEvent(new OperationFailureRecordedEvent(
+                    saved.getOperationFailureLogId(),
+                    saved.getCategory(),
+                    saved.getOperation(),
+                    saved.getErrorCode()
             ));
         } catch (RuntimeException e) {
             // 이력 기록 실패가 다른 흐름에 영향을 주면 안 된다. 최소한 로그로는 남긴다.

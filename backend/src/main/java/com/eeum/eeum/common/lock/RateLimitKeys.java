@@ -41,6 +41,13 @@ public final class RateLimitKeys {
         return "rate-limit:ai-exposure-click:" + viewerKey;
     }
 
+    // 운영 실패 관리자 알림 스로틀 — 분류 단위.
+    // PortOne 장애처럼 한 원인으로 실패가 연속 발생할 때 관리자 전원에게 건별 알림이 나가면
+    // 알림 폭탄이 되고 정작 다른 분류의 실패가 묻힌다. 분류별로 쿨다운을 둔다.
+    public static String operationFailureAlert(String category) {
+        return "rate-limit:operation-failure-alert:" + (category == null ? "UNKNOWN" : category);
+    }
+
     private static String normalize(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }

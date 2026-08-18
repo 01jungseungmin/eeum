@@ -142,6 +142,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
 - `AiPlanExpirationScheduler` — 매일 03:30, 만료일 지난 AI 플랜 구독 비활성화 (이후 FREE 처리)
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
+- `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:
@@ -153,6 +154,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `rate-limit:email-verification:{email}` — 이메일 인증 코드 발송 쿨다운 (60초)
 - `rate-limit:password-reset:{email}` — 비밀번호 재설정 메일 발송 쿨다운 (5분)
 - `rate-limit:login-fail:{email}` — 로그인 실패 카운터 (5분 내 5회 초과 시 차단)
+- `rate-limit:operation-failure-alert:{category}` — 운영 실패 관리자 알림 스로틀 (분류별 10분 쿨다운)
 - 분산 락 키는 `common/lock/LockKeys`에 상수로 정의 후 사용
 - Rate Limit 키는 `common/lock/RateLimitKeys`에 상수로 정의 후 사용 (`common/service/RateLimitService`로 체크)
 

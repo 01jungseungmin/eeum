@@ -24,6 +24,13 @@ public class RateLimitService {
         }
     }
 
+    // 쿨다운형(비예외) — 획득에 성공하면 true, 이미 쿨다운 중이면 false.
+    // checkCooldown과 달리 예외를 던지지 않는다. 사용자 요청을 막는 것이 아니라
+    // "막히면 조용히 건너뛰는" 내부 경로(운영 실패 알림 스로틀 등)에서 쓴다.
+    public boolean tryAcquireCooldown(String key, Duration cooldown) {
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, "1", cooldown));
+    }
+
     // 카운터형 — window 동안 누적된 실패 횟수가 maxAttempts 이상이면 차단 (로그인 실패 등)
     public void checkNotBlocked(String key, int maxAttempts, ErrorCode errorCode) {
         String value = redisTemplate.opsForValue().get(key);
