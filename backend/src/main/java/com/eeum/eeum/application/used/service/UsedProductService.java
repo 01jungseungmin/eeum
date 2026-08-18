@@ -49,7 +49,10 @@ public class UsedProductService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
-        AccountRegion sellerRegion = getVerifiedRegionOrThrow(sellerId, request.getRegionId());
+        // 지역을 지정하지 않으면 선택한 동네에 올린다 — 앱에서 동네를 고른 뒤 글을 쓰는 흐름과 맞춘다.
+        AccountRegion sellerRegion = request.getRegionId() == null
+                ? getSelectedRegionOrThrow(sellerId)
+                : getVerifiedRegionOrThrow(sellerId, request.getRegionId());
 
         UsedProduct product = UsedProduct.create(
                 seller,
@@ -78,8 +81,8 @@ public class UsedProductService {
             Long regionId,
             Pageable pageable
     ) {
-        List<Long> regionIds = resolveViewableRegionIds(viewerId, regionId);
-        Slice<UsedProduct> products = usedProductRepository.findByRegions(regionIds, pageable);
+        Long targetRegionId = resolveSelectedRegionId(viewerId, regionId);
+        Slice<UsedProduct> products = usedProductRepository.findByRegion(targetRegionId, pageable);
 
         Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());
 
@@ -148,21 +151,36 @@ public class UsedProductService {
 
     // ===================== 내부 헬퍼 =====================
 
-    // 조회 대상 지역을 정한다. regionId를 주면 그 지역이 내 인증 지역인지 확인한다.
-    private List<Long> resolveViewableRegionIds(Long accountId, Long regionId) {
+    // 조회 대상 지역을 정한다. regionId를 주면 그 지역이 내 인증 지역인지 확인하고,
+    // 생략하면 내가 선택해 둔 동네(대표 지역)를 쓴다.
+    // 활동 지역은 최대 2개지만 사용자는 그중 하나를 골라 쓰므로 둘을 합쳐 보여주지 않는다.
+    private Long resolveSelectedRegionId(Long accountId, Long regionId) {
         if (regionId != null) {
-            return List.of(getVerifiedRegionOrThrow(accountId, regionId).getRegion().getRegionId());
+            return getVerifiedRegionOrThrow(accountId, regionId).getRegion().getRegionId();
+        }
+        return getSelectedRegionOrThrow(accountId).getRegion().getRegionId();
+    }
+
+    // 사용자가 선택해 둔 동네(대표 지역)를 찾는다.
+    // 주의: Account.primaryRegionId는 이름과 달리 regionId가 아니라 accountRegionId를 담는다.
+    // 활동 지역 등록 행을 가리키는 값이라, 지역 자체와 혼동하면 엉뚱한 동네를 조회하게 된다.
+    private AccountRegion getSelectedRegionOrThrow(Long accountId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        Long selectedAccountRegionId = account.getPrimaryRegionId();
+        if (selectedAccountRegionId == null) {
+            throw new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
         }
 
-        List<Long> verifiedRegionIds = accountRegionRepository.findByAccount_AccountId(accountId).stream()
-                .filter(AccountRegion::isVerified)
-                .map(accountRegion -> accountRegion.getRegion().getRegionId())
-                .toList();
+        AccountRegion selected = accountRegionRepository
+                .findByAccountRegionIdAndAccount_AccountId(selectedAccountRegionId, accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
 
-        if (verifiedRegionIds.isEmpty()) {
-            throw new ForbiddenException(ErrorCode.REGION_ACCESS_REQUIRED);
+        if (!selected.isVerified()) {
+            throw new ForbiddenException(ErrorCode.REGION_NOT_VERIFIED);
         }
-        return verifiedRegionIds;
+        return selected;
     }
 
     // 대표 사진을 한 번의 IN 쿼리로 모아 온다 — 게시글마다 조회하면 N+1이다.

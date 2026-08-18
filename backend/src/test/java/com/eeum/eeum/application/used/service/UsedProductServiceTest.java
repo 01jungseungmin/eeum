@@ -51,6 +51,7 @@ class UsedProductServiceTest {
     private static final Long PRODUCT_ID = 10L;
     private static final Long CATEGORY_ID = 100L;
     private static final Long REGION_ID = 1000L;
+    private static final Long ACCOUNT_REGION_ID = 500L;
 
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private AccountRepository accountRepository;
@@ -178,33 +179,60 @@ class UsedProductServiceTest {
     // ─────────────────── 목록 ───────────────────
 
     @Test
-    void 지역을_지정하지_않으면_내_인증_지역_전체를_조회한다() {
-        // given — 인증된 지역만 대상이다
-        AccountRegion verified = accountRegion(true);
-        AccountRegion notVerified = accountRegion(false);
-        ReflectionTestUtils.setField(notVerified.getRegion(), "regionId", 2000L);
-
-        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID))
-                .thenReturn(List.of(verified, notVerified));
-        when(usedProductRepository.findByRegions(eq(List.of(REGION_ID)), any()))
-                .thenReturn(emptySlice());
+    void 지역을_지정하지_않으면_내가_선택한_동네만_조회한다() {
+        // given — 활동 지역이 2개여도 사용자는 하나를 선택해 쓴다. 둘을 합쳐 보여주지 않는다.
+        givenSelectedRegion(true);
+        when(usedProductRepository.findByRegion(eq(REGION_ID), any())).thenReturn(emptySlice());
 
         // when
         usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20));
 
-        // then — 미인증 지역(2000)은 대상에서 빠진다
-        verify(usedProductRepository).findByRegions(eq(List.of(REGION_ID)), any());
+        // then
+        verify(usedProductRepository).findByRegion(eq(REGION_ID), any());
     }
 
     @Test
-    void 인증된_활동_지역이_하나도_없으면_목록을_볼_수_없다() {
-        // given — 빈 목록을 주면 "매물이 없다"고 오해한다. 동네 인증이 전제임을 알린다.
-        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID)).thenReturn(List.of());
+    void 선택한_동네가_없으면_목록을_볼_수_없다() {
+        // given — 빈 목록을 주면 "매물이 없다"고 오해한다. 동네 선택이 전제임을 알린다.
+        Account account = seller();
+        ReflectionTestUtils.setField(account, "primaryRegionId", null);
+        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(account));
 
         assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.REGION_ACCESS_REQUIRED);
+                .isEqualTo(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
+    }
+
+    @Test
+    void 선택한_동네가_인증되지_않았으면_목록을_볼_수_없다() {
+        givenSelectedRegion(false);
+
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, null, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REGION_NOT_VERIFIED);
+    }
+
+    @Test
+    void 지역을_지정하지_않으면_선택한_동네에_게시글이_등록된다() {
+        // given — 앱에서 동네를 고른 뒤 글을 쓰는 흐름과 맞춘다
+        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(sellerWithPrimary()));
+        when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
+                .thenReturn(Optional.of(usedCategory()));
+        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(ACCOUNT_REGION_ID, SELLER_ID))
+                .thenReturn(Optional.of(accountRegion(true)));
+        when(usedProductRepository.save(any(UsedProduct.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        UsedProductCreateRequestDto request = createRequest(UsedProductPriceType.FIXED, new BigDecimal("10000"));
+        ReflectionTestUtils.setField(request, "regionId", null);
+
+        // when
+        UsedProductDetailResponseDto result = usedProductService.create(SELLER_ID, request);
+
+        // then
+        assertThat(result.getRegionId()).isEqualTo(REGION_ID);
     }
 
     @Test
@@ -222,9 +250,8 @@ class UsedProductServiceTest {
     void 목록의_대표_사진은_한_번의_조회로_모아_붙인다() {
         // given — 게시글마다 사진을 조회하면 페이지 크기만큼 쿼리가 나간다(N+1)
         UsedProduct product = product();
-        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID))
-                .thenReturn(List.of(accountRegion(true)));
-        when(usedProductRepository.findByRegions(any(), any()))
+        givenSelectedRegion(true);
+        when(usedProductRepository.findByRegion(any(), any()))
                 .thenReturn(new SliceImpl<>(List.of(product), PageRequest.of(0, 20), false));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of(UsedProductImage.create(product, "thumb.jpg", 1, true)));
@@ -242,9 +269,8 @@ class UsedProductServiceTest {
 
     @Test
     void 사진이_없는_게시글의_대표_사진은_null이다() {
-        when(accountRegionRepository.findByAccount_AccountId(SELLER_ID))
-                .thenReturn(List.of(accountRegion(true)));
-        when(usedProductRepository.findByRegions(any(), any()))
+        givenSelectedRegion(true);
+        when(usedProductRepository.findByRegion(any(), any()))
                 .thenReturn(new SliceImpl<>(List.of(product()), PageRequest.of(0, 20), false));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of());
@@ -389,6 +415,20 @@ class UsedProductServiceTest {
 
     // ─────────────────── 헬퍼 ───────────────────
 
+    // 선택한 동네(대표 지역)가 설정된 상태를 만든다.
+    // Account.primaryRegionId에는 regionId가 아니라 accountRegionId가 들어간다.
+    private void givenSelectedRegion(boolean verified) {
+        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(sellerWithPrimary()));
+        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(ACCOUNT_REGION_ID, SELLER_ID))
+                .thenReturn(Optional.of(accountRegion(verified)));
+    }
+
+    private Account sellerWithPrimary() {
+        Account account = seller();
+        ReflectionTestUtils.setField(account, "primaryRegionId", ACCOUNT_REGION_ID);
+        return account;
+    }
+
     private Slice<UsedProduct> emptySlice() {
         return new SliceImpl<>(List.of(), PageRequest.of(0, 20), false);
     }
@@ -443,6 +483,7 @@ class UsedProductServiceTest {
 
     private AccountRegion accountRegion(boolean verified) {
         AccountRegion accountRegion = AccountRegion.create(seller(), region());
+        ReflectionTestUtils.setField(accountRegion, "accountRegionId", ACCOUNT_REGION_ID);
         ReflectionTestUtils.setField(accountRegion, "verified", verified);
         return accountRegion;
     }

@@ -13,7 +13,6 @@ import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -35,7 +34,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public Slice<UsedProduct> findByRegions(Collection<Long> regionIds, Pageable pageable) {
+    public Slice<UsedProduct> findByRegion(Long regionId, Pageable pageable) {
         int size = pageable.getPageSize();
         Sort appliedSort = resolveSort(pageable.getSort());
 
@@ -45,7 +44,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
                 .leftJoin(PRODUCT.region).fetchJoin()
                 .leftJoin(PRODUCT.category).fetchJoin()
                 .where(
-                        PRODUCT.region.regionId.in(regionIds),
+                        PRODUCT.region.regionId.eq(regionId),
                         // 삭제·숨김은 모든 사용자 조회에서 빠짐없이 거르기
                         PRODUCT.deletedAt.isNull(),
                         PRODUCT.hidden.isFalse()

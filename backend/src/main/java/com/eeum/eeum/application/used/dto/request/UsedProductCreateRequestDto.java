@@ -17,9 +17,7 @@ public class UsedProductCreateRequestDto {
     @Schema(description = "중고거래 카테고리 ID")
     private Long categoryId;
 
-    // 활동 지역은 최대 2개라 어느 동네로 올릴지 사용자가 고른다.
-    @NotNull
-    @Schema(description = "거래 희망 지역 ID (본인의 인증된 활동 지역이어야 함)")
+    @Schema(description = "거래 희망 지역 ID. 생략하면 내가 선택한 동네(대표 지역)에 등록된다")
     private Long regionId;
 
     @NotBlank
