@@ -185,6 +185,8 @@ public class NotificationSettings extends BaseEntity {
             case NEW_RESERVATION                          -> true;
             // 관리자 전용 (항상 수신)
             case OWNER_APPLICATION_SUBMITTED, REPORT_SUBMITTED, INQUIRY_SUBMITTED -> true;
+            // 운영 실패는 대응이 늦으면 매출·정산에 직결된다 — 설정으로 끌 수 없다.
+            case OPERATION_FAILURE_DETECTED                                        -> true;
 
             // 선택 알림
             case CHAT_MESSAGE                             -> chatEnabled;

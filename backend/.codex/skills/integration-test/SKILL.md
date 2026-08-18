@@ -3,102 +3,11 @@ name: integration-test
 description: "Testcontainers 기반 MySQL·Redis·JPA·동시성 통합 테스트 또는 PortOne 등 외부 API의 공식 fixture·로컬 HTTP Stub 기반 계약 테스트를 요청했을 때 사용한다."
 ---
 
-사용자가 지정한 클래스 또는 도메인의 통합 테스트나 외부 API 계약 테스트를 작성한다.
+이 skill의 지시는 `.claude/commands/integration-test.md`에 있다. **그 파일을 처음부터 끝까지 읽고 그대로 따른다.**
 
-## 모드 선택
+- 지시가 "커맨드"라고 표현한 것은 이 skill을 가리킨다.
+- `$ARGUMENTS`는 사용자가 이 skill에 넘긴 인자로 읽는다.
+- 지시가 `.claude/CLAUDE.md`를 가리키면 `.codex/AGENTS.md`를 대신 읽어도 된다 — 내용이 같다.
+- 공통 참조 문서는 `.claude/skills/references/` 아래에 있다.
 
-- DB 제약, JPA, Redis, 동시성 검증은 **Testcontainers 통합 테스트 모드**를 사용한다.
-- 외부 API method/path/header/body/response/status 검증은 **계약 테스트 모드**를 사용한다.
-- 둘이 모두 필요한 결제·정산 흐름은 각 모드를 분리해 작성한다.
-
-## 목적
-
-`test-gen`이 만드는 단위 테스트는 Repository를 전부 Mock 처리하므로,
-Hibernate flush/clear 시점, FK 제약, 실제 쿼리 결과처럼 **실제 DB 없이는 검증할 수 없는 버그**를
-구조적으로 잡지 못한다. 이 skill은 그 공백을 메우기 위한 것이다.
-단위 테스트가 이미 다루는 분기/예외 케이스는 다루지 않는다 — 그건 `test-gen` 영역이다.
-
-## 통합 테스트가 필요한 신호 (대상 선정 기준)
-
-대상 Service/Repository를 읽고 아래 패턴이 있는지 확인한다. 하나라도 있으면 통합 테스트 후보다.
-
-1. **같은 트랜잭션 안에서 엔티티 변경 + `@Modifying` bulk 쿼리가 섞여 있다**
-   - 예: `entity.update(...)` 호출 후 같은 메서드에서 `@Modifying(clearAutomatically=true)` 쿼리를 호출
-   - 검증 시나리오: API 호출 후 같은 트랜잭션이 끝난 다음 **재조회해서 실제 값이 바뀌었는지** 확인 (응답 DTO만 보면 속는다)
-2. **자기참조 FK 또는 부모-자식 구조를 가진 엔티티의 bulk delete/hard delete**
-   - 예: 대댓글(`parentCommentId`)이 있는 댓글, 하위 카테고리가 있는 카테고리
-   - 검증 시나리오: 자식이 존재하는 상태에서 부모 삭제 시 FK 제약 위반 없이 삭제되는지
-3. **여러 계정의 데이터가 섞여야 정상 동작하는 정책**
-   - 예: 같은 지역(Region) 인증된 다른 계정의 글이 목록에 보여야 하는 경우, 소유자가 아닌 계정의 접근 차단
-   - 검증 시나리오: 계정 A가 쓴 글이 같은 조건을 만족하는 계정 B에게도 보이는지 (또는 안 보여야 하는 경우 차단되는지) 실제 데이터로 확인
-4. **LAZY 연관관계를 트랜잭션 경계를 넘어 접근할 가능성이 있는 흐름**
-   - 검증 시나리오: 실제 세션/트랜잭션 경계에서 `LazyInitializationException` 없이 끝까지 동작하는지
-5. **동시성 방어(분산 락, Pessimistic Lock, Unique 제약)가 적용된 쓰기 연산**
-   - 이미 `EventProductConcurrencyIntegrationTest`처럼 별도 동시성 통합 테스트가 있다면 중복 생성하지 않는다.
-
-위 신호가 전혀 없는 단순 CRUD/조회 메서드는 통합 테스트를 만들지 않는다 — 단위 테스트로 충분하다고 보고한다.
-
-## 작업 절차
-
-1. 대상이 DB/JPA/Redis인지 외부 API 계약인지 모드를 먼저 결정한다.
-2. DB 모드는 대상 Service에서 위 5가지 신호에 해당하는 메서드를 추린다.
-3. 계약 모드는 외부 client/gateway와 공식 최신 문서를 함께 읽고 계약 표를 만든다.
-4. 같은 패키지의 기존 테스트를 확인해 중복 시나리오를 만들지 않는다.
-5. DB 모드는 `EventProductConcurrencyIntegrationTest`를 컨벤션 기준으로 사용한다.
-6. 계약 모드는 실제 외부 API 대신 공식 fixture와 로컬 HTTP Stub을 사용한다.
-7. 관련 테스트만 먼저 실행하고, 이후 사용자가 요청한 검증 범위까지 확장한다.
-
-## 작성 컨벤션
-
-절차 3에서 읽은 `EventProductConcurrencyIntegrationTest`의 어노테이션, 컨테이너 설정,
-주입 방식을 그대로 따른다 (이 파일이 컨벤션의 단일 기준이다). 핵심 요건만 요약하면:
-
-- `@EnabledIfDockerAvailable` 필수 — Docker 없는 환경에서 빌드가 깨지지 않게 한다.
-- Testcontainers MySQL은 필수, Redis 컨테이너는 해당 도메인이 Redis를 쓸 때만 추가한다.
-- 테스트에 필요한 Service/Repository만 주입한다.
-- `@BeforeEach`에서 실제 `repository.save(...)`로 선행 데이터를 만들고,
-  `@AfterEach`에서 FK 자식 → 부모 순서로 정리한다.
-
-## 검증 원칙 (가장 중요)
-
-- **Service 메서드의 반환값(DTO)만 검증하지 않는다.** 메모리상 엔티티는 맞는데 DB는 stale한 경우(영속성 컨텍스트 clear 문제)를 잡는 게 이 테스트의 목적이므로, 반드시 같은 트랜잭션이 끝난 뒤 **Repository로 재조회**해서 실제 컬럼 값을 검증한다.
-- bulk delete가 섞인 메서드는 삭제 후 자식 엔티티가 남아있는지, FK 위반 없이 끝났는지 둘 다 확인한다.
-- 여러 계정이 등장하는 시나리오는 실제로 2개 이상의 `Account`를 `accountRepository.save(...)`로 만들어서 검증한다 — 한 계정만으로는 "본인 글만 보임" 같은 버그를 재현할 수 없다.
-- `@Transactional`을 테스트 클래스에 걸어서 자동 롤백시키지 않는다 — 그러면 flush/clear 타이밍 버그가 가려진다. `@AfterEach`에서 명시적으로 정리한다.
-
-## 데이터 생성 규칙
-
-- 테스트 데이터는 실제 정적 팩토리 메서드(`Account.createUser(...)`, `CommunityPost.create(...)` 등)로 생성한다.
-- Mock을 쓰지 않는다 — 통합 테스트의 의미가 실제 Hibernate/DB 동작 검증이므로 Mock은 금지한다.
-- DB 통합 테스트에서는 외부 API 호출 경로에 들어오지 않는 시나리오만 선택한다.
-- 계약 테스트에서는 실제 외부 API를 호출하지 않고 로컬 Stub만 사용한다.
-
-## 외부 API 계약 테스트
-
-- 공식 최신 문서를 1차 자료로 사용하고 확인한 문서 URL을 테스트 주석 또는 기준 문서에 남긴다.
-- 실제 Secret, API Key, 운영 URL 호출을 사용하지 않는다.
-- 로컬 HTTP Stub으로 요청 method, path, query, 인증 header, idempotency header, JSON body를 검증한다.
-- 공식 성공·비동기·실패 응답 fixture를 각각 제공하고 내부 결과/상태 매핑을 검증한다.
-- Webhook은 raw body와 공식 헤더를 사용해 정상 서명, 잘못된 서명, 중첩 data 구조를 검증한다.
-- DTO 역직렬화만 확인하지 말고 실제 client/gateway/handler 진입점을 호출한다.
-- 테스트 모드와 운영 모드의 응답·완료 조건이 다르면 별도 시나리오로 작성한다.
-- 결제·정산·PortOne 계약 테스트는 `.codex/references/payment-settlement.md`를 읽고 필수 목록과 중복 여부를 확인한다.
-- 공식 계약 변경으로 테스트가 실패하면 fixture만 맞춰 통과시키지 말고 프로덕션 어댑터와 내부 상태 매핑을 함께 검토한다.
-
-## 금지 사항
-
-- 테스트를 통과시키기 위해 프로덕션 로직을 약화시키지 않는다.
-- H2 등 다른 인메모리 DB로 대체하지 않는다 — MySQL 특유의 FK/제약 동작을 검증하는 게 목적이므로 반드시 Testcontainers MySQL을 사용한다.
-- 기존 단위 테스트(`test-gen` 산출물)와 중복되는 단순 분기/예외 케이스는 만들지 않는다.
-- Secret, API Key, 환경변수 값을 생성하거나 하드코딩하지 않는다.
-- 계약 테스트에서 실제 PortOne, FCM, 카카오, NTS 운영·테스트 API를 호출하지 않는다.
-- 현재 구현에서 생성한 JSON을 expected fixture로 복사해 자기 자신만 검증하지 않는다.
-
-## 출력 형식
-
-1. 선택한 모드와 대상 메서드, 선정 이유
-2. 생성/수정한 테스트 파일 경로
-3. 작성한 시나리오 목록
-4. 대상에서 제외한 메서드와 제외 이유 (단순 CRUD라 단위 테스트로 충분한 경우 등)
-5. DB 모드면 Docker 미설치 환경에서 건너뛰어지는지 확인 결과
-6. 계약 모드면 사용한 공식 문서와 실제 외부 호출이 없음을 확인한 결과
+원본을 이 파일로 복사해 오지 않는다. 사본을 만들면 두 곳이 어긋난다.

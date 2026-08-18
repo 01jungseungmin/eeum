@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -82,10 +83,13 @@ class AdminInquiryServiceTest {
         Account writer = createAccount(1L, "사용자", "user_nick");
         Inquiry inquiry = createInquiry(1L, writer, InquiryTargetType.ADMIN);
         Page<Inquiry> page = new PageImpl<>(List.of(inquiry));
-        when(inquiryRepository.findByTargetType(eq(InquiryTargetType.ADMIN), eq(pageable))).thenReturn(page);
+        when(inquiryRepository.searchInquiries(
+                eq(InquiryTargetType.ADMIN), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(page);
 
-        // when
-        Page<InquiryResponseDto> result = adminInquiryService.getAdminInquiries(pageable);
+        // when: 필터 미지정이면 전체 조회
+        Page<InquiryResponseDto> result =
+                adminInquiryService.getAdminInquiries(null, null, null, pageable);
 
         // then
         assertThat(result.getTotalElements()).isEqualTo(1);

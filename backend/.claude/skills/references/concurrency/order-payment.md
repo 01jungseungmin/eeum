@@ -1,7 +1,8 @@
 # 주문/결제 동시성 — 알려진 경쟁 시나리오
 
-concurrency-auditor가 주문/결제 도메인 감사 시 확인하는 최소 점검 목록이다.
+`concurrency-auditor`가 주문/결제 도메인 감사 시 확인하는 최소 점검 목록이다.
 이 목록은 하한선일 뿐이며, 목록 밖 시나리오도 코드에서 도출해야 한다.
+결제·정산 전체 상태와 PortOne 계약은 `../payment-settlement.md`를 함께 읽는다.
 
 ## 상태 전이
 
@@ -42,6 +43,17 @@ concurrency-auditor가 주문/결제 도메인 감사 시 확인하는 최소 �
 - 외부 API 성공 후 DB 저장 실패 시 보상 로직이 있는가?
 - 같은 결제 건에 대해 중복 환불이 발생하지 않는가?
 - Webhook은 같은 paymentId가 여러 번 와도 1회만 상태 변경되는가? (Redis + DB Unique 이중 방어)
+- Webhook과 브라우저 verify가 어느 순서로 도착해도 같은 성공 결과로 수렴하는가?
+- 취소 `REQUESTED` 상태에서 내부 취소를 완료하지 않는가?
+- 외부 콘솔 취소와 부분 취소가 수익 원장·정산에 반영되는가?
+- 가상계좌 발급·입금·주문 만료가 서로 다른 상태로 조정되는가?
+
+## 환불 승인 vs 정산 지급
+
+- 환불 승인 prepare와 지급 claim 중 어느 쪽이 먼저 시작돼도 과지급을 차단하는가?
+- 미완료 취소 작업이 포함된 정산의 지급 시작을 차단하는가?
+- 외부 transfer 생성 뒤 환불이 발생하면 자동 지급 중단 또는 과지급 경고가 남는가?
+- claim 임대 만료 뒤 이전 작업자의 결과가 최신 결과를 덮어쓰지 않는가?
 
 ## 대응 통합 테스트
 
@@ -50,3 +62,7 @@ concurrency-auditor가 주문/결제 도메인 감사 시 확인하는 최소 �
 - IT-ORD-005: 주문 만료 스케줄러와 결제 Webhook 동시 처리 → 최종 상태 1개로 수렴
 - IT-ORD-006: 고객 취소와 사장 거절 동시 처리 → 재고 1회만 복구
 - IT-ORD-007: 환불 승인 중복 요청 → PortOne 환불 1회만 호출
+- CT-PAY-001: Standard Webhooks header + `data.paymentId` 계약
+- CT-PAY-002: 취소 `SUCCEEDED/REQUESTED/FAILED` 응답 매핑
+- CT-PAY-003: 외부 취소/부분 취소 → 수익 원장·정산 조정
+- CT-SET-001: 테스트/운영 Transfer·Partner Settlement 지급 완료 상태 매핑

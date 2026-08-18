@@ -83,6 +83,12 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail(ErrorCode.VISIT_RESERVATION_ALREADY_EXISTS));
         }
+        // 답변 작성 요청이 동시에 두 번 들어오면 서비스단 중복 검사를 둘 다 통과한 뒤
+        // 유니크 제약에서 갈린다. 진 쪽에도 "이미 답변됨"이라는 같은 의미를 돌려준다.
+        if (rootMsg.contains("uk_inquiry_answer_inquiry_id")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.INQUIRY_ALREADY_ANSWERED));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
     }

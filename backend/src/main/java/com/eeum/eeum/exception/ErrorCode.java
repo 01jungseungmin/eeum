@@ -138,6 +138,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_REFUND_ALREADY("PAYMENT_010", "이미 환불 처리 되었습니다.", HttpStatus.CONFLICT),
     PAYMENT_NOT_COMPLETED("PAYMENT_011", "결제가 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
     PAYMENT_REFUND_NOT_REQUESTED("PAYMENT_012", "환불 요청 상태가 아닙니다.", HttpStatus.BAD_REQUEST),
+    // 서명 검증 이전 단계에서 걸러지는 형식 오류 — 인증 실패(401)와 구분해 400으로 응답한다
+    PAYMENT_WEBHOOK_MALFORMED("PAYMENT_013", "형식이 올바르지 않은 Webhook 요청입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
@@ -233,6 +235,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     INQUIRY_TARGET_TYPE_MISMATCH("INQUIRY_006", "해당 문의 유형에 대한 답변 권한이 없습니다", HttpStatus.FORBIDDEN),
     INQUIRY_ANSWER_NOT_FOUND("INQUIRY_007", "존재하지 않는 답변입니다", HttpStatus.NOT_FOUND),
     INQUIRY_STORE_NOT_ALLOWED("INQUIRY_008", "관리자 문의에는 storeId를 포함할 수 없습니다", HttpStatus.BAD_REQUEST),
+    INQUIRY_ALREADY_CLOSED("INQUIRY_009", "이미 종료된 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_NOT_CLOSED("INQUIRY_010", "종료 상태가 아닌 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_CLOSED("INQUIRY_011", "종료된 문의에는 답변할 수 없습니다", HttpStatus.CONFLICT),
 
     // ===================== 신고 (REPORT) =====================
     REPORT_NOT_FOUND("REPORT_001", "존재하지 않는 신고입니다.", HttpStatus.NOT_FOUND),

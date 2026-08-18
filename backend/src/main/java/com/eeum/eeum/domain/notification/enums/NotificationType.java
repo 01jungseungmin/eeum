@@ -57,7 +57,8 @@ public enum NotificationType {
     // 관리자 전용
     OWNER_APPLICATION_SUBMITTED, // 새 사장 승인 신청 접수
     REPORT_SUBMITTED,            // 새 신고 접수
-    INQUIRY_SUBMITTED;           // 새 문의 접수
+    INQUIRY_SUBMITTED,           // 새 문의 접수
+    OPERATION_FAILURE_DETECTED;  // 운영 실패 감지 (결제 Webhook·환불·스케줄러·외부 API)
 
     // UI 필터 카테고리 반환
     // NotificationController의 category 파라미터 필터링에 사용
@@ -79,7 +80,8 @@ public enum NotificationType {
                     -> NotificationCategory.PRODUCT;
             case SETTLEMENT_COMPLETED, INQUIRY_ANSWERED, SYSTEM_NOTICE,
                  MARKETING_EVENT, USED_PRODUCT_INQUIRY, USED_REVIEW,
-                 OWNER_APPLICATION_SUBMITTED, REPORT_SUBMITTED, INQUIRY_SUBMITTED
+                 OWNER_APPLICATION_SUBMITTED, REPORT_SUBMITTED, INQUIRY_SUBMITTED,
+                 OPERATION_FAILURE_DETECTED
                     -> NotificationCategory.SYSTEM;
         };
     }

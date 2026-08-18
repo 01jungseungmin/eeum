@@ -371,4 +371,142 @@ class OwnerInquiryServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ACCOUNT_NOT_FOUND);
     }
+
+    @Test
+    void 이미_답변이_달린_문의에_사장이_다시_답변하면_INQUIRY_ALREADY_ANSWERED() {
+        // given — 상태는 PENDING이지만 답변 행이 이미 존재하는 경우
+        Long ownerId = 1L;
+        Long storeId = 10L;
+        Long inquiryId = 100L;
+        Account owner = createAccount(ownerId, "사장님", "owner_nick");
+        Account writer = createAccount(2L, "사용자", "user_nick");
+        Store store = createStore(storeId, owner);
+        Inquiry inquiry = createInquiry(inquiryId, writer, store, InquiryTargetType.STORE);
+        InquiryAnswerCreateRequestDto request = mockAnswerRequest("두 번째 답변");
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerId))).thenReturn(Optional.of(store));
+        when(inquiryRepository.findByInquiryId(eq(inquiryId))).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.existsByInquiry_InquiryId(eq(inquiryId))).thenReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> ownerInquiryService.answerInquiry(ownerId, inquiryId, request))
+                .isInstanceOf(ConflictException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+    }
+
+    // ──────────────── updateAnswer ────────────────
+
+    @Test
+    void 사장이_자기_답변을_수정하면_본문이_바뀐다() {
+        // given
+        Long ownerId = 1L;
+        Long storeId = 10L;
+        Long inquiryId = 100L;
+        Long answerId = 500L;
+        Account owner = createAccount(ownerId, "사장님", "owner_nick");
+        Account writer = createAccount(2L, "사용자", "user_nick");
+        Store store = createStore(storeId, owner);
+        Inquiry inquiry = createInquiry(inquiryId, writer, store, InquiryTargetType.STORE);
+        InquiryAnswer answer = createOwnerAnswer(answerId, inquiry, owner, "오타가 있던 답변");
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerId))).thenReturn(Optional.of(store));
+        when(inquiryRepository.findByInquiryId(eq(inquiryId))).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.findById(eq(answerId))).thenReturn(Optional.of(answer));
+
+        // when
+        InquiryAnswerResponseDto result = ownerInquiryService.updateAnswer(
+                ownerId, inquiryId, answerId, mockAnswerRequest("정정된 답변"));
+
+        // then
+        assertThat(answer.getContent()).isEqualTo("정정된 답변");
+        assertThat(result.getContent()).isEqualTo("정정된 답변");
+        assertThat(result.getWriterType()).isEqualTo(InquiryAnswerWriterType.OWNER);
+    }
+
+    @Test
+    void 남의_가게_문의의_답변은_수정할_수_없다() {
+        // given
+        Long ownerId = 1L;
+        Long inquiryId = 100L;
+        Long answerId = 500L;
+        Account owner = createAccount(ownerId, "사장님", "owner_nick");
+        Account otherOwner = createAccount(3L, "다른사장", "other_nick");
+        Account writer = createAccount(2L, "사용자", "user_nick");
+        Store myStore = createStore(10L, owner);
+        Store otherStore = createStore(20L, otherOwner);
+        Inquiry inquiry = createInquiry(inquiryId, writer, otherStore, InquiryTargetType.STORE);
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerId))).thenReturn(Optional.of(myStore));
+        when(inquiryRepository.findByInquiryId(eq(inquiryId))).thenReturn(Optional.of(inquiry));
+
+        // when & then
+        assertThatThrownBy(() -> ownerInquiryService.updateAnswer(
+                ownerId, inquiryId, answerId, mockAnswerRequest("월권 수정")))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INQUIRY_ACCESS_DENIED);
+    }
+
+    @Test
+    void 다른_문의의_답변_ID로는_사장도_수정할_수_없다() {
+        // given
+        Long ownerId = 1L;
+        Long storeId = 10L;
+        Long inquiryId = 100L;
+        Long answerId = 500L;
+        Account owner = createAccount(ownerId, "사장님", "owner_nick");
+        Account writer = createAccount(2L, "사용자", "user_nick");
+        Store store = createStore(storeId, owner);
+        Inquiry inquiry = createInquiry(inquiryId, writer, store, InquiryTargetType.STORE);
+        Inquiry otherInquiry = createInquiry(999L, writer, store, InquiryTargetType.STORE);
+        InquiryAnswer answerOfOther = createOwnerAnswer(answerId, otherInquiry, owner, "다른 문의 답변");
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerId))).thenReturn(Optional.of(store));
+        when(inquiryRepository.findByInquiryId(eq(inquiryId))).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.findById(eq(answerId))).thenReturn(Optional.of(answerOfOther));
+
+        // when & then
+        assertThatThrownBy(() -> ownerInquiryService.updateAnswer(
+                ownerId, inquiryId, answerId, mockAnswerRequest("바꿔치기 시도")))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INQUIRY_ANSWER_NOT_FOUND);
+    }
+
+    @Test
+    void 사장_API로_관리자_답변은_수정할_수_없다() {
+        // given
+        Long ownerId = 1L;
+        Long storeId = 10L;
+        Long inquiryId = 100L;
+        Long answerId = 500L;
+        Account owner = createAccount(ownerId, "사장님", "owner_nick");
+        Account admin = createAccount(99L, "관리자", "admin_nick");
+        Account writer = createAccount(2L, "사용자", "user_nick");
+        Store store = createStore(storeId, owner);
+        Inquiry inquiry = createInquiry(inquiryId, writer, store, InquiryTargetType.STORE);
+
+        InquiryAnswer adminAnswer = InquiryAnswer.create(
+                inquiry, admin, InquiryAnswerWriterType.ADMIN, "관리자가 대신 쓴 답변");
+        ReflectionTestUtils.setField(adminAnswer, "answerId", answerId);
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerId))).thenReturn(Optional.of(store));
+        when(inquiryRepository.findByInquiryId(eq(inquiryId))).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.findById(eq(answerId))).thenReturn(Optional.of(adminAnswer));
+
+        // when & then
+        assertThatThrownBy(() -> ownerInquiryService.updateAnswer(
+                ownerId, inquiryId, answerId, mockAnswerRequest("월권 수정")))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+    }
+
+    private InquiryAnswer createOwnerAnswer(Long answerId, Inquiry inquiry, Account owner, String content) {
+        InquiryAnswer answer = InquiryAnswer.create(
+                inquiry, owner, InquiryAnswerWriterType.OWNER, content);
+        ReflectionTestUtils.setField(answer, "answerId", answerId);
+        return answer;
+    }
 }

@@ -5,7 +5,10 @@ import com.eeum.eeum.application.order.dto.request.PaymentWebhookRequestDto;
 import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.PaymentResponseDto;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.lock.RateLimitKeys;
+import com.eeum.eeum.common.service.RateLimitService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.config.PortOneProperties;
 import com.eeum.eeum.domain.order.entity.Order;
@@ -16,6 +19,7 @@ import com.eeum.eeum.domain.order.enums.RefundStatus;
 import com.eeum.eeum.domain.order.event.OrderPaidEvent;
 import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.exception.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -35,6 +39,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -49,9 +54,17 @@ public class PaymentService {
     private final PortOnePaymentClient portOnePaymentClient;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final OperationFailureRecorder operationFailureRecorder;
+    private final RateLimitService rateLimitService;
     private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
+
+    /** Webhook 서명 실패 누적 카운터의 집계 구간. */
+    private static final Duration SIGNATURE_FAILURE_COUNT_WINDOW = Duration.ofHours(1);
+
+    /** 서명 실패를 DB 이력으로 남기는 최소 간격 — 구간당 1건. */
+    private static final Duration SIGNATURE_FAILURE_RECORD_COOLDOWN = Duration.ofMinutes(10);
 
     @Transactional
     public void verifyPayment(Long accountId, PaymentCompleteRequestDto request) {
@@ -65,9 +78,12 @@ public class PaymentService {
 
     @Transactional
     public void handleWebhook(String rawBody, String signature) {
+        // [1단계] 서명 검증 이전의 형식 오류는 이력에 남기지 않는다.
+        // 이 엔드포인트는 permitAll이라 누구나 호출할 수 있고, 건별로 기록하면
+        // 익명 요청 반복만으로 실패 이력 테이블을 채울 수 있다(3개월 보존).
         if (rawBody == null || rawBody.isBlank()) {
             log.warn("빈 Webhook body 수신");
-            return;
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
         }
 
         /*
@@ -81,8 +97,14 @@ public class PaymentService {
 
         PaymentWebhookRequestDto request = parseWebhookBody(rawBody);
 
+        // [3단계] 여기부터는 서명 검증을 통과한 요청이다 — 실패는 빠짐없이 기록한다.
         if (request.getPaymentId() == null || request.getPaymentId().isBlank()) {
             log.warn("paymentId 없는 Webhook 수신");
+            operationFailureRecorder.record(
+                    OperationFailureCategory.PAYMENT_WEBHOOK,
+                    "PaymentService.handleWebhook",
+                    null, null,
+                    "WEBHOOK_NO_PAYMENT_ID", "Webhook에 paymentId가 없음", maskWebhookBody(rawBody));
             return;
         }
 
@@ -123,8 +145,16 @@ public class PaymentService {
                 ? payment.getRefundReason()
                 : "고객 요청 취소";
 
-        // PortOne 취소 API 호출
-        portOnePaymentClient.cancelPayment(payment.getPortonePaymentId(), payment.getAmount(), reason);
+        // PortOne 취소 API 호출 — 실패하면 결제는 PAID로 남으므로 반드시 이력을 남긴다.
+        // 이 기록이 없으면 "환불이 왜 안 됐는지"를 서버 로그에서만 찾아야 한다.
+        recordPortOneFailure(
+                OperationFailureCategory.REFUND,
+                "PaymentService.cancelPayment",
+                String.valueOf(payment.getPaymentId()),
+                "portonePaymentId=" + payment.getPortonePaymentId()
+                        + ", amount=" + payment.getAmount(),
+                () -> portOnePaymentClient.cancelPayment(
+                        payment.getPortonePaymentId(), payment.getAmount(), reason));
 
         payment.cancel();
 
@@ -193,12 +223,24 @@ public class PaymentService {
             // 주문이 이미 만료/취소됐는데 PortOne에는 결제가 실제로 PAID면(만료 직전 결제 + 웹훅 지연)
             // 고객 돈이 PG에 묶이므로 자동 취소(환불)로 보상한다. 웹훅 재시도 시에는 PortOne 상태가
             // 이미 CANCELLED이므로 이 분기를 다시 타지 않아 이중 환불되지 않는다.
-            PortOnePaymentInfo settledInfo = portOnePaymentClient.getPayment(request.getPaymentId());
+            PortOnePaymentInfo settledInfo = recordPortOneFailure(
+                    OperationFailureCategory.EXTERNAL_API,
+                    "PaymentService.handleWebhook.getPayment",
+                    request.getPaymentId(),
+                    "orderId=" + order.getOrderId() + ", orderStatus=" + order.getStatus(),
+                    () -> portOnePaymentClient.getPayment(request.getPaymentId()));
+
             if ("PAID".equalsIgnoreCase(settledInfo.getStatus())) {
                 log.warn("만료/취소 주문에 결제 완료 Webhook 수신 — 자동 환불: orderId={}, status={}",
                         order.getOrderId(), order.getStatus());
-                portOnePaymentClient.cancelPayment(request.getPaymentId(), settledInfo.getAmount(),
-                        "주문 만료 후 결제 완료 — 자동 환불");
+                recordPortOneFailure(
+                        OperationFailureCategory.REFUND,
+                        "PaymentService.handleWebhook.autoCancel",
+                        request.getPaymentId(),
+                        "orderId=" + order.getOrderId() + ", amount=" + settledInfo.getAmount(),
+                        () -> portOnePaymentClient.cancelPayment(
+                                request.getPaymentId(), settledInfo.getAmount(),
+                                "주문 만료 후 결제 완료 — 자동 환불"));
             } else {
                 log.info("이미 결제 처리 불가능한 주문 상태: orderId={}, status={}",
                         order.getOrderId(), order.getStatus());
@@ -213,8 +255,12 @@ public class PaymentService {
         }
 
 
-        PortOnePaymentInfo paymentInfo =
-                 portOnePaymentClient.getPayment(request.getPaymentId());
+        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
+                OperationFailureCategory.EXTERNAL_API,
+                "PaymentService.handleWebhook.getPayment",
+                request.getPaymentId(),
+                "orderId=" + order.getOrderId(),
+                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
 
          validatePaymentAmount(order, paymentInfo);
 
@@ -235,12 +281,16 @@ public class PaymentService {
     private void validateWebhookSignature(String rawBody, String signature) {
         String secret = portOneProperties.webhookSecret();
         if (!StringUtils.hasText(secret)) {
+            // 서버 설정 오류다. 공격자가 반복 유발할 수 있으므로 2단계와 같은 제한 기록을 쓴다.
             log.error("PortOne Webhook Secret이 설정되지 않았습니다.");
+            recordWebhookSignatureFailure("Webhook Secret 미설정", null);
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
 
+        // [1단계] 서명 헤더 자체가 없으면 PortOne이 보낸 요청이 아니다 — 기록 없이 400.
         if (!StringUtils.hasText(signature)) {
-            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
+            log.warn("서명 헤더 없는 Webhook 수신");
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
         }
 
         String expected = hmacSha256Hex(rawBody, secret);
@@ -250,6 +300,9 @@ public class PaymentService {
                 expected.getBytes(StandardCharsets.UTF_8),
                 normalizedSignature.getBytes(StandardCharsets.UTF_8)
         )) {
+            // [2단계] 서명은 왔는데 맞지 않는다 — 시크릿 로테이션 사고일 수도, 공격일 수도 있다.
+            // 카운터로 전량 집계하고 이력은 구간당 1건만 남긴다.
+            recordWebhookSignatureFailure("서명 불일치", rawBody);
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
     }
@@ -321,8 +374,12 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
 
-        PortOnePaymentInfo paymentInfo =
-                portOnePaymentClient.getPayment(request.getPaymentId());
+        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
+                OperationFailureCategory.EXTERNAL_API,
+                "PaymentService.verifyPayment.getPayment",
+                request.getPaymentId(),
+                "orderNumber=" + order.getOrderNumber(),
+                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
 
         validatePaymentAmount(order, paymentInfo);
 
@@ -363,6 +420,41 @@ public class PaymentService {
                 order.getOrderId()));
     }
 
+    /**
+     * PortOne 호출 실패를 업무 맥락과 함께 <b>한 번만</b> 기록하고 예외를 그대로 다시 던진다.
+     *
+     * <p>클라이언트({@code PortOnePaymentClientImpl})는 이력을 남기지 않는다. 양쪽에서 남기면
+     * 실패 1건이 이력 2건이 되어 failureCount·분류별 실패율·알람 임계치가 전부 두 배로 어긋난다.
+     * 기록을 서비스에 두면 orderId·orderNumber 같은 업무 정보까지 payload에 담을 수 있다.
+     */
+    private <T> T recordPortOneFailure(
+            OperationFailureCategory category,
+            String operation,
+            String refId,
+            String payload,
+            Supplier<T> call
+    ) {
+        try {
+            return call.get();
+        } catch (RuntimeException e) {
+            operationFailureRecorder.record(category, operation, "PAYMENT", refId, e, payload);
+            throw e;
+        }
+    }
+
+    private void recordPortOneFailure(
+            OperationFailureCategory category,
+            String operation,
+            String refId,
+            String payload,
+            Runnable call
+    ) {
+        recordPortOneFailure(category, operation, refId, payload, () -> {
+            call.run();
+            return null;
+        });
+    }
+
     private String normalizeSignature(String signature) {
         String value = signature.trim();
         if (value.startsWith("sha256=")) {
@@ -371,12 +463,50 @@ public class PaymentService {
         return value;
     }
 
+    /**
+     * [2단계] 서명 검증 실패의 제한 기록.
+     *
+     * <p>발생량은 Redis 카운터로 전량 집계하고, DB 이력은 {@link #SIGNATURE_FAILURE_RECORD_COOLDOWN}당
+     * 1건만 남긴다. 인증 없는 엔드포인트라 건별로 남기면 익명 요청만으로 테이블이 불어난다.
+     * 대신 남기는 1건에 구간 누적 건수를 적어 규모를 알 수 있게 한다.
+     */
+    private void recordWebhookSignatureFailure(String message, String rawBody) {
+        long total = rateLimitService.incrementAndGet(
+                RateLimitKeys.webhookSignatureFailureCount(), SIGNATURE_FAILURE_COUNT_WINDOW);
+
+        if (!rateLimitService.tryAcquireCooldown(
+                RateLimitKeys.webhookSignatureFailureRecord(), SIGNATURE_FAILURE_RECORD_COOLDOWN)) {
+            log.warn("Webhook 서명 검증 실패(이력 생략) — reason={}, 누적={}건", message, total);
+            return;
+        }
+
+        operationFailureRecorder.record(
+                OperationFailureCategory.PAYMENT_WEBHOOK,
+                "PaymentService.validateWebhookSignature",
+                null, null,
+                ErrorCode.PAYMENT_WEBHOOK_INVALID.name(),
+                message + " (최근 " + SIGNATURE_FAILURE_COUNT_WINDOW.toHours() + "시간 누적 " + total + "건)",
+                maskWebhookBody(rawBody));
+    }
+
+    // 실패 이력은 관리자 화면에 그대로 노출되므로 원문을 통째로 넣지 않는다.
+    // 재현에 필요한 앞부분만 남기고 자른다.
+    private String maskWebhookBody(String rawBody) {
+        if (rawBody == null) {
+            return null;
+        }
+        int limit = Math.min(rawBody.length(), 500);
+        return rawBody.substring(0, limit);
+    }
+
     private PaymentWebhookRequestDto parseWebhookBody(String rawBody) {
         try {
             return objectMapper.readValue(rawBody, PaymentWebhookRequestDto.class);
         } catch (JsonProcessingException e) {
-            log.warn("Webhook body 파싱 실패: rawBody={}", rawBody);
-            throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+            // [1단계] 형식 오류 — 기록하지 않고 400. 서명은 통과했더라도 본문이 JSON이 아니라면
+            // 정상 PortOne 요청이 아니며, 여기서 남기면 본문 조작만으로 이력을 늘릴 수 있다.
+            log.warn("Webhook body 파싱 실패: {}", maskWebhookBody(rawBody));
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
         }
     }
 }

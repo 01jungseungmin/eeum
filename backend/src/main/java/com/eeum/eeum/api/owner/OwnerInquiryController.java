@@ -63,4 +63,20 @@ public class OwnerInquiryController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(ownerInquiryService.answerInquiry(ownerId, inquiryId, request)));
     }
+
+    @Operation(
+            summary = "내 가게 문의 답변 수정",
+            description = "내 가게 문의에 단 답변 본문을 정정합니다. 삭제는 제공하지 않습니다. " +
+                    "수정 시 응답의 edited=true, modifiedAt이 갱신되며 알림은 재발송되지 않습니다."
+    )
+    @PatchMapping("/{inquiryId}/answers/{answerId}")
+    public ResponseEntity<ApiResponse<InquiryAnswerResponseDto>> updateAnswer(
+            @Parameter(description = "문의 ID") @PathVariable Long inquiryId,
+            @Parameter(description = "답변 ID") @PathVariable Long answerId,
+            @Valid @RequestBody InquiryAnswerCreateRequestDto request
+    ) {
+        Long ownerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                ownerInquiryService.updateAnswer(ownerId, inquiryId, answerId, request)));
+    }
 }
