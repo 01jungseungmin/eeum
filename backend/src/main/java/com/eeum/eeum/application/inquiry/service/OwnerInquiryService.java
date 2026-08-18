@@ -141,6 +141,11 @@ public class OwnerInquiryService {
         }
 
         answer.updateContent(request.getContent());
+
+        // modifiedAt은 @LastModifiedDate라 flush(@PreUpdate) 시점에 채워진다.
+        // flush 없이 DTO를 만들면 edited=false, modifiedAt=이전 값이 그대로 응답에 실린다.
+        inquiryAnswerRepository.flush();
+
         return InquiryAnswerResponseDto.from(answer);
     }
 
