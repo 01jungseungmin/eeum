@@ -109,6 +109,24 @@ public class UsedProduct extends BaseEntity {
         return product;
     }
 
+    // 게시글 내용 수정
+    public void updateInfo(
+            Category category,
+            String title,
+            String content,
+            UsedProductPriceType priceType,
+            BigDecimal price
+    ) {
+        validateCategory(category);
+        validatePrice(priceType, price);
+
+        this.category = category;
+        this.title = title;
+        this.content = content;
+        this.priceType = priceType;
+        this.price = price;
+    }
+
     // ===================== 거래 상태 =====================
 
     // 판매중인 글만 예약 가능
