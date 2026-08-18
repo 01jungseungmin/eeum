@@ -171,6 +171,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_REVIEW_NOT_FOUND("USED_006", "존재하지 않는 중고거래 리뷰입니다", HttpStatus.NOT_FOUND),
     USED_REVIEW_ALREADY_EXISTS("USED_007", "이미 리뷰를 작성했습니다", HttpStatus.CONFLICT),
     USED_REVIEW_NOT_COMPLETED("USED_008", "거래가 완료된 후 리뷰를 작성할 수 있습니다", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_INVALID_CATEGORY("USED_009", "중고거래 카테고리가 아닙니다", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_INVALID_PRICE("USED_010", "거래 유형과 가격이 맞지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
