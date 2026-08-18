@@ -10,10 +10,8 @@ import com.eeum.eeum.domain.notification.enums.NotificationType;
 import com.eeum.eeum.domain.operation.event.OperationFailureRecordedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Duration;
 import java.util.List;
@@ -44,26 +42,36 @@ public class OperationFailureNotificationListener {
     private final AccountRepository accountRepository;
     private final RateLimitService rateLimitService;
 
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    /**
+     * {@code @EventListener}인 이유: 이 이벤트는 {@code OperationFailureLogWriter}의
+     * 트랜잭션이 커밋된 <b>뒤</b>, 트랜잭션 밖에서 발행된다. 트랜잭션 리스너로 두면
+     * 활성 트랜잭션이 없어 아예 실행되지 않는다.
+     *
+     * <p>{@code @Async}를 붙이지 않는다 — 발행 지점이 이미 비동기 스레드라 한 번 더
+     * 넘길 이유가 없고, 풀이 포화될 때 불필요한 압력만 더한다.
+     */
+    @EventListener
     public void onOperationFailureRecorded(OperationFailureRecordedEvent event) {
         // 분류는 DB에서 not null이라 실제로는 항상 존재한다. null 분기는 링크가 깨지지 않게 하는 방어다.
         String category = event.category() == null ? null : event.category().name();
         String label = category == null ? "UNKNOWN" : category;
 
-        // 수신자를 먼저 확인한다. 관리자가 없는데 쿨다운만 소모하면
-        // 이후 관리자가 생겨도 남은 쿨다운 동안 알림이 조용히 사라진다.
-        List<Long> adminIds = accountRepository.findAdminAccountIds();
-        if (adminIds.isEmpty()) {
-            log.warn("운영 실패 알림 — 관리자 계정 없음: logId={}, category={}",
-                    event.operationFailureLogId(), label);
+        // 쿨다운을 먼저 잡는다. 수신자 조회를 앞에 두면 실패가 폭주할 때
+        // 스로틀에 막힐 건까지 건별로 관리자 조회 쿼리를 날리게 된다.
+        String cooldownKey = RateLimitKeys.operationFailureAlert(category);
+        if (!rateLimitService.tryAcquireCooldown(cooldownKey, ALERT_COOLDOWN)) {
+            log.debug("운영 실패 알림 스로틀 — category={}, logId={}",
+                    label, event.operationFailureLogId());
             return;
         }
 
-        if (!rateLimitService.tryAcquireCooldown(
-                RateLimitKeys.operationFailureAlert(category), ALERT_COOLDOWN)) {
-            log.debug("운영 실패 알림 스로틀 — category={}, logId={}",
-                    label, event.operationFailureLogId());
+        List<Long> adminIds = accountRepository.findAdminAccountIds();
+        if (adminIds.isEmpty()) {
+            // 보낼 곳이 없으면 쿨다운을 반납한다. 그대로 두면 이후 관리자가 생겨도
+            // 남은 쿨다운 동안 알림이 조용히 사라진다.
+            rateLimitService.releaseCooldown(cooldownKey);
+            log.warn("운영 실패 알림 — 관리자 계정 없음: logId={}, category={}",
+                    event.operationFailureLogId(), label);
             return;
         }
 

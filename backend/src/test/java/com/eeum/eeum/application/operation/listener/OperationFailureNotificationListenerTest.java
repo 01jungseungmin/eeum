@@ -81,17 +81,18 @@ class OperationFailureNotificationListenerTest {
     }
 
     @Test
-    void 같은_분류의_실패가_쿨다운_중이면_알림을_보내지_않는다() {
+    void 같은_분류의_실패가_쿨다운_중이면_알림도_관리자_조회도_하지_않는다() {
         // given — PortOne 장애로 환불 실패가 연속 발생하는 상황
-        when(accountRepository.findAdminAccountIds()).thenReturn(List.of(1L));
         when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(false);
 
         // when
         listener.onOperationFailureRecorded(event(
                 OperationFailureCategory.REFUND, "PaymentService.cancelPayment", "PORTONE_TIMEOUT"));
 
-        // then — 이력은 이미 저장돼 있고 알림만 생략된다
+        // then — 이력은 이미 저장돼 있고 알림만 생략된다.
+        // 폭주 구간에서 건별 관리자 조회 쿼리가 나가지 않아야 한다.
         verify(notificationService, never()).createNotificationsBatch(any());
+        verifyNoInteractions(accountRepository);
     }
 
     @Test
@@ -111,8 +112,9 @@ class OperationFailureNotificationListenerTest {
     }
 
     @Test
-    void 관리자가_없으면_쿨다운을_소모하지_않는다() {
-        // given — 쿨다운만 태우면 이후 관리자가 생겨도 남은 시간 동안 알림이 조용히 사라진다
+    void 관리자가_없으면_잡았던_쿨다운을_반납한다() {
+        // given — 그대로 두면 이후 관리자가 생겨도 남은 쿨다운 동안 알림이 조용히 사라진다
+        when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(true);
         when(accountRepository.findAdminAccountIds()).thenReturn(List.of());
 
         // when
@@ -120,7 +122,7 @@ class OperationFailureNotificationListenerTest {
                 OperationFailureCategory.PAYMENT_WEBHOOK, "PaymentService.handleWebhook", "INVALID_SIGNATURE"));
 
         // then
-        verifyNoInteractions(rateLimitService);
+        verify(rateLimitService).releaseCooldown("rate-limit:operation-failure-alert:PAYMENT_WEBHOOK");
         verify(notificationService, never()).createNotificationsBatch(any());
     }
 
