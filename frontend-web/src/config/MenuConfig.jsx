@@ -20,6 +20,7 @@ import {
   Settings,
   Sparkles,
   MessageSquareText,
+  HeartHandshake,
   LogOut,
 } from 'lucide-react';
 
@@ -75,6 +76,13 @@ export const OWNER_MENU_CONFIG = [
         path: '/ai-manager',
         icon: <Sparkles {...iconProps} />,
         subtitle: 'AI가 정리한 오늘의 할 일을 확인하세요',
+      },
+      {
+        id: 'ai-customer-care',
+        name: 'AI 고객 케어',
+        path: '/ai-manager/customer-care',
+        icon: <HeartHandshake {...iconProps} />,
+        subtitle: '지금 말을 걸어야 할 고객을 확인하세요',
       },
       {
         id: 'ai-messages',
