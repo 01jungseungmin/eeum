@@ -134,6 +134,11 @@ public class AdminInquiryService {
         }
 
         answer.updateContent(request.getContent());
+
+        // modifiedAt은 @LastModifiedDate라 flush(@PreUpdate) 시점에 채워진다.
+        // flush 없이 DTO를 만들면 edited=false, modifiedAt=이전 값이 그대로 응답에 실린다.
+        inquiryAnswerRepository.flush();
+
         return InquiryAnswerResponseDto.from(answer);
     }
 
@@ -154,7 +159,9 @@ public class AdminInquiryService {
         if (!inquiry.isClosed()) {
             throw new ConflictException(ErrorCode.INQUIRY_NOT_CLOSED);
         }
-        inquiry.reopen();
+        // 답변이 남아 있으면 ANSWERED로 되돌린다 — PENDING으로 되돌리면 재답변이 거부되어
+        // 미답변 목록과 대시보드 미답변 수에서 빠져나갈 수 없게 된다.
+        inquiry.reopen(inquiryAnswerRepository.existsByInquiry_InquiryId(inquiryId));
     }
 
     // ADMIN 문의가 아니면 관리자 API로 다룰 수 없다 — 상점 문의는 사장이 담당한다.

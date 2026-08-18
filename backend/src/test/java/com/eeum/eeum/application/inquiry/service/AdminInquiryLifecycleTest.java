@@ -26,6 +26,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -198,6 +199,53 @@ class AdminInquiryLifecycleTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+    }
+
+    @Test
+    void 답변_수정_응답을_만들기_전에_flush해_edited가_참으로_나가게_한다() {
+        // given — modifiedAt은 flush(@PreUpdate) 때 채워진다. flush를 빼면
+        // edited=false, modifiedAt=이전 값이 그대로 응답에 실린다(Swagger 설명과 어긋남).
+        Inquiry inquiry = adminInquiry(InquiryStatus.ANSWERED);
+        InquiryAnswer answer = adminAnswer(inquiry, "오타");
+        when(inquiryRepository.findByInquiryId(INQUIRY_ID)).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.findById(ANSWER_ID)).thenReturn(Optional.of(answer));
+
+        // when
+        adminInquiryService.updateAnswer(INQUIRY_ID, ANSWER_ID, answerRequest("정정"));
+
+        // then
+        verify(inquiryAnswerRepository).flush();
+    }
+
+    // ─────────────────── 재오픈 상태 결정 ───────────────────
+
+    @Test
+    void 답변이_있는_문의를_재오픈하면_ANSWERED로_돌아간다() {
+        // given — PENDING으로 되돌리면 재답변이 거부되어(문의당 답변 1건)
+        // 미답변 목록과 대시보드 미답변 수에서 빠져나갈 수 없게 된다.
+        Inquiry inquiry = adminInquiry(InquiryStatus.CLOSED);
+        when(inquiryRepository.findByInquiryId(INQUIRY_ID)).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.existsByInquiry_InquiryId(INQUIRY_ID)).thenReturn(true);
+
+        // when
+        adminInquiryService.reopenInquiry(INQUIRY_ID);
+
+        // then
+        assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.ANSWERED);
+    }
+
+    @Test
+    void 답변이_없는_문의를_재오픈하면_PENDING으로_돌아간다() {
+        // given
+        Inquiry inquiry = adminInquiry(InquiryStatus.CLOSED);
+        when(inquiryRepository.findByInquiryId(INQUIRY_ID)).thenReturn(Optional.of(inquiry));
+        when(inquiryAnswerRepository.existsByInquiry_InquiryId(INQUIRY_ID)).thenReturn(false);
+
+        // when
+        adminInquiryService.reopenInquiry(INQUIRY_ID);
+
+        // then
+        assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.PENDING);
     }
 
     // ─────────────────── 헬퍼 ───────────────────
