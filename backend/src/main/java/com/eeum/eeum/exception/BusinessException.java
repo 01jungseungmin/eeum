@@ -21,6 +21,13 @@ public class BusinessException extends RuntimeException {
         this.data = null;
     }
 
+    // 외부 연동 예외를 감쌀 때 사용 — 원인 예외를 잃으면 실패 이력에 "무엇 때문에"가 남지 않는다
+    public BusinessException(ErrorCode errorCode, String message, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+        this.data = null;
+    }
+
     // 프론트가 확인 다이얼로그 등을 그리는 데 필요한 상세 정보를 함께 전달할 때 사용
     public BusinessException(ErrorCode errorCode, Object data) {
         super(errorCode.getMessage());
