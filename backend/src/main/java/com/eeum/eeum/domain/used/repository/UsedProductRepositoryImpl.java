@@ -84,7 +84,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
                 .and(PRODUCT.deletedAt.isNull())
                 .and(PRODUCT.hidden.isFalse())
                 .and(keywordContains(condition.keyword()))
-                .and(categoryEq(condition.categoryId()))
+                .and(categoryIn(condition.categoryIds()))
                 .and(priceTypeEq(condition.priceType()))
                 .and(priceGoe(condition.minPrice()))
                 .and(priceLoe(condition.maxPrice()))
@@ -100,8 +100,9 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
         return PRODUCT.title.contains(trimmed).or(PRODUCT.content.contains(trimmed));
     }
 
-    private BooleanExpression categoryEq(Long categoryId) {
-        return categoryId == null ? null : PRODUCT.category.categoryId.eq(categoryId);
+    // 상위 카테고리를 고르면 하위 전체가 함께 온다. 서비스가 펼쳐서 넘긴다.
+    private BooleanExpression categoryIn(List<Long> categoryIds) {
+        return CollectionUtils.isEmpty(categoryIds) ? null : PRODUCT.category.categoryId.in(categoryIds);
     }
 
     private BooleanExpression priceTypeEq(UsedProductPriceType priceType) {

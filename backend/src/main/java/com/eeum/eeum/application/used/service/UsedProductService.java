@@ -11,6 +11,8 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -73,13 +76,7 @@ public class UsedProductService {
         return UsedProductDetailResponseDto.from(usedProductRepository.save(product), List.of());
     }
 
-    /**
-     * 내 동네 중고 목록.
-     *
-     * <p>지역을 지정하지 않으면 내 인증 활동 지역 전체를 본다. 인증된 지역이 하나도 없으면
-     * 빈 목록이 아니라 오류로 막는다 — 동네 인증이 이 서비스의 전제이고,
-     * 빈 목록을 주면 사용자는 "매물이 없다"고 오해한다.
-     */
+    // 내 동네 중고 목록
     @Transactional(readOnly = true)
     public Slice<UsedProductSummaryResponseDto> getRegionProducts(
             Long viewerId,
@@ -92,7 +89,7 @@ public class UsedProductService {
         UsedProductSearchCondition resolved = new UsedProductSearchCondition(
                 targetRegionId,
                 request.getKeyword(),
-                request.getCategoryId(),
+                resolveCategoryIds(request.getCategoryId()),
                 request.getPriceType(),
                 request.getMinPrice(),
                 request.getMaxPrice(),
@@ -225,6 +222,37 @@ public class UsedProductService {
             throw new ForbiddenException(ErrorCode.REGION_NOT_VERIFIED);
         }
         return selected;
+    }
+
+    // 선택한 카테고리와 그 하위 전체를 펼친다.
+    private List<Long> resolveCategoryIds(Long categoryId) {
+        if (categoryId == null) {
+            return null;
+        }
+
+        List<Category> categories = categoryRepository
+                .findAllByTypeOrderByDepthAscParentIdAscDisplayOrderAscCategoryIdAsc(CategoryType.USED);
+
+        boolean exists = categories.stream()
+                .anyMatch(category -> category.getCategoryId().equals(categoryId));
+        if (!exists) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
+        }
+
+        List<Long> result = new ArrayList<>();
+        Deque<Long> queue = new ArrayDeque<>();
+        queue.add(categoryId);
+
+        while (!queue.isEmpty()) {
+            Long current = queue.poll();
+            result.add(current);
+
+            categories.stream()
+                    .filter(category -> current.equals(category.getParentId()))
+                    .map(Category::getCategoryId)
+                    .forEach(queue::add);
+        }
+        return result;
     }
 
     // 대표 사진을 한 번의 IN 쿼리로 모아 온다 — 게시글마다 조회하면 N+1이다.

@@ -11,6 +11,7 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
+import java.util.Arrays;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
@@ -325,6 +326,7 @@ class UsedProductServiceTest {
     void 검색_조건은_지역만_서버가_정하고_나머지는_그대로_전달된다() {
         // given — 필터는 사용자가 고른 값이므로 서버가 손대지 않는다
         givenSelectedRegion(true);
+        givenUsedCategories(rootCategory());
         when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
 
         UsedProductSearchRequestDto request = new UsedProductSearchRequestDto(
@@ -339,7 +341,7 @@ class UsedProductServiceTest {
         UsedProductSearchCondition applied = capturedCondition();
         assertThat(applied.regionId()).isEqualTo(REGION_ID);   // 서버가 채운 값
         assertThat(applied.keyword()).isEqualTo("자전거");
-        assertThat(applied.categoryId()).isEqualTo(CATEGORY_ID);
+        assertThat(applied.categoryIds()).containsExactly(CATEGORY_ID);
         assertThat(applied.priceType()).isEqualTo(UsedProductPriceType.FIXED);
         assertThat(applied.minPrice()).isEqualByComparingTo("10000");
         assertThat(applied.maxPrice()).isEqualByComparingTo("50000");
@@ -364,6 +366,55 @@ class UsedProductServiceTest {
         UsedProductSearchCondition applied = capturedCondition();
         assertThat(applied.regionId()).isEqualTo(otherRegionId);
         assertThat(applied.keyword()).isEqualTo("책상");
+    }
+
+    @Test
+    void 상위_카테고리를_고르면_하위_카테고리_글까지_함께_조회된다() {
+        // given — "디지털기기"를 골랐는데 그 아래 "휴대폰" 글이 빠지면 검색이 고장 난 것처럼 보인다
+        Category root = rootCategory();                     // 100
+        Category child = childCategory(200L, CATEGORY_ID);  // 200 ← 100
+        Category grandChild = childCategory(300L, 200L);    // 300 ← 200
+        Category unrelated = childCategory(400L, 999L);     // 다른 트리
+
+        givenSelectedRegion(true);
+        givenUsedCategories(root, child, grandChild, unrelated);
+        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+
+        // when
+        usedProductService.getRegionProducts(
+                SELLER_ID, searchRequestWithCategory(CATEGORY_ID), PageRequest.of(0, 20));
+
+        // then — 3단계까지 펼쳐지고 다른 트리는 섞이지 않는다
+        assertThat(capturedCondition().categoryIds())
+                .containsExactlyInAnyOrder(CATEGORY_ID, 200L, 300L);
+    }
+
+    @Test
+    void 최하위_카테고리를_고르면_자기_자신만_조회된다() {
+        Category root = rootCategory();
+        Category child = childCategory(200L, CATEGORY_ID);
+
+        givenSelectedRegion(true);
+        givenUsedCategories(root, child);
+        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+
+        usedProductService.getRegionProducts(
+                SELLER_ID, searchRequestWithCategory(200L), PageRequest.of(0, 20));
+
+        assertThat(capturedCondition().categoryIds()).containsExactly(200L);
+    }
+
+    @Test
+    void 중고_카테고리가_아닌_ID로는_검색할_수_없다() {
+        // given — 조용히 빈 목록을 주면 오타를 눈치채지 못한다
+        givenSelectedRegion(true);
+        givenUsedCategories(rootCategory());
+
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(
+                SELLER_ID, searchRequestWithCategory(9999L), PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
     }
 
     // ─────────────────── 조회수 ───────────────────
@@ -526,6 +577,27 @@ class UsedProductServiceTest {
         Account account = seller();
         ReflectionTestUtils.setField(account, "primaryRegionId", ACCOUNT_REGION_ID);
         return account;
+    }
+
+    private void givenUsedCategories(Category... categories) {
+        when(categoryRepository.findAllByTypeOrderByDepthAscParentIdAscDisplayOrderAscCategoryIdAsc(
+                CategoryType.USED)).thenReturn(Arrays.asList(categories));
+    }
+
+    private Category rootCategory() {
+        Category category = Category.createRoot(CategoryType.USED, "디지털기기", 1);
+        ReflectionTestUtils.setField(category, "categoryId", CATEGORY_ID);
+        return category;
+    }
+
+    private Category childCategory(Long categoryId, Long parentId) {
+        Category category = Category.createChild(CategoryType.USED, parentId, "휴대폰", 1, 2);
+        ReflectionTestUtils.setField(category, "categoryId", categoryId);
+        return category;
+    }
+
+    private UsedProductSearchRequestDto searchRequestWithCategory(Long categoryId) {
+        return new UsedProductSearchRequestDto(null, null, categoryId, null, null, null, null);
     }
 
     private UsedProductSearchRequestDto searchRequest(Long regionId) {
