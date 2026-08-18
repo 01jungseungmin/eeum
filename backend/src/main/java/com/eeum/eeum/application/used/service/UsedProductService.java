@@ -14,7 +14,9 @@ import com.eeum.eeum.domain.category.entity.Category;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import com.eeum.eeum.domain.category.enums.CategoryType;
+import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
@@ -49,6 +51,7 @@ public class UsedProductService {
     private final RegionRepository regionRepository;
     private final UsedProductImageService usedProductImageService;
     private final UsedProductImageRepository usedProductImageRepository;
+    private final FavoriteService favoriteService;
 
     @Transactional
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
@@ -162,6 +165,10 @@ public class UsedProductService {
         }
 
         product.softDelete();
+
+        // 찜을 함께 정리한다. 남겨두면 다른 사용자의 찜 목록에 사라진 글이 계속 남는다.
+        // 같은 트랜잭션에서 처리해야 잠깐이라도 죽은 찜이 보이는 구간이 생기지 않는다.
+        favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, usedProductId);
     }
 
     // ===================== 내부 헬퍼 =====================

@@ -12,6 +12,10 @@ import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.entity.UsedProductImage;
+import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +43,8 @@ public class FavoriteService {
     private final AccountRepository accountRepository;
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
+    private final UsedProductRepository usedProductRepository;
+    private final UsedProductImageRepository usedProductImageRepository;
 
     // ===================== 찜 토글 =====================
 
@@ -150,6 +156,54 @@ public class FavoriteService {
         return new PageImpl<>(content, pageable, favorites.getTotalElements());
     }
 
+    /**
+     * 중고 게시글 찜 목록 — 상점 목록과 같은 배치 조회로 N+1을 막기
+     * Favorite 1번 + UsedProduct 1번 + 대표 사진 1번 = 총 3 쿼리
+     */
+    @Transactional(readOnly = true)
+    public Page<FavoriteUsedProductResponseDto> getMyFavoriteUsedProducts(
+            Long accountId, Pageable pageable) {
+
+        Page<Favorite> favorites = favoriteRepository
+                .findByAccount_AccountIdAndRefTypeOrderByCreatedAtDesc(
+                        accountId, FavoriteRefType.USED_PRODUCT, pageable);
+
+        if (favorites.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, favorites.getTotalElements());
+        }
+
+        List<Long> productIds = favorites.getContent().stream()
+                .map(Favorite::getRefId)
+                .toList();
+
+        // 숨김 처리된 글은 목록에서 뺀다 — 찜 목록으로 우회해 보게 되면 관리자 숨김이 무의미해진다.
+        // 삭제된 글은 게시글 삭제 시 찜까지 정리되지만, 과거 데이터를 대비해 함께 거른다.
+        Map<Long, UsedProduct> productMap = usedProductRepository.findAllById(productIds).stream()
+                .filter(product -> !product.isHidden() && !product.isDeleted())
+                .collect(Collectors.toMap(UsedProduct::getUsedProductId, Function.identity()));
+
+        Map<Long, String> thumbnailMap = usedProductImageRepository
+                .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
+                .collect(Collectors.toMap(
+                        image -> image.getUsedProduct().getUsedProductId(),
+                        UsedProductImage::getImageUrl,
+                        (first, second) -> first));
+
+        // 걸러진 항목만큼 페이지 크기가 줄어들 수 있다. Favorite은 polymorphic 참조라
+        // 게시글 테이블과 조인할 수 없어 조회 후 거르는 수밖에 없다.
+        List<FavoriteUsedProductResponseDto> content = favorites.getContent().stream()
+                .filter(fav -> productMap.containsKey(fav.getRefId()))
+                .map(fav -> {
+                    UsedProduct product = productMap.get(fav.getRefId());
+                    return FavoriteUsedProductResponseDto.of(
+                            fav.getFavoriteId(), product,
+                            thumbnailMap.get(product.getUsedProductId()), fav.getCreatedAt());
+                })
+                .toList();
+
+        return new PageImpl<>(content, pageable, favorites.getTotalElements());
+    }
+
     // ===================== 찜 여부 확인 =====================
 
     // 단건 찜 여부 조회 (상세 화면 진입 시)
@@ -205,9 +259,12 @@ public class FavoriteService {
     // 회원 탈퇴 시 해당 회원의 찜 일괄 삭제.
     @Transactional
     public void deleteAllByAccountId(Long accountId) {
-        // STORE 찜에 대해 favoriteCount 원자 감소 (USED_PRODUCT 구현 후 분기 추가)
+        // 대상 도메인의 favoriteCount 원자 감소 — 탈퇴자가 남긴 찜이 카운트에 계속 잡히면 안 된다.
         favoriteRepository.findByAccount_AccountIdAndRefType(accountId, FavoriteRefType.STORE)
                 .forEach(f -> storeRepository.decrementFavoriteCount(f.getRefId()));
+
+        favoriteRepository.findByAccount_AccountIdAndRefType(accountId, FavoriteRefType.USED_PRODUCT)
+                .forEach(f -> usedProductRepository.decrementFavoriteCount(f.getRefId()));
 
         favoriteRepository.deleteAllByAccount_AccountId(accountId);
         log.info("회원 탈퇴 찜 CASCADE 삭제: accountId={}", accountId);
@@ -258,25 +315,28 @@ public class FavoriteService {
                 }
             }
             case USED_PRODUCT -> {
-                // UsedProduct 도메인 구현 후 UsedProductRepository.existsById(refId) 검증 추가
-                log.debug("USED_PRODUCT 존재 검증 — 도메인 구현 후 활성화: refId={}", refId);
+                // existsById가 아니라 삭제 필터가 걸린 조회를 쓴다 — 삭제된 글은 찜할 수 없어야 한다.
+                // 판매완료(SOLD)는 막지 않는다: 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다.
+                if (usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(refId).isEmpty()) {
+                    throw new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+                }
             }
         }
     }
 
     // DB 원자 UPDATE로 찜 카운트 +1.
     private void incrementCount(FavoriteRefType refType, Long refId) {
-        if (refType == FavoriteRefType.STORE) {
-            storeRepository.incrementFavoriteCount(refId);
+        switch (refType) {
+            case STORE -> storeRepository.incrementFavoriteCount(refId);
+            case USED_PRODUCT -> usedProductRepository.incrementFavoriteCount(refId);
         }
-        // USED_PRODUCT: usedProductRepository.incrementFavoriteCount(refId);
     }
 
     // DB 원자 UPDATE로 찜 카운트 -1 (favoriteCount > 0 가드).
     private void decrementCount(FavoriteRefType refType, Long refId) {
-        if (refType == FavoriteRefType.STORE) {
-            storeRepository.decrementFavoriteCount(refId);
+        switch (refType) {
+            case STORE -> storeRepository.decrementFavoriteCount(refId);
+            case USED_PRODUCT -> usedProductRepository.decrementFavoriteCount(refId);
         }
-        // USED_PRODUCT: usedProductRepository.decrementFavoriteCount(refId);
     }
 }

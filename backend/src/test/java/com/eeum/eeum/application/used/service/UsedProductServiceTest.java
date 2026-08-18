@@ -66,6 +66,7 @@ class UsedProductServiceTest {
     @Mock private UsedProductImageService usedProductImageService;
     @Mock private UsedProductImageRepository usedProductImageRepository;
     @Mock private RegionRepository regionRepository;
+    @Mock private com.eeum.eeum.application.favorite.service.FavoriteService favoriteService;
 
     @InjectMocks
     private UsedProductService usedProductService;
@@ -522,6 +523,10 @@ class UsedProductServiceTest {
         assertThat(product.isDeleted()).isTrue();
         verify(usedProductRepository, never()).delete(any());
         verify(usedProductRepository, never()).deleteById(eq(PRODUCT_ID));
+
+        // 남겨두면 다른 사용자의 찜 목록에 사라진 글이 계속 남는다
+        verify(favoriteService).deleteAllByRefTypeAndRefId(
+                com.eeum.eeum.domain.favorite.enums.FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
     }
 
     @Test
@@ -538,6 +543,7 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_DELETE_NOT_ALLOWED);
 
         assertThat(product.isDeleted()).isFalse();
+        verify(favoriteService, never()).deleteAllByRefTypeAndRefId(any(), any());
     }
 
     @Test

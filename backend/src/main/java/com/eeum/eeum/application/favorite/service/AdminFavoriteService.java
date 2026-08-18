@@ -6,6 +6,8 @@ import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
 import com.eeum.eeum.domain.favorite.repository.FavoriteStatProjection;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ public class AdminFavoriteService {
 
     private final FavoriteRepository favoriteRepository;
     private final StoreRepository storeRepository;
+    private final UsedProductRepository usedProductRepository;
 
     // 인기 항목 통계 — 기간 + refType + 상위 N개 refType별로 이름을 조회해 함께 반환
 
@@ -57,7 +60,9 @@ public class AdminFavoriteService {
             case STORE -> storeRepository.findById(refId)
                     .map(Store::getName)
                     .orElse("(삭제된 상점)");
-            case USED_PRODUCT -> "(중고상품 #" + refId + ")";
+            case USED_PRODUCT -> usedProductRepository.findById(refId)
+                    .map(UsedProduct::getTitle)
+                    .orElse("(삭제된 중고상품)");
         };
     }
 }

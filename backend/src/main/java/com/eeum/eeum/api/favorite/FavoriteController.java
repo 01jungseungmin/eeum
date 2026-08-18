@@ -111,6 +111,21 @@ public class FavoriteController {
                 favoriteService.getMyFavoriteStores(accountId, pageable)));
     }
 
+    @Operation(
+            summary = "중고 게시글 찜 목록",
+            description = "내가 찜한 중고 게시글을 대표 사진·가격·거래 상태와 함께 반환합니다. " +
+                    "관리자가 숨긴 게시글은 목록에서 제외됩니다."
+    )
+    @GetMapping("/me/USED")
+    public ResponseEntity<ApiResponse<Page<FavoriteUsedProductResponseDto>>> getMyFavoriteUsedProducts(
+            @PageableDefault(size = 20, sort = "createdAt",
+                    direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                favoriteService.getMyFavoriteUsedProducts(accountId, pageable)));
+    }
+
     // ===================== 찜 여부 확인 =====================
 
     @Operation(
