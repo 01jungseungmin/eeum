@@ -1,12 +1,14 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.ai.repository.AiPlanPaymentRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -35,6 +37,7 @@ public class AiPlanPaymentCommandExecutor {
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     private final PortOnePaymentClient portOnePaymentClient;
     private final AiPlanPaymentFailureRecorder failureRecorder;
+    private final OperationFailureRecorder operationFailureRecorder;
 
     // 구독 결제 요청 생성 — store 단위 락 안에서 "이미 같은 플랜 활성 구독 여부" 체크와 PENDING 결제 생성을 원자적으로 수행
     @Transactional
@@ -63,7 +66,17 @@ public class AiPlanPaymentCommandExecutor {
         }
 
         // PortOne 결제 검증 — 금액/상태 불일치 시 플랜 변경 없음
-        PortOnePaymentInfo info = portOnePaymentClient.getPayment(paymentId);
+        PortOnePaymentInfo info;
+        try {
+            info = portOnePaymentClient.getPayment(paymentId);
+        } catch (RuntimeException e) {
+            // 클라이언트는 이력을 남기지 않으므로 여기서 한 번만 기록한다.
+            operationFailureRecorder.record(
+                    OperationFailureCategory.EXTERNAL_API,
+                    "AiPlanPaymentCommandExecutor.getPayment",
+                    "PAYMENT", paymentId, e, "aiPlanPaymentId=" + payment.getAiPlanPaymentId());
+            throw e;
+        }
         if (!"PAID".equalsIgnoreCase(info.getStatus())) {
             log.warn("[AI-PLAN] 결제 완료 상태가 아님: status={}", info.getStatus());
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
@@ -77,6 +90,13 @@ public class AiPlanPaymentCommandExecutor {
                             "AI 플랜 결제 금액 불일치 — 자동 환불");
                 } catch (Exception e) {
                     log.error("[AI-PLAN] 금액 불일치 자동 환불 실패 — 수동 확인 필요: paymentId={}", paymentId, e);
+                    // 여기서 삼킨 예외는 대시보드에서만 보인다 — 고객 돈이 PG에 묶인 채로 남는 건이라
+                    // 이력이 없으면 수동 확인 자체가 불가능하다.
+                    operationFailureRecorder.record(
+                            OperationFailureCategory.REFUND,
+                            "AiPlanPaymentCommandExecutor.autoCancel",
+                            "PAYMENT", paymentId, e,
+                            "결제 금액 불일치 자동 환불 실패, amount=" + info.getAmount());
                 }
             }
             // 이 메서드가 예외로 롤백되어도 FAILED 기록은 남아야 하므로 REQUIRES_NEW로 먼저 커밋
