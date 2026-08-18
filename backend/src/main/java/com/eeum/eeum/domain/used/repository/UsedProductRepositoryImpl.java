@@ -2,7 +2,11 @@ package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.QUsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.ComparableExpressionBase;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +15,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
+
+import java.math.BigDecimal;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +42,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public Slice<UsedProduct> findByRegion(Long regionId, Pageable pageable) {
+    public Slice<UsedProduct> search(UsedProductSearchCondition condition, Pageable pageable) {
         int size = pageable.getPageSize();
         Sort appliedSort = resolveSort(pageable.getSort());
 
@@ -43,12 +51,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
                 // 목록 DTO가 지역명과 카테고리명을 바로 읽기 fetch join이 없으면 페이지 크기만큼 추가 select가 나감(N+1)
                 .leftJoin(PRODUCT.region).fetchJoin()
                 .leftJoin(PRODUCT.category).fetchJoin()
-                .where(
-                        PRODUCT.region.regionId.eq(regionId),
-                        // 삭제·숨김은 모든 사용자 조회에서 빠짐없이 거르기
-                        PRODUCT.deletedAt.isNull(),
-                        PRODUCT.hidden.isFalse()
-                )
+                .where(toPredicate(condition))
                 .orderBy(toOrderSpecifiers(appliedSort))
                 .offset(pageable.getOffset())
                 // 다음 페이지 존재 여부만 알면 되므로 한 건 더 읽고 자르기
@@ -72,6 +75,51 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
                 .set(PRODUCT.viewCount, PRODUCT.viewCount.add(1))
                 .where(PRODUCT.usedProductId.eq(usedProductId))
                 .execute();
+    }
+
+    private BooleanBuilder toPredicate(UsedProductSearchCondition condition) {
+        return new BooleanBuilder()
+                .and(PRODUCT.region.regionId.eq(condition.regionId()))
+                // 삭제·숨김은 모든 사용자 조회에서 빠짐없이 거른다
+                .and(PRODUCT.deletedAt.isNull())
+                .and(PRODUCT.hidden.isFalse())
+                .and(keywordContains(condition.keyword()))
+                .and(categoryEq(condition.categoryId()))
+                .and(priceTypeEq(condition.priceType()))
+                .and(priceGoe(condition.minPrice()))
+                .and(priceLoe(condition.maxPrice()))
+                .and(statusIn(condition.statuses()));
+    }
+
+    // 제목·본문 부분 일치. LIKE '%kw%'라 인덱스를 타지 못한다
+    private BooleanExpression keywordContains(String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return null;
+        }
+        String trimmed = keyword.trim();
+        return PRODUCT.title.contains(trimmed).or(PRODUCT.content.contains(trimmed));
+    }
+
+    private BooleanExpression categoryEq(Long categoryId) {
+        return categoryId == null ? null : PRODUCT.category.categoryId.eq(categoryId);
+    }
+
+    private BooleanExpression priceTypeEq(UsedProductPriceType priceType) {
+        return priceType == null ? null : PRODUCT.priceType.eq(priceType);
+    }
+
+    // 가격 범위를 지정하면 가격제안(price = null) 글은 자연히 빠진다 — NULL 비교는 참이 되지 않는다
+    private BooleanExpression priceGoe(BigDecimal minPrice) {
+        return minPrice == null ? null : PRODUCT.price.goe(minPrice);
+    }
+
+    private BooleanExpression priceLoe(BigDecimal maxPrice) {
+        return maxPrice == null ? null : PRODUCT.price.loe(maxPrice);
+    }
+
+    // 비어 있으면 전체 상태를 본다. 거래완료를 숨기려면 SELLING·RESERVED를 넘긴다
+    private BooleanExpression statusIn(List<UsedProductStatus> statuses) {
+        return CollectionUtils.isEmpty(statuses) ? null : PRODUCT.status.in(statuses);
     }
 
     private Sort resolveSort(Sort requested) {

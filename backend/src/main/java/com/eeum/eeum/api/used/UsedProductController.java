@@ -3,11 +3,14 @@ package com.eeum.eeum.api.used;
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedProductImageService;
 import com.eeum.eeum.application.used.service.UsedProductService;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
+import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +28,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -45,14 +49,30 @@ public class UsedProductController {
                     "정렬은 createdAt·price·favoriteCount·viewCount만 지원하며, 그 외 값은 무시하고 최신순으로 조회합니다."
     )
     public ResponseEntity<ApiResponse<Slice<UsedProductSummaryResponseDto>>> getRegionProducts(
-            @Parameter(description = "거래 지역 ID. 생략 시 내 인증 지역 전체")
+            @Parameter(description = "거래 지역 ID. 생략 시 내가 선택한 동네")
             @RequestParam(required = false) Long regionId,
+            @Parameter(description = "제목·본문 검색어")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "카테고리 ID (하위 카테고리는 포함하지 않음)")
+            @RequestParam(required = false) Long categoryId,
+            @Parameter(description = "거래 유형 (FIXED·FREE·NEGOTIABLE)")
+            @RequestParam(required = false) UsedProductPriceType priceType,
+            @Parameter(description = "최소 가격. 지정하면 가격제안 글은 제외된다")
+            @RequestParam(required = false) BigDecimal minPrice,
+            @Parameter(description = "최대 가격. 지정하면 가격제안 글은 제외된다")
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @Parameter(description = "거래 상태. 여러 번 보낼 수 있다. 거래완료를 숨기려면 SELLING·RESERVED")
+            @RequestParam(required = false) List<UsedProductStatus> status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.
         Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(
-                usedProductService.getRegionProducts(viewerId, regionId, pageable)));
+                usedProductService.getRegionProducts(
+                        viewerId,
+                        new UsedProductSearchRequestDto(
+                                regionId, keyword, categoryId, priceType, minPrice, maxPrice, status),
+                        pageable)));
     }
 
     @PostMapping

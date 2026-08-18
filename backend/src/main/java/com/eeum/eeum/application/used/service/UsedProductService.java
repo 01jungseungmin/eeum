@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
@@ -17,6 +18,7 @@ import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
@@ -81,11 +83,23 @@ public class UsedProductService {
     @Transactional(readOnly = true)
     public Slice<UsedProductSummaryResponseDto> getRegionProducts(
             Long viewerId,
-            Long regionId,
+            UsedProductSearchRequestDto request,
             Pageable pageable
     ) {
-        Long targetRegionId = resolveViewRegionId(viewerId, regionId);
-        Slice<UsedProduct> products = usedProductRepository.findByRegion(targetRegionId, pageable);
+        Long targetRegionId = resolveViewRegionId(viewerId, request.getRegionId());
+
+        // 지역만 서버가 정하고 나머지 필터는 요청한 그대로 넘긴다.
+        UsedProductSearchCondition resolved = new UsedProductSearchCondition(
+                targetRegionId,
+                request.getKeyword(),
+                request.getCategoryId(),
+                request.getPriceType(),
+                request.getMinPrice(),
+                request.getMaxPrice(),
+                request.getStatuses()
+        );
+
+        Slice<UsedProduct> products = usedProductRepository.search(resolved, pageable);
 
         Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());
 
