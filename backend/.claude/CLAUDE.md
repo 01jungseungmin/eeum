@@ -63,7 +63,7 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 - 읽기 전용 메서드는 `@Transactional(readOnly = true)` 필수
 - 가격 필드는 `BigDecimal` 사용
 - API 응답은 반드시 `ApiResponse<T>`로 래핑 (`common/dto/response/ApiResponse`)
-- URL은 kebab-case: `/used-products`, `/store-reviews`
+- URL은 kebab-case: `/used`, `/store-reviews`
 - FCM 직접 호출 금지 — 항상 도메인 이벤트 경유
 - 로깅은 SLF4J 사용 — `System.out.println` 금지
 - Soft Delete 대상 외 엔티티에 `deletedAt` 추가 금지
