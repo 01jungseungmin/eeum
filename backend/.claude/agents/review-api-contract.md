@@ -13,6 +13,7 @@ model: fable
 
 시작하기 전에 반드시 `.claude/skills/references/review-common.md`를 읽고
 운영 원칙, Bash 사용 제한, 리뷰 절차, 심각도 기준, 출력 형식을 따르십시오.
+중고거래·Favorite 관련 변경이면 `used-favorite-review.md`도 전부 읽고 적용하십시오.
 
 ## 담당 영역
 
@@ -37,6 +38,8 @@ Controller의 API 표면과 DTO 계약만 본다.
     - `@Min`
     - `@Positive`
 - Controller 메서드 파라미터에는 `@Valid`를 적용한다.
+- PathVariable/RequestParam 제약에는 Controller `@Validated`가 함께 있는지 확인한다.
+- 컬렉션 DTO는 요소의 `@NotNull`, `@Valid`, 범위 제약까지 확인한다.
 - Swagger 어노테이션을 적용한다.
     - `@Tag`
     - `@Operation`
@@ -51,6 +54,14 @@ Controller의 API 표면과 DTO 계약만 본다.
 - 날짜/시간 필드 포맷 변경 가능성이 있으면 보고한다.
 - 기존 API의 URL, Method, Query Parameter, Request/Response 필드 변경이 있으면
   Major 이상으로 보고한다. 프론트 코드는 수정 대상이 아니므로 변경 사실 안내만 한다.
+- Controller 설명과 SecurityConfig의 실제 공개/인증 경계를 대조한다. 전역 Swagger security가
+  permitAll API를 인증 필수로 표시하지 않는지 확인한다.
+- Page/Slice는 필터를 DB pagination 전에 적용하는지, 실제 정렬과 Pageable 메타데이터가
+  일치하는지 Service/Repository까지 추적한다.
+- 쓰기 후 반환 DTO의 값이 실제 DB 변경 후 상태인지 확인한다. bulk update 뒤 재조회는
+  JPA 1차 캐시 때문에 갱신되지 않을 수 있으므로 실제 실행 의미를 확인한다.
+- 공용 DTO 필드를 특정 도메인이 무시하거나 제거하면 런타임 동작과 기존 계약을 함께 대조한다.
+- 재리뷰에서는 새 DTO/필드/검증을 Validator 또는 HTTP 계약 테스트가 고정하는지도 확인한다.
 
 ## 담당 아님 (다른 리뷰어 영역 — 보고하지 않는다)
 

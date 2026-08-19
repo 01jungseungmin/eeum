@@ -13,6 +13,7 @@ model: fable
 
 시작하기 전에 반드시 `.claude/skills/references/review-common.md`를 읽고
 운영 원칙, Bash 사용 제한, 리뷰 절차, 심각도 기준, 출력 형식을 따르십시오.
+중고거래·Favorite 관련 변경이면 `used-favorite-review.md`도 전부 읽고 적용하십시오.
 
 ## 담당 영역
 
@@ -37,7 +38,7 @@ domain 계층 — 엔티티 규칙과 Repository/쿼리 — 만 본다.
 - EAGER 연관관계는 위반으로 보고한다.
 - 가격은 `BigDecimal`을 사용한다.
 - Soft Delete는 허용된 엔티티에만 적용한다.
-    - 허용: `Account`, `ChatMessage`, `Category`
+    - 허용: `Account`, `ChatMessage`, `Category`, `CommunityComment`, `UsedProduct`
     - 그 외 엔티티에 `deletedAt` 추가 시 위반으로 보고한다.
 - Entity에서 외부 API, Repository, Service 의존성이 있으면 위반으로 보고한다.
 
@@ -55,6 +56,15 @@ domain 계층 — 엔티티 규칙과 Repository/쿼리 — 만 본다.
   삭제하는 별도 쿼리로 분리되어 있는지 확인한다.
 - QueryDSL where 조건이 누락되어 권한/상태 필터가 빠지지 않았는지 확인한다.
 - public 목록 조회는 비활성/숨김/삭제/미승인 데이터가 노출되지 않는지 확인한다.
+- 공개/상태 필터는 pagination/count 전에 DB에서 적용되는지 확인한다. Page 조회 뒤 메모리
+  필터링으로 content, totalElements, hasNext가 어긋나면 보고한다.
+- 복잡한 공개 조건을 Repository 파생 메서드나 JPQL 문자열로 우회하지 않고 QueryDSL로
+  구현했는지 확인한다.
+- 실제 where/order by와 인덱스 컬럼 순서를 대조한다. 성능 판단에 EXPLAIN이 필요하면
+  "추가 확인 필요"로 분리한다.
+- UNIQUE·인덱스가 엔티티 선언뿐 아니라 Flyway/Liquibase/수동 운영 DDL에도 반영되는지,
+  기존 데이터 정리와 쓰기 통제 조건이 있는지 확인한다.
+- 단위 Mock이 bulk update 뒤 1차 캐시 불일치를 숨기지 않는지 실제 JPA 테스트 유무를 확인한다.
 
 ## 담당 아님 (다른 리뷰어 영역 — 보고하지 않는다)
 

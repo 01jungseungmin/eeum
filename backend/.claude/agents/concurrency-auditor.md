@@ -55,7 +55,21 @@ model: fable
 - `reservation.md` — 예약/슬롯 capacity
 - `chat.md` — 채팅방/메시지/unread
 
+중고거래·Favorite·회원 탈퇴·찜/조회수/이미지 카운터가 대상이면
+`.claude/skills/references/used-favorite-review.md`를 처음부터 끝까지 읽고 적용한다.
+
 참조 파일이 없는 도메인(신규 도메인 포함)은 핵심 위험 패턴 기준으로 감사한다.
+
+## 중고거래·찜 추가 감사 규칙
+
+- 쓰기 진입점을 actor Account, Store/UsedProduct, Favorite/Image 순서로 표로 만들고 실제 락 순서를 적는다.
+- 탈퇴와 모든 인증 사용자 쓰기가 같은 Account mutex와 ACTIVE 재검증을 공유하는지 확인한다.
+- Favorite/Image를 읽은 뒤 target 락을 기다리는 read-before-mutex 패턴을 찾는다.
+- 여러 Store/UsedProduct를 잠그는 탈퇴·정리·재계산은 ID 고정 순서가 있는지 확인한다.
+- STORE와 USED_PRODUCT 분기를 모두 시뮬레이션한다. 한 타입에만 target mutex가 있으면 보고한다.
+- 재계산/운영 DDL은 실시간 쓰기와의 mutex 또는 write-pause가 코드·절차에 있는지 확인한다.
+- 동시성 테스트가 sleep/경과 시간만으로 경쟁을 추정하면 통과시키지 않는다. 실제 barrier나 DB
+  lock-wait로 경쟁 진입을 증명하는지 본다.
 
 ## 위험도 기준
 

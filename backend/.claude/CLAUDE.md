@@ -108,6 +108,12 @@ Soft Delete (deletedAt 필드) 적용 대상:
 redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 ```
 
+중고거래·찜·회원 탈퇴 연계 쓰기는 기본적으로
+`Account → Store/UsedProduct → Favorite/UsedProductImage` 순서로 잠근다.
+여러 대상 행을 잠그면 ID 오름차순처럼 하나의 전역 순서를 사용한다. 상세 공개 정책,
+카운터, 페이징, 운영 DDL과 필수 경쟁 시나리오는
+`.claude/skills/references/used-favorite-review.md`를 따른다.
+
 ### 멱등성 처리
 - PortOne Webhook: Redis + DB Unique 제약으로 중복 처리 방지
 - ChatRoom 생성: 동일 참여자 조합으로 중복 생성 방지
