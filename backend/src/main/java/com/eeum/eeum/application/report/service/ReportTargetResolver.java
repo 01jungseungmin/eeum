@@ -52,7 +52,7 @@ public class ReportTargetResolver {
                     .filter(comment -> !comment.isDeleted())
                     .map(this::fromCommunityComment)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
-            case USED_PRODUCT -> usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(targetId)
+            case USED_PRODUCT -> usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(targetId)
                     .map(this::fromUsedProduct)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case ACCOUNT -> accountRepository.findById(targetId)
