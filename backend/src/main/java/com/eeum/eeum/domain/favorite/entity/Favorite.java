@@ -26,7 +26,11 @@ import lombok.NoArgsConstructor;
         indexes = {
                 // 대상 기준 조회 전용. UNIQUE 인덱스는 account_id가 선행 컬럼이라
                 // 대상별 카운트·통계·CASCADE 삭제(ref_type + ref_id)에 쓰이지 못한다.
-                @Index(name = "idx_favorite_ref", columnList = "ref_type, ref_id")
+                @Index(name = "idx_favorite_ref", columnList = "ref_type, ref_id"),
+                // 내 찜 목록(타입별 + 등록 최신순 + PK tie-break). UNIQUE 인덱스는
+                // 세 번째 컬럼이 ref_id라 created_at 정렬에 쓰이지 못한다.
+                @Index(name = "idx_favorite_account_type_created",
+                        columnList = "account_id, ref_type, created_at, favorite_id")
         }
 )
 public class Favorite extends BaseEntity {
