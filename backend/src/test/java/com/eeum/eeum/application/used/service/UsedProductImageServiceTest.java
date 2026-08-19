@@ -112,6 +112,21 @@ class UsedProductImageServiceTest {
     }
 
     @Test
+    void 숨김_게시글은_비소유자에게_사진_변경_요청에도_없는_것으로_응답한다() {
+        // given — 게시글 수정·삭제 경로와 같은 정책을 사진 경로에도 적용한다
+        UsedProduct hidden = product();
+        hidden.hide();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> usedProductImageService.addImages(
+                OTHER_ID, PRODUCT_ID, uploadRequest("a.jpg")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
     void 삭제된_게시글에는_사진을_올릴_수_없다() {
         // given — 조회 자체가 deletedAt IS NULL 조건을 포함한다
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))

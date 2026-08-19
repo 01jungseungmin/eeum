@@ -507,6 +507,37 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_ACCESS_DENIED);
     }
 
+    @Test
+    void 숨김_게시글은_비소유자에게_수정_요청에도_없는_것으로_응답한다() {
+        // given — 상세 조회는 404인데 수정만 403이면 그 차이로 숨김 글의 존재가 드러난다
+        UsedProduct hidden = product();
+        hidden.hide();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> usedProductService.update(
+                OTHER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글도_작성자_본인은_수정할_수_있다() {
+        // given — 숨김은 노출 정책이지 작성자의 편집권 박탈이 아니다
+        UsedProduct hidden = product();
+        hidden.hide();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(hidden));
+        when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
+                .thenReturn(Optional.of(usedCategory()));
+
+        usedProductService.update(
+                SELLER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100")));
+
+        assertThat(hidden.getPrice()).isEqualByComparingTo(new BigDecimal("100"));
+    }
+
     // ─────────────────── 삭제 ───────────────────
 
     @Test
