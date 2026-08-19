@@ -56,4 +56,17 @@ public interface UsedProductRepository
           AND p.favoriteCount > 0
         """)
     int decrementFavoriteCounts(@Param("usedProductIds") Collection<Long> usedProductIds);
+
+    // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 게시글의 favoriteCount 일괄 갱신.
+    // 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 처리한다.
+    // 삭제된 글도 대상에 포함한다 — 글이 삭제되면 찜도 함께 지워지므로 0이 정답이다.
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+        UPDATE used_product p
+        SET p.favorite_count = (
+            SELECT COUNT(*) FROM favorite f
+            WHERE f.ref_type = 'USED_PRODUCT' AND f.ref_id = p.used_product_id
+        )
+        """, nativeQuery = true)
+    int recalculateAllFavoriteCounts();
 }

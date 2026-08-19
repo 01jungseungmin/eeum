@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.favorite.service;
 
+import com.eeum.eeum.application.favorite.dto.response.FavoriteRecalculateResponseDto;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteStatResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
@@ -92,6 +94,40 @@ class AdminFavoriteServiceTest {
         assertThat(result).isEmpty();
         verify(storeRepository, never()).findAllById(any());
         verify(usedProductRepository, never()).findByUsedProductIdInAndDeletedAtIsNull(any());
+    }
+
+    // ─────────────────── 정합성 재계산 ───────────────────
+
+    @Test
+    void refType을_지정하면_해당_타입만_재계산한다() {
+        // given
+        when(usedProductRepository.recalculateAllFavoriteCounts()).thenReturn(42);
+
+        // when
+        FavoriteRecalculateResponseDto result =
+                adminFavoriteService.recalculateFavoriteCounts(FavoriteRefType.USED_PRODUCT);
+
+        // then — 전체 테이블을 갱신하는 무거운 쿼리라 지정하지 않은 타입까지 건드리면 안 된다
+        assertThat(result.getTotalUpdated()).isEqualTo(42);
+        assertThat(result.getUpdatedRows())
+                .containsExactly(entry(FavoriteRefType.USED_PRODUCT, 42));
+        verify(storeRepository, never()).recalculateAllFavoriteCounts();
+    }
+
+    @Test
+    void refType을_생략하면_상점과_중고_게시글을_모두_재계산한다() {
+        // given
+        when(storeRepository.recalculateAllFavoriteCounts()).thenReturn(12);
+        when(usedProductRepository.recalculateAllFavoriteCounts()).thenReturn(30);
+
+        // when
+        FavoriteRecalculateResponseDto result = adminFavoriteService.recalculateFavoriteCounts(null);
+
+        // then
+        assertThat(result.getUpdatedRows()).containsOnly(
+                entry(FavoriteRefType.STORE, 12),
+                entry(FavoriteRefType.USED_PRODUCT, 30));
+        assertThat(result.getTotalUpdated()).isEqualTo(42);
     }
 
     // ─────────────────── 헬퍼 ───────────────────

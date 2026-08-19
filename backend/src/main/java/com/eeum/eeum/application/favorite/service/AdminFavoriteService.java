@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.favorite.service;
 
+import com.eeum.eeum.application.favorite.dto.response.FavoriteRecalculateResponseDto;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteStatResponseDto;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -51,13 +53,30 @@ public class AdminFavoriteService {
                 .collect(Collectors.toList());
     }
 
-    // Store.favoriteCount 정합성 재계산 장애·대량 삭제·수동 DB 수정 후 favorite 테이블 실제 수와 Store 컬럼이 어긋났을 때 사용
-    // 단일 UPDATE ... SELECT로 처리 — N번 쿼리 없이 전체 동기화.
+    // favoriteCount 정합성 재계산 — 장애·대량 삭제·수동 DB 수정으로 favorite 테이블 실제 수와
+    // 대상 컬럼이 어긋났을 때 사용한다. refType을 주면 그 타입만, 생략하면 전체를 맞춘다.
+    // 타입별로 단일 UPDATE ... SELECT로 처리 — N번 쿼리 없이 전체 동기화.
     @Transactional
-    public int recalculateFavoriteCounts() {
-        int updated = storeRepository.recalculateAllFavoriteCounts();
-        log.info("Store.favoriteCount 정합성 재계산 완료: updatedRows={}", updated);
-        return updated;
+    public FavoriteRecalculateResponseDto recalculateFavoriteCounts(FavoriteRefType refType) {
+        Map<FavoriteRefType, Integer> updatedRows = new EnumMap<>(FavoriteRefType.class);
+
+        for (FavoriteRefType type : targetTypes(refType)) {
+            updatedRows.put(type, recalculate(type));
+        }
+
+        log.info("favoriteCount 정합성 재계산 완료: updatedRows={}", updatedRows);
+        return FavoriteRecalculateResponseDto.of(updatedRows);
+    }
+
+    private List<FavoriteRefType> targetTypes(FavoriteRefType refType) {
+        return refType == null ? List.of(FavoriteRefType.values()) : List.of(refType);
+    }
+
+    private int recalculate(FavoriteRefType refType) {
+        return switch (refType) {
+            case STORE -> storeRepository.recalculateAllFavoriteCounts();
+            case USED_PRODUCT -> usedProductRepository.recalculateAllFavoriteCounts();
+        };
     }
 
     // 통계 대상 이름 배치 조회 — 대상이 사라진 refId는 map에 담기지 않아 삭제 표기로 넘어간다.

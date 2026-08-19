@@ -31,6 +31,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
@@ -75,11 +77,13 @@ class FavoriteUsedProductListIntegrationTest {
     }
 
     private final FavoriteService favoriteService;
+    private final AdminFavoriteService adminFavoriteService;
     private final FavoriteRepository favoriteRepository;
     private final UsedProductRepository usedProductRepository;
     private final AccountRepository accountRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final PlatformTransactionManager transactionManager;
 
     private Long viewerId;
     private final List<Long> productIds = new ArrayList<>();
@@ -212,6 +216,26 @@ class FavoriteUsedProductListIntegrationTest {
         assertThatThrownBy(() -> favoriteRepository.saveAndFlush(
                 Favorite.create(viewer, FavoriteRefType.USED_PRODUCT, alreadyFavorited)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void 어긋난_찜_수는_재계산으로_실제_찜_행_수에_맞춰진다() {
+        // given: 중복 찜 정리나 장애 복구 후처럼 카운트만 부풀어 있는 상태를 만든다.
+        Long productId = productIds.get(0);
+        // @Modifying 쿼리라 트랜잭션 안에서 실행해야 한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            usedProductRepository.incrementFavoriteCount(productId);
+            usedProductRepository.incrementFavoriteCount(productId);
+        });
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getFavoriteCount())
+                .isEqualTo(3);   // 실제 찜 행은 1건
+
+        // when
+        adminFavoriteService.recalculateFavoriteCounts(FavoriteRefType.USED_PRODUCT);
+
+        // then: 모든 게시글이 favorite 테이블 실제 행 수로 맞춰진다.
+        assertThat(usedProductRepository.findAllById(productIds))
+                .allSatisfy(product -> assertThat(product.getFavoriteCount()).isEqualTo(1));
     }
 
     private void hide(Long productId) {
