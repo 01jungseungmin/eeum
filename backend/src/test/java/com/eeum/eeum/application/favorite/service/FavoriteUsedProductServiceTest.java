@@ -69,7 +69,7 @@ class FavoriteUsedProductServiceTest {
     @Test
     void 찜을_등록하면_게시글_찜_수가_원자적으로_증가한다() {
         // given — 읽어서 +1 후 저장하면 동시 찜이 서로의 증가분을 덮어쓴다
-        givenActiveProduct(product());
+        givenLockedProduct(product());
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());
         when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account()));
@@ -85,8 +85,6 @@ class FavoriteUsedProductServiceTest {
     @Test
     void 찜을_해제하면_게시글_찜_수가_감소한다() {
         // given
-        UsedProduct product = product();
-        givenActiveProduct(product);
         Favorite favorite = Favorite.create(account(), FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.of(favorite));
@@ -100,9 +98,10 @@ class FavoriteUsedProductServiceTest {
 
     @Test
     void 삭제된_게시글은_찜할_수_없다() {
-        // given — existsById를 쓰면 삭제된 글도 존재로 판정된다
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
-                .thenReturn(Optional.empty());
+        // given — 잠금 조회에는 삭제 필터가 없으므로 서비스에서 걸러야 한다
+        UsedProduct deleted = product();
+        deleted.softDelete();
+        givenLockedProduct(deleted);
 
         // when & then
         assertThatThrownBy(() -> favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest()))
@@ -118,7 +117,7 @@ class FavoriteUsedProductServiceTest {
         // given — ID만 알면 목록을 거치지 않고 찜해 favoriteCount를 올릴 수 있다
         UsedProduct hidden = product();
         hidden.hide();
-        givenActiveProduct(hidden);
+        givenLockedProduct(hidden);
 
         // when & then — 존재 사실을 흘리지 않도록 NOT_FOUND로 통일한다
         assertThatThrownBy(() -> favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest()))
@@ -134,7 +133,7 @@ class FavoriteUsedProductServiceTest {
         // given — 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다
         UsedProduct sold = product();
         sold.markSold();
-        givenActiveProduct(sold);
+        givenLockedProduct(sold);
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());
         when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account()));
@@ -144,6 +143,38 @@ class FavoriteUsedProductServiceTest {
 
         // then
         verify(usedProductRepository).incrementFavoriteCount(PRODUCT_ID);
+    }
+
+    @Test
+    void 숨김_처리된_게시글의_찜도_해제할_수_있다() {
+        // given — 내가 남긴 찜을 거두는 일까지 막으면 카운트가 부풀린 채로 영영 남는다
+        UsedProduct hidden = product();
+        hidden.hide();
+        givenLockedProduct(hidden);
+        when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
+                ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID))
+                .thenReturn(Optional.of(Favorite.create(account(), FavoriteRefType.USED_PRODUCT, PRODUCT_ID)));
+
+        // when
+        favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest());
+
+        // then
+        verify(usedProductRepository).decrementFavoriteCount(PRODUCT_ID);
+    }
+
+    @Test
+    void 찜_등록은_대상_게시글을_먼저_잠근_뒤_검증한다() {
+        // given — 잠그지 않으면 삭제 트랜잭션과 스냅샷이 엇갈려 죽은 찜이 생긴다
+        givenLockedProduct(product());
+        when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
+                ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());
+        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account()));
+
+        // when
+        favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest());
+
+        // then — 잠금 없는 조회로 검증하면 안 된다
+        verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(any());
     }
 
     // ─────────────────── 찜 수 조회 ───────────────────
@@ -277,6 +308,12 @@ class FavoriteUsedProductServiceTest {
     }
 
     // ─────────────────── 헬퍼 ───────────────────
+
+    // 쓰기 경로(토글)는 잠금 조회를 쓴다. 잠금 조회에는 삭제 필터가 없다.
+    private void givenLockedProduct(UsedProduct product) {
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+    }
 
     private void givenActiveProduct(UsedProduct product) {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))

@@ -544,7 +544,7 @@ class UsedProductServiceTest {
     void 삭제하면_물리_삭제_대신_deletedAt이_찍힌다() {
         // given — 후기·채팅·신고 이력이 가리킬 대상을 남겨야 한다
         UsedProduct product = product();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
         // when
@@ -565,7 +565,7 @@ class UsedProductServiceTest {
         // given — 상대가 거래를 기다리는 중이다. 말없이 사라지면 이유를 알 수 없다.
         UsedProduct product = product();
         product.reserve();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
         assertThatThrownBy(() -> usedProductService.delete(SELLER_ID, PRODUCT_ID))
@@ -581,7 +581,7 @@ class UsedProductServiceTest {
     void 판매완료된_게시글은_삭제할_수_있다() {
         UsedProduct product = product();
         product.markSold();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
         usedProductService.delete(SELLER_ID, PRODUCT_ID);
@@ -590,8 +590,23 @@ class UsedProductServiceTest {
     }
 
     @Test
+    void 삭제는_신고_조치와_같은_비관적_잠금으로_게시글을_읽는다() {
+        // given — 잠그지 않으면 삭제 직후 들어온 찜이 정리를 지나쳐 죽은 찜으로 남는다
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+
+        // when
+        usedProductService.delete(SELLER_ID, PRODUCT_ID);
+
+        // then
+        verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID);
+        verify(favoriteService).deleteAllByRefTypeAndRefId(
+                com.eeum.eeum.domain.favorite.enums.FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
+    }
+
+    @Test
     void 남의_게시글은_삭제할_수_없다() {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
 
         assertThatThrownBy(() -> usedProductService.delete(OTHER_ID, PRODUCT_ID))

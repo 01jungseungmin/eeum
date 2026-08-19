@@ -51,13 +51,15 @@ public class FavoriteService {
 
     // ===================== 찜 토글 =====================
 
-    // 찜 토글 — 이미 찜한 상태면 해제, 없으면 등록 refType별로 대상 도메인 존재 여부를 검증한 뒤 처리
+    // 찜 토글 — 이미 찜한 상태면 해제, 없으면 등록.
+    // 등록만 노출 조건을 검증한다. 해제는 숨김·삭제된 대상이어도 막지 않는다 —
+    // 내가 남긴 찜을 거두는 일까지 막으면 카운트가 부풀린 채로 영영 남는다.
     @Transactional
     public FavoriteToggleResponseDto toggleFavorite(
             Long accountId,
             FavoriteToggleRequestDto request
     ) {
-        validateRef(request.getRefType(), request.getRefId());
+        Optional<UsedProduct> locked = lockUsedProduct(request.getRefType(), request.getRefId());
 
         Optional<Favorite> existing = favoriteRepository
                 .findByAccount_AccountIdAndRefTypeAndRefId(
@@ -65,9 +67,10 @@ public class FavoriteService {
 
         if (existing.isPresent()) {
             return removeFavorite(accountId, existing.get(), request.getRefType(), request.getRefId());
-        } else {
-            return addFavorite(accountId, request.getRefType(), request.getRefId());
         }
+
+        validateRefForRegistration(request.getRefType(), request.getRefId(), locked);
+        return addFavorite(accountId, request.getRefType(), request.getRefId());
     }
 
     // 찜 삭제 — favoriteId 기반 내 찜 목록 화면처럼 favoriteId를 이미 알고 있을 때 사용
@@ -78,6 +81,7 @@ public class FavoriteService {
                 .findByFavoriteIdAndAccount_AccountId(favoriteId, accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAVORITE_NOT_FOUND));
 
+        lockUsedProduct(favorite.getRefType(), favorite.getRefId());
         favoriteRepository.delete(favorite);
         favoriteRepository.flush(); // DELETE 즉시 반영 후 카운트 감소
         decrementCount(favorite.getRefType(), favorite.getRefId());
@@ -93,6 +97,7 @@ public class FavoriteService {
                 .findByAccount_AccountIdAndRefTypeAndRefId(accountId, refType, refId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAVORITE_NOT_FOUND));
 
+        lockUsedProduct(refType, refId);
         favoriteRepository.delete(favorite);
         favoriteRepository.flush(); // DELETE 즉시 반영 후 카운트 감소
         decrementCount(refType, refId);
@@ -309,7 +314,38 @@ public class FavoriteService {
         return FavoriteToggleResponseDto.removed(refType, refId, count);
     }
 
-    // refType별 대상 도메인 존재 여부 검증
+    // 쓰기 경로에서 대상 게시글 행을 먼저 잠근다.
+    // 잠그지 않으면 삭제 트랜잭션과 스냅샷이 엇갈려, 이미 삭제된 글에 찜이 붙는다.
+    // 그 찜은 삭제 시 정리(deleteAllByRefTypeAndRefId)를 이미 지나쳤으므로 영영 남는다.
+    // 잠금 순서는 항상 used_product → favorite다. 반대로 잡는 경로가 생기면 교착이 난다.
+    // 대상이 없으면(하드 삭제·잘못된 ID) 잠글 것도 없다 — 등록 검증에서 걸러진다.
+    private Optional<UsedProduct> lockUsedProduct(FavoriteRefType refType, Long refId) {
+        if (refType != FavoriteRefType.USED_PRODUCT) {
+            return Optional.empty();
+        }
+        return usedProductRepository.findByUsedProductIdForUpdate(refId);
+    }
+
+    // 찜 등록 검증 — 이미 잠근 행을 그대로 쓴다(추가 조회 없음).
+    // 숨김 글을 막는 이유: ID만 알면 목록을 거치지 않고 찜해 favoriteCount를 올릴 수 있고,
+    // 숨김 해제 후 그 카운트가 그대로 노출된다. 존재 사실을 흘리지 않도록 NOT_FOUND로 통일한다.
+    // 판매완료(SOLD)는 막지 않는다: 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다.
+    private void validateRefForRegistration(
+            FavoriteRefType refType, Long refId, Optional<UsedProduct> lockedProduct) {
+        switch (refType) {
+            case STORE -> {
+                if (!storeRepository.existsById(refId)) {
+                    throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
+                }
+            }
+            case USED_PRODUCT -> lockedProduct
+                    .filter(product -> !product.isDeleted() && !product.isHidden())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+        }
+    }
+
+    // 조회 전용 검증 — 잠금 없이 노출 대상인지만 확인한다.
+    // readOnly 트랜잭션에서 쓰이므로 쓰기 잠금을 잡으면 안 된다.
     private void validateRef(FavoriteRefType refType, Long refId) {
         switch (refType) {
             case STORE -> {
@@ -317,18 +353,10 @@ public class FavoriteService {
                     throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
                 }
             }
-            case USED_PRODUCT -> {
-                // existsById가 아니라 삭제 필터가 걸린 조회를 쓴다 — 삭제된 글은 찜할 수 없어야 한다.
-                // 숨김 글도 막는다 — ID만 알면 목록을 거치지 않고 찜해 favoriteCount를 올릴 수 있고,
-                // 숨김 해제 후 그 카운트가 그대로 노출된다. 존재 사실을 흘리지 않도록 NOT_FOUND로 통일한다.
-                // 판매완료(SOLD)는 막지 않는다: 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다.
-                UsedProduct product = usedProductRepository
-                        .findByUsedProductIdAndDeletedAtIsNull(refId)
-                        .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
-                if (product.isHidden()) {
-                    throw new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND);
-                }
-            }
+            case USED_PRODUCT -> usedProductRepository
+                    .findByUsedProductIdAndDeletedAtIsNull(refId)
+                    .filter(product -> !product.isHidden())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
         }
     }
 

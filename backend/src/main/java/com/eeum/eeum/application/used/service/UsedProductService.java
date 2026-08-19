@@ -156,7 +156,9 @@ public class UsedProductService {
 
     @Transactional
     public void delete(Long sellerId, Long usedProductId) {
-        UsedProduct product = getOwnedOrThrow(sellerId, usedProductId);
+        // 찜 정리까지 하는 경로라 신고 조치와 같은 비관적 잠금을 쓴다.
+        // 잠그지 않으면 삭제 직후 들어온 찜이 정리를 지나쳐 죽은 찜으로 남는다.
+        UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
 
         // 예약 중이라는 건 상대가 거래를 기다리고 있다는 뜻이다. 말없이 사라지면
         // 상대는 이유를 알 수 없다. 예약을 먼저 취소하게 한다.
@@ -285,6 +287,21 @@ public class UsedProductService {
 
     private UsedProduct getOwnedOrThrow(Long sellerId, Long usedProductId) {
         UsedProduct product = getActiveOrThrow(usedProductId);
+        assertOwned(product, sellerId);
+        return product;
+    }
+
+    // 잠금 조회 버전 — 찜·신고 조치와 경쟁하는 쓰기 경로에서 사용한다.
+    // 잠금 조회에는 삭제 필터가 없으므로 여기서 거른다.
+    private UsedProduct getOwnedForUpdateOrThrow(Long sellerId, Long usedProductId) {
+        UsedProduct product = usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
+                .filter(found -> !found.isDeleted())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+        assertOwned(product, sellerId);
+        return product;
+    }
+
+    private void assertOwned(UsedProduct product, Long sellerId) {
         // 숨김 글은 작성자에게만 보인다. 비소유자에게 403을 주면 상세 조회는 404인데 수정·삭제만
         // 403이 되어, 그 차이로 숨김 글의 존재가 드러난다. 상세 조회와 같은 응답으로 맞춘다.
         // 공개 글의 403은 유지한다 — 존재가 이미 공개라 404로 바꾸면 정상적인 권한 오류를 가린다.
@@ -295,7 +312,6 @@ public class UsedProductService {
         if (!product.isOwnedBy(sellerId)) {
             throw new ForbiddenException(ErrorCode.USED_PRODUCT_ACCESS_DENIED);
         }
-        return product;
     }
 
     // 비활성 카테고리와 가게용 카테고리를 모두 걸러낸다.
