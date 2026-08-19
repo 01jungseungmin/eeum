@@ -53,7 +53,7 @@ public class UsedProductController {
             @RequestParam(required = false) Long regionId,
             @Parameter(description = "제목·본문 검색어")
             @RequestParam(required = false) String keyword,
-            @Parameter(description = "카테고리 ID (하위 카테고리는 포함하지 않음)")
+            @Parameter(description = "카테고리 ID. 상위 카테고리를 지정하면 하위 카테고리 글도 함께 조회된다")
             @RequestParam(required = false) Long categoryId,
             @Parameter(description = "거래 유형 (FIXED·FREE·NEGOTIABLE)")
             @RequestParam(required = false) UsedProductPriceType priceType,
