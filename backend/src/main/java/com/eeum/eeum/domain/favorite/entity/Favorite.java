@@ -13,7 +13,17 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "favorite")
+@Table(
+        name = "favorite",
+        uniqueConstraints = {
+                // 동일 대상 중복 찜을 DB 레벨에서 차단.
+                // 없으면 동시 토글로 중복 행이 생겨 favoriteCount가 부풀고,
+                // 이후 단건 찜 조회(Optional 반환)가 IncorrectResultSize로 실패한다.
+                @UniqueConstraint(
+                        name = "uk_favorite_account_ref",
+                        columnNames = {"account_id", "ref_type", "ref_id"})
+        }
+)
 public class Favorite extends BaseEntity {
 
     @Id
