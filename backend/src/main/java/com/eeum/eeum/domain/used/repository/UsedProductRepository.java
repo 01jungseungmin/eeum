@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface UsedProductRepository
@@ -21,6 +22,9 @@ public interface UsedProductRepository
     // 신고 상세의 대상 스냅샷 — 판매자를 함께 조회해 스냅샷 생성 시 추가 SELECT 방지
     @EntityGraph(attributePaths = "seller")
     Optional<UsedProduct> findWithSellerByUsedProductIdAndDeletedAtIsNull(Long usedProductId);
+
+    // 다건 조회 — Soft Delete 대상이므로 삭제된 글을 함께 받으면 안 되는 곳에서 사용한다.
+    List<UsedProduct> findByUsedProductIdInAndDeletedAtIsNull(Collection<Long> usedProductIds);
 
     // 관리자 조치용 비관적 쓰기 잠금 — 조치와 작성자의 수정·삭제가 동시에 들어오는 경쟁을 막는다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -49,7 +49,7 @@ class AdminFavoriteServiceTest {
         // given — 항목마다 findById를 호출하면 상위 N개만큼 쿼리가 나간다
         when(favoriteRepository.findFavoriteStats(any(), any(), any(), anyInt()))
                 .thenReturn(List.of(stat(10L, 5L), stat(11L, 3L), stat(12L, 1L)));
-        when(usedProductRepository.findAllById(List.of(10L, 11L, 12L)))
+        when(usedProductRepository.findByUsedProductIdInAndDeletedAtIsNull(List.of(10L, 11L, 12L)))
                 .thenReturn(List.of(product(10L, "자전거"), product(11L, "노트북"), product(12L, "의자")));
 
         // when
@@ -59,16 +59,17 @@ class AdminFavoriteServiceTest {
         // then
         assertThat(result).extracting(FavoriteStatResponseDto::getRefName)
                 .containsExactly("자전거", "노트북", "의자");
-        verify(usedProductRepository, times(1)).findAllById(any());
+        verify(usedProductRepository, times(1)).findByUsedProductIdInAndDeletedAtIsNull(any());
         verify(usedProductRepository, never()).findById(any());
     }
 
     @Test
     void 통계에는_남아_있지만_대상이_삭제된_항목은_삭제_표기로_반환한다() {
-        // given — 찜 통계 행은 남고 대상만 사라진 경우
+        // given — 찜 통계 행은 남고 대상만 사라진 경우.
+        // 중고 게시글은 Soft Delete라 deletedAt 조건이 걸린 조회를 써야 삭제 글이 빠진다.
         when(favoriteRepository.findFavoriteStats(any(), any(), any(), anyInt()))
                 .thenReturn(List.of(stat(10L, 5L), stat(99L, 2L)));
-        when(usedProductRepository.findAllById(List.of(10L, 99L)))
+        when(usedProductRepository.findByUsedProductIdInAndDeletedAtIsNull(List.of(10L, 99L)))
                 .thenReturn(List.of(product(10L, "자전거")));
 
         // when
@@ -90,6 +91,7 @@ class AdminFavoriteServiceTest {
 
         assertThat(result).isEmpty();
         verify(storeRepository, never()).findAllById(any());
+        verify(usedProductRepository, never()).findByUsedProductIdInAndDeletedAtIsNull(any());
     }
 
     // ─────────────────── 헬퍼 ───────────────────

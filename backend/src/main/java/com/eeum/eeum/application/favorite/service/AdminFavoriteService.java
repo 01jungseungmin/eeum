@@ -60,7 +60,8 @@ public class AdminFavoriteService {
         return updated;
     }
 
-    // 통계 대상 이름 배치 조회 — 찜만 남고 대상이 삭제된 refId는 map에 담기지 않는다.
+    // 통계 대상 이름 배치 조회 — 대상이 사라진 refId는 map에 담기지 않아 삭제 표기로 넘어간다.
+    // 중고 게시글은 Soft Delete라 deletedAt 조건 없이 조회하면 삭제된 글의 제목이 그대로 노출된다.
     private Map<Long, String> resolveRefNames(FavoriteRefType refType, List<Long> refIds) {
         if (refIds.isEmpty()) {
             return Map.of();
@@ -68,7 +69,7 @@ public class AdminFavoriteService {
         return switch (refType) {
             case STORE -> storeRepository.findAllById(refIds).stream()
                     .collect(Collectors.toMap(Store::getStoreId, Store::getName));
-            case USED_PRODUCT -> usedProductRepository.findAllById(refIds).stream()
+            case USED_PRODUCT -> usedProductRepository.findByUsedProductIdInAndDeletedAtIsNull(refIds).stream()
                     .collect(Collectors.toMap(UsedProduct::getUsedProductId, UsedProduct::getTitle));
         };
     }
