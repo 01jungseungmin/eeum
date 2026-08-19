@@ -37,7 +37,13 @@ public class ReportTargetResolver {
     private final AccountRepository accountRepository;
     private final UsedProductRepository usedProductRepository;
 
+    // 관리자 열람용 — 숨김 게시글도 그대로 반환한다. 관리자는 숨긴 콘텐츠의 신고도 처리해야 한다.
     public ReportTargetSnapshotDto resolve(ReportTargetType targetType, Long targetId) {
+        return resolveInternal(targetType, targetId, false);
+    }
+
+    private ReportTargetSnapshotDto resolveInternal(
+            ReportTargetType targetType, Long targetId, boolean forCreation) {
         return switch (targetType) {
             case STORE -> storeRepository.findWithAccountByStoreId(targetId)
                     .map(this::fromStore)
@@ -53,6 +59,9 @@ public class ReportTargetResolver {
                     .map(this::fromCommunityComment)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case USED_PRODUCT -> usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(targetId)
+                    // 신고 접수에서는 숨김 글을 없는 것으로 취급한다. 상세 조회(UsedProductService)가
+                    // 숨김 글에 404를 주는데 신고만 성공하면, ID를 넣어보는 것으로 숨김 글의 존재가 드러난다.
+                    .filter(product -> !forCreation || !product.isHidden())
                     .map(this::fromUsedProduct)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case ACCOUNT -> accountRepository.findById(targetId)
@@ -64,7 +73,7 @@ public class ReportTargetResolver {
 
     // 신고 접수 시에는 대상이 반드시 존재해야 하므로 타입별 표준 NotFound 예외로 변환한다.
     public ReportTargetSnapshotDto resolveForCreation(ReportTargetType targetType, Long targetId) {
-        ReportTargetSnapshotDto target = resolve(targetType, targetId);
+        ReportTargetSnapshotDto target = resolveInternal(targetType, targetId, true);
         if (target.isExists()) {
             return target;
         }

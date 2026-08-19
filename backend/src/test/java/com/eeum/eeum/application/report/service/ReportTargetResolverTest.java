@@ -11,6 +11,8 @@ import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
+import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.NotFoundException;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -29,6 +31,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -224,6 +227,40 @@ class ReportTargetResolverTest {
 
         // Then: 소유자 조회를 위한 AccountRepository 접근이 없어야 한다
         org.mockito.Mockito.verifyNoInteractions(accountRepository);
+    }
+
+    @Test
+    void 숨김_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 상세 조회는 숨김 글에 404를 준다. 신고만 성공하면 ID를 넣어보는 것으로 존재가 드러난다.
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        UsedProduct hidden = createUsedProduct(70L, seller);
+        hidden.hide();
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(hidden));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글도_관리자_열람용_조회에서는_그대로_반환된다() {
+        // Given: 관리자는 숨긴 콘텐츠에 대한 신고도 열람/처리할 수 있어야 한다
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        UsedProduct hidden = createUsedProduct(70L, seller);
+        hidden.hide();
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(hidden));
+
+        // When
+        ReportTargetSnapshotDto result = reportTargetResolver.resolve(ReportTargetType.USED_PRODUCT, 70L);
+
+        // Then
+        assertThat(result.isExists()).isTrue();
+        assertThat(result.getTitle()).isEqualTo("자전거 팝니다");
     }
 
     @Test
