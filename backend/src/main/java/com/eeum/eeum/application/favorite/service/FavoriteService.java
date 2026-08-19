@@ -134,7 +134,12 @@ public class FavoriteService {
                 .map(Favorite::getRefId)
                 .collect(Collectors.toList());
 
+        // 미승인·정지·비활성 계정의 상점은 목록에서 뺀다 — 찜 목록으로 우회해
+        // 비공개 상점의 이름·주소·상태·썸네일을 보게 되면 공개 조건이 무의미해진다.
+        Set<Long> visibleStoreIds = Set.copyOf(storeRepository.findPublicVisibleStoreIds(storeIds));
+
         Map<Long, Store> storeMap = storeRepository.findAllById(storeIds).stream()
+                .filter(store -> visibleStoreIds.contains(store.getStoreId()))
                 .collect(Collectors.toMap(Store::getStoreId, Function.identity()));
 
         Map<Long, String> thumbnailMap = storeImageRepository
@@ -286,6 +291,12 @@ public class FavoriteService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
+        // 탈퇴 정리가 지나간 뒤 들어온 요청이 찜을 되살리지 못하게 막는다.
+        // 토큰이 아직 살아 있는 동안 탈퇴 요청과 겹칠 수 있다.
+        if (!account.isActive()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
+
         Favorite favorite = Favorite.create(account, refType, refId);
 
         try {
@@ -333,8 +344,10 @@ public class FavoriteService {
     private void validateRefForRegistration(
             FavoriteRefType refType, Long refId, Optional<UsedProduct> lockedProduct) {
         switch (refType) {
+            // existsById로는 미승인·정지·비활성 계정의 상점까지 찜할 수 있고,
+            // 그 뒤 찜 목록·공개 카운트로 비공개 상점 정보가 새어 나간다.
             case STORE -> {
-                if (!storeRepository.existsById(refId)) {
+                if (!isPublicVisibleStore(refId)) {
                     throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
                 }
             }
@@ -349,7 +362,7 @@ public class FavoriteService {
     private void validateRef(FavoriteRefType refType, Long refId) {
         switch (refType) {
             case STORE -> {
-                if (!storeRepository.existsById(refId)) {
+                if (!isPublicVisibleStore(refId)) {
                     throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
                 }
             }
@@ -358,6 +371,11 @@ public class FavoriteService {
                     .filter(product -> !product.isHidden())
                     .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
         }
+    }
+
+    // 공개 노출 가능한 상점인지 — 조건은 PublicStoreService.validatePublicVisibleStore와 같다.
+    private boolean isPublicVisibleStore(Long storeId) {
+        return !storeRepository.findPublicVisibleStoreIds(List.of(storeId)).isEmpty();
     }
 
     // DB 원자 UPDATE로 찜 카운트 +1.
