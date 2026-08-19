@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.test.context.ActiveProfiles;
@@ -43,8 +45,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 중고 게시글 찜 목록의 노출 필터가 실제 MySQL 쿼리에서 페이징 전에 적용되는지 검증한다.
- * Mock 단위 테스트는 리포지토리 반환값을 그대로 받으므로 "필터가 페이징 전인지"를 구조적으로 확인할 수 없다.
+ * 중고 게시글 찜의 DB 의존 동작을 실제 MySQL에서 검증한다.
+ * 노출 필터가 페이징 전에 적용되는지, 탈퇴 정리가 IN UPDATE 한 번으로 끝나는지,
+ * 중복 찜을 UNIQUE 제약이 막는지는 Mock 단위 테스트로 확인할 수 없다.
  */
 @SpringBootTest
 @Testcontainers
@@ -196,6 +199,19 @@ class FavoriteUsedProductListIntegrationTest {
                 .filter(sql -> sql.toLowerCase().startsWith("update used_product"))
                 .toList();
         assertThat(updates).as("실행 UPDATE: %s", updates).hasSize(1);
+    }
+
+    @Test
+    void 같은_대상을_두_번_찜하면_UNIQUE_제약이_막는다() {
+        // given: 서비스는 이 제약을 전제로 동시 중복 요청을 FAVORITE_ALREADY_EXISTS로 처리한다.
+        // 제약이 없으면 중복 행이 쌓여 favoriteCount가 부풀고, 단건 찜 조회(Optional)가 터진다.
+        Account viewer = accountRepository.findById(viewerId).orElseThrow();
+        Long alreadyFavorited = productIds.get(0);
+
+        // when & then
+        assertThatThrownBy(() -> favoriteRepository.saveAndFlush(
+                Favorite.create(viewer, FavoriteRefType.USED_PRODUCT, alreadyFavorited)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private void hide(Long productId) {

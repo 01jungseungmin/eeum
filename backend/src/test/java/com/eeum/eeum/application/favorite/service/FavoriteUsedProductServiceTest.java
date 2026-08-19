@@ -146,6 +146,37 @@ class FavoriteUsedProductServiceTest {
         verify(usedProductRepository).incrementFavoriteCount(PRODUCT_ID);
     }
 
+    // ─────────────────── 찜 수 조회 ───────────────────
+
+    @Test
+    void 숨김_게시글의_찜_수는_조회할_수_없다() {
+        // given — 비회원도 호출 가능한 공개 API라, 검증 없이 세면 ID를 훑는 것만으로
+        // 숨김 게시글의 존재와 찜 수가 드러난다
+        UsedProduct hidden = product();
+        hidden.hide();
+        givenActiveProduct(hidden);
+
+        // when & then
+        assertThatThrownBy(() ->
+                favoriteService.getFavoriteCount(FavoriteRefType.USED_PRODUCT, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+
+        verify(favoriteRepository, never()).countByRefTypeAndRefId(any(), any());
+    }
+
+    @Test
+    void 공개_게시글의_찜_수는_그대로_반환한다() {
+        givenActiveProduct(product());
+        when(favoriteRepository.countByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, PRODUCT_ID))
+                .thenReturn(7L);
+
+        long count = favoriteService.getFavoriteCount(FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
+
+        assertThat(count).isEqualTo(7L);
+    }
+
     // ─────────────────── 찜 목록 ───────────────────
 
     @Test
