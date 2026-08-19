@@ -2,12 +2,14 @@ package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.Optional;
 
 public interface UsedProductRepository
@@ -15,6 +17,10 @@ public interface UsedProductRepository
 
     //  Soft Delete 대상이므로 단건 조회는 항상 이 메서드 사용
     Optional<UsedProduct> findByUsedProductIdAndDeletedAtIsNull(Long usedProductId);
+
+    // 신고 상세의 대상 스냅샷 — 판매자를 함께 조회해 스냅샷 생성 시 추가 SELECT 방지
+    @EntityGraph(attributePaths = "seller")
+    Optional<UsedProduct> findWithSellerByUsedProductIdAndDeletedAtIsNull(Long usedProductId);
 
     // 관리자 조치용 비관적 쓰기 잠금 — 조치와 작성자의 수정·삭제가 동시에 들어오는 경쟁을 막는다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -35,4 +41,15 @@ public interface UsedProductRepository
           AND p.favoriteCount > 0
         """)
     int decrementFavoriteCount(@Param("usedProductId") Long usedProductId);
+
+    // 찜 카운트 일괄 -1 — 회원 탈퇴처럼 한 사람의 찜을 한꺼번에 정리할 때 사용.
+    // 같은 회원이 같은 글을 두 번 찜할 수 없어(UNIQUE) ID가 중복되지 않으므로 단건 -1의 반복과 결과가 같다.
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE UsedProduct p
+        SET p.favoriteCount = p.favoriteCount - 1
+        WHERE p.usedProductId IN :usedProductIds
+          AND p.favoriteCount > 0
+        """)
+    int decrementFavoriteCounts(@Param("usedProductIds") Collection<Long> usedProductIds);
 }

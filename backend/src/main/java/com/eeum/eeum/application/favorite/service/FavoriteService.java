@@ -247,14 +247,27 @@ public class FavoriteService {
     @Transactional
     public void deleteAllByAccountId(Long accountId) {
         // 대상 도메인의 favoriteCount 원자 감소 — 탈퇴자가 남긴 찜이 카운트에 계속 잡히면 안 된다.
-        favoriteRepository.findByAccount_AccountIdAndRefType(accountId, FavoriteRefType.STORE)
-                .forEach(f -> storeRepository.decrementFavoriteCount(f.getRefId()));
+        // 찜 1건마다 UPDATE를 날리면 찜이 많은 회원의 탈퇴가 그만큼의 쿼리를 유발하므로 IN 절로 한 번에 처리한다.
+        List<Long> storeIds = refIds(accountId, FavoriteRefType.STORE);
+        if (!storeIds.isEmpty()) {
+            storeRepository.decrementFavoriteCounts(storeIds);
+        }
 
-        favoriteRepository.findByAccount_AccountIdAndRefType(accountId, FavoriteRefType.USED_PRODUCT)
-                .forEach(f -> usedProductRepository.decrementFavoriteCount(f.getRefId()));
+        List<Long> productIds = refIds(accountId, FavoriteRefType.USED_PRODUCT);
+        if (!productIds.isEmpty()) {
+            usedProductRepository.decrementFavoriteCounts(productIds);
+        }
 
         favoriteRepository.deleteAllByAccount_AccountId(accountId);
-        log.info("회원 탈퇴 찜 CASCADE 삭제: accountId={}", accountId);
+        log.info("회원 탈퇴 찜 CASCADE 삭제: accountId={}, storeCount={}, usedProductCount={}",
+                accountId, storeIds.size(), productIds.size());
+    }
+
+    // 탈퇴 회원이 찜한 대상 ID 목록 — 빈 목록으로 IN 절을 만들면 DB에 따라 문법 오류가 나므로 호출부에서 거른다.
+    private List<Long> refIds(Long accountId, FavoriteRefType refType) {
+        return favoriteRepository.findByAccount_AccountIdAndRefType(accountId, refType).stream()
+                .map(Favorite::getRefId)
+                .toList();
     }
 
     // ===================== 내부 헬퍼 =====================

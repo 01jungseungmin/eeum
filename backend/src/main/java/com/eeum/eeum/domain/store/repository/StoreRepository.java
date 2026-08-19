@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.Optional;
 
 public interface StoreRepository extends JpaRepository<Store, Long>,StoreRepositoryCustom {
@@ -53,6 +54,17 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
           AND s.favoriteCount > 0
         """)
     int decrementFavoriteCount(@Param("storeId") Long storeId);
+
+    // 찜 카운트 일괄 -1 — 회원 탈퇴처럼 한 사람의 찜을 한꺼번에 정리할 때 사용.
+    // 같은 회원이 같은 상점을 두 번 찜할 수 없어(UNIQUE) ID가 중복되지 않으므로 단건 -1의 반복과 결과가 같다.
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Store s
+        SET s.favoriteCount = s.favoriteCount - 1
+        WHERE s.storeId IN :storeIds
+          AND s.favoriteCount > 0
+        """)
+    int decrementFavoriteCounts(@Param("storeIds") Collection<Long> storeIds);
 
     // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 상점의 favoriteCount 일괄 갱신
     // 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 처리

@@ -212,18 +212,37 @@ class FavoriteUsedProductServiceTest {
     // ─────────────────── 회원 탈퇴 ───────────────────
 
     @Test
-    void 회원이_탈퇴하면_중고_찜_수도_함께_감소한다() {
-        // given — 탈퇴자가 남긴 찜이 카운트에 계속 잡히면 안 된다
+    void 회원이_탈퇴하면_중고_찜_수가_한_번의_IN_UPDATE로_감소한다() {
+        // given — 탈퇴자가 남긴 찜이 카운트에 계속 잡히면 안 된다.
+        // 찜 1건마다 UPDATE를 날리면 찜이 많은 회원의 탈퇴가 그만큼의 쿼리를 유발한다.
         when(favoriteRepository.findByAccount_AccountIdAndRefType(ACCOUNT_ID, FavoriteRefType.STORE))
                 .thenReturn(List.of());
         when(favoriteRepository.findByAccount_AccountIdAndRefType(ACCOUNT_ID, FavoriteRefType.USED_PRODUCT))
-                .thenReturn(List.of(Favorite.create(account(), FavoriteRefType.USED_PRODUCT, PRODUCT_ID)));
+                .thenReturn(List.of(
+                        Favorite.create(account(), FavoriteRefType.USED_PRODUCT, PRODUCT_ID),
+                        Favorite.create(account(), FavoriteRefType.USED_PRODUCT, 11L)));
 
         // when
         favoriteService.deleteAllByAccountId(ACCOUNT_ID);
 
         // then
-        verify(usedProductRepository).decrementFavoriteCount(PRODUCT_ID);
+        verify(usedProductRepository).decrementFavoriteCounts(List.of(PRODUCT_ID, 11L));
+        verify(usedProductRepository, never()).decrementFavoriteCount(any());
+    }
+
+    @Test
+    void 찜이_없는_회원_탈퇴는_카운트_UPDATE를_실행하지_않는다() {
+        // given — 빈 목록으로 IN 절을 만들면 DB에 따라 문법 오류가 난다
+        when(favoriteRepository.findByAccount_AccountIdAndRefType(any(), any()))
+                .thenReturn(List.of());
+
+        // when
+        favoriteService.deleteAllByAccountId(ACCOUNT_ID);
+
+        // then
+        verify(usedProductRepository, never()).decrementFavoriteCounts(any());
+        verify(storeRepository, never()).decrementFavoriteCounts(any());
+        verify(favoriteRepository).deleteAllByAccount_AccountId(ACCOUNT_ID);
     }
 
     // ─────────────────── 헬퍼 ───────────────────
