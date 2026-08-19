@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -38,11 +39,15 @@ public class AdminFavoriteService {
         List<FavoriteStatProjection> projections =
                 favoriteRepository.findFavoriteStats(refType, from, to, limit);
 
+        // 항목마다 이름을 조회하면 상위 N개만큼 쿼리가 나가므로 ID를 모아 IN 절로 한 번에 조회한다.
+        Map<Long, String> refNames = resolveRefNames(
+                refType,
+                projections.stream().map(FavoriteStatProjection::getRefId).toList());
+
         return projections.stream()
-                .map(p -> {
-                    String refName = resolveRefName(refType, p.getRefId());
-                    return FavoriteStatResponseDto.of(refType, p.getRefId(), p.getFavoriteCount(), refName);
-                })
+                .map(p -> FavoriteStatResponseDto.of(
+                        refType, p.getRefId(), p.getFavoriteCount(),
+                        refNames.getOrDefault(p.getRefId(), deletedRefName(refType))))
                 .collect(Collectors.toList());
     }
 
@@ -55,14 +60,23 @@ public class AdminFavoriteService {
         return updated;
     }
 
-    private String resolveRefName(FavoriteRefType refType, Long refId) {
+    // 통계 대상 이름 배치 조회 — 찜만 남고 대상이 삭제된 refId는 map에 담기지 않는다.
+    private Map<Long, String> resolveRefNames(FavoriteRefType refType, List<Long> refIds) {
+        if (refIds.isEmpty()) {
+            return Map.of();
+        }
         return switch (refType) {
-            case STORE -> storeRepository.findById(refId)
-                    .map(Store::getName)
-                    .orElse("(삭제된 상점)");
-            case USED_PRODUCT -> usedProductRepository.findById(refId)
-                    .map(UsedProduct::getTitle)
-                    .orElse("(삭제된 중고상품)");
+            case STORE -> storeRepository.findAllById(refIds).stream()
+                    .collect(Collectors.toMap(Store::getStoreId, Store::getName));
+            case USED_PRODUCT -> usedProductRepository.findAllById(refIds).stream()
+                    .collect(Collectors.toMap(UsedProduct::getUsedProductId, UsedProduct::getTitle));
+        };
+    }
+
+    private String deletedRefName(FavoriteRefType refType) {
+        return switch (refType) {
+            case STORE -> "(삭제된 상점)";
+            case USED_PRODUCT -> "(삭제된 중고상품)";
         };
     }
 }
