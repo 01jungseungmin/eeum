@@ -117,8 +117,10 @@ public class AccountService {
         // 1. ReAuth 토큰 검증
         tokenService.validateReAuthToken(accountId, request.getReAuthToken());
 
-        // 2. 활성 회원 조회
-        Account account = getActiveAccount(accountId);
+        // 2. 활성 회원 조회 — 탈퇴는 계정 행을 잠근다.
+        // 잠그지 않으면 탈퇴 정리(찜 삭제·카운트 감소)와 같은 사용자의 다른 쓰기 요청이 겹쳐
+        // 카운터가 이중 감소하거나, 정리가 끝난 뒤 찜·게시글이 다시 생성될 수 있다.
+        Account account = getActiveAccountWithLock(accountId);
 
         // 3. 사장 계정이면 상점/상품/이벤트 상품 비활성화
         if (account.getRole() == AccountRole.ROLE_OWNER) {
@@ -194,7 +196,20 @@ public class AccountService {
     private Account getActiveAccount(Long accountId) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        assertActive(account);
+        return account;
+    }
 
+    // 탈퇴 전용 — 계정 행을 잠근 뒤 같은 조건으로 검증한다.
+    // 검증은 getActiveAccount와 반드시 동일해야 한다(정지 계정 차단 포함).
+    private Account getActiveAccountWithLock(Long accountId) {
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        assertActive(account);
+        return account;
+    }
+
+    private void assertActive(Account account) {
         if (account.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
@@ -202,8 +217,6 @@ public class AccountService {
         if (!account.isActive()) {
             throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
         }
-
-        return account;
     }
 
     private boolean isEmptyUpdateRequest(UpdateInfoRequestDto request) {

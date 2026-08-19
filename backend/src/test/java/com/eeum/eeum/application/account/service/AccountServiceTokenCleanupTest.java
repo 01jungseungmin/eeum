@@ -141,7 +141,7 @@ class AccountServiceTokenCleanupTest {
         when(account.isWithdrawn()).thenReturn(false);
         when(account.isActive()).thenReturn(true);
         when(account.getRole()).thenReturn(AccountRole.ROLE_USER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         // when
         accountService.withdraw(accountId, request);
@@ -164,7 +164,7 @@ class AccountServiceTokenCleanupTest {
         when(account.isWithdrawn()).thenReturn(false);
         when(account.isActive()).thenReturn(true);
         when(account.getRole()).thenReturn(AccountRole.ROLE_USER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         // when
         accountService.withdraw(accountId, request);
@@ -186,7 +186,7 @@ class AccountServiceTokenCleanupTest {
 
         Account account = mock(Account.class);
         when(account.isWithdrawn()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         // when & then
         assertThatThrownBy(() -> accountService.withdraw(accountId, request))
@@ -208,7 +208,7 @@ class AccountServiceTokenCleanupTest {
         when(account.isWithdrawn()).thenReturn(false);
         when(account.isActive()).thenReturn(true);
         when(account.getRole()).thenReturn(AccountRole.ROLE_OWNER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         // when
         accountService.withdraw(accountId, request);
@@ -230,7 +230,7 @@ class AccountServiceTokenCleanupTest {
         when(account.isWithdrawn()).thenReturn(false);
         when(account.isActive()).thenReturn(true);
         when(account.getRole()).thenReturn(AccountRole.ROLE_OWNER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         doThrow(new RuntimeException("상점 비활성화 실패"))
                 .when(ownerStoreWithdrawalService).deactivateForWithdrawal(accountId);
