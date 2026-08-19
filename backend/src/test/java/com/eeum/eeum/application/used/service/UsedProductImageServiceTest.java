@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
-import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
@@ -116,7 +116,7 @@ class UsedProductImageServiceTest {
         // given — 게시글 수정·삭제 경로와 같은 정책을 사진 경로에도 적용한다
         UsedProduct hidden = product();
         hidden.hide();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(hidden));
 
         assertThatThrownBy(() -> usedProductImageService.addImages(
@@ -129,7 +129,7 @@ class UsedProductImageServiceTest {
     @Test
     void 삭제된_게시글에는_사진을_올릴_수_없다() {
         // given — 조회 자체가 deletedAt IS NULL 조건을 포함한다
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> usedProductImageService.addImages(
@@ -252,12 +252,27 @@ class UsedProductImageServiceTest {
 
     // ─────────────────── 헬퍼 ───────────────────
 
+    @Test
+    void 사진_쓰기는_부모_게시글을_비관적_잠금으로_읽는다() {
+        // given — 잠그지 않으면 동시 요청이 각자 현재 사진 수·대표를 읽어
+        // 10장 초과, 순서 중복, 대표 복수가 생긴다
+        givenOwnedProduct();
+        when(usedProductImageRepository.countByUsedProduct_UsedProductId(PRODUCT_ID)).thenReturn(0);
+        when(usedProductImageRepository.saveAll(any())).thenAnswer(returnsSavedList());
+
+        // when
+        usedProductImageService.addImages(SELLER_ID, PRODUCT_ID, uploadRequest("a.jpg"));
+
+        // then
+        verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(any());
+    }
+
     private void givenOwnedProduct() {
         givenOwnedProduct(product());
     }
 
     private void givenOwnedProduct(UsedProduct product) {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
     }
 
@@ -266,8 +281,8 @@ class UsedProductImageServiceTest {
         return invocation -> new ArrayList<>((List<UsedProductImage>) invocation.getArgument(0));
     }
 
-    private ImageUploadListRequestDto uploadRequest(String... urls) {
-        ImageUploadListRequestDto request = new ImageUploadListRequestDto();
+    private UsedProductImageUploadListRequestDto uploadRequest(String... urls) {
+        UsedProductImageUploadListRequestDto request = new UsedProductImageUploadListRequestDto();
         List<ImageUploadRequestDto> images = Arrays.stream(urls).map(url -> {
             ImageUploadRequestDto image = new ImageUploadRequestDto();
             ReflectionTestUtils.setField(image, "imageUrl", url);
