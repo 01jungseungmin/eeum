@@ -35,7 +35,7 @@ public class SecurityConfig {
     // ===================== 인증 없이 허용할 GET 경로 =====================
     private static final String[] PUBLIC_GET = {
             "/stores/**",
-            "/used-products/**",
+            "/used/**",
             "/products/**",
             "/regions/search",
             "/regions/nearby",

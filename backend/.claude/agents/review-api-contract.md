@@ -26,7 +26,7 @@ Controller의 API 표면과 DTO 계약만 본다.
 ### Controller / API 표준
 
 - URL은 kebab-case를 사용한다.
-    - 예: `/used-products`
+    - 예: `/used`
 - 계층 구조가 리소스 관계를 반영하는지 확인한다.
 - 응답은 `ApiResponse<T>`로 래핑한다.
 - Controller는 Service를 호출하고, DTO 변환은 Service 또는 Mapper에서 처리한다.

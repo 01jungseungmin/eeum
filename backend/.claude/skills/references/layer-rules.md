@@ -4,7 +4,7 @@
 
 - 클래스명: `{DomainName}Controller`
 - 응답은 `ApiResponse<T>`로 래핑한다.
-- URL은 복수형 kebab-case (예: `/used-products`, `/store-reviews`)
+- URL은 복수형 kebab-case (예: `/used`, `/store-reviews`)
 - Controller에서 비즈니스 검증, Repository 직접 호출을 하지 않는다.
 - 로그인 사용자 ID가 필요할 때만 `SecurityUtil.getCurrentAccountId()` 또는
   `getCurrentAccountIdOrNull()`을 사용하며, 어떤 메서드를 쓸지는 기존 유사
