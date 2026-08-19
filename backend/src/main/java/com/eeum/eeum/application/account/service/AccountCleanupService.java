@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.account.service;
 
+import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.application.store.service.StorePhysicalDeleteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
@@ -23,6 +24,7 @@ public class AccountCleanupService {
     private final AccountRegionRepository accountRegionRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final StorePhysicalDeleteService storePhysicalDeleteService;
+    private final FavoriteService favoriteService;
 
     // 탈퇴 후 30일이 지난 계정을 물리 삭제
     @Transactional
@@ -41,6 +43,11 @@ public class AccountCleanupService {
 
         for (Account account : accounts) {
             Long accountId = account.getAccountId();
+
+            // 찜 정리 — favorite.account_id는 NOT NULL FK라 남아 있으면 계정 물리 삭제가 제약 위반으로 실패한다.
+            // 탈퇴 시점(AccountService.withdraw)에 이미 정리되지만, 이 배선 이전에 탈퇴한 계정은 찜이 남아 있다.
+            // 남은 찜이 없으면 추가 쿼리 없이 끝나므로 무조건 호출해도 안전하다.
+            favoriteService.deleteAllByAccountId(accountId);
 
             // 상점 하위 데이터 먼저 삭제 — ownerSignup은 승인 전(ROLE_USER)에도 Store를 생성하므로
             // role로 게이팅하면 미승인 사장의 Store가 FK 제약 위반/고아로 남는다. deleteStoreDataByAccountId는

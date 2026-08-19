@@ -10,6 +10,7 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResp
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
@@ -41,6 +42,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    private final FavoriteService favoriteService;
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -126,7 +128,13 @@ public class AccountService {
         // 4. 탈퇴 처리
         account.withdraw();
 
-        // 5. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
+        // 5. 찜 정리 — 탈퇴자가 남긴 찜이 상점·게시글의 favoriteCount에 계속 잡히면 안 된다.
+        // 찜 카운트 감소는 영속성 컨텍스트를 비우는 bulk UPDATE(@Modifying(clearAutomatically))라
+        // 앞 단계의 변경(탈퇴 상태, 사장 상점 비활성화)을 먼저 flush하지 않으면 그대로 유실된다.
+        accountRepository.flush();
+        favoriteService.deleteAllByAccountId(accountId);
+
+        // 6. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 계정은 ACTIVE 상태이고 토큰도 유지
         eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
 

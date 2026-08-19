@@ -5,6 +5,7 @@ import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
@@ -15,6 +16,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +28,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -45,6 +48,7 @@ class AccountServiceTokenCleanupTest {
     @Mock AccountMapper accountMapper;
     @Mock OwnerApplicationMapper ownerApplicationMapper;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock FavoriteService favoriteService;
 
     // ─────────────────── changePassword ───────────────────
 
@@ -147,6 +151,30 @@ class AccountServiceTokenCleanupTest {
         verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
         verify(tokenService, never()).consumeReAuthToken(any());
         verify(tokenService, never()).deleteRefreshToken(any());
+    }
+
+    @Test
+    void withdraw_성공_시_찜을_정리하고_그_전에_변경사항을_flush한다() {
+        // given — 탈퇴자가 남긴 찜이 상점·게시글 favoriteCount에 계속 잡히면 안 된다
+        Long accountId = 1L;
+        WithdrawRequestDto request = mock(WithdrawRequestDto.class);
+        when(request.getReAuthToken()).thenReturn("reauth");
+
+        Account account = mock(Account.class);
+        when(account.isWithdrawn()).thenReturn(false);
+        when(account.isActive()).thenReturn(true);
+        when(account.getRole()).thenReturn(AccountRole.ROLE_USER);
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+
+        // when
+        accountService.withdraw(accountId, request);
+
+        // then: 찜 카운트 감소는 영속성 컨텍스트를 비우는 bulk UPDATE라,
+        // 앞 단계 변경을 먼저 flush하지 않으면 탈퇴 상태가 유실된다.
+        InOrder inOrder = inOrder(account, accountRepository, favoriteService);
+        inOrder.verify(account).withdraw();
+        inOrder.verify(accountRepository).flush();
+        inOrder.verify(favoriteService).deleteAllByAccountId(accountId);
     }
 
     @Test
