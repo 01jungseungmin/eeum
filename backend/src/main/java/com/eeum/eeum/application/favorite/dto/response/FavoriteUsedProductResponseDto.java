@@ -1,6 +1,6 @@
 package com.eeum.eeum.application.favorite.dto.response;
 
-import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.favorite.repository.FavoriteUsedProductRow;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -42,18 +42,18 @@ public class FavoriteUsedProductResponseDto {
     @Schema(description = "찜 등록 일시")
     private LocalDateTime favoritedAt;
 
-    public static FavoriteUsedProductResponseDto of(
-            Long favoriteId, UsedProduct product, String thumbnailUrl, LocalDateTime favoritedAt) {
+    // 엔티티가 아닌 조인 projection으로 만든다 — LAZY 연관(region) 접근이 없어 항목당 추가 쿼리가 나가지 않는다.
+    public static FavoriteUsedProductResponseDto of(FavoriteUsedProductRow row, String thumbnailUrl) {
         return FavoriteUsedProductResponseDto.builder()
-                .favoriteId(favoriteId)
-                .usedProductId(product.getUsedProductId())
-                .title(product.getTitle())
-                .priceType(product.getPriceType())
-                .price(product.getPrice())
-                .status(product.getStatus())
-                .regionName(product.getRegion().getDong())
+                .favoriteId(row.favoriteId())
+                .usedProductId(row.usedProductId())
+                .title(row.title())
+                .priceType(row.priceType())
+                .price(row.price())
+                .status(row.status())
+                .regionName(row.regionName())
                 .thumbnailUrl(thumbnailUrl)
-                .favoritedAt(favoritedAt)
+                .favoritedAt(row.favoritedAt())
                 .build();
     }
 }
