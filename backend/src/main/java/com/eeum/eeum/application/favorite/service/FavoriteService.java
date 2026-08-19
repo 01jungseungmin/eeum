@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
+import com.eeum.eeum.domain.favorite.repository.FavoriteUsedProductRow;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.repository.StoreImageRepository;
@@ -25,6 +26,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -158,30 +160,25 @@ public class FavoriteService {
     }
 
     /**
-     * 중고 게시글 찜 목록 — 상점 목록과 같은 배치 조회로 N+1을 막기
-     * Favorite 1번 + UsedProduct 1번 + 대표 사진 1번 = 총 3 쿼리
+     * 중고 게시글 찜 목록.
+     * 숨김·삭제 필터는 QueryDSL 조인 조건으로 DB에서 적용한다 — 조회 후 메모리에서 거르면
+     * 요청한 size보다 적은 항목이 내려가고 hasNext 판정도 어긋난다.
+     * 조회 1번(게시글·지역 조인 포함) + 대표 사진 1번 = 총 2 쿼리.
      */
     @Transactional(readOnly = true)
     public Slice<FavoriteUsedProductResponseDto> getMyFavoriteUsedProducts(
             Long accountId, Pageable pageable) {
 
-        Page<Favorite> favorites = favoriteRepository
-                .findByAccount_AccountIdAndRefTypeOrderByCreatedAtDesc(
-                        accountId, FavoriteRefType.USED_PRODUCT, pageable);
+        Slice<FavoriteUsedProductRow> rows =
+                favoriteRepository.findFavoriteUsedProducts(accountId, pageable);
 
-        if (favorites.isEmpty()) {
-            return new PageImpl<>(List.of(), pageable, favorites.getTotalElements());
+        if (rows.isEmpty()) {
+            return new SliceImpl<>(List.of(), pageable, false);
         }
 
-        List<Long> productIds = favorites.getContent().stream()
-                .map(Favorite::getRefId)
+        List<Long> productIds = rows.getContent().stream()
+                .map(FavoriteUsedProductRow::usedProductId)
                 .toList();
-
-        // 숨김 처리된 글은 목록에서 뺀다 — 찜 목록으로 우회해 보게 되면 관리자 숨김이 무의미해진다.
-        // 삭제된 글은 게시글 삭제 시 찜까지 정리되지만, 과거 데이터를 대비해 함께 거른다.
-        Map<Long, UsedProduct> productMap = usedProductRepository.findAllById(productIds).stream()
-                .filter(product -> !product.isHidden() && !product.isDeleted())
-                .collect(Collectors.toMap(UsedProduct::getUsedProductId, Function.identity()));
 
         Map<Long, String> thumbnailMap = usedProductImageRepository
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
@@ -190,19 +187,8 @@ public class FavoriteService {
                         UsedProductImage::getImageUrl,
                         (first, second) -> first));
 
-        // 걸러진 항목만큼 페이지 크기가 줄어들 수 있다. Favorite은 polymorphic 참조라
-        // 게시글 테이블과 조인할 수 없어 조회 후 거르는 수밖에 없다.
-        List<FavoriteUsedProductResponseDto> content = favorites.getContent().stream()
-                .filter(fav -> productMap.containsKey(fav.getRefId()))
-                .map(fav -> {
-                    UsedProduct product = productMap.get(fav.getRefId());
-                    return FavoriteUsedProductResponseDto.of(
-                            fav.getFavoriteId(), product,
-                            thumbnailMap.get(product.getUsedProductId()), fav.getCreatedAt());
-                })
-                .toList();
-
-        return new PageImpl<>(content, pageable, favorites.getTotalElements());
+        return rows.map(row -> FavoriteUsedProductResponseDto.of(
+                row, thumbnailMap.get(row.usedProductId())));
     }
 
     // ===================== 찜 여부 확인 =====================
@@ -317,8 +303,13 @@ public class FavoriteService {
             }
             case USED_PRODUCT -> {
                 // existsById가 아니라 삭제 필터가 걸린 조회를 쓴다 — 삭제된 글은 찜할 수 없어야 한다.
+                // 숨김 글도 막는다 — ID만 알면 목록을 거치지 않고 찜해 favoriteCount를 올릴 수 있고,
+                // 숨김 해제 후 그 카운트가 그대로 노출된다. 존재 사실을 흘리지 않도록 NOT_FOUND로 통일한다.
                 // 판매완료(SOLD)는 막지 않는다: 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다.
-                if (usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(refId).isEmpty()) {
+                UsedProduct product = usedProductRepository
+                        .findByUsedProductIdAndDeletedAtIsNull(refId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+                if (product.isHidden()) {
                     throw new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND);
                 }
             }

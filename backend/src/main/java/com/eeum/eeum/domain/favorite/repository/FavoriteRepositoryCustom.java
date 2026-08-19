@@ -1,6 +1,8 @@
 package com.eeum.eeum.domain.favorite.repository;
 
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,4 +25,8 @@ public interface FavoriteRepositoryCustom {
             LocalDateTime to,
             int limit
     );
+
+    // 중고 게시글 찜 목록 — 노출 조건(숨김·삭제 제외)을 페이징 전에 DB에서 걸러 페이지 크기를 보장한다.
+    // Favorite은 FK 없는 polymorphic 참조지만 refId ↔ usedProductId theta join으로 조인할 수 있다.
+    Slice<FavoriteUsedProductRow> findFavoriteUsedProducts(Long accountId, Pageable pageable);
 }
