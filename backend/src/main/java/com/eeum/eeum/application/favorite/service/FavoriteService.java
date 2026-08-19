@@ -24,6 +24,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -161,7 +162,7 @@ public class FavoriteService {
      * Favorite 1번 + UsedProduct 1번 + 대표 사진 1번 = 총 3 쿼리
      */
     @Transactional(readOnly = true)
-    public Page<FavoriteUsedProductResponseDto> getMyFavoriteUsedProducts(
+    public Slice<FavoriteUsedProductResponseDto> getMyFavoriteUsedProducts(
             Long accountId, Pageable pageable) {
 
         Page<Favorite> favorites = favoriteRepository

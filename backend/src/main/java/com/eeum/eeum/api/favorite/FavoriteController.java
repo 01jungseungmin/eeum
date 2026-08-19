@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -101,7 +102,7 @@ public class FavoriteController {
             summary = "상점 찜 목록",
             description = "내가 찜한 상점 목록을 상점 상세 정보(평점, 썸네일 등)와 함께 반환합니다."
     )
-    @GetMapping("/me/STORE")
+    @GetMapping("/me/store")
     public ResponseEntity<ApiResponse<Page<FavoriteStoreResponseDto>>> getMyFavoriteStores(
             @PageableDefault(size = 20, sort = "createdAt",
                     direction = Sort.Direction.DESC) Pageable pageable
@@ -116,8 +117,8 @@ public class FavoriteController {
             description = "내가 찜한 중고 게시글을 대표 사진·가격·거래 상태와 함께 반환합니다. " +
                     "관리자가 숨긴 게시글은 목록에서 제외됩니다."
     )
-    @GetMapping("/me/USED")
-    public ResponseEntity<ApiResponse<Page<FavoriteUsedProductResponseDto>>> getMyFavoriteUsedProducts(
+    @GetMapping("/me/used")
+    public ResponseEntity<ApiResponse<Slice<FavoriteUsedProductResponseDto>>> getMyFavoriteUsedProducts(
             @PageableDefault(size = 20, sort = "createdAt",
                     direction = Sort.Direction.DESC) Pageable pageable
     ) {

@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -138,7 +139,7 @@ class FavoriteUsedProductServiceTest {
                 .thenReturn(List.of(UsedProductImage.create(product, "thumb.jpg", 1, true)));
 
         // when
-        Page<FavoriteUsedProductResponseDto> result =
+        Slice<FavoriteUsedProductResponseDto> result =
                 favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
 
         // then
@@ -159,7 +160,7 @@ class FavoriteUsedProductServiceTest {
                 .thenReturn(List.of());
 
         // when
-        Page<FavoriteUsedProductResponseDto> result =
+        Slice<FavoriteUsedProductResponseDto> result =
                 favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
 
         // then
@@ -172,7 +173,7 @@ class FavoriteUsedProductServiceTest {
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of());
 
-        Page<FavoriteUsedProductResponseDto> result =
+        Slice<FavoriteUsedProductResponseDto> result =
                 favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
 
         assertThat(result.getContent().get(0).getThumbnailUrl()).isNull();
@@ -183,7 +184,7 @@ class FavoriteUsedProductServiceTest {
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeOrderByCreatedAtDesc(
                 any(), any(), any())).thenReturn(new PageImpl<>(List.of()));
 
-        Page<FavoriteUsedProductResponseDto> result =
+        Slice<FavoriteUsedProductResponseDto> result =
                 favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
 
         assertThat(result.getContent()).isEmpty();
