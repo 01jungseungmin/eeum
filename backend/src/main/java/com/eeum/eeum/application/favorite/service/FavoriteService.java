@@ -228,8 +228,11 @@ public class FavoriteService {
     }
 
     // 대상별 총 찜 수 조회 (상세 화면 표시용)
+    // 비회원도 호출할 수 있는 공개 API다. 검증 없이 세면 ID를 훑는 것만으로
+    // 숨김 게시글의 존재와 찜 수가 드러나므로, 볼 수 있는 대상인지 먼저 확인한다.
     @Transactional(readOnly = true)
     public long getFavoriteCount(FavoriteRefType refType, Long refId) {
+        validateRef(refType, refId);
         return favoriteRepository.countByRefTypeAndRefId(refType, refId);
     }
 
