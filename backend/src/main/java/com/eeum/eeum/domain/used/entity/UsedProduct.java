@@ -13,12 +13,16 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Getter
+// 변경된 컬럼만 UPDATE한다. 전체 컬럼을 쓰면 favoriteCount·viewCount처럼 별도 원자 UPDATE로
+// 증감되는 값이, 이전에 읽어둔 엔티티의 오래된 값으로 덮어써져 조용히 유실된다.
+@DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
         name = "used_product",

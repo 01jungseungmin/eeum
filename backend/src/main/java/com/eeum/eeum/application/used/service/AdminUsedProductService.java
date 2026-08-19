@@ -25,8 +25,12 @@ public class AdminUsedProductService {
 
     @Transactional
     public void show(Long usedProductId) {
+        // 신고 조치(UsedProductReportActionExecutor)와 같은 비관적 잠금을 쓴다.
+        // 숨김 해제와 신고 숨김은 같은 컬럼을 다투므로, 잠금 없이 읽으면
+        // "숨김 상태인지" 확인과 해제 사이에 조치가 끼어들어 방금 걸린 숨김이 풀린다.
         UsedProduct product = usedProductRepository
-                .findByUsedProductIdAndDeletedAtIsNull(usedProductId)
+                .findByUsedProductIdForUpdate(usedProductId)
+                .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
 
         if (!product.isHidden()) {
