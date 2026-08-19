@@ -2,7 +2,7 @@ package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
-import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadRequestDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -283,8 +283,8 @@ class UsedProductImageServiceTest {
 
     private UsedProductImageUploadListRequestDto uploadRequest(String... urls) {
         UsedProductImageUploadListRequestDto request = new UsedProductImageUploadListRequestDto();
-        List<ImageUploadRequestDto> images = Arrays.stream(urls).map(url -> {
-            ImageUploadRequestDto image = new ImageUploadRequestDto();
+        List<UsedProductImageUploadRequestDto> images = Arrays.stream(urls).map(url -> {
+            UsedProductImageUploadRequestDto image = new UsedProductImageUploadRequestDto();
             ReflectionTestUtils.setField(image, "imageUrl", url);
             return image;
         }).toList();

@@ -10,6 +10,7 @@ import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.support.SqlCaptureInspector;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
@@ -65,6 +66,7 @@ class UsedProductDynamicUpdateIntegrationTest {
     }
 
     private final AdminUsedProductService adminUsedProductService;
+    private final UsedProductService usedProductService;
     private final UsedProductRepository usedProductRepository;
     private final AccountRepository accountRepository;
     private final RegionRepository regionRepository;
@@ -137,6 +139,23 @@ class UsedProductDynamicUpdateIntegrationTest {
         UsedProduct reloaded = usedProductRepository.findById(productId).orElseThrow();
         assertThat(reloaded.isHidden()).isFalse();
         assertThat(reloaded.getFavoriteCount()).isEqualTo(2);
+    }
+
+    @Test
+    void 상세_응답의_조회수에_방금_센_이번_조회가_반영된다() {
+        // given: 조회수는 QueryDSL bulk UPDATE라 영속성 컨텍스트를 거치지 않는다.
+        // 증가 후 다시 조회해도 1차 캐시의 기존 인스턴스가 나오므로, refresh 없이는 값이 그대로다.
+        // Mock 단위 테스트는 1차 캐시를 재현하지 못해 이 회귀를 잡을 수 없다.
+        adminUsedProductService.show(productId);   // setUp이 숨김으로 만들어 두므로 먼저 노출시킨다
+
+        // when: 판매자가 아닌 사용자가 상세를 본다.
+        UsedProductDetailResponseDto detail =
+                usedProductService.getDetailAndCountView(null, productId);
+
+        // then: 응답과 DB가 같은 값이어야 한다.
+        assertThat(detail.getViewCount()).isEqualTo(1);
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getViewCount())
+                .isEqualTo(1);
     }
 
     // 별도 스레드 + 별도 트랜잭션으로 찜 카운트를 올린다.

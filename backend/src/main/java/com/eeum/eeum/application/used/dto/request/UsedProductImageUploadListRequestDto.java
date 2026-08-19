@@ -1,8 +1,8 @@
 package com.eeum.eeum.application.used.dto.request;
 
-import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -20,9 +20,9 @@ import java.util.List;
 @Schema(description = "중고 게시글 이미지 등록 요청")
 public class UsedProductImageUploadListRequestDto {
 
-    @Valid
+    // 요소에 @NotNull이 없으면 {"images":[null]}이 검증을 통과해 서비스에서 NPE 500이 된다.
     @NotEmpty(message = "이미지는 1장 이상 등록해야 합니다.")
     @Size(max = 10, message = "중고 게시글 사진은 최대 10장까지 등록할 수 있습니다.")
     @Schema(description = "등록할 이미지 목록")
-    private List<ImageUploadRequestDto> images;
+    private List<@NotNull @Valid UsedProductImageUploadRequestDto> images;
 }

@@ -27,6 +27,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -44,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -67,6 +69,7 @@ class UsedProductServiceTest {
     @Mock private UsedProductImageRepository usedProductImageRepository;
     @Mock private RegionRepository regionRepository;
     @Mock private com.eeum.eeum.application.favorite.service.FavoriteService favoriteService;
+    @Mock private jakarta.persistence.EntityManager entityManager;
 
     @InjectMocks
     private UsedProductService usedProductService;
@@ -435,22 +438,34 @@ class UsedProductServiceTest {
     }
 
     @Test
-    void 상세_응답의_조회수에_방금_센_이번_조회가_반영된다() {
-        // given — 조회수는 원자 UPDATE라 엔티티에 반영되지 않는다.
-        // 증가 전 엔티티로 응답을 만들면 사용자에게 보이는 값이 항상 실제보다 1 작다.
-        UsedProduct before = product();                 // viewCount 0
-        UsedProduct after = product();
-        ReflectionTestUtils.setField(after, "viewCount", 1);
+    void 조회수_증가_후_엔티티를_refresh해_응답에_반영한다() {
+        // given — 조회수는 QueryDSL bulk UPDATE라 영속성 컨텍스트를 거치지 않는다.
+        // 다시 조회해도 1차 캐시의 기존 인스턴스가 나오므로 refresh가 없으면 응답이 항상 1 작다.
+        // 실제 값이 반영되는지는 Mock으로 확인할 수 없어 UsedProductDynamicUpdateIntegrationTest에서 검증한다.
+        UsedProduct product = product();
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
-                .thenReturn(Optional.of(before), Optional.of(after));
+                .thenReturn(Optional.of(product));
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
 
         // when
-        UsedProductDetailResponseDto detail =
-                usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
+        usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
 
         // then
-        assertThat(detail.getViewCount()).isEqualTo(1);
+        InOrder inOrder = inOrder(usedProductRepository, entityManager);
+        inOrder.verify(usedProductRepository).increaseViewCount(PRODUCT_ID);
+        inOrder.verify(entityManager).refresh(product);
+    }
+
+    @Test
+    void 판매자_본인_조회는_refresh도_하지_않는다() {
+        UsedProduct product = product();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+
+        usedProductService.getDetailAndCountView(SELLER_ID, PRODUCT_ID);
+
+        verify(entityManager, never()).refresh(any());
     }
 
     @Test

@@ -28,6 +28,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
 public class UsedProductService {
 
     private final UsedProductRepository usedProductRepository;
+    private final EntityManager entityManager;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
@@ -58,6 +60,11 @@ public class UsedProductService {
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
         Account seller = accountRepository.findById(sellerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        // 탈퇴 처리가 지나간 뒤 살아 있는 토큰으로 들어온 요청이 게시글을 만들지 못하게 막는다.
+        if (!seller.isActive()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
         // 등록은 조회와 달리 GPS 인증된 지역을 요구한다 — 아무 동네에나 매물을 뿌리는 것을 막는다.
@@ -125,9 +132,10 @@ public class UsedProductService {
         // 비회원 조회도 센다. 판매자 본인 조회만 제외한다.
         if (!product.isOwnedBy(viewerId)) {
             usedProductRepository.increaseViewCount(usedProductId);
-            // 조회수는 원자 UPDATE라 엔티티에 반영되지 않는다. 다시 읽지 않으면
-            // 방금 센 이번 조회가 빠진 값이 응답에 담겨 항상 실제보다 1 작다.
-            product = getVisibleOrThrow(viewerId, usedProductId);
+            // 조회수는 QueryDSL bulk UPDATE라 영속성 컨텍스트를 거치지 않는다.
+            // 다시 조회해도 1차 캐시의 기존 인스턴스가 그대로 나오므로 refresh로 DB 값을 다시 읽는다.
+            // 이걸 빼면 방금 센 이번 조회가 빠진 값이 응답에 담겨 항상 실제보다 1 작다.
+            entityManager.refresh(product);
         }
 
         return UsedProductDetailResponseDto.from(product, images);
