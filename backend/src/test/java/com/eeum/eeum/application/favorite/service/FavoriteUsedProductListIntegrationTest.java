@@ -16,10 +16,8 @@ import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
-import jakarta.persistence.EntityManagerFactory;
+import com.eeum.eeum.support.SqlCaptureInspector;
 import lombok.RequiredArgsConstructor;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,8 +65,10 @@ class FavoriteUsedProductListIntegrationTest {
         registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
-        // 목록 조립 중 LAZY 초기화가 없는지 실제 실행 쿼리 수로 확인하기 위해 통계를 켠다.
-        registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
+        // 목록 조립 중 LAZY 초기화가 없는지 실제 실행 SQL로 확인한다.
+        // 전역 통계는 같은 컨텍스트의 스케줄러가 배경에서 날리는 쿼리까지 세므로 스레드별 수집기를 쓴다.
+        registry.add("spring.jpa.properties.hibernate.session_factory.statement_inspector",
+                () -> SqlCaptureInspector.class.getName());
     }
 
     private final FavoriteService favoriteService;
@@ -77,7 +77,6 @@ class FavoriteUsedProductListIntegrationTest {
     private final AccountRepository accountRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
-    private final EntityManagerFactory entityManagerFactory;
 
     private Long viewerId;
     private final List<Long> productIds = new ArrayList<>();
@@ -146,18 +145,18 @@ class FavoriteUsedProductListIntegrationTest {
     @Test
     void 찜_목록은_항목_수와_무관하게_고정된_쿼리만_실행한다() {
         // given: region은 LAZY 연관이라 DTO에서 접근하면 항목 수만큼 SELECT가 추가된다(N+1).
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        statistics.clear();
+        SqlCaptureInspector.reset();
 
         // when
         Slice<FavoriteUsedProductResponseDto> result =
                 favoriteService.getMyFavoriteUsedProducts(viewerId, PageRequest.of(0, 6));
+        List<String> executedSql = SqlCaptureInspector.captured();
 
         // then: 목록 조회 1번 + 대표 사진 배치 조회 1번으로 고정된다.
         assertThat(result.getContent()).hasSize(6);
         assertThat(result.getContent()).allSatisfy(
                 dto -> assertThat(dto.getRegionName()).isEqualTo("역삼동"));
-        assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+        assertThat(executedSql).as("실행 SQL: %s", executedSql).hasSize(2);
     }
 
     @Test
@@ -176,6 +175,27 @@ class FavoriteUsedProductListIntegrationTest {
 
         assertThat(usedProductRepository.findById(hiddenId).orElseThrow().getFavoriteCount())
                 .isEqualTo(countBefore);
+    }
+
+    @Test
+    void 회원_탈퇴_시_찜한_게시글의_카운트가_IN_UPDATE_한_번으로_모두_감소한다() {
+        // given: 6건 모두 찜한 상태라 favoriteCount는 각각 1이다.
+        assertThat(usedProductRepository.findAllById(productIds))
+                .allSatisfy(product -> assertThat(product.getFavoriteCount()).isEqualTo(1));
+        SqlCaptureInspector.reset();
+
+        // when
+        favoriteService.deleteAllByAccountId(viewerId);
+
+        // then: 찜 수만큼 UPDATE를 날리지 않고 IN 절 UPDATE 한 번으로 6건이 함께 감소한다.
+        assertThat(usedProductRepository.findAllById(productIds))
+                .allSatisfy(product -> assertThat(product.getFavoriteCount()).isZero());
+        assertThat(favoriteRepository.count()).isZero();
+
+        List<String> updates = SqlCaptureInspector.captured().stream()
+                .filter(sql -> sql.toLowerCase().startsWith("update used_product"))
+                .toList();
+        assertThat(updates).as("실행 UPDATE: %s", updates).hasSize(1);
     }
 
     private void hide(Long productId) {
