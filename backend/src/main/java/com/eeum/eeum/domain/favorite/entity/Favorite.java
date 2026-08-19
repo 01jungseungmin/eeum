@@ -22,6 +22,11 @@ import lombok.NoArgsConstructor;
                 @UniqueConstraint(
                         name = "uk_favorite_account_ref",
                         columnNames = {"account_id", "ref_type", "ref_id"})
+        },
+        indexes = {
+                // 대상 기준 조회 전용. UNIQUE 인덱스는 account_id가 선행 컬럼이라
+                // 대상별 카운트·통계·CASCADE 삭제(ref_type + ref_id)에 쓰이지 못한다.
+                @Index(name = "idx_favorite_ref", columnList = "ref_type, ref_id")
         }
 )
 public class Favorite extends BaseEntity {

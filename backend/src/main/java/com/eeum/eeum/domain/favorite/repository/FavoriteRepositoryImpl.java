@@ -8,7 +8,9 @@ import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Repository;
@@ -78,6 +80,14 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                 .collect(Collectors.toList());
     }
 
+    // 실제 적용한 정렬(찜 등록 최신순 + PK tie-break)을 담은 Pageable
+    private Pageable withAppliedSort(Pageable pageable) {
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("favoriteId")));
+    }
+
     // 중고 게시글 찜 목록 — 숨김·삭제 필터를 페이징 전에 적용한다.
     // 조회 후 메모리에서 거르면 요청한 size보다 적은 항목이 내려가고 hasNext 판정도 어긋난다.
     // region까지 조인해 목록 조립 중 LAZY 초기화(항목 수만큼 추가 SELECT)가 없다.
@@ -113,6 +123,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
         if (hasNext) {
             rows.remove(rows.size() - 1);
         }
-        return new SliceImpl<>(rows, pageable, hasNext);
+        // 요청 sort는 무시하고 최신순으로 고정한다. 요청받은 Pageable을 그대로 돌려주면
+        // 응답의 sort가 실제 적용된 정렬과 달라 클라이언트가 잘못된 순서를 전제하게 된다.
+        return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
     }
 }

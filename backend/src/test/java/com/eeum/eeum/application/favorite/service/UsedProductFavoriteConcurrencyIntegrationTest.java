@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -114,37 +115,40 @@ class UsedProductFavoriteConcurrencyIntegrationTest {
         accountRepository.deleteAll();
     }
 
+    // T1이 잠금을 쥐고 버티는 시간. T2가 이만큼 대기했는지로 "실제로 잠금에 걸렸는지"를 판정한다.
+    private static final long LOCK_HOLD_MILLIS = 1_000L;
+
     @Test
     void 삭제_커밋_전에_들어온_찜은_죽은_찜으로_남지_않는다() throws Exception {
         CountDownLatch deleteLocked = new CountDownLatch(1);
-        CountDownLatch favoriteAttempted = new CountDownLatch(1);
+        CountDownLatch favoriteStarted = new CountDownLatch(1);
         AtomicReference<Throwable> favoriteFailure = new AtomicReference<>();
+        AtomicLong favoriteElapsedMillis = new AtomicLong();
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
-            // T1: 게시글을 잠그고 삭제한 뒤, 커밋을 잠시 미룬다.
+            // T1: 게시글을 잠그고 삭제한 뒤, 찜 요청이 들어온 것을 확인하고도 잠시 커밋을 미룬다.
             Future<?> deletion = executor.submit(() ->
                     new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                         usedProductService.delete(sellerId, productId);
                         deleteLocked.countDown();
-                        awaitQuietly(favoriteAttempted);   // 찜 요청이 잠금에 걸릴 때까지 커밋을 늦춘다
+                        awaitQuietly(favoriteStarted);
+                        sleepQuietly(LOCK_HOLD_MILLIS);
                     }));
 
             // T2: 삭제가 아직 커밋되지 않은 상태에서 찜을 시도한다.
             Future<?> favorite = executor.submit(() -> {
                 awaitQuietly(deleteLocked);
+                favoriteStarted.countDown();
+                long startedAt = System.nanoTime();
                 try {
                     favoriteService.toggleFavorite(viewerId, toggleRequest());
                 } catch (Throwable e) {
                     favoriteFailure.set(e);
                 } finally {
-                    favoriteAttempted.countDown();
+                    favoriteElapsedMillis.set((System.nanoTime() - startedAt) / 1_000_000);
                 }
             });
-
-            // 찜 요청은 잠금 대기에 들어가므로, 잠금 대기 상태를 확인한 뒤 삭제를 커밋시킨다.
-            Thread.sleep(500);
-            favoriteAttempted.countDown();
 
             deletion.get(30, TimeUnit.SECONDS);
             favorite.get(30, TimeUnit.SECONDS);
@@ -152,15 +156,30 @@ class UsedProductFavoriteConcurrencyIntegrationTest {
             executor.shutdownNow();
         }
 
-        // then 1: 찜은 삭제된 글을 대상으로 성립하지 않는다.
+        // then 1: 찜 요청이 실제로 잠금 대기에 걸렸는지 확인한다.
+        // 이 단언이 없으면, 느린 환경에서 삭제가 먼저 커밋돼 버려 잠금이 없어도 통과하는
+        // 무의미한 테스트가 된다(경쟁을 재현하지 못한 채 결과만 맞는 경우).
+        assertThat(favoriteElapsedMillis.get())
+                .as("찜 요청이 삭제 트랜잭션의 잠금을 기다리지 않았다 — 경쟁이 재현되지 않음")
+                .isGreaterThanOrEqualTo(LOCK_HOLD_MILLIS / 2);
+
+        // then 2: 찜은 삭제된 글을 대상으로 성립하지 않는다.
         assertThat(favoriteFailure.get())
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
 
-        // then 2: 잠금이 없으면 여기서 죽은 찜 1건이 남는다.
+        // then 3: 잠금이 없으면 여기서 죽은 찜 1건이 남는다.
         assertThat(favoriteRepository.count()).isZero();
         assertThat(usedProductRepository.findById(productId).orElseThrow().getFavoriteCount()).isZero();
+    }
+
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void awaitQuietly(CountDownLatch latch) {

@@ -8,7 +8,7 @@ import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedProductImageService;
 import com.eeum.eeum.application.used.service.UsedProductService;
-import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -147,7 +147,7 @@ public class UsedProductController {
     )
     public ResponseEntity<ApiResponse<List<UsedProductImageResponseDto>>> addImages(
             @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
-            @Valid @RequestBody ImageUploadListRequestDto request
+            @Valid @RequestBody UsedProductImageUploadListRequestDto request
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.status(HttpStatus.CREATED)
