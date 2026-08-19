@@ -435,6 +435,25 @@ class UsedProductServiceTest {
     }
 
     @Test
+    void 상세_응답의_조회수에_방금_센_이번_조회가_반영된다() {
+        // given — 조회수는 원자 UPDATE라 엔티티에 반영되지 않는다.
+        // 증가 전 엔티티로 응답을 만들면 사용자에게 보이는 값이 항상 실제보다 1 작다.
+        UsedProduct before = product();                 // viewCount 0
+        UsedProduct after = product();
+        ReflectionTestUtils.setField(after, "viewCount", 1);
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(before), Optional.of(after));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+
+        // when
+        UsedProductDetailResponseDto detail =
+                usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
+
+        // then
+        assertThat(detail.getViewCount()).isEqualTo(1);
+    }
+
+    @Test
     void 판매자가_자기_글을_봐도_조회수는_오르지_않는다() {
         // given — 새로고침할 때마다 오르면 지표가 무의미해진다
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))

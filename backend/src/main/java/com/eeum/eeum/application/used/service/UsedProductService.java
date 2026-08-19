@@ -4,6 +4,7 @@ import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
@@ -109,13 +110,7 @@ public class UsedProductService {
 
     @Transactional(readOnly = true)
     public UsedProductDetailResponseDto getDetail(Long viewerId, Long usedProductId) {
-        UsedProduct product = getActiveOrThrow(usedProductId);
-
-        // 숨김 처리된 글은 작성자에게만 보인다. 남에게 403을 주면 "숨겨진 글이 있다"는 사실이 새어 나가므로
-        // 존재하지 않는 것과 같은 응답을 준다.
-        if (product.isHidden() && !product.isOwnedBy(viewerId)) {
-            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
-        }
+        UsedProduct product = getVisibleOrThrow(viewerId, usedProductId);
 
         return UsedProductDetailResponseDto.from(
                 product, usedProductImageService.getImages(usedProductId));
@@ -124,13 +119,28 @@ public class UsedProductService {
     // 상세 조회 + 조회수 증가.
     @Transactional
     public UsedProductDetailResponseDto getDetailAndCountView(Long viewerId, Long usedProductId) {
-        UsedProductDetailResponseDto detail = getDetail(viewerId, usedProductId);
+        UsedProduct product = getVisibleOrThrow(viewerId, usedProductId);
+        List<UsedProductImageResponseDto> images = usedProductImageService.getImages(usedProductId);
 
         // 비회원 조회도 센다. 판매자 본인 조회만 제외한다.
-        if (!detail.getSellerId().equals(viewerId)) {
+        if (!product.isOwnedBy(viewerId)) {
             usedProductRepository.increaseViewCount(usedProductId);
+            // 조회수는 원자 UPDATE라 엔티티에 반영되지 않는다. 다시 읽지 않으면
+            // 방금 센 이번 조회가 빠진 값이 응답에 담겨 항상 실제보다 1 작다.
+            product = getVisibleOrThrow(viewerId, usedProductId);
         }
-        return detail;
+
+        return UsedProductDetailResponseDto.from(product, images);
+    }
+
+    // 숨김 처리된 글은 작성자에게만 보인다. 남에게 403을 주면 "숨겨진 글이 있다"는 사실이 새어 나가므로
+    // 존재하지 않는 것과 같은 응답을 준다.
+    private UsedProduct getVisibleOrThrow(Long viewerId, Long usedProductId) {
+        UsedProduct product = getActiveOrThrow(usedProductId);
+        if (product.isHidden() && !product.isOwnedBy(viewerId)) {
+            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        }
+        return product;
     }
 
     @Transactional
