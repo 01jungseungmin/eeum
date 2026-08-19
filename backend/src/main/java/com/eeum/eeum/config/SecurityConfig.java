@@ -36,6 +36,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_GET = {
             "/stores/**",
             "/used/**",
+            "/favorites/count",   // 찜 수는 상세 화면에 비회원에게도 보인다
             "/products/**",
             "/regions/search",
             "/regions/nearby",

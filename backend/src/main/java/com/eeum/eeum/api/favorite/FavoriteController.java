@@ -9,6 +9,7 @@ import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -164,6 +165,7 @@ public class FavoriteController {
             description = "특정 대상의 총 찜 수를 반환합니다. 비회원도 접근 가능합니다."
     )
     @PreAuthorize("permitAll()")  // 클래스 레벨 isAuthenticated() 오버라이드 — 비회원 허용
+    @SecurityRequirements          // 클래스 레벨 bearerAuth 해제 — 문서에도 공개 API로 표시
     @GetMapping("/count")
     public ResponseEntity<ApiResponse<Long>> getFavoriteCount(
             @RequestParam FavoriteRefType refType,
