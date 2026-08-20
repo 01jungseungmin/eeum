@@ -44,24 +44,32 @@ public class ReportTargetResolver {
 
     private ReportTargetSnapshotDto resolveInternal(
             ReportTargetType targetType, Long targetId, boolean forCreation) {
+        // 신고 접수(forCreation)에서는 "그 화면에서 볼 수 있는 대상"만 허용한다.
+        // 상세 조회는 404인데 신고만 성공하면, ID를 넣어보는 것만으로 비공개 대상의 존재가 드러난다.
+        // 관리자 열람(forCreation=false)은 숨긴 콘텐츠의 신고도 처리해야 하므로 거르지 않는다.
         return switch (targetType) {
             case STORE -> storeRepository.findWithAccountByStoreId(targetId)
+                    .filter(store -> !forCreation || storeRepository.isPubliclyVisible(targetId))
                     .map(this::fromStore)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
+            // 후기 자체에는 숨김 상태가 없지만, 비공개 상점의 후기는 그 상점을 볼 수 없으므로 함께 가린다.
             case STORE_REVIEW -> storeReviewRepository.findWithAccountAndStoreByStorereviewId(targetId)
+                    .filter(review -> !forCreation
+                            || storeRepository.isPubliclyVisible(review.getStore().getStoreId()))
                     .map(this::fromStoreReview)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case COMMUNITY_POST -> communityPostRepository.findWithAccountByPostId(targetId)
+                    .filter(post -> !forCreation || !post.isHidden())
                     .map(this::fromCommunityPost)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case COMMUNITY_COMMENT -> communityCommentRepository.findWithAccountAndPostByCommentId(targetId)
                     .filter(comment -> !comment.isDeleted())
+                    // 숨겨진 게시글의 댓글도 화면에서 볼 수 없다
+                    .filter(comment -> !forCreation || !comment.getPost().isHidden())
                     .map(this::fromCommunityComment)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case USED_PRODUCT -> usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(targetId)
-                    // 신고 접수에서는 숨김 글을 없는 것으로 취급한다. 상세 조회(UsedProductService)가
-                    // 숨김 글에 404를 주는데 신고만 성공하면, ID를 넣어보는 것으로 숨김 글의 존재가 드러난다.
-                    .filter(product -> !forCreation || !product.isHidden())
+                    .filter(product -> !forCreation || product.isPubliclyVisible())
                     .map(this::fromUsedProduct)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case ACCOUNT -> accountRepository.findById(targetId)

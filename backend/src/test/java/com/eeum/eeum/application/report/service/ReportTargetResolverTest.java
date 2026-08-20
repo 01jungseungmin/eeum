@@ -229,6 +229,77 @@ class ReportTargetResolverTest {
         org.mockito.Mockito.verifyNoInteractions(accountRepository);
     }
 
+    // ===================== 신고 접수 공개 정책 =====================
+    // 상세 조회는 404인데 신고만 성공하면, ID를 넣어보는 것만으로 비공개 대상의 존재가 드러난다.
+
+    @Test
+    void 비공개_상점은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 미승인·정지·탈퇴 계정의 상점
+        Account owner = createAccount(OWNER_ID, "김사장", "사장님");
+        when(storeRepository.findWithAccountByStoreId(1L))
+                .thenReturn(Optional.of(createStore(1L, owner)));
+        when(storeRepository.isPubliclyVisible(1L)).thenReturn(false);
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.STORE, 1L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_커뮤니티_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 공개 조회 쿼리는 이미 hidden = false를 거는데 신고만 뚫려 있었다
+        Account author = createAccount(20L, "박작성", "작성자");
+        CommunityPost post = CommunityPost.create(author, null, null, "숨겨진 게시글", "본문");
+        ReflectionTestUtils.setField(post, "postId", 40L);
+        post.hide();
+        when(communityPostRepository.findWithAccountByPostId(40L)).thenReturn(Optional.of(post));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_POST, 40L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글의_댓글도_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 부모 글이 숨겨지면 댓글도 화면에서 볼 수 없다
+        Account author = createAccount(20L, "박작성", "작성자");
+        CommunityPost post = CommunityPost.create(author, null, null, "숨겨진 게시글", "본문");
+        ReflectionTestUtils.setField(post, "postId", 40L);
+        post.hide();
+        CommunityComment comment = CommunityComment.createComment(post, author, "댓글");
+        ReflectionTestUtils.setField(comment, "commentId", 50L);
+        when(communityCommentRepository.findWithAccountAndPostByCommentId(50L))
+                .thenReturn(Optional.of(comment));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_COMMENT, 50L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+    }
+
+    @Test
+    void 판매자가_탈퇴한_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        UsedProduct product = createUsedProduct(70L, seller);
+        seller.withdraw();
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
     @Test
     void 숨김_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
         // Given: 상세 조회는 숨김 글에 404를 준다. 신고만 성공하면 ID를 넣어보는 것으로 존재가 드러난다.
