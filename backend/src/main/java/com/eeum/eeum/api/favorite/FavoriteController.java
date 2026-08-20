@@ -8,6 +8,7 @@ import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.constraints.Positive;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,12 +21,14 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @Tag(name = "13. Favorite", description = "찜 API (상점 / 중고상품)")
 @SecurityRequirement(name = "bearerAuth")
+@Validated
 @RestController
 @RequestMapping("/favorites")
 @RequiredArgsConstructor
@@ -58,7 +61,7 @@ public class FavoriteController {
             description = "favoriteId로 찜을 직접 삭제합니다. 내 찜 목록처럼 favoriteId를 이미 아는 경우에 사용합니다."
     )
     @DeleteMapping("/{favoriteId}")
-    public ResponseEntity<ApiResponse<Void>> deleteFavorite(@PathVariable Long favoriteId) {
+    public ResponseEntity<ApiResponse<Void>> deleteFavorite(@PathVariable @Positive Long favoriteId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         favoriteService.deleteFavorite(accountId, favoriteId);
         return ResponseEntity.ok(ApiResponse.success());
@@ -76,7 +79,7 @@ public class FavoriteController {
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> deleteFavoriteByRef(
             @RequestParam FavoriteRefType refType,
-            @RequestParam Long refId
+            @RequestParam @Positive Long refId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         favoriteService.deleteFavoriteByRef(accountId, refType, refId);
@@ -137,7 +140,7 @@ public class FavoriteController {
     @GetMapping("/check")
     public ResponseEntity<ApiResponse<FavoriteCheckResponseDto>> checkFavorite(
             @RequestParam FavoriteRefType refType,
-            @RequestParam Long refId
+            @RequestParam @Positive Long refId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
@@ -169,7 +172,7 @@ public class FavoriteController {
     @GetMapping("/count")
     public ResponseEntity<ApiResponse<Long>> getFavoriteCount(
             @RequestParam FavoriteRefType refType,
-            @RequestParam Long refId
+            @RequestParam @Positive Long refId
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 favoriteService.getFavoriteCount(refType, refId)));
