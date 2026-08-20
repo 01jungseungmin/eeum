@@ -57,8 +57,6 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn("123-45-67890");
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
@@ -82,8 +80,6 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn("1234567890");
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
@@ -107,8 +103,6 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn("123-45-67890"); // 정규화 후 "1234567890"
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
@@ -134,8 +128,6 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn(null); // null 입력
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);

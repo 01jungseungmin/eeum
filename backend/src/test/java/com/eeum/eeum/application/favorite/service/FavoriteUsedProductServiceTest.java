@@ -306,6 +306,33 @@ class FavoriteUsedProductServiceTest {
                 .isEqualTo(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
     }
 
+    // ─────────────────── 대상 삭제 CASCADE ───────────────────
+
+    @Test
+    void 게시글_삭제로_찜을_정리하면_찜_수도_0이_된다() {
+        // given — 찜 행만 지우고 favoriteCount를 두면 삭제된 글이 예전 수를 계속 들고 있어
+        // 관리자 통계·정합성 재계산 결과와 어긋난다
+        when(favoriteRepository.countByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, PRODUCT_ID))
+                .thenReturn(5L);
+
+        // when
+        favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
+
+        // then
+        verify(favoriteRepository).deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
+        verify(usedProductRepository).resetFavoriteCount(PRODUCT_ID);
+    }
+
+    @Test
+    void 상점_삭제로_찜을_정리하면_상점_찜_수도_0이_된다() {
+        when(favoriteRepository.countByRefTypeAndRefId(FavoriteRefType.STORE, 7L)).thenReturn(3L);
+
+        favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.STORE, 7L);
+
+        verify(storeRepository).resetFavoriteCount(7L);
+        verify(usedProductRepository, never()).resetFavoriteCount(any());
+    }
+
     // ─────────────────── 회원 탈퇴 ───────────────────
 
     @Test
