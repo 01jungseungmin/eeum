@@ -54,6 +54,7 @@ class AdminAccountServiceTokenCleanupTest {
     @Mock OwnerApplicationMapper ownerApplicationMapper;
     @Mock StoreApprovalMapper storeApprovalMapper;
     @Mock SanctionHistoryService sanctionHistoryService;
+    @Mock AccountWithdrawalProcessor accountWithdrawalProcessor;
     @Mock ApplicationEventPublisher eventPublisher;
 
     // ─────────────────── suspendAccount ───────────────────
@@ -109,8 +110,22 @@ class AdminAccountServiceTokenCleanupTest {
         adminAccountService.forceDeleteAccount(0L, targetId);
 
         // then
-        verify(target).withdraw();
         verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(targetId));
+    }
+
+    @Test
+    void forceDeleteAccount는_본인_탈퇴와_같은_뒷정리를_한다() {
+        // given — 강제 탈퇴만 찜을 남겨두면 탈퇴자의 찜이 상점·게시글 favoriteCount에 계속 잡힌다
+        Long targetId = 2L;
+        Account target = mock(Account.class);
+        when(target.isWithdrawn()).thenReturn(false);
+        when(accountRepository.findByIdWithLock(targetId)).thenReturn(Optional.of(target));
+
+        // when
+        adminAccountService.forceDeleteAccount(0L, targetId);
+
+        // then
+        verify(accountWithdrawalProcessor).process(target);
     }
 
     @Test
@@ -128,7 +143,7 @@ class AdminAccountServiceTokenCleanupTest {
                 .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
 
         // withdraw() 재호출 시 deletedAt이 리셋되어 30일 유예 초기화되는 문제 방지
-        verify(target, never()).withdraw();
+        verify(accountWithdrawalProcessor, never()).process(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 

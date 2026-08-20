@@ -57,7 +57,7 @@ public class AdminAccountService {
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
-    private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    private final AccountWithdrawalProcessor accountWithdrawalProcessor;
     private final SanctionHistoryService sanctionHistoryService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -172,13 +172,9 @@ public class AdminAccountService {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
 
-        // 사장 계정이면 상점/상품/이벤트 상품을 비활성화 — AccountService.withdraw와 동일하게 처리해야
-        // 강제 탈퇴한 사장의 상점이 사용자 화면에 계속 노출되고 주문/예약이 들어오는 것을 막는다.
-        if (target.getRole() == AccountRole.ROLE_OWNER) {
-            ownerStoreWithdrawalService.deactivateForWithdrawal(targetAccountId);
-        }
-
-        target.withdraw();
+        // 본인 탈퇴와 같은 뒷정리를 한다 — 상점 비활성화, 탈퇴 처리, 찜 정리.
+        // 강제 탈퇴만 찜을 남겨두면 탈퇴자의 찜이 상점·게시글 favoriteCount에 계속 잡힌다.
+        accountWithdrawalProcessor.process(target);
 
         // DB 커밋 성공 후 Refresh Token 삭제
         eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
