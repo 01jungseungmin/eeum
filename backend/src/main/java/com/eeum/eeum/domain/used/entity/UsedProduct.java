@@ -29,6 +29,12 @@ import java.time.LocalDateTime;
         indexes = {
                 // 동네 목록 기본 조회: 지역 + 상태 + 최신순
                 @Index(name = "idx_used_product_region_status", columnList = "region_id, status, created_at"),
+                // 공개 목록 기본 조회: region + (삭제·숨김 제외) + 최신순.
+                // 상태 필터는 선택값이라 위 인덱스는 status가 없으면 created_at까지 닿지 못한다.
+                // 모든 공개 조회가 반드시 거는 조건만 순서대로 담았다.
+                // TODO: 운영 데이터로 EXPLAIN 확인 후 컬럼 순서 재검토
+                @Index(name = "idx_used_product_public_list",
+                        columnList = "region_id, deleted_at, is_hidden, created_at"),
                 // 내가 쓴 글 목록
                 @Index(name = "idx_used_product_seller", columnList = "account_id")
         }

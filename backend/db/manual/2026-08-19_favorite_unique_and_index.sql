@@ -15,6 +15,10 @@
 --
 -- 실행 순서: 1 → (중복이 있으면) 2 → 3 → 4 → 5
 -- 서비스 배포 전에 실행할 것.
+--
+-- ⚠ 2~5 구간에는 찜 쓰기를 중단해야 한다.
+--   중복을 지운 뒤 재계산까지 사이에 찜 등록·해제가 들어오면 카운트가 다시 어긋나고,
+--   제약 생성 전에 들어온 중복 요청은 그대로 통과한다.
 -- ============================================================================
 
 -- 1) 중복 확인. 결과가 0행이면 2·3을 건너뛰고 4로 간다.
@@ -50,6 +54,11 @@ ALTER TABLE favorite
 -- 대상 기준 조회 전용. UNIQUE 인덱스는 account_id가 선행 컬럼이라
 -- 대상별 카운트·통계·CASCADE 삭제(ref_type + ref_id)에 쓰이지 못한다.
 CREATE INDEX idx_favorite_ref ON favorite (ref_type, ref_id);
+
+-- 내 찜 목록(타입별 + 등록 최신순 + PK tie-break) 전용.
+-- UNIQUE 인덱스는 세 번째 컬럼이 ref_id라 created_at 정렬에 쓰이지 못한다.
+CREATE INDEX idx_favorite_account_type_created
+    ON favorite (account_id, ref_type, created_at, favorite_id);
 
 -- 5) 2에서 중복을 지웠다면 카운트가 실제 행 수와 어긋난다. 배포 후 아래 API로 재계산한다.
 --      POST /admin/favorites/recalculate          (상점 + 중고 게시글 전체)
