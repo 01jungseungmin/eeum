@@ -12,6 +12,8 @@ import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.SettlementAccountRepository;
 import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
+import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ import java.util.List;
 public class StorePhysicalDeleteService {
 
     private final StoreRepository storeRepository;
+    private final FavoriteService favoriteService;
     private final ProductRepository productRepository;
     private final EventProductRepository eventProductRepository;
     private final ProductImageRepository productImageRepository;
@@ -84,6 +87,11 @@ public class StorePhysicalDeleteService {
         settlementAccountRepository.deleteByStore_StoreId(storeId);
 
         // 상점 삭제
+        // 다른 사용자가 이 상점에 남긴 찜을 먼저 지운다.
+        // Favorite은 FK 없는 polymorphic 참조라 상점만 지우면 행이 그대로 남아,
+        // 전체 찜 목록·찜 여부 조회에 사라진 상점을 가리키는 항목이 계속 나온다.
+        favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.STORE, storeId);
+
         storeRepository.delete(store);
 
         log.info("상점 하위 데이터 물리 삭제 완료: accountId={}, storeId={}", accountId, storeId);
