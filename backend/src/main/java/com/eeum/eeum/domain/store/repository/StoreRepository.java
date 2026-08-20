@@ -30,24 +30,6 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
     @Query("SELECT s FROM Store s WHERE s.account.accountId = :accountId")
     Optional<Store> findByAccountIdWithPessimisticLock(@Param("accountId") Long accountId);
 
-    // 주어진 ID 중 "공개 노출 가능한" 상점 ID만 반환한다.
-    // 조건은 PublicStoreService.validatePublicVisibleStore와 동일해야 한다 —
-    // 계정 ACTIVE + 상점 미정지 + 사장 승인 완료. 한쪽만 고치면 우회 경로가 생긴다.
-    // 목록에서 항목별로 검사하면 N+1이 되므로 IN 절 한 번으로 판정한다.
-    @Query("""
-        SELECT s.storeId FROM Store s
-        JOIN s.account a
-        WHERE s.storeId IN :storeIds
-          AND a.status = com.eeum.eeum.domain.account.enums.AccountStatus.ACTIVE
-          AND s.status <> com.eeum.eeum.domain.store.enums.StoreStatus.SUSPENDED
-          AND EXISTS (
-              SELECT 1 FROM OwnerInfo o
-              WHERE o.account.accountId = a.accountId
-                AND o.approvalStatus = com.eeum.eeum.domain.account.enums.ApprovalStatus.APPROVED
-          )
-        """)
-    List<Long> findPublicVisibleStoreIds(@Param("storeIds") Collection<Long> storeIds);
-
     // 신고 상세의 대상 스냅샷 — 소유자를 함께 조회해 N+1 방지
     @EntityGraph(attributePaths = "account")
     Optional<Store> findWithAccountByStoreId(Long storeId);

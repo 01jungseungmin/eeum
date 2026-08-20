@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
+import com.eeum.eeum.domain.favorite.repository.FavoriteStoreRow;
 import com.eeum.eeum.domain.favorite.repository.FavoriteUsedProductRow;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreImage;
@@ -23,9 +24,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,33 +62,35 @@ public class FavoriteService {
             Long accountId,
             FavoriteToggleRequestDto request
     ) {
-        Optional<UsedProduct> locked = lockUsedProduct(request.getRefType(), request.getRefId());
+        // 잠금 순서는 항상 account → 대상(store/used_product) → favorite다.
+        // 한 경로라도 순서를 뒤집으면 탈퇴·삭제 트랜잭션과 교착이 난다.
+        Account account = lockActiveAccount(accountId);
+        LockedRef target = lockRef(request.getRefType(), request.getRefId());
 
         Optional<Favorite> existing = favoriteRepository
                 .findByAccount_AccountIdAndRefTypeAndRefId(
                         accountId, request.getRefType(), request.getRefId());
 
         if (existing.isPresent()) {
-            return removeFavorite(accountId, existing.get(), request.getRefType(), request.getRefId());
+            return removeFavorite(accountId, existing.get(),
+                    request.getRefType(), request.getRefId(), target.publiclyVisible());
         }
 
-        validateRefForRegistration(request.getRefType(), request.getRefId(), locked);
-        return addFavorite(accountId, request.getRefType(), request.getRefId());
+        target.assertRegisterable(request.getRefType());
+        return addFavorite(account, request.getRefType(), request.getRefId());
     }
 
     // 찜 삭제 — favoriteId 기반 내 찜 목록 화면처럼 favoriteId를 이미 알고 있을 때 사용
 
     @Transactional
     public void deleteFavorite(Long accountId, Long favoriteId) {
-        Favorite favorite = favoriteRepository
+        // 대상을 알아내기 위한 선행 조회(잠금 없음). 이 값으로 잠금 대상만 정하고,
+        // 실제 삭제는 잠금을 잡은 뒤 다시 읽은 행으로 한다.
+        Favorite peeked = favoriteRepository
                 .findByFavoriteIdAndAccount_AccountId(favoriteId, accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAVORITE_NOT_FOUND));
 
-        lockUsedProduct(favorite.getRefType(), favorite.getRefId());
-        favoriteRepository.delete(favorite);
-        favoriteRepository.flush(); // DELETE 즉시 반영 후 카운트 감소
-        decrementCount(favorite.getRefType(), favorite.getRefId());
-
+        deleteFavoriteByRef(accountId, peeked.getRefType(), peeked.getRefId());
         log.info("찜 삭제(id): favoriteId={}, accountId={}", favoriteId, accountId);
     }
 
@@ -93,11 +98,15 @@ public class FavoriteService {
 
     @Transactional
     public void deleteFavoriteByRef(Long accountId, FavoriteRefType refType, Long refId) {
+        lockActiveAccount(accountId);
+        lockRef(refType, refId);
+
+        // 잠금을 잡은 뒤 다시 읽는다. 먼저 읽어둔 행으로 지우면 그 사이 대상 삭제 트랜잭션이
+        // 같은 찜을 정리한 경우 없는 행을 지우고 카운터만 한 번 더 깎는다.
         Favorite favorite = favoriteRepository
                 .findByAccount_AccountIdAndRefTypeAndRefId(accountId, refType, refId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAVORITE_NOT_FOUND));
 
-        lockUsedProduct(refType, refId);
         favoriteRepository.delete(favorite);
         favoriteRepository.flush(); // DELETE 즉시 반영 후 카운트 감소
         decrementCount(refType, refId);
@@ -111,62 +120,50 @@ public class FavoriteService {
 
     @Transactional(readOnly = true)
     public Page<FavoriteResponseDto> getMyFavorites(Long accountId, Pageable pageable) {
+        // 정렬은 찜 등록 최신순으로 고정한다. 요청 sort를 그대로 두면 실제 순서와
+        // 응답 Page 메타데이터가 달라 클라이언트가 잘못된 순서를 전제하게 된다.
         return favoriteRepository
-                .findByAccount_AccountIdOrderByCreatedAtDesc(accountId, pageable)
+                .findByAccount_AccountIdOrderByCreatedAtDesc(accountId, latestFirst(pageable))
                 .map(FavoriteResponseDto::from);
     }
 
-    // 상점 찜 목록 — Store + 썸네일을 IN절 배치 조회로 N+1 방지
-    // Favorite 1번 + Store 1번 + Thumbnail 1번 = 총 3 쿼리.
+    // 찜 등록 최신순 + PK tie-break. createdAt 동률 시 페이지 경계에서 항목이 중복·유실된다.
+    private Pageable latestFirst(Pageable pageable) {
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("favoriteId")));
+    }
 
+    /**
+     * 상점 찜 목록.
+     * 공개 조건(계정 활성·미정지·사장 승인)은 QueryDSL 조인에서 페이징·count 전에 적용한다 —
+     * 조회 후 메모리에서 거르면 페이지 크기·전체 건수·페이지 경계가 모두 어긋난다.
+     * 조회 1번 + count 1번 + 대표 사진 1번 = 총 3 쿼리.
+     */
     @Transactional(readOnly = true)
     public Page<FavoriteStoreResponseDto> getMyFavoriteStores(Long accountId, Pageable pageable) {
-        Page<Favorite> favorites = favoriteRepository
-                .findByAccount_AccountIdAndRefTypeOrderByCreatedAtDesc(
-                        accountId, FavoriteRefType.STORE, pageable);
+        Page<FavoriteStoreRow> rows = favoriteRepository.findFavoriteStores(accountId, pageable);
 
-        if (favorites.isEmpty()) {
-            return favorites.map(fav -> null); // 빈 페이지 빠른 반환
+        if (rows.isEmpty()) {
+            return rows.map(row -> null);
         }
 
-        // storeId 목록 추출 → Store, Thumbnail 배치 조회
-        List<Long> storeIds = favorites.stream()
-                .map(Favorite::getRefId)
-                .collect(Collectors.toList());
-
-        // 미승인·정지·비활성 계정의 상점은 목록에서 뺀다 — 찜 목록으로 우회해
-        // 비공개 상점의 이름·주소·상태·썸네일을 보게 되면 공개 조건이 무의미해진다.
-        Set<Long> visibleStoreIds = Set.copyOf(storeRepository.findPublicVisibleStoreIds(storeIds));
-
-        Map<Long, Store> storeMap = storeRepository.findAllById(storeIds).stream()
-                .filter(store -> visibleStoreIds.contains(store.getStoreId()))
-                .collect(Collectors.toMap(Store::getStoreId, Function.identity()));
+        List<Long> storeIds = rows.getContent().stream()
+                .map(FavoriteStoreRow::store)
+                .map(Store::getStoreId)
+                .toList();
 
         Map<Long, String> thumbnailMap = storeImageRepository
                 .findByStore_StoreIdInAndIsThumbnailTrue(storeIds).stream()
                 .collect(Collectors.toMap(
                         img -> img.getStore().getStoreId(),
-                        StoreImage::getImageUrl
-                ));
+                        StoreImage::getImageUrl,
+                        (first, second) -> first));
 
-        // 찜 등록 후 상점이 삭제된 dangling 참조는 해당 항목만 건너뛴다 — 예외를 던지면 그 1건 때문에
-        // 찜 목록 페이지 전체가 실패해 사용자가 다른 찜을 삭제할 화면조차 열 수 없게 된다.
-        List<FavoriteStoreResponseDto> content = favorites.getContent().stream()
-                .filter(fav -> {
-                    boolean exists = storeMap.containsKey(fav.getRefId());
-                    if (!exists) {
-                        log.warn("찜 목록 조회 중 삭제된 상점 발견 — 항목 스킵: refId={}", fav.getRefId());
-                    }
-                    return exists;
-                })
-                .map(fav -> {
-                    Store store = storeMap.get(fav.getRefId());
-                    String thumbnail = thumbnailMap.get(store.getStoreId());
-                    return FavoriteStoreResponseDto.of(fav.getFavoriteId(), store, thumbnail, fav.getCreatedAt());
-                })
-                .toList();
-
-        return new PageImpl<>(content, pageable, favorites.getTotalElements());
+        return rows.map(row -> FavoriteStoreResponseDto.of(
+                row.favoriteId(), row.store(),
+                thumbnailMap.get(row.store().getStoreId()), row.favoritedAt()));
     }
 
     /**
@@ -261,12 +258,12 @@ public class FavoriteService {
     public void deleteAllByAccountId(Long accountId) {
         // 대상 도메인의 favoriteCount 원자 감소 — 탈퇴자가 남긴 찜이 카운트에 계속 잡히면 안 된다.
         // 찜 1건마다 UPDATE를 날리면 찜이 많은 회원의 탈퇴가 그만큼의 쿼리를 유발하므로 IN 절로 한 번에 처리한다.
-        List<Long> storeIds = refIds(accountId, FavoriteRefType.STORE);
+        List<Long> storeIds = findFavoriteRefIds(accountId, FavoriteRefType.STORE);
         if (!storeIds.isEmpty()) {
             storeRepository.decrementFavoriteCounts(storeIds);
         }
 
-        List<Long> productIds = refIds(accountId, FavoriteRefType.USED_PRODUCT);
+        List<Long> productIds = findFavoriteRefIds(accountId, FavoriteRefType.USED_PRODUCT);
         if (!productIds.isEmpty()) {
             usedProductRepository.decrementFavoriteCounts(productIds);
         }
@@ -277,25 +274,19 @@ public class FavoriteService {
     }
 
     // 탈퇴 회원이 찜한 대상 ID 목록 — 빈 목록으로 IN 절을 만들면 DB에 따라 문법 오류가 나므로 호출부에서 거른다.
-    private List<Long> refIds(Long accountId, FavoriteRefType refType) {
+    // 오름차순으로 정렬한다 — 여러 행을 함께 잠그는 경로끼리 순서가 다르면 교착이 난다.
+    public List<Long> findFavoriteRefIds(Long accountId, FavoriteRefType refType) {
         return favoriteRepository.findByAccount_AccountIdAndRefType(accountId, refType).stream()
                 .map(Favorite::getRefId)
+                .distinct()
+                .sorted()
                 .toList();
     }
 
     // ===================== 내부 헬퍼 =====================
 
     private FavoriteToggleResponseDto addFavorite(
-            Long accountId, FavoriteRefType refType, Long refId) {
-
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-
-        // 탈퇴 정리가 지나간 뒤 들어온 요청이 찜을 되살리지 못하게 막는다.
-        // 토큰이 아직 살아 있는 동안 탈퇴 요청과 겹칠 수 있다.
-        if (!account.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
+            Account account, FavoriteRefType refType, Long refId) {
 
         Favorite favorite = Favorite.create(account, refType, refId);
 
@@ -309,51 +300,75 @@ public class FavoriteService {
         incrementCount(refType, refId);
 
         long count = favoriteRepository.countByRefTypeAndRefId(refType, refId);
-        log.info("찜 등록: accountId={}, refType={}, refId={}", accountId, refType, refId);
+        log.info("찜 등록: accountId={}, refType={}, refId={}",
+                account.getAccountId(), refType, refId);
         return FavoriteToggleResponseDto.added(favorite, count);
     }
 
     private FavoriteToggleResponseDto removeFavorite(
-            Long accountId, Favorite favorite, FavoriteRefType refType, Long refId) {
+            Long accountId, Favorite favorite,
+            FavoriteRefType refType, Long refId, boolean publiclyVisible) {
 
         favoriteRepository.delete(favorite);
         favoriteRepository.flush(); // DELETE 즉시 반영 후 카운트 감소
         decrementCount(refType, refId);
 
-        long count = favoriteRepository.countByRefTypeAndRefId(refType, refId);
+        // 비공개 대상(숨김 글·미승인 상점)의 찜 수는 응답에서 뺀다.
+        // 해제는 허용해야 하지만, 정확한 카운트를 돌려주면 공개 카운트 API를 막아둔 의미가 없어진다.
+        Long count = publiclyVisible
+                ? favoriteRepository.countByRefTypeAndRefId(refType, refId)
+                : null;
+
         log.info("찜 해제: accountId={}, refType={}, refId={}", accountId, refType, refId);
         return FavoriteToggleResponseDto.removed(refType, refId, count);
     }
 
-    // 쓰기 경로에서 대상 게시글 행을 먼저 잠근다.
-    // 잠그지 않으면 삭제 트랜잭션과 스냅샷이 엇갈려, 이미 삭제된 글에 찜이 붙는다.
-    // 그 찜은 삭제 시 정리(deleteAllByRefTypeAndRefId)를 이미 지나쳤으므로 영영 남는다.
-    // 잠금 순서는 항상 used_product → favorite다. 반대로 잡는 경로가 생기면 교착이 난다.
-    // 대상이 없으면(하드 삭제·잘못된 ID) 잠글 것도 없다 — 등록 검증에서 걸러진다.
-    private Optional<UsedProduct> lockUsedProduct(FavoriteRefType refType, Long refId) {
-        if (refType != FavoriteRefType.USED_PRODUCT) {
-            return Optional.empty();
+    // 계정 행을 잠근 뒤 활성 상태를 검증한다 — 잠금 순서의 첫 단계.
+    // 잠그지 않으면 탈퇴 정리(찜 삭제·카운트 감소)와 겹쳐 카운터가 어긋나거나
+    // 정리가 끝난 뒤 찜이 되살아난다. 탈퇴와 정지는 구분해서 응답한다.
+    private Account lockActiveAccount(Long accountId) {
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (account.isWithdrawn()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
-        return usedProductRepository.findByUsedProductIdForUpdate(refId);
+        if (!account.isActive()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+        }
+        return account;
     }
 
-    // 찜 등록 검증 — 이미 잠근 행을 그대로 쓴다(추가 조회 없음).
-    // 숨김 글을 막는 이유: ID만 알면 목록을 거치지 않고 찜해 favoriteCount를 올릴 수 있고,
-    // 숨김 해제 후 그 카운트가 그대로 노출된다. 존재 사실을 흘리지 않도록 NOT_FOUND로 통일한다.
-    // 판매완료(SOLD)는 막지 않는다: 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다.
-    private void validateRefForRegistration(
-            FavoriteRefType refType, Long refId, Optional<UsedProduct> lockedProduct) {
-        switch (refType) {
-            // existsById로는 미승인·정지·비활성 계정의 상점까지 찜할 수 있고,
-            // 그 뒤 찜 목록·공개 카운트로 비공개 상점 정보가 새어 나간다.
-            case STORE -> {
-                if (!isPublicVisibleStore(refId)) {
-                    throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
-                }
+    // 찜 대상 행을 잠그고, 그 시점의 공개 여부를 함께 판정한다.
+    // 잠그지 않으면 "공개 상태 확인 → 찜 저장" 사이에 삭제·숨김·사장 탈퇴가 끼어든다.
+    // 대상이 아예 없으면(하드 삭제·잘못된 ID) 잠글 것도 없다 — 등록 검증에서 걸러진다.
+    private LockedRef lockRef(FavoriteRefType refType, Long refId) {
+        return switch (refType) {
+            case USED_PRODUCT -> new LockedRef(
+                    usedProductRepository.findByUsedProductIdForUpdate(refId)
+                            .filter(product -> !product.isDeleted() && !product.isHidden())
+                            .isPresent());
+            // 상점 행을 잠근 뒤 공개 조건을 다시 확인한다.
+            case STORE -> new LockedRef(
+                    storeRepository.findByIdWithPessimisticLock(refId)
+                            .map(store -> storeRepository.isPubliclyVisible(refId))
+                            .orElse(false));
+        };
+    }
+
+    // 잠근 시점의 대상 공개 여부. 등록 가능 여부와 카운트 노출 여부를 함께 결정한다.
+    private record LockedRef(boolean publiclyVisible) {
+
+        // 등록은 공개 대상만 허용한다. 존재 사실을 흘리지 않도록 NOT_FOUND로 통일한다.
+        // 판매완료(SOLD)는 막지 않는다: 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다.
+        void assertRegisterable(FavoriteRefType refType) {
+            if (publiclyVisible) {
+                return;
             }
-            case USED_PRODUCT -> lockedProduct
-                    .filter(product -> !product.isDeleted() && !product.isHidden())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+            throw switch (refType) {
+                case STORE -> new BusinessException(ErrorCode.STORE_NOT_FOUND);
+                case USED_PRODUCT -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+            };
         }
     }
 
@@ -362,7 +377,7 @@ public class FavoriteService {
     private void validateRef(FavoriteRefType refType, Long refId) {
         switch (refType) {
             case STORE -> {
-                if (!isPublicVisibleStore(refId)) {
+                if (!storeRepository.isPubliclyVisible(refId)) {
                     throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
                 }
             }
@@ -371,11 +386,6 @@ public class FavoriteService {
                     .filter(product -> !product.isHidden())
                     .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
         }
-    }
-
-    // 공개 노출 가능한 상점인지 — 조건은 PublicStoreService.validatePublicVisibleStore와 같다.
-    private boolean isPublicVisibleStore(Long storeId) {
-        return !storeRepository.findPublicVisibleStoreIds(List.of(storeId)).isEmpty();
     }
 
     // DB 원자 UPDATE로 찜 카운트 +1.

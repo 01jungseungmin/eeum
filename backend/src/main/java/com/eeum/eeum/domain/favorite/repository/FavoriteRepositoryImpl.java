@@ -1,14 +1,20 @@
 package com.eeum.eeum.domain.favorite.repository;
 
+import com.eeum.eeum.domain.account.entity.QAccount;
 import com.eeum.eeum.domain.account.entity.QRegion;
 import com.eeum.eeum.domain.favorite.entity.QFavorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import com.eeum.eeum.domain.store.entity.QStore;
+import com.eeum.eeum.domain.store.repository.StoreVisibilityPredicate;
 import com.eeum.eeum.domain.used.entity.QUsedProduct;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Projections;
+import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Slice;
@@ -29,6 +35,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     private final QFavorite favorite = QFavorite.favorite;
     private final QUsedProduct usedProduct = QUsedProduct.usedProduct;
     private final QRegion region = QRegion.region;
+    private final QStore store = QStore.store;
+    private final QAccount account = QAccount.account;
 
     // 목록 화면 배치 조회 — 사용자가 찜한 refId Set 반환 IN절 한 번으로 N+1을 방지
 
@@ -126,5 +134,42 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
         // 요청 sort는 무시하고 최신순으로 고정한다. 요청받은 Pageable을 그대로 돌려주면
         // 응답의 sort가 실제 적용된 정렬과 달라 클라이언트가 잘못된 순서를 전제하게 된다.
         return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
+    }
+
+    // 상점 찜 목록 — 공개 조건을 조인·where로 걸어 페이징과 count 이전에 적용한다.
+    // Favorite은 FK 없는 polymorphic 참조지만 refId ↔ storeId theta join으로 묶을 수 있다.
+    @Override
+    public Page<FavoriteStoreRow> findFavoriteStores(Long accountId, Pageable pageable) {
+        List<FavoriteStoreRow> rows = queryFactory
+                .select(Projections.constructor(
+                        FavoriteStoreRow.class,
+                        favorite.favoriteId,
+                        favorite.createdAt,
+                        store))
+                .from(favorite)
+                .join(store).on(store.storeId.eq(favorite.refId))
+                .join(store.account, account)
+                .where(
+                        favorite.account.accountId.eq(accountId),
+                        favorite.refType.eq(FavoriteRefType.STORE),
+                        StoreVisibilityPredicate.publiclyVisible(store, account))
+                // createdAt 동률 시 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
+                .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc())
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .fetch();
+
+        JPAQuery<Long> countQuery = queryFactory
+                .select(favorite.count())
+                .from(favorite)
+                .join(store).on(store.storeId.eq(favorite.refId))
+                .join(store.account, account)
+                .where(
+                        favorite.account.accountId.eq(accountId),
+                        favorite.refType.eq(FavoriteRefType.STORE),
+                        StoreVisibilityPredicate.publiclyVisible(store, account));
+
+        return new PageImpl<>(rows, withAppliedSort(pageable),
+                countQuery.fetchOne() == null ? 0L : countQuery.fetchOne());
     }
 }
