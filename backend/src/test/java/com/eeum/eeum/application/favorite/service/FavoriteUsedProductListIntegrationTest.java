@@ -238,6 +238,25 @@ class FavoriteUsedProductListIntegrationTest {
                 .allSatisfy(product -> assertThat(product.getFavoriteCount()).isEqualTo(1));
     }
 
+    @Test
+    void 판매자가_탈퇴한_게시글은_찜_목록에서도_빠진다() {
+        // given: 판매자 탈퇴는 글을 내리는 사유다. 목록·상세에서 사라진 글이
+        // 찜 목록에만 남아 있으면 탈퇴자에게 거래 문의가 계속 간다.
+        Account seller = accountRepository.findAll().stream()
+                .filter(account -> !account.getAccountId().equals(viewerId))
+                .findFirst()
+                .orElseThrow();
+        seller.withdraw();
+        accountRepository.saveAndFlush(seller);
+
+        // when
+        Slice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(viewerId, PageRequest.of(0, 20));
+
+        // then: 판매자가 한 명이므로 전부 빠진다
+        assertThat(result.getContent()).isEmpty();
+    }
+
     private void hide(Long productId) {
         UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
         product.hide();

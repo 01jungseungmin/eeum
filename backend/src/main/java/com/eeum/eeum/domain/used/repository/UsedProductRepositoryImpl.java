@@ -1,5 +1,6 @@
 package com.eeum.eeum.domain.used.repository;
 
+import com.eeum.eeum.domain.account.entity.QAccount;
 import com.eeum.eeum.domain.used.entity.QUsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
@@ -28,6 +29,7 @@ import java.util.Map;
 public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
 
     private static final QUsedProduct PRODUCT = QUsedProduct.usedProduct;
+    private static final QAccount SELLER = QAccount.account;
 
     // 정렬 허용 필드
     private static final Map<String, ComparableExpressionBase<?>> SORTABLE = Map.of(
@@ -51,6 +53,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
                 // 목록 DTO가 지역명과 카테고리명을 바로 읽기 fetch join이 없으면 페이지 크기만큼 추가 select가 나감(N+1)
                 .leftJoin(PRODUCT.region).fetchJoin()
                 .leftJoin(PRODUCT.category).fetchJoin()
+                .join(PRODUCT.seller, SELLER)
                 .where(toPredicate(condition))
                 .orderBy(toOrderSpecifiers(appliedSort))
                 .offset(pageable.getOffset())
@@ -80,9 +83,8 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
     private BooleanBuilder toPredicate(UsedProductSearchCondition condition) {
         return new BooleanBuilder()
                 .and(PRODUCT.region.regionId.eq(condition.regionId()))
-                // 삭제·숨김은 모든 사용자 조회에서 빠짐없이 거른다
-                .and(PRODUCT.deletedAt.isNull())
-                .and(PRODUCT.hidden.isFalse())
+                // 삭제·숨김·판매자 탈퇴는 모든 사용자 조회에서 빠짐없이 거른다
+                .and(UsedProductVisibilityPredicate.publiclyVisible(PRODUCT, SELLER))
                 .and(keywordContains(condition.keyword()))
                 .and(categoryIn(condition.categoryIds()))
                 .and(priceTypeEq(condition.priceType()))

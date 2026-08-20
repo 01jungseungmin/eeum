@@ -346,7 +346,7 @@ public class FavoriteService {
         return switch (refType) {
             case USED_PRODUCT -> new LockedRef(
                     usedProductRepository.findByUsedProductIdForUpdate(refId)
-                            .filter(product -> !product.isDeleted() && !product.isHidden())
+                            .filter(UsedProduct::isPubliclyVisible)
                             .isPresent());
             // 상점 행을 잠근 뒤 공개 조건을 다시 확인한다.
             case STORE -> new LockedRef(
@@ -383,7 +383,7 @@ public class FavoriteService {
             }
             case USED_PRODUCT -> usedProductRepository
                     .findByUsedProductIdAndDeletedAtIsNull(refId)
-                    .filter(product -> !product.isHidden())
+                    .filter(UsedProduct::isPubliclyVisible)
                     .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
         }
     }

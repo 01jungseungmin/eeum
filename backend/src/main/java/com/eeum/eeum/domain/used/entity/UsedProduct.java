@@ -184,6 +184,12 @@ public class UsedProduct extends BaseEntity {
         this.deletedAt = LocalDateTime.now();
     }
 
+    // 공개 노출 가능 여부 — 조건은 UsedProductVisibilityPredicate와 같아야 한다.
+    // 판매자가 탈퇴하면 글도 함께 내린다. 탈퇴자에게 거래 문의가 계속 가는 것을 막는다.
+    public boolean isPubliclyVisible() {
+        return !isDeleted() && !hidden && seller.isActive();
+    }
+
     public boolean isDeleted() {
         return this.deletedAt != null;
     }

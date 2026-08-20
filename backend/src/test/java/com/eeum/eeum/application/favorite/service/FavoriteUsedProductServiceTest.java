@@ -181,6 +181,35 @@ class FavoriteUsedProductServiceTest {
         verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(any());
     }
 
+    @Test
+    void 판매자가_탈퇴한_게시글은_찜할_수_없다() {
+        // given — 목록·상세에서 사라진 글이 찜으로만 살아 있으면 안 된다
+        UsedProduct product = product();
+        product.getSeller().withdraw();
+        givenLockedProduct(product);
+
+        // when & then
+        assertThatThrownBy(() -> favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+
+        verify(usedProductRepository, never()).incrementFavoriteCount(any());
+    }
+
+    @Test
+    void 판매자가_탈퇴한_게시글의_찜_수는_조회할_수_없다() {
+        UsedProduct product = product();
+        product.getSeller().withdraw();
+        givenActiveProduct(product);
+
+        assertThatThrownBy(() ->
+                favoriteService.getFavoriteCount(FavoriteRefType.USED_PRODUCT, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
     // ─────────────────── 찜 수 조회 ───────────────────
 
     @Test

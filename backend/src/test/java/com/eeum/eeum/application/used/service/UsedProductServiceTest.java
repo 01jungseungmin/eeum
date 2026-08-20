@@ -423,6 +423,22 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
     }
 
+    @Test
+    void 판매자가_탈퇴하면_게시글_상세도_볼_수_없다() {
+        // given — 탈퇴자에게 거래 문의가 계속 가는 것을 막는다.
+        // 탈퇴 계정은 로그인 자체가 막히므로 "작성자에게만 보인다" 예외도 성립하지 않는다.
+        UsedProduct product = product();
+        product.getSeller().withdraw();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+
+        // when & then
+        assertThatThrownBy(() -> usedProductService.getDetail(SELLER_ID, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
     // ─────────────────── 조회수 ───────────────────
 
     @Test

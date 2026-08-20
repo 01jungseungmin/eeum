@@ -142,8 +142,14 @@ public class UsedProductService {
 
     // 숨김 처리된 글은 작성자에게만 보인다. 남에게 403을 주면 "숨겨진 글이 있다"는 사실이 새어 나가므로
     // 존재하지 않는 것과 같은 응답을 준다.
+    // 판매자가 탈퇴한 글은 작성자에게도 보이지 않는다 — 탈퇴 계정은 로그인 자체가 막힌다.
     private UsedProduct getVisibleOrThrow(Long viewerId, Long usedProductId) {
         UsedProduct product = getActiveOrThrow(usedProductId);
+
+        if (!product.getSeller().isActive()) {
+            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        }
+
         if (product.isHidden() && !product.isOwnedBy(viewerId)) {
             throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
         }

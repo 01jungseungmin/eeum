@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.store.entity.QStore;
 import com.eeum.eeum.domain.store.repository.StoreVisibilityPredicate;
 import com.eeum.eeum.domain.used.entity.QUsedProduct;
+import com.eeum.eeum.domain.used.repository.UsedProductVisibilityPredicate;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQuery;
@@ -37,6 +38,7 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     private final QRegion region = QRegion.region;
     private final QStore store = QStore.store;
     private final QAccount account = QAccount.account;
+    private final QAccount seller = new QAccount("seller");
 
     // 목록 화면 배치 조회 — 사용자가 찜한 refId Set 반환 IN절 한 번으로 N+1을 방지
 
@@ -115,11 +117,11 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                 .from(favorite)
                 .join(usedProduct).on(usedProduct.usedProductId.eq(favorite.refId))
                 .join(usedProduct.region, region)
+                .join(usedProduct.seller, seller)
                 .where(
                         favorite.account.accountId.eq(accountId),
                         favorite.refType.eq(FavoriteRefType.USED_PRODUCT),
-                        usedProduct.hidden.isFalse(),
-                        usedProduct.deletedAt.isNull()
+                        UsedProductVisibilityPredicate.publiclyVisible(usedProduct, seller)
                 )
                 // createdAt 동률 시 순서가 흔들려 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
                 .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc())
