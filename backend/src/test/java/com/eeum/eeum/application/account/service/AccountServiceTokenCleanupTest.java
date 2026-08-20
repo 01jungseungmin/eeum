@@ -12,6 +12,7 @@ import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,7 @@ class AccountServiceTokenCleanupTest {
     @Mock OwnerApplicationMapper ownerApplicationMapper;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock FavoriteService favoriteService;
+    @Mock StoreRepository storeRepository;
 
     // ─────────────────── changePassword ───────────────────
 

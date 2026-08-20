@@ -44,7 +44,9 @@ public class FavoriteToggleResponseDto {
     }
 
     // 찜 해제 응답
-    public static FavoriteToggleResponseDto removed(FavoriteRefType refType, Long refId, long favoriteCount) {
+    // favoriteCount는 비공개 대상(숨김 글·미승인 상점) 해제 시 null이다 —
+    // 정확한 수를 돌려주면 공개 카운트 API를 막아둔 의미가 없어진다.
+    public static FavoriteToggleResponseDto removed(FavoriteRefType refType, Long refId, Long favoriteCount) {
         return FavoriteToggleResponseDto.builder()
                 .favorited(false)
                 .favoriteId(null)
