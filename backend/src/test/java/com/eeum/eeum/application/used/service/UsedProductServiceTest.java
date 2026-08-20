@@ -79,7 +79,7 @@ class UsedProductServiceTest {
     @Test
     void 인증된_활동_지역이면_게시글이_등록된다() {
         // given
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountRepository.findByIdWithLock(SELLER_ID)).thenReturn(Optional.of(seller()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
@@ -100,7 +100,7 @@ class UsedProductServiceTest {
     @Test
     void 내_활동_지역이_아니면_등록할_수_없다() {
         // given — 검증이 없으면 아무 regionId나 실어 남의 동네에 글을 올릴 수 있다
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountRepository.findByIdWithLock(SELLER_ID)).thenReturn(Optional.of(seller()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
@@ -118,7 +118,7 @@ class UsedProductServiceTest {
 
     @Test
     void GPS_인증이_안_된_지역에는_등록할_수_없다() {
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountRepository.findByIdWithLock(SELLER_ID)).thenReturn(Optional.of(seller()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
@@ -134,7 +134,7 @@ class UsedProductServiceTest {
     @Test
     void 가게_카테고리로는_중고_게시글을_등록할_수_없다() {
         // given — 조회 자체를 CategoryType.USED로 걸어 가게·비활성 카테고리를 함께 막는다
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountRepository.findByIdWithLock(SELLER_ID)).thenReturn(Optional.of(seller()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.empty());
 
@@ -273,6 +273,8 @@ class UsedProductServiceTest {
     @Test
     void 지역을_지정하지_않으면_선택한_동네에_게시글이_등록된다() {
         // given — 앱에서 동네를 고른 뒤 글을 쓰는 흐름과 맞춘다
+        // 등록은 계정 행을 잠그고, 선택한 동네 조회는 잠금 없이 다시 읽는다
+        when(accountRepository.findByIdWithLock(SELLER_ID)).thenReturn(Optional.of(sellerWithPrimary()));
         when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(sellerWithPrimary()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));

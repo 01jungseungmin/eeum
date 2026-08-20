@@ -72,7 +72,7 @@ class FavoriteUsedProductServiceTest {
         givenLockedProduct(product());
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account()));
+        givenActiveAccount();
 
         // when
         favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest());
@@ -85,6 +85,7 @@ class FavoriteUsedProductServiceTest {
     @Test
     void 찜을_해제하면_게시글_찜_수가_감소한다() {
         // given
+        givenLockedProduct(product());
         Favorite favorite = Favorite.create(account(), FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.of(favorite));
@@ -136,7 +137,7 @@ class FavoriteUsedProductServiceTest {
         givenLockedProduct(sold);
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account()));
+        givenActiveAccount();
 
         // when
         favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest());
@@ -168,7 +169,7 @@ class FavoriteUsedProductServiceTest {
         givenLockedProduct(product());
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account()));
+        givenActiveAccount();
 
         // when
         favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest());
@@ -309,10 +310,15 @@ class FavoriteUsedProductServiceTest {
 
     // ─────────────────── 헬퍼 ───────────────────
 
-    // 쓰기 경로(토글)는 잠금 조회를 쓴다. 잠금 조회에는 삭제 필터가 없다.
+    // 쓰기 경로(토글)는 계정 → 대상 순으로 잠근다. 잠금 조회에는 삭제 필터가 없다.
     private void givenLockedProduct(UsedProduct product) {
+        givenActiveAccount();
         when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
+    }
+
+    private void givenActiveAccount() {
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account()));
     }
 
     private void givenActiveProduct(UsedProduct product) {

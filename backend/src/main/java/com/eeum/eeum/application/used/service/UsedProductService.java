@@ -58,12 +58,16 @@ public class UsedProductService {
 
     @Transactional
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
-        Account seller = accountRepository.findById(sellerId)
+        // 잠금 순서는 account → product다. 잠그지 않으면 탈퇴 처리가 지나간 뒤
+        // 살아 있는 토큰으로 들어온 요청이 탈퇴 계정의 게시글을 만들 수 있다.
+        Account seller = accountRepository.findByIdWithLock(sellerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        // 탈퇴 처리가 지나간 뒤 살아 있는 토큰으로 들어온 요청이 게시글을 만들지 못하게 막는다.
-        if (!seller.isActive()) {
+        if (seller.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
+        if (!seller.isActive()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
         }
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());

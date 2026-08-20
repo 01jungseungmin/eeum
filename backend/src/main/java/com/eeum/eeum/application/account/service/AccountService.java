@@ -11,6 +11,9 @@ import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
@@ -29,6 +32,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -43,6 +47,7 @@ public class AccountService {
     private final TokenService tokenService;
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     private final FavoriteService favoriteService;
+    private final StoreRepository storeRepository;
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -122,21 +127,27 @@ public class AccountService {
         // 카운터가 이중 감소하거나, 정리가 끝난 뒤 찜·게시글이 다시 생성될 수 있다.
         Account account = getActiveAccountWithLock(accountId);
 
-        // 3. 사장 계정이면 상점/상품/이벤트 상품 비활성화
+        // 3. 이 트랜잭션이 잠글 상점 행을 ID 오름차순으로 미리 확보한다.
+        // 서로의 상점을 찜한 두 사장이 동시에 탈퇴하면, 각자 자기 상점을 잡고 상대 상점을
+        // 기다리는 순환 교착이 난다(비활성화는 자기 상점, 찜 정리는 찜한 상점을 잠근다).
+        // 잠금 순서를 ID 오름차순 하나로 통일하면 사이클이 생기지 않는다.
+        lockStoresInIdOrder(accountId);
+
+        // 4. 사장 계정이면 상점/상품/이벤트 상품 비활성화
         if (account.getRole() == AccountRole.ROLE_OWNER) {
             ownerStoreWithdrawalService.deactivateForWithdrawal(accountId);
         }
 
-        // 4. 탈퇴 처리
+        // 5. 탈퇴 처리
         account.withdraw();
 
-        // 5. 찜 정리 — 탈퇴자가 남긴 찜이 상점·게시글의 favoriteCount에 계속 잡히면 안 된다.
+        // 6. 찜 정리 — 탈퇴자가 남긴 찜이 상점·게시글의 favoriteCount에 계속 잡히면 안 된다.
         // 찜 카운트 감소는 영속성 컨텍스트를 비우는 bulk UPDATE(@Modifying(clearAutomatically))라
         // 앞 단계의 변경(탈퇴 상태, 사장 상점 비활성화)을 먼저 flush하지 않으면 그대로 유실된다.
         accountRepository.flush();
         favoriteService.deleteAllByAccountId(accountId);
 
-        // 6. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
+        // 7. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 계정은 ACTIVE 상태이고 토큰도 유지
         eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
 
@@ -192,6 +203,19 @@ public class AccountService {
     }
 
     // ===================== 내부 유틸 =====================
+
+    // 탈퇴 트랜잭션이 건드릴 상점 행(자기 상점 + 찜한 상점)을 ID 오름차순으로 잠근다.
+    private void lockStoresInIdOrder(Long accountId) {
+        List<Long> storeIds = new ArrayList<>(
+                favoriteService.findFavoriteRefIds(accountId, FavoriteRefType.STORE));
+
+        storeRepository.findByAccount_AccountId(accountId)
+                .map(Store::getStoreId)
+                .filter(ownStoreId -> !storeIds.contains(ownStoreId))
+                .ifPresent(storeIds::add);
+
+        storeIds.stream().sorted().forEach(storeRepository::findByIdWithPessimisticLock);
+    }
 
     private Account getActiveAccount(Long accountId) {
         Account account = accountRepository.findById(accountId)
