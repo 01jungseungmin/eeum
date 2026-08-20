@@ -24,8 +24,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
@@ -146,7 +146,8 @@ public class FavoriteService {
         Page<FavoriteStoreRow> rows = favoriteRepository.findFavoriteStores(accountId, pageable);
 
         if (rows.isEmpty()) {
-            return rows.map(row -> null);
+            // 썸네일 배치 조회만 건너뛴다. 정렬·전체 건수는 리포지토리가 판정한 값을 그대로 쓴다.
+            return new PageImpl<>(List.of(), rows.getPageable(), rows.getTotalElements());
         }
 
         List<Long> storeIds = rows.getContent().stream()
@@ -180,7 +181,8 @@ public class FavoriteService {
                 favoriteRepository.findFavoriteUsedProducts(accountId, pageable);
 
         if (rows.isEmpty()) {
-            return new SliceImpl<>(List.of(), pageable, false);
+            // 요청 pageable을 그대로 돌려주면 실제 적용된 정렬(최신순 고정)과 메타데이터가 어긋난다.
+            return new SliceImpl<>(List.of(), rows.getPageable(), rows.hasNext());
         }
 
         List<Long> productIds = rows.getContent().stream()
@@ -323,19 +325,14 @@ public class FavoriteService {
         return FavoriteToggleResponseDto.removed(refType, refId, count);
     }
 
-    // 계정 행을 잠근 뒤 활성 상태를 검증한다 — 잠금 순서의 첫 단계.
+    // 계정 행을 잠근 뒤 사용 가능 상태를 검증한다 — 잠금 순서의 첫 단계.
     // 잠그지 않으면 탈퇴 정리(찜 삭제·카운트 감소)와 겹쳐 카운터가 어긋나거나
-    // 정리가 끝난 뒤 찜이 되살아난다. 탈퇴와 정지는 구분해서 응답한다.
+    // 정리가 끝난 뒤 찜이 되살아난다. 탈퇴·정지·가입 미완료는 상태별로 구분해 응답한다.
     private Account lockActiveAccount(Long accountId) {
         Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (account.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
-        if (!account.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-        }
+        account.assertWritable();
         return account;
     }
 

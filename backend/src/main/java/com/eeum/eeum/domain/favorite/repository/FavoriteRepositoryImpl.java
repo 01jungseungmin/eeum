@@ -169,7 +169,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                         favorite.refType.eq(FavoriteRefType.STORE),
                         StoreVisibilityPredicate.publiclyVisible(store, account));
 
-        return new PageImpl<>(rows, withAppliedSort(pageable),
-                countQuery.fetchOne() == null ? 0L : countQuery.fetchOne());
+        // fetchOne()을 삼항 연산자 양쪽에서 호출하면 같은 count 쿼리가 두 번 실행된다.
+        Long total = countQuery.fetchOne();
+        return new PageImpl<>(rows, withAppliedSort(pageable), total == null ? 0L : total);
     }
 }

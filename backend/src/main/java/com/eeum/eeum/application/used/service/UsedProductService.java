@@ -63,12 +63,7 @@ public class UsedProductService {
         Account seller = accountRepository.findByIdWithLock(sellerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (seller.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
-        if (!seller.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-        }
+        seller.assertWritable();
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
         // 등록은 조회와 달리 GPS 인증된 지역을 요구한다 — 아무 동네에나 매물을 뿌리는 것을 막는다.

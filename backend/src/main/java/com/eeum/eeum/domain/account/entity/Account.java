@@ -4,6 +4,8 @@ import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -216,6 +218,17 @@ public class Account extends BaseEntity {
 
     public void clearPrimaryRegion() {
         this.primaryRegionId = null;
+    }
+
+    // 쓰기 경로 공통 가드 — 상태별로 구분해서 던진다.
+    // !isActive()를 한 덩어리로 묶으면 가입 미완료(PENDING) 계정까지 "정지된 계정"으로 응답한다.
+    public void assertWritable() {
+        switch (this.status) {
+            case ACTIVE -> { }
+            case WITHDRAWN -> throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+            case SUSPENDED -> throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+            case PENDING -> throw new BusinessException(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
+        }
     }
 
     public boolean isActive() {

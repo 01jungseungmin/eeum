@@ -4,6 +4,7 @@ import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteUsedProductResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -27,6 +28,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -270,6 +273,37 @@ class FavoriteUsedProductServiceTest {
         assertThat(result.getContent()).isEmpty();
         verify(usedProductImageRepository, never())
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(any());
+    }
+
+    @Test
+    void 빈_목록도_실제_적용된_정렬을_그대로_반환한다() {
+        // given — 리포지토리는 요청 sort를 무시하고 최신순으로 고정해 돌려준다.
+        // 빈 결과에서만 요청 pageable을 그대로 쓰면 메타데이터가 실제 정렬과 어긋난다.
+        Pageable applied = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("createdAt")));
+        when(favoriteRepository.findFavoriteUsedProducts(any(), any()))
+                .thenReturn(new SliceImpl<>(List.of(), applied, false));
+
+        // when — 클라이언트는 가격순을 요청한다
+        Slice<FavoriteUsedProductResponseDto> result = favoriteService.getMyFavoriteUsedProducts(
+                ACCOUNT_ID, PageRequest.of(0, 20, Sort.by("price")));
+
+        // then
+        assertThat(result.getSort()).isEqualTo(applied.getSort());
+    }
+
+    @Test
+    void 가입_미완료_계정은_정지가_아니라_가입_미완료로_응답한다() {
+        // given — !isActive()를 한 덩어리로 묶으면 PENDING까지 "정지된 계정"이 된다
+        Account pending = Account.createOAuthPendingUser(
+                "oauth@test.com", "펜딩닉", null, OAuthProvider.KAKAO, "provider-1");
+        ReflectionTestUtils.setField(pending, "accountId", ACCOUNT_ID);
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(pending));
+
+        // when & then
+        assertThatThrownBy(() -> favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
     }
 
     // ─────────────────── 회원 탈퇴 ───────────────────

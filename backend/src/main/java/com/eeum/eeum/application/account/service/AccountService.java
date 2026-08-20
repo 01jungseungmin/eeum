@@ -234,13 +234,7 @@ public class AccountService {
     }
 
     private void assertActive(Account account) {
-        if (account.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
-
-        if (!account.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-        }
+        account.assertWritable();
     }
 
     private boolean isEmptyUpdateRequest(UpdateInfoRequestDto request) {
