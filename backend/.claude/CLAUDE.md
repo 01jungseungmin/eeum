@@ -130,6 +130,14 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - 무한 스크롤 (모바일 앱): `Slice<T>`
 - 관리자 페이지 (번호 페이징): `Page<T>`
 
+### 신규 도메인 단계별 개발
+- 신규 도메인이나 큰 기능 확장은 `.claude/skills/references/domain-development-workflow.md`의
+  Gate 1~7을 순서대로 적용한다.
+- 정책 결정 → Domain/Persistence → Application/Transaction → API/DTO → 교차 도메인·운영 →
+  테스트 → 최종 전체 리뷰 순서를 지키고, 이전 Gate의 위반을 다음 단계로 넘기지 않는다.
+- 완성 구현에서 공개 범위, 권한, 상태 전이, 삭제, 외부 계약처럼 결과를 바꾸는 정책이 미정이면
+  TODO나 임의 값으로 진행하지 않고 사용자 결정을 받는다.
+
 ### 테스트 작성 규칙
 - JUnit5 + Mockito + AssertJ 조합 (Spring Boot test starter에 포함)
 - Given-When-Then 구조로 작성

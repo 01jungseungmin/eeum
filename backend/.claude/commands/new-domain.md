@@ -1,25 +1,38 @@
 ---
-description: 이음 표준 구조로 신규 도메인 스캐폴딩
-allowed-tools: Read, Write, Glob
+description: 이음 표준 구조와 단계별 품질 게이트로 신규 도메인 개발 또는 스캐폴딩
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 ---
 
-"$ARGUMENTS" 도메인을 이음 프로젝트 표준 구조로 생성하세요.
+"$ARGUMENTS" 도메인을 이음 프로젝트 표준 구조로 단계별 개발하세요.
 
 ## 작업 순서
 
-1. 도메인명을 패키지명, 클래스명, URL 리소스명(복수형 kebab-case)으로 변환한다.
-2. 기존 도메인(store 또는 order)의 실제 코드를 읽고 패키지/네이밍/작성 패턴을 확인한다.
-3. `.claude/skills/references/layer-rules.md`의 레이어별 규칙에 따라
-   4-layer 구조(api/{domain} · application/{domain}의 service/dto/mapper · domain/{domain}의 entity/repository/enums)에 파일을 생성한다.
-4. URL, 인증, 예외, 삭제, 알림 정책은 `.claude/skills/references/policies.md`를 따른다.
-5. 완료 후 `.claude/skills/references/output.md` 형식으로 요약한다.
+1. `.claude/skills/references/domain-development-workflow.md`를 처음부터 끝까지 읽고
+   0단계부터 7단계까지 순서대로 적용한다.
+2. `layer-rules.md`, `policies.md`, `output.md`를 전부 읽는다.
+3. 도메인명을 패키지명, 클래스명, URL 리소스명(복수형 kebab-case)으로 변환한다.
+4. 기존 유사 도메인의 실제 코드와 테스트를 읽고 패키지/네이밍/작성 패턴을 확인한다.
+5. 요청이 순수 스캐폴딩인지 동작하는 기능 완성인지 구분하고 0단계 산출물에 명시한다.
+6. Gate 1의 계약·정책 결정표를 먼저 제시한다. 제품 동작을 바꾸는 미정 사항이 있으면
+   코드를 만들기 전에 멈춰 사용자 결정을 받는다.
+7. Gate 1 통과 후 Domain·Persistence → Application·Transaction → API·DTO →
+   교차 도메인·운영 → 테스트 순서로 구현하고 각 게이트를 검증한다.
+8. 마지막에 전체 `code-reviewer`를 적용하고 `output.md` 형식으로 결과를 요약한다.
+
+## 진행 방식
+
+- 단계가 완료될 때마다 현재 단계, 검증 결과, 다음 단계를 짧게 알린다.
+- 한 단계의 위반을 다음 단계로 넘기지 않는다. 수정 후 같은 게이트를 다시 확인한다.
+- 정책 질문이 없는 기술적 단계는 불필요하게 사용자 확인을 기다리지 않고 계속 진행한다.
+- 테스트를 실행하지 못했으면 통과로 표시하지 말고 이유와 남은 위험을 기록한다.
 
 ## 기존 코드 우선 원칙 (최상위 규칙)
 
 - 구현 방식은 반드시 기존 도메인의 실제 코드 패턴을 우선한다. 판단이 필요하면
-  임의로 정하지 말고 참고한 도메인과 동일하게 한다.
+  프로젝트 규칙과 충돌하지 않는 범위에서 참고한 도메인과 동일하게 한다.
+- 기존 구현이 현재 전문 리뷰 체크리스트와 충돌하면 기존 결함을 복제하지 않고 리뷰 기준을 따른다.
 - 기존 코드에서 확인되지 않은 정책(필드, 상태값, 조회 조건, soft delete, count,
-  regionId 등)은 구현하지 말고 TODO 주석으로 남긴다.
+  regionId 등)은 완성 구현에서는 Gate 1에서 질문하고, 순수 스캐폴딩에서만 TODO로 남긴다.
 - 목록 조회는 기존 도메인이 Page 기반이면 Page를 사용한다. Slice는 채팅처럼
   기존 코드에 명확한 유사 사례가 있을 때만 사용한다.
 - RepositoryCustom + RepositoryImpl은 검색 조건, 동적 정렬, 복잡한 조인이
@@ -31,3 +44,4 @@ allowed-tools: Read, Write, Glob
 - Secret, API Key, 환경변수 값을 생성하거나 하드코딩하지 않는다.
 - 테스트를 위해 운영 로직을 변경하지 않는다.
 - 도메인 비즈니스 정책을 임의로 확정하지 않는다.
+- Gate를 건너뛴 채 전체 레이어를 한 번에 생성하지 않는다.
