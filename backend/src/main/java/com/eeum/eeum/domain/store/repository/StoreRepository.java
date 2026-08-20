@@ -67,6 +67,11 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
         """)
     int decrementFavoriteCounts(@Param("storeIds") Collection<Long> storeIds);
 
+    // 대상 삭제 시 찜 카운트 0으로 전이 — 찜 행을 지우면 카운트도 함께 0이어야 한다.
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Store s SET s.favoriteCount = 0 WHERE s.storeId = :storeId")
+    int resetFavoriteCount(@Param("storeId") Long storeId);
+
     // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 상점의 favoriteCount 일괄 갱신
     // 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 처리
     @Modifying(clearAutomatically = true)

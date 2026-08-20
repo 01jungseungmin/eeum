@@ -247,11 +247,14 @@ public class FavoriteService {
 
     // ===================== 내부 CASCADE (다른 서비스 호출) =====================
 
-    // 대상 도메인 삭제 시 연관 찜 일괄 삭제
+    // 대상 도메인 삭제 시 연관 찜 일괄 삭제 + 카운트 0 전이.
+    // 찜 행만 지우고 favoriteCount를 그대로 두면 삭제된 대상이 예전 수를 계속 들고 있어,
+    // 관리자 통계·정합성 재계산 결과와 어긋난다.
     @Transactional
     public void deleteAllByRefTypeAndRefId(FavoriteRefType refType, Long refId) {
         long count = favoriteRepository.countByRefTypeAndRefId(refType, refId);
         favoriteRepository.deleteAllByRefTypeAndRefId(refType, refId);
+        resetCount(refType, refId);
         log.info("찜 CASCADE 삭제: refType={}, refId={}, count={}", refType, refId, count);
     }
 
@@ -382,6 +385,14 @@ public class FavoriteService {
                     .findByUsedProductIdAndDeletedAtIsNull(refId)
                     .filter(product -> !product.isHidden())
                     .orElseThrow(() -> new BusinessException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+        }
+    }
+
+    // 대상 삭제 시 찜 카운트 0 전이.
+    private void resetCount(FavoriteRefType refType, Long refId) {
+        switch (refType) {
+            case STORE -> storeRepository.resetFavoriteCount(refId);
+            case USED_PRODUCT -> usedProductRepository.resetFavoriteCount(refId);
         }
     }
 

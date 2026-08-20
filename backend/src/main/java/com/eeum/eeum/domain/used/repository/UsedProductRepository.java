@@ -57,6 +57,12 @@ public interface UsedProductRepository
         """)
     int decrementFavoriteCounts(@Param("usedProductIds") Collection<Long> usedProductIds);
 
+    // 대상 삭제 시 찜 카운트 0으로 전이 — 찜 행을 지우면 카운트도 함께 0이어야 한다.
+    // 남겨두면 삭제된 글이 통계·재계산 기준과 어긋난 값을 갖는다.
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE UsedProduct p SET p.favoriteCount = 0 WHERE p.usedProductId = :usedProductId")
+    int resetFavoriteCount(@Param("usedProductId") Long usedProductId);
+
     // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 게시글의 favoriteCount 일괄 갱신.
     // 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 처리한다.
     // 삭제된 글도 대상에 포함한다 — 글이 삭제되면 찜도 함께 지워지므로 0이 정답이다.
