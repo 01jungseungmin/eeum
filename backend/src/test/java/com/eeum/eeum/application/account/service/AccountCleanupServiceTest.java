@@ -17,11 +17,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -47,27 +49,38 @@ class AccountCleanupServiceTest {
     void 계정을_물리_삭제하기_전에_찜을_정리한다() {
         // given
         Account account = account();
-        when(accountRepository.findWithdrawnAccountsBefore(any(), any()))
-                .thenReturn(List.of(account));
+        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
         // when
-        accountCleanupService.deleteWithdrawnAccountsAfter30Days();
+        accountCleanupService.deleteAccount(ACCOUNT_ID);
 
-        // then: 찜이 남은 채 계정을 지우면 FK 제약 위반으로 스케줄러가 실패한다
+        // then: 찜이 남은 채 계정을 지우면 FK 제약 위반으로 삭제가 실패한다
         InOrder inOrder = inOrder(favoriteService, accountRepository);
         inOrder.verify(favoriteService).deleteAllByAccountId(ACCOUNT_ID);
         inOrder.verify(accountRepository).delete(account);
     }
 
     @Test
-    void 삭제_대상이_없으면_하위_데이터_정리를_시도하지_않는다() {
-        when(accountRepository.findWithdrawnAccountsBefore(any(), any()))
-                .thenReturn(List.of());
+    void 이미_사라진_계정은_건너뛴다() {
+        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
 
-        accountCleanupService.deleteWithdrawnAccountsAfter30Days();
+        accountCleanupService.deleteAccount(ACCOUNT_ID);
 
         verifyNoInteractions(favoriteService, storePhysicalDeleteService, accountRegionRepository);
         verify(accountRepository, never()).delete(any());
+    }
+
+    @Test
+    void 삭제_대상_조회는_ID만_넘긴다() {
+        // given — 삭제는 계정별 트랜잭션으로 분리되므로 엔티티가 아니라 ID로 넘긴다
+        when(accountRepository.findWithdrawnAccountsBefore(any(), any()))
+                .thenReturn(List.of(account()));
+
+        // when
+        List<Long> targets = accountCleanupService.findDeletableAccountIds();
+
+        // then
+        assertThat(targets).containsExactly(ACCOUNT_ID);
     }
 
     private Account account() {

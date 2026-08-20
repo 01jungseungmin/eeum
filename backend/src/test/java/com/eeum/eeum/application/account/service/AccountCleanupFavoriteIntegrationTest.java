@@ -118,7 +118,8 @@ class AccountCleanupFavoriteIntegrationTest {
         assertThat(favoriteRepository.count()).isEqualTo(3);
 
         // when: 찜을 정리하지 않으면 여기서 FK 제약 위반으로 스케줄러가 실패한다.
-        accountCleanupService.deleteWithdrawnAccountsAfter30Days();
+        accountCleanupService.findDeletableAccountIds()
+                .forEach(accountCleanupService::deleteAccount);
 
         // then
         assertThat(accountRepository.findById(withdrawnAccountId)).isEmpty();
