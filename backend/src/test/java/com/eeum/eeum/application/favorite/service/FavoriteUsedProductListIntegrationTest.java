@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.favorite.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteUsedProductResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -22,22 +24,12 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -51,30 +43,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 노출 필터가 페이징 전에 적용되는지, 탈퇴 정리가 IN UPDATE 한 번으로 끝나는지,
  * 중복 찜을 UNIQUE 제약이 막는지는 Mock 단위 테스트로 확인할 수 없다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class FavoriteUsedProductListIntegrationTest {
+class FavoriteUsedProductListIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        // 목록 조립 중 LAZY 초기화가 없는지 실제 실행 SQL로 확인한다.
-        // 전역 통계는 같은 컨텍스트의 스케줄러가 배경에서 날리는 쿼리까지 세므로 스레드별 수집기를 쓴다.
-        registry.add("spring.jpa.properties.hibernate.session_factory.statement_inspector",
-                () -> SqlCaptureInspector.class.getName());
-    }
 
     private final FavoriteService favoriteService;
     private final AdminFavoriteService adminFavoriteService;
