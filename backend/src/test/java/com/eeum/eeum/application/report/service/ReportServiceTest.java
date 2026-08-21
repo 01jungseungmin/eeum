@@ -3,7 +3,7 @@ package com.eeum.eeum.application.report.service;
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.report.entity.Report;
 import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
@@ -32,7 +32,7 @@ class ReportServiceTest {
     @InjectMocks private ReportService reportService;
 
     @Mock private ReportRepository reportRepository;
-    @Mock private AccountRepository accountRepository;
+    @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private ReportTargetResolver reportTargetResolver;
     @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -44,7 +44,7 @@ class ReportServiceTest {
         Account reporter = Account.createUser(
                 "reporter@test.com", "encoded", "신고자", "신고자닉", "010-0000-0000");
         ReflectionTestUtils.setField(reporter, "accountId", reporterId);
-        when(accountRepository.findById(reporterId)).thenReturn(Optional.of(reporter));
+        when(accountWriteGuard.lockActive(reporterId)).thenReturn(reporter);
 
         ReportTargetSnapshotDto target = ReportTargetSnapshotDto.builder()
                 .targetType(ReportTargetType.COMMUNITY_POST)

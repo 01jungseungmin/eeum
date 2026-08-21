@@ -39,7 +39,7 @@ class ReportedAccountActionServiceTest {
     void 작성자_경고는_계정_존재와_제재_가능_여부를_확인한다() {
         // given
         Account account = createAccount();
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
         // when
         Long result = service.apply(ReportAction.WARN_AUTHOR, ACCOUNT_ID);
@@ -47,7 +47,9 @@ class ReportedAccountActionServiceTest {
         // then
         assertThat(result).isEqualTo(ACCOUNT_ID);
         assertThat(account.getStatus()).isEqualTo(AccountStatus.ACTIVE);
-        verify(accountRepository, never()).findByIdWithLock(ACCOUNT_ID);
+        // 경고도 정지와 같은 잠금을 쓴다 — 대상 확인과 조치 사이에 탈퇴·정지가 끼어들면
+        // 이미 사라진 계정에 경고가 기록된다. 상태는 바꾸지 않으므로 토큰 정리는 없다.
+        verify(accountRepository).findByIdWithLock(ACCOUNT_ID);
         verify(eventPublisher, never()).publishEvent(isA(AccountTokenCleanupEvent.class));
     }
 
@@ -70,7 +72,7 @@ class ReportedAccountActionServiceTest {
     @Test
     void 경고_대상_계정이_없으면_조치할_수_없다() {
         // given
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> service.apply(ReportAction.WARN_AUTHOR, ACCOUNT_ID))
@@ -113,7 +115,7 @@ class ReportedAccountActionServiceTest {
         // given
         Account account = createAccount();
         account.withdraw();
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
         // when & then
         assertThatThrownBy(() -> service.apply(ReportAction.WARN_AUTHOR, ACCOUNT_ID))

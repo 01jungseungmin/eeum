@@ -149,7 +149,9 @@ class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSuppo
     }
 
     // 찜 트랜잭션이 행 잠금 대기에 들어갔는지 MySQL에 직접 물어본다.
-    // information_schema 조회는 PROCESS 권한이 필요해 컨테이너 root 계정으로 별도 접속한다.
+    // 잠금 대기 "개수"만 세면 이 테스트와 무관한 트랜잭션(다른 테스트·스케줄러)이 잡혀
+    // 경쟁이 재현되지 않았는데도 통과할 수 있다. 대기 중인 잠금의 대상 테이블까지 확인한다.
+    // performance_schema 조회는 권한이 필요해 컨테이너 root 계정으로 별도 접속한다.
     private boolean awaitLockWait() throws Exception {
         long deadline = System.currentTimeMillis() + 15_000L;
         try (Connection connection = DriverManager.getConnection(
@@ -157,8 +159,13 @@ class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSuppo
             while (System.currentTimeMillis() < deadline) {
                 try (Statement statement = connection.createStatement();
                      ResultSet rs = statement.executeQuery(
-                             "SELECT COUNT(*) FROM information_schema.INNODB_TRX "
-                                     + "WHERE trx_state = 'LOCK WAIT'")) {
+                             """
+                             SELECT COUNT(*)
+                             FROM performance_schema.data_lock_waits w
+                             JOIN performance_schema.data_locks l
+                               ON w.REQUESTING_ENGINE_LOCK_ID = l.ENGINE_LOCK_ID
+                             WHERE l.OBJECT_NAME = 'used_product'
+                             """)) {
                     if (rs.next() && rs.getInt(1) > 0) {
                         return true;
                     }

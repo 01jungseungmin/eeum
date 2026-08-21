@@ -11,6 +11,7 @@ import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -41,6 +42,7 @@ class UsedProductImageServiceTest {
     private static final Long OTHER_ID = 2L;
     private static final Long PRODUCT_ID = 10L;
 
+    @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private UsedProductImageRepository usedProductImageRepository;
 

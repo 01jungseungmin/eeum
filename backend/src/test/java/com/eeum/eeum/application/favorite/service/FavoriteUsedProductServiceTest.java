@@ -5,7 +5,7 @@ import com.eeum.eeum.application.favorite.dto.response.FavoriteUsedProductRespon
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.favorite.entity.Favorite;
@@ -58,7 +58,7 @@ class FavoriteUsedProductServiceTest {
     private static final Long PRODUCT_ID = 10L;
 
     @Mock private FavoriteRepository favoriteRepository;
-    @Mock private AccountRepository accountRepository;
+    @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private StoreRepository storeRepository;
     @Mock private StoreImageRepository storeImageRepository;
     @Mock private UsedProductRepository usedProductRepository;
@@ -321,18 +321,19 @@ class FavoriteUsedProductServiceTest {
     }
 
     @Test
-    void 가입_미완료_계정은_정지가_아니라_가입_미완료로_응답한다() {
-        // given — !isActive()를 한 덩어리로 묶으면 PENDING까지 "정지된 계정"이 된다
-        Account pending = Account.createOAuthPendingUser(
-                "oauth@test.com", "펜딩닉", null, OAuthProvider.KAKAO, "provider-1");
-        ReflectionTestUtils.setField(pending, "accountId", ACCOUNT_ID);
-        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(pending));
+    void 찜_쓰기는_계정_가드를_먼저_통과한다() {
+        // given — 탈퇴·정지·가입 미완료 판정은 AccountWriteGuard가 한다(AccountWriteGuardTest).
+        // 여기서는 찜 경로가 그 가드를 거치는지만 본다. 건너뛰면 탈퇴 정리 뒤 찜이 되살아난다.
+        when(accountWriteGuard.lockActive(ACCOUNT_ID))
+                .thenThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN));
 
         // when & then
         assertThatThrownBy(() -> favoriteService.toggleFavorite(ACCOUNT_ID, toggleRequest()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
+                .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
+
+        verify(usedProductRepository, never()).findByUsedProductIdForUpdate(any());
     }
 
     // ─────────────────── 대상 삭제 CASCADE ───────────────────
@@ -408,7 +409,7 @@ class FavoriteUsedProductServiceTest {
     }
 
     private void givenActiveAccount() {
-        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account()));
+        when(accountWriteGuard.lockActive(ACCOUNT_ID)).thenReturn(account());
     }
 
     private void givenActiveProduct(UsedProduct product) {
