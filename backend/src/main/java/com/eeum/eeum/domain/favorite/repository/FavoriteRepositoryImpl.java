@@ -78,7 +78,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                         to   != null ? favorite.createdAt.loe(to)   : null
                 )
                 .groupBy(favorite.refId)
-                .orderBy(favorite.refId.count().desc())
+                // 동률이면 limit 경계에서 어떤 항목이 잘릴지 매번 달라진다. refId로 순서를 고정한다.
+                .orderBy(favorite.refId.count().desc(), favorite.refId.asc())
                 .limit(limit)
                 .fetch();
 

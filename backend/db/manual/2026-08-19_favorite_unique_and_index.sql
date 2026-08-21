@@ -60,6 +60,12 @@ CREATE INDEX idx_favorite_ref ON favorite (ref_type, ref_id);
 CREATE INDEX idx_favorite_account_type_created
     ON favorite (account_id, ref_type, created_at, favorite_id);
 
+-- 중고 공개 목록 기본 조회(지역 + 삭제·숨김 제외 + 최신순) 전용.
+-- 기존 idx_used_product_region_status는 status가 선행이라 상태 필터가 없으면 created_at까지 닿지 못한다.
+-- 운영 데이터로 EXPLAIN 확인 후 적용할 것.
+CREATE INDEX idx_used_product_public_list
+    ON used_product (region_id, deleted_at, is_hidden, created_at);
+
 -- 5) 2에서 중복을 지웠다면 카운트가 실제 행 수와 어긋난다. 배포 후 아래 API로 재계산한다.
 --      POST /admin/favorites/recalculate          (상점 + 중고 게시글 전체)
 --      POST /admin/favorites/recalculate?refType=USED_PRODUCT
