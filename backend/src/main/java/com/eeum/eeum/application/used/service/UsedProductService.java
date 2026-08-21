@@ -9,6 +9,7 @@ import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -49,6 +50,7 @@ public class UsedProductService {
     private final UsedProductRepository usedProductRepository;
     private final EntityManager entityManager;
     private final AccountRepository accountRepository;
+    private final AccountWriteGuard accountWriteGuard;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
@@ -58,12 +60,8 @@ public class UsedProductService {
 
     @Transactional
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
-        // 잠금 순서는 account → product다. 잠그지 않으면 탈퇴 처리가 지나간 뒤
-        // 살아 있는 토큰으로 들어온 요청이 탈퇴 계정의 게시글을 만들 수 있다.
-        Account seller = accountRepository.findByIdWithLock(sellerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
-
-        seller.assertWritable();
+        // 잠금 순서는 account → product다. 규약은 AccountWriteGuard 참고.
+        Account seller = accountWriteGuard.lockActive(sellerId);
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
         // 등록은 조회와 달리 GPS 인증된 지역을 요구한다 — 아무 동네에나 매물을 뿌리는 것을 막는다.
@@ -166,6 +164,7 @@ public class UsedProductService {
             Long usedProductId,
             UsedProductUpdateRequestDto request
     ) {
+        accountWriteGuard.lockActive(sellerId);
         UsedProduct product = getOwnedOrThrow(sellerId, usedProductId);
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
 
@@ -185,6 +184,7 @@ public class UsedProductService {
     public void delete(Long sellerId, Long usedProductId) {
         // 찜 정리까지 하는 경로라 신고 조치와 같은 비관적 잠금을 쓴다.
         // 잠그지 않으면 삭제 직후 들어온 찜이 정리를 지나쳐 죽은 찜으로 남는다.
+        accountWriteGuard.lockActive(sellerId);
         UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
 
         // 예약 중이라는 건 상대가 거래를 기다리고 있다는 뜻이다. 말없이 사라지면

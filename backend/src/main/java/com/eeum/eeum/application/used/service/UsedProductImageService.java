@@ -5,6 +5,7 @@ import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequ
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -27,6 +28,7 @@ public class UsedProductImageService {
     /** 게시글당 사진 상한. {@code IMAGE_LIMIT_EXCEEDED} 메시지와 맞춘 값이다. */
     private static final int MAX_IMAGE_COUNT = 10;
 
+    private final AccountWriteGuard accountWriteGuard;
     private final UsedProductRepository usedProductRepository;
     private final UsedProductImageRepository usedProductImageRepository;
 
@@ -119,6 +121,10 @@ public class UsedProductImageService {
     // 잠금 순서는 게시글 삭제·찜과 같은 used_product → 하위 테이블이다.
     // 잠금 조회에는 삭제 필터가 없으므로 여기서 거른다.
     private UsedProduct getOwnedOrThrow(Long sellerId, Long usedProductId) {
+        // 잠금 순서 account → used_product → image의 첫 단계.
+        // 탈퇴 처리가 지나간 뒤 살아 있는 토큰으로 사진이 추가되는 것을 막는다.
+        accountWriteGuard.lockActive(sellerId);
+
         UsedProduct product = usedProductRepository
                 .findByUsedProductIdForUpdate(usedProductId)
                 .filter(found -> !found.isDeleted())

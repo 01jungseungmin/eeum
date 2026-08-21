@@ -4,7 +4,7 @@ import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
 import com.eeum.eeum.application.report.dto.response.MyReportResponseDto;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.report.entity.Report;
 import com.eeum.eeum.domain.report.event.ReportSubmittedEvent;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
@@ -27,14 +27,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReportService {
 
     private final ReportRepository reportRepository;
-    private final AccountRepository accountRepository;
+    private final AccountWriteGuard accountWriteGuard;
     private final ReportTargetResolver reportTargetResolver;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public MyReportResponseDto createReport(Long accountId, ReportCreateRequestDto request) {
-        Account reporter = accountRepository.findById(accountId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+        // 탈퇴·정지 계정이 살아 있는 토큰으로 신고를 남기지 못하게 막는다.
+        Account reporter = accountWriteGuard.lockActive(accountId);
 
         if (reportRepository.existsByReporter_AccountIdAndTargetTypeAndTargetId(
                 accountId, request.getTargetType(), request.getTargetId())) {

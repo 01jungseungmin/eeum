@@ -4,7 +4,7 @@ import com.eeum.eeum.application.favorite.dto.request.FavoriteBatchCheckRequestD
 import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.favorite.dto.response.*;
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
 public class FavoriteService {
 
     private final FavoriteRepository favoriteRepository;
-    private final AccountRepository accountRepository;
+    private final AccountWriteGuard accountWriteGuard;
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
     private final UsedProductRepository usedProductRepository;
@@ -328,15 +328,9 @@ public class FavoriteService {
         return FavoriteToggleResponseDto.removed(refType, refId, count);
     }
 
-    // 계정 행을 잠근 뒤 사용 가능 상태를 검증한다 — 잠금 순서의 첫 단계.
-    // 잠그지 않으면 탈퇴 정리(찜 삭제·카운트 감소)와 겹쳐 카운터가 어긋나거나
-    // 정리가 끝난 뒤 찜이 되살아난다. 탈퇴·정지·가입 미완료는 상태별로 구분해 응답한다.
+    // 잠금 순서의 첫 단계 — 규약은 AccountWriteGuard에 있다.
     private Account lockActiveAccount(Long accountId) {
-        Account account = accountRepository.findByIdWithLock(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-
-        account.assertWritable();
-        return account;
+        return accountWriteGuard.lockActive(accountId);
     }
 
     // 찜 대상 행을 잠그고, 그 시점의 공개 여부를 함께 판정한다.

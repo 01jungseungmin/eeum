@@ -29,7 +29,9 @@ public class ReportedAccountActionService {
     }
 
     private Long warn(Long accountId) {
-        Account account = accountRepository.findById(accountId)
+        // suspend와 같은 잠금을 쓴다. 잠그지 않으면 대상 상태 확인과 조치 사이에
+        // 탈퇴·정지가 끼어들어 이미 사라진 계정에 경고가 기록된다.
+        Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
         validateActionTarget(account);
         return accountId;
