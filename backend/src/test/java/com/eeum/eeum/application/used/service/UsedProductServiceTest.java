@@ -447,6 +447,7 @@ class UsedProductServiceTest {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(1L);
 
         // when
         usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
@@ -464,6 +465,7 @@ class UsedProductServiceTest {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(1L);
 
         // when
         usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
@@ -482,6 +484,24 @@ class UsedProductServiceTest {
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
 
         usedProductService.getDetailAndCountView(SELLER_ID, PRODUCT_ID);
+
+        verify(entityManager, never()).refresh(any());
+    }
+
+    @Test
+    void 조회_직전에_숨겨진_글은_조회수를_올리지_않고_거부한다() {
+        // given — 공개 확인과 조회수 UPDATE 사이에 숨김이 커밋되면 갱신 행이 0이 된다.
+        // 그대로 응답하면 방금 비공개가 된 글을 보여주게 된다.
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(0L);
+
+        // when & then
+        assertThatThrownBy(() -> usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
 
         verify(entityManager, never()).refresh(any());
     }
@@ -506,6 +526,7 @@ class UsedProductServiceTest {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(1L);
 
         // when
         usedProductService.getDetailAndCountView(null, PRODUCT_ID);

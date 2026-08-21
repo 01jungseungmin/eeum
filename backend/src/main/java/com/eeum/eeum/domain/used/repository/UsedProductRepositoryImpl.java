@@ -72,11 +72,16 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
     }
 
     @Override
-    public void increaseViewCount(Long usedProductId) {
-        queryFactory
+    public long increaseViewCount(Long usedProductId) {
+        return queryFactory
                 .update(PRODUCT)
                 .set(PRODUCT.viewCount, PRODUCT.viewCount.add(1))
-                .where(PRODUCT.usedProductId.eq(usedProductId))
+                .where(
+                        PRODUCT.usedProductId.eq(usedProductId),
+                        // 공개 확인과 이 UPDATE 사이에 숨김·삭제가 커밋될 수 있다.
+                        // 조건을 UPDATE에 함께 걸어야 비공개 글의 조회수가 오르지 않는다.
+                        PRODUCT.deletedAt.isNull(),
+                        PRODUCT.hidden.isFalse())
                 .execute();
     }
 

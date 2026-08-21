@@ -130,7 +130,11 @@ public class UsedProductService {
 
         // 비회원 조회도 센다. 판매자 본인 조회만 제외한다.
         if (!product.isOwnedBy(viewerId)) {
-            usedProductRepository.increaseViewCount(usedProductId);
+            // 갱신 행이 0이면 공개 확인 이후 숨김·삭제가 커밋된 것이다.
+            // 그 상태의 글을 응답으로 내보내면 상세 조회의 노출 정책이 무의미해진다.
+            if (usedProductRepository.increaseViewCount(usedProductId) == 0) {
+                throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+            }
             // 조회수는 QueryDSL bulk UPDATE라 영속성 컨텍스트를 거치지 않는다.
             // 다시 조회해도 1차 캐시의 기존 인스턴스가 그대로 나오므로 refresh로 DB 값을 다시 읽는다.
             // 이걸 빼면 방금 센 이번 조회가 빠진 값이 응답에 담겨 항상 실제보다 1 작다.

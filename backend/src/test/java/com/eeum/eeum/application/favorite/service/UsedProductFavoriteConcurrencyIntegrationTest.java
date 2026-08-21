@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.favorite.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.used.service.UsedProductService;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -20,19 +22,9 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -55,26 +47,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 그 찜은 삭제 시 정리(deleteAllByRefTypeAndRefId)를 이미 지나쳤으므로 영영 남는다.
  * 단위 테스트는 트랜잭션 스냅샷과 행 잠금을 재현하지 못해 이 경쟁을 잡을 수 없다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class UsedProductFavoriteConcurrencyIntegrationTest {
+class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-    }
 
     private final FavoriteService favoriteService;
     private final UsedProductService usedProductService;
@@ -177,7 +153,7 @@ class UsedProductFavoriteConcurrencyIntegrationTest {
     private boolean awaitLockWait() throws Exception {
         long deadline = System.currentTimeMillis() + 15_000L;
         try (Connection connection = DriverManager.getConnection(
-                mysql.getJdbcUrl(), "root", mysql.getPassword())) {
+                mysqlJdbcUrl(), "root", mysqlPassword())) {
             while (System.currentTimeMillis() < deadline) {
                 try (Statement statement = connection.createStatement();
                      ResultSet rs = statement.executeQuery(

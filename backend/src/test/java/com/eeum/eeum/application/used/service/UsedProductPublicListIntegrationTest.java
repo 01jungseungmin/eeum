@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.used.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -18,16 +20,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 
@@ -39,26 +31,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 삭제·숨김·판매자 탈퇴는 QueryDSL 조인과 where로 걸리므로 Mock 단위 테스트가 재현하지 못한다.
  * 지역·카테고리 fetch join과 seller inner join이 섞인 상태에서 페이징이 정상인지도 함께 본다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class UsedProductPublicListIntegrationTest {
+class UsedProductPublicListIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-    }
 
     private final UsedProductService usedProductService;
     private final UsedProductRepository usedProductRepository;

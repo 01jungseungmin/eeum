@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.used.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -16,18 +18,8 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -42,28 +34,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 전체 컬럼을 쓰는 UPDATE가 나가면, 그 값을 읽어둔 시점 이후의 증감이 오래된 값으로 덮어써져 조용히 사라진다.
  * 단위 테스트는 실제 UPDATE 문을 만들지 않으므로 이 회귀를 잡지 못한다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class UsedProductDynamicUpdateIntegrationTest {
+class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.jpa.properties.hibernate.session_factory.statement_inspector",
-                () -> SqlCaptureInspector.class.getName());
-    }
 
     private final AdminUsedProductService adminUsedProductService;
     private final UsedProductService usedProductService;
