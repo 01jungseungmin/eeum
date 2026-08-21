@@ -14,6 +14,8 @@ import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Positive;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -63,9 +65,15 @@ public class UsedProductController {
             @Parameter(description = "거래 유형 (FIXED·FREE·NEGOTIABLE)")
             @RequestParam(required = false) UsedProductPriceType priceType,
             @Parameter(description = "최소 가격. 지정하면 가격제안 글은 제외된다")
-            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false)
+            @DecimalMin(value = "0.00", message = "가격은 0 이상이어야 합니다")
+            @Digits(integer = 8, fraction = 2, message = "가격은 정수 8자리, 소수 2자리까지 입력할 수 있습니다")
+            BigDecimal minPrice,
             @Parameter(description = "최대 가격. 지정하면 가격제안 글은 제외된다")
-            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false)
+            @DecimalMin(value = "0.00", message = "가격은 0 이상이어야 합니다")
+            @Digits(integer = 8, fraction = 2, message = "가격은 정수 8자리, 소수 2자리까지 입력할 수 있습니다")
+            BigDecimal maxPrice,
             @Parameter(description = "거래 상태. 여러 번 보낼 수 있다. 거래완료를 숨기려면 SELLING·RESERVED")
             @RequestParam(required = false) List<UsedProductStatus> status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
