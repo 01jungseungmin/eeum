@@ -331,6 +331,41 @@ class UsedProductServiceTest {
     }
 
     @Test
+    void 최소_가격이_최대_가격보다_크면_거절한다() {
+        // given — 결과가 반드시 비는 조건이다. 빈 목록으로 응답하면 클라이언트는
+        // "매물이 없다"로 읽어 잘못된 조건을 계속 보낸다.
+        UsedProductSearchRequestDto request = new UsedProductSearchRequestDto(
+                REGION_ID, null, null, null,
+                new BigDecimal("50000"), new BigDecimal("1000"), null);
+
+        // when & then
+        assertThatThrownBy(() ->
+                usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_PRICE_RANGE);
+
+        verify(usedProductRepository, never()).search(any(), any());
+    }
+
+    @Test
+    void 최소와_최대_가격이_같으면_허용한다() {
+        // given — 경계값은 유효한 조건이다
+        UsedProductSearchRequestDto request = new UsedProductSearchRequestDto(
+                REGION_ID, null, null, null,
+                new BigDecimal("1000"), new BigDecimal("1000"), null);
+        when(regionRepository.existsById(REGION_ID)).thenReturn(true);
+        when(usedProductRepository.search(any(), any()))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        // when
+        usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20));
+
+        // then
+        verify(usedProductRepository).search(any(), any());
+    }
+
+    @Test
     void 검색_조건은_지역만_서버가_정하고_나머지는_그대로_전달된다() {
         // given — 필터는 사용자가 고른 값이므로 서버가 손대지 않는다
         givenSelectedRegion(true);

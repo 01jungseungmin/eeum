@@ -25,6 +25,7 @@ import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
+import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
@@ -38,6 +39,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 
 import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -91,6 +93,8 @@ public class UsedProductService {
             UsedProductSearchRequestDto request,
             Pageable pageable
     ) {
+        validatePriceRange(request.getMinPrice(), request.getMaxPrice());
+
         Long targetRegionId = resolveViewRegionId(viewerId, request.getRegionId());
 
         // 지역만 서버가 정하고 나머지 필터는 요청한 그대로 넘긴다.
@@ -140,6 +144,15 @@ public class UsedProductService {
         }
 
         return UsedProductDetailResponseDto.from(product, images);
+    }
+
+    // 최소 가격이 최대 가격보다 크면 결과가 반드시 빈다.
+    // 빈 목록으로 응답하면 클라이언트는 "그 조건에 매물이 없다"로 읽어 잘못된 조건을 계속 보낸다.
+    // 두 값을 함께 봐야 하는 검증이라 파라미터 애노테이션으로는 표현할 수 없다.
+    private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new BadRequestException(ErrorCode.USED_PRODUCT_INVALID_PRICE_RANGE);
+        }
     }
 
     // 숨김 처리된 글은 작성자에게만 보인다. 남에게 403을 주면 "숨겨진 글이 있다"는 사실이 새어 나가므로
