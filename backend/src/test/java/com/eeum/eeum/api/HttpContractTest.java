@@ -145,6 +145,44 @@ class HttpContractTest extends IntegrationTestSupport {
     }
 
     @Test
+    void 음수_가격_검색은_400으로_거절한다() throws Exception {
+        MvcResult result = mockMvc.perform(get("/used")
+                        .param("regionId", String.valueOf(regionId))
+                        .param("minPrice", "-1000"))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 자릿수를_넘는_가격_검색은_400으로_거절한다() throws Exception {
+        // 컬럼이 DECIMAL(10,2)다. 등록 요청과 같은 경계를 검색에도 적용한다.
+        MvcResult result = mockMvc.perform(get("/used")
+                        .param("regionId", String.valueOf(regionId))
+                        .param("maxPrice", "12345678901234"))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 최소가_최대보다_큰_가격_검색은_400으로_거절한다() throws Exception {
+        MvcResult result = mockMvc.perform(get("/used")
+                        .param("regionId", String.valueOf(regionId))
+                        .param("minPrice", "50000")
+                        .param("maxPrice", "1000"))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
+    }
+
+    @Test
     void 날짜는_ISO_문자열로_직렬화한다() throws Exception {
         MvcResult result = mockMvc.perform(get("/used")
                         .param("regionId", String.valueOf(regionId)))
