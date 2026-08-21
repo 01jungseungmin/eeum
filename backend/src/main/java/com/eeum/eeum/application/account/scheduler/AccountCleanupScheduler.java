@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.account.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.application.account.service.AccountCleanupService;
 import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
@@ -19,6 +20,7 @@ public class AccountCleanupScheduler {
     private final OperationFailureRecorder operationFailureRecorder;
 
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(name = "cleanupWithdrawnAccounts", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void cleanupWithdrawnAccounts() {
         List<Long> targetIds = accountCleanupService.findAnonymizeTargetIds();
 

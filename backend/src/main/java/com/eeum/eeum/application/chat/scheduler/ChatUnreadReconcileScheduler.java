@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.application.chat.ChatRedisKeys;
 import com.eeum.eeum.application.chat.service.ChatMessageService;
 import com.eeum.eeum.application.chat.service.ChatUnreadService;
@@ -48,6 +49,7 @@ public class ChatUnreadReconcileScheduler {
 
     // 5분 주기 — 알림 unread 보정(NotificationCleanupScheduler)과 동일 주기
     @Scheduled(fixedRate = 300_000)
+    @SchedulerLock(name = "reconcileChatUnread", lockAtMostFor = "PT10M", lockAtLeastFor = "PT2M")
     @Transactional(readOnly = true)
     public void reconcileChatUnread() {
         List<String> totalKeys = new ArrayList<>();

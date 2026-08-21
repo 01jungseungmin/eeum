@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.ai.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
 import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class AiPlanExpirationScheduler {
 
     @Transactional
     @Scheduled(cron = "0 30 3 * * *")
+    @SchedulerLock(name = "expireSubscriptions", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void expireSubscriptions() {
         List<AiPlanSubscription> expired =
                 aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(LocalDateTime.now());

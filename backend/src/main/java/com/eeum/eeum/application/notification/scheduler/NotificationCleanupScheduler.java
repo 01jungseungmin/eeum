@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.notification.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.application.notification.service.UnreadCountService;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class NotificationCleanupScheduler {
 
     // 매일 새벽 3시 — 6개월 이전 알림 일괄 삭제
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(name = "cleanupOldNotifications", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     @Transactional
     public void cleanupOldNotifications() {
         LocalDateTime threshold = LocalDateTime.now().minusMonths(RETENTION_MONTHS);
@@ -37,6 +39,7 @@ public class NotificationCleanupScheduler {
 
     // 5분마다 — Redis unread 키 스캔 후 DB 값과 불일치 시 Redis 보정 Redis key 패턴: unread:account:*
     @Scheduled(fixedRate = 300_000)
+    @SchedulerLock(name = "recalculateUnreadCounts", lockAtMostFor = "PT10M", lockAtLeastFor = "PT2M")
     public void recalculateUnreadCounts() {
         var keys = redisTemplate.keys(UNREAD_KEY_PREFIX + "*");
         if (keys == null || keys.isEmpty()) return;
