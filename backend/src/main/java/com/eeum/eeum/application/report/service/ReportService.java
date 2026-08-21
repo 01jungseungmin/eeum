@@ -11,13 +11,14 @@ import com.eeum.eeum.domain.report.repository.ReportRepository;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
-import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,27 +78,25 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public Slice<MyReportResponseDto> getMyReports(Long accountId, Pageable pageable) {
-        return reportRepository.findByReporter_AccountId(accountId, pageable)
+        // 접수 최신순 고정 + PK tie-break — 관리자 목록과 같은 규칙을 쓴다.
+        Pageable fixed = PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("reportId")));
+
+        return reportRepository.findByReporter_AccountId(accountId, fixed)
                 .map(MyReportResponseDto::from);
     }
 
     @Transactional(readOnly = true)
     public MyReportResponseDto getMyReportDetail(Long accountId, Long reportId) {
-        Report report = getReportOrThrow(reportId);
-        validateOwner(report, accountId);
+        // 소유자를 조회 조건에 넣는다. 남의 신고에 403을 주면 없는 신고(404)와 구분되어
+        // ID를 넣어보는 것만으로 신고의 존재 여부를 알아낼 수 있다.
+        Report report = reportRepository.findByReportIdAndReporter_AccountId(reportId, accountId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.REPORT_NOT_FOUND));
         return MyReportResponseDto.from(report);
     }
 
     // ===================== 내부 유틸 =====================
 
-    private Report getReportOrThrow(Long reportId) {
-        return reportRepository.findByReportId(reportId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.REPORT_NOT_FOUND));
-    }
-
-    private void validateOwner(Report report, Long accountId) {
-        if (!report.isOwnedBy(accountId)) {
-            throw new ForbiddenException(ErrorCode.REPORT_ACCESS_DENIED);
-        }
-    }
 }

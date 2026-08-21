@@ -8,6 +8,8 @@ import com.eeum.eeum.domain.report.entity.Report;
 import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
+import com.eeum.eeum.exception.NotFoundException;
+import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -20,6 +22,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -75,5 +78,19 @@ class ReportServiceTest {
         assertThat(captor.getValue().getTargetContentSnapshot())
                 .isEqualTo("삭제돼도 남아야 하는 전체 본문");
         assertThat(captor.getValue().getTargetOwnerAccountIdSnapshot()).isEqualTo(2L);
+    }
+
+    @Test
+    void 남의_신고_상세는_없는_신고와_같은_응답을_준다() {
+        // given — 남의 신고에 403, 없는 신고에 404를 주면 그 차이로
+        // 임의의 reportId에 신고가 존재하는지 알아낼 수 있다
+        when(reportRepository.findByReportIdAndReporter_AccountId(99L, 1L))
+                .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> reportService.getMyReportDetail(1L, 99L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.REPORT_NOT_FOUND);
     }
 }

@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.report.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.community.service.CommunityCommentService;
 import com.eeum.eeum.application.community.service.CommunityPostService;
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
@@ -26,17 +28,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.temporal.ChronoUnit;
 
@@ -45,30 +37,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 신고 접수 시 저장한 콘텐츠 스냅샷이 실제 MySQL에서도 대상 삭제와 독립적으로 보존되는지 검증한다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class ReportSnapshotPersistenceIntegrationTest {
+class ReportSnapshotPersistenceIntegrationTest extends IntegrationTestSupport {
 
     private static final String POST_TITLE = "신고 접수 당시 게시글 제목";
     private static final String POST_CONTENT = "신고 접수 당시 게시글 전체 본문";
     private static final String COMMENT_CONTENT = "신고 접수 당시 댓글 원문";
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-    }
 
     private final ReportService reportService;
     private final AdminReportService adminReportService;
