@@ -20,9 +20,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 탈퇴 계정 영구 삭제 스케줄러 테스트.
+ * 탈퇴 계정 개인정보 파기 스케줄러 테스트.
  * 한 계정의 실패가 회차 전체를 죽이지 않아야 한다 —
- * 하나로 묶으면 남은 참조가 있는 계정 하나 때문에 정상 삭제 가능한 계정까지 함께 롤백된다.
+ * 하나로 묶으면 계정 하나 때문에 정상 처리 가능한 계정까지 함께 롤백된다.
  */
 @ExtendWith(MockitoExtension.class)
 class AccountCleanupSchedulerTest {
@@ -34,26 +34,26 @@ class AccountCleanupSchedulerTest {
     private AccountCleanupScheduler accountCleanupScheduler;
 
     @Test
-    void 한_계정이_실패해도_나머지는_삭제한다() {
+    void 한_계정이_실패해도_나머지는_파기한다() {
         // given
-        when(accountCleanupService.findDeletableAccountIds()).thenReturn(List.of(1L, 2L, 3L));
-        doThrow(new RuntimeException("FK 제약 위반"))
-                .when(accountCleanupService).deleteAccount(2L);
+        when(accountCleanupService.findAnonymizeTargetIds()).thenReturn(List.of(1L, 2L, 3L));
+        doThrow(new RuntimeException("파기 실패"))
+                .when(accountCleanupService).anonymizeAccount(2L);
 
         // when
         accountCleanupScheduler.cleanupWithdrawnAccounts();
 
         // then
-        verify(accountCleanupService).deleteAccount(1L);
-        verify(accountCleanupService).deleteAccount(3L);
+        verify(accountCleanupService).anonymizeAccount(1L);
+        verify(accountCleanupService).anonymizeAccount(3L);
     }
 
     @Test
-    void 삭제_실패는_운영_실패_이력으로_남긴다() {
+    void 파기_실패는_운영_실패_이력으로_남긴다() {
         // given — 로그만 남기면 매일 같은 실패가 반복돼도 아무도 모른다
-        when(accountCleanupService.findDeletableAccountIds()).thenReturn(List.of(2L));
-        doThrow(new RuntimeException("FK 제약 위반"))
-                .when(accountCleanupService).deleteAccount(2L);
+        when(accountCleanupService.findAnonymizeTargetIds()).thenReturn(List.of(2L));
+        doThrow(new RuntimeException("파기 실패"))
+                .when(accountCleanupService).anonymizeAccount(2L);
 
         // when
         accountCleanupScheduler.cleanupWithdrawnAccounts();
@@ -69,12 +69,12 @@ class AccountCleanupSchedulerTest {
     }
 
     @Test
-    void 대상이_없으면_삭제도_이력도_없다() {
-        when(accountCleanupService.findDeletableAccountIds()).thenReturn(List.of());
+    void 대상이_없으면_파기도_이력도_없다() {
+        when(accountCleanupService.findAnonymizeTargetIds()).thenReturn(List.of());
 
         accountCleanupScheduler.cleanupWithdrawnAccounts();
 
-        verify(accountCleanupService, never()).deleteAccount(any());
+        verify(accountCleanupService, never()).anonymizeAccount(any());
         verifyNoInteractions(operationFailureRecorder);
     }
 }

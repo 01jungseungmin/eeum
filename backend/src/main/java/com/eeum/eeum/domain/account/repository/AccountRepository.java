@@ -35,8 +35,14 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
             String providerId
     );
 
-    // 탈퇴 후 30일 경과 계정 조회 (스케줄러용)
-    @Query("SELECT a FROM Account a WHERE a.status = :status AND a.deletedAt <= :threshold")
+    // 탈퇴 후 30일 경과 + 아직 개인정보를 파기하지 않은 계정 (스케줄러용).
+    // anonymizedAt 조건이 없으면 이미 파기한 계정을 매일 다시 처리한다.
+    @Query("""
+        SELECT a FROM Account a
+        WHERE a.status = :status
+          AND a.deletedAt <= :threshold
+          AND a.anonymizedAt IS NULL
+        """)
     List<Account> findWithdrawnAccountsBefore(
             @Param("status") AccountStatus status,
             @Param("threshold") LocalDateTime threshold

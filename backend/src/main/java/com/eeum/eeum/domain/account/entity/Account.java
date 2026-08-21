@@ -80,6 +80,11 @@ public class Account extends BaseEntity {
     @Column(name = "fcm_token", length = 255)
     private String fcmToken;
 
+    // 개인정보 파기 시각. WITHDRAWN만으로는 "유예 중"과 "파기 완료"를 구분할 수 없어
+    // 스케줄러가 같은 계정을 반복 처리한다.
+    @Column(name = "anonymized_at")
+    private LocalDateTime anonymizedAt;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -179,6 +184,33 @@ public class Account extends BaseEntity {
     public void cancelWithdrawal() {
         this.status = AccountStatus.ACTIVE;
         this.deletedAt = null;
+    }
+
+    /**
+     * 개인정보 파기 — 행은 남기고 식별 가능한 값만 지운다.
+     *
+     * <p>계정 행을 물리 삭제하려면 이 계정을 참조하는 18개 테이블(주문·결제·신고·채팅 등)을
+     * 함께 정리해야 하는데, 주문·결제는 정산과 보존 의무가 걸려 지울 수 없다.
+     * 파기해야 하는 것은 식별 정보이지 활동 이력이 아니므로, 행을 남기고 값만 지운다.
+     *
+     * <p>email·nickname에는 UNIQUE 제약이 있다. 고정값으로 지우면 두 번째 탈퇴자부터 충돌하고
+     * 같은 이메일로 재가입할 수도 없으므로, 계정 ID를 섞어 유일성을 만든다.
+     */
+    public void anonymize() {
+        this.email = "deleted_" + this.accountId + "@removed.local";
+        this.nickname = "탈퇴한회원_" + this.accountId;
+        this.name = "탈퇴한 회원";
+        this.phone = "";
+        this.password = null;
+        this.providerId = null;
+        this.profileImageUrl = DEFAULT_PROFILE_IMAGE_URL;
+        this.fcmToken = null;
+        this.primaryRegionId = null;
+        this.anonymizedAt = LocalDateTime.now();
+    }
+
+    public boolean isAnonymized() {
+        return this.anonymizedAt != null;
     }
 
     public void withdraw() {

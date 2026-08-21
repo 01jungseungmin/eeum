@@ -1,7 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
-import com.eeum.eeum.application.store.service.StorePhysicalDeleteService;
+import com.eeum.eeum.application.store.service.SettlementAccountDeleteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
@@ -39,35 +39,81 @@ class AccountCleanupServiceTest {
     @Mock private AccountRepository accountRepository;
     @Mock private AccountRegionRepository accountRegionRepository;
     @Mock private OwnerInfoRepository ownerInfoRepository;
-    @Mock private StorePhysicalDeleteService storePhysicalDeleteService;
+    @Mock private SettlementAccountDeleteService settlementAccountDeleteService;
     @Mock private FavoriteService favoriteService;
 
     @InjectMocks
     private AccountCleanupService accountCleanupService;
 
     @Test
-    void 계정을_물리_삭제하기_전에_찜을_정리한다() {
-        // given
+    void 개인정보를_지우고_계정_행은_남긴다() {
+        // given — 주문·결제·신고 등 18개 테이블이 이 계정을 참조한다.
+        // 행을 지우면 FK 제약에 걸리고, 주문·결제는 보존 의무가 있어 함께 지울 수도 없다.
         Account account = account();
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
         // when
-        accountCleanupService.deleteAccount(ACCOUNT_ID);
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
 
-        // then: 찜이 남은 채 계정을 지우면 FK 제약 위반으로 삭제가 실패한다
-        InOrder inOrder = inOrder(favoriteService, accountRepository);
+        // then
+        assertThat(account.isAnonymized()).isTrue();
+        assertThat(account.getEmail()).doesNotContain("user@test.com");
+        assertThat(account.getPhone()).isEmpty();
+        verify(accountRepository, never()).delete(any());
+    }
+
+    @Test
+    void 익명화를_먼저_반영한_뒤_정리한다() {
+        // given — 정리 작업에는 영속성 컨텍스트를 비우는 bulk 연산이 섞여 있다.
+        // 익명화를 나중에 하면 엔티티가 분리된 뒤라 파기가 통째로 유실된다.
+        Account account = account();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
+
+        // then
+        InOrder inOrder = inOrder(accountRepository, favoriteService);
+        inOrder.verify(accountRepository).flush();
         inOrder.verify(favoriteService).deleteAllByAccountId(ACCOUNT_ID);
-        inOrder.verify(accountRepository).delete(account);
+    }
+
+    @Test
+    void 계정에_딸린_개인정보_행은_함께_지운다() {
+        // given — GPS 활동지역, 사업자번호, 정산 계좌는 식별 정보라 남길 이유가 없다
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account()));
+
+        // when
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
+
+        // then
+        verify(favoriteService).deleteAllByAccountId(ACCOUNT_ID);
+        verify(accountRegionRepository).deleteByAccount_AccountId(ACCOUNT_ID);
+        verify(ownerInfoRepository).deleteByAccount_AccountId(ACCOUNT_ID);
+        verify(settlementAccountDeleteService).deleteByAccountId(ACCOUNT_ID);
+    }
+
+    @Test
+    void 이미_파기한_계정은_다시_처리하지_않는다() {
+        // given — 재처리하면 이미 익명화된 값 위에 또 덮어써 파기 시각이 계속 갱신된다
+        Account account = account();
+        account.anonymize();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
+
+        // then
+        verifyNoInteractions(favoriteService, settlementAccountDeleteService, accountRegionRepository);
     }
 
     @Test
     void 이미_사라진_계정은_건너뛴다() {
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.empty());
 
-        accountCleanupService.deleteAccount(ACCOUNT_ID);
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
 
-        verifyNoInteractions(favoriteService, storePhysicalDeleteService, accountRegionRepository);
-        verify(accountRepository, never()).delete(any());
+        verifyNoInteractions(favoriteService, settlementAccountDeleteService, accountRegionRepository);
     }
 
     @Test
@@ -77,7 +123,7 @@ class AccountCleanupServiceTest {
                 .thenReturn(List.of(account()));
 
         // when
-        List<Long> targets = accountCleanupService.findDeletableAccountIds();
+        List<Long> targets = accountCleanupService.findAnonymizeTargetIds();
 
         // then
         assertThat(targets).containsExactly(ACCOUNT_ID);

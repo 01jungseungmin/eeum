@@ -30,9 +30,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 탈퇴 계정의 찜 정리를 실제 MySQL에서 검증한다.
- * favorite.account_id는 NOT NULL FK라, 찜이 남은 계정은 물리 삭제 자체가 제약 위반으로 실패한다.
- * Mock 단위 테스트는 이 FK 제약을 재현하지 못한다.
+ * 탈퇴 계정의 개인정보 파기를 실제 MySQL에서 검증한다.
+ * 계정 행은 남기고 식별 정보만 지운다 — 주문·결제 등 18개 테이블이 이 계정을 참조하고,
+ * 그중 일부는 보존 의무가 있어 함께 지울 수 없다.
+ * UNIQUE 제약(email·nickname) 위반 없이 파기되는지는 Mock으로 재현할 수 없다.
  */
 @EnabledIfDockerAvailable
 @RequiredArgsConstructor
@@ -84,7 +85,7 @@ class AccountCleanupFavoriteIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 탈퇴_30일_경과_계정은_찜이_남아_있어도_물리_삭제되고_찜_수도_함께_줄어든다() {
+    void 탈퇴_30일_경과_계정은_개인정보가_파기되고_찜_수도_함께_줄어든다() {
         // given: 이 배선 이전에 탈퇴해 찜이 남아 있는 계정을 재현한다.
         Account withdrawn = accountRepository.findById(withdrawnAccountId).orElseThrow();
         withdrawn.withdraw();
@@ -93,12 +94,14 @@ class AccountCleanupFavoriteIntegrationTest extends IntegrationTestSupport {
 
         assertThat(favoriteRepository.count()).isEqualTo(3);
 
-        // when: 찜을 정리하지 않으면 여기서 FK 제약 위반으로 스케줄러가 실패한다.
-        accountCleanupService.findDeletableAccountIds()
-                .forEach(accountCleanupService::deleteAccount);
+        // when: 찜을 정리하지 않으면 카운트가 어긋난 채로 남는다.
+        accountCleanupService.findAnonymizeTargetIds()
+                .forEach(accountCleanupService::anonymizeAccount);
 
-        // then
-        assertThat(accountRepository.findById(withdrawnAccountId)).isEmpty();
+        // then: 계정 행은 남기고 개인정보만 지운다 — 주문·결제·신고가 이 계정을 참조한다
+        Account anonymized = accountRepository.findById(withdrawnAccountId).orElseThrow();
+        assertThat(anonymized.isAnonymized()).isTrue();
+        assertThat(anonymized.getEmail()).doesNotContain("viewer@test.com");
         assertThat(favoriteRepository.count()).isZero();
         assertThat(usedProductRepository.findAllById(productIds))
                 .allSatisfy(product -> assertThat(product.getFavoriteCount()).isZero());
