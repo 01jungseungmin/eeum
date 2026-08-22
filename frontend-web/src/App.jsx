@@ -22,6 +22,7 @@ import InquiryManagementPage from './pages/owner/main/InquiryManagementPage';
 import ChatManagementPage from './pages/owner/main/ChatManagementPage';
 import CustomerManagementPage from './pages/owner/main/CustomerManagementPage';
 import OwnerReportManagementPage from './pages/owner/main/ReportManagementPage';
+import AiManagerPage from './pages/owner/main/AiManagerPage';
 import AdminReportManagementPage from './pages/admin/main/ReportManagementPage';
 import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
@@ -30,9 +31,6 @@ import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
 import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
 import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
-import AiManagerPage from './pages/owner/main/AiManagerPage';
-import AiMessagePage from './pages/owner/main/AiMessagePage';
-import AiCustomerCarePage from './pages/owner/main/AiCustomerCarePage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/ApprovalApi';
@@ -214,14 +212,6 @@ function App() {
           <Route
             path="/ai-manager"
             element={<AiManagerPage />}
-          />
-          <Route
-            path="/ai-manager/customer-care"
-            element={<AiCustomerCarePage />}
-          />
-          <Route
-            path="/ai-manager/messages"
-            element={<AiMessagePage />}
           />
         </Route>
       </Route>
