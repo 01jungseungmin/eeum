@@ -42,7 +42,7 @@ public class ReportService {
         }
 
         ReportTargetSnapshotDto target = reportTargetResolver.resolveForCreation(
-                request.getTargetType(), request.getTargetId());
+                request.getTargetType(), request.getTargetId(), reporter);
         if (target.getOwnerAccountId().equals(accountId)) {
             throw new BadRequestException(ErrorCode.REPORT_SELF_NOT_ALLOWED);
         }

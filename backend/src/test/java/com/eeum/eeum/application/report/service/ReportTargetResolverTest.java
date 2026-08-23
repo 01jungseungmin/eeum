@@ -19,6 +19,7 @@ import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +48,7 @@ class ReportTargetResolverTest {
     @Mock private CommunityCommentRepository communityCommentRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private UsedProductRepository usedProductRepository;
+    @Mock private PrimaryRegionResolver primaryRegionResolver;
 
     private static final Long OWNER_ID = 7L;
 
@@ -64,6 +66,10 @@ class ReportTargetResolverTest {
         ReflectionTestUtils.setField(store, "storeId", id);
         ReflectionTestUtils.setField(store, "description", "동네 카페입니다");
         return store;
+    }
+
+    private Account reporter() {
+        return createAccount(99L, "신고자", "신고자닉");
     }
 
     private UsedProduct createUsedProduct(Long id, Account seller) {
@@ -242,7 +248,7 @@ class ReportTargetResolverTest {
 
         // When & Then
         assertThatThrownBy(() ->
-                reportTargetResolver.resolveForCreation(ReportTargetType.STORE, 1L))
+                reportTargetResolver.resolveForCreation(ReportTargetType.STORE, 1L, reporter()))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.STORE_NOT_FOUND);
@@ -259,7 +265,7 @@ class ReportTargetResolverTest {
 
         // When & Then
         assertThatThrownBy(() ->
-                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_POST, 40L))
+                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_POST, 40L, reporter()))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
@@ -279,7 +285,7 @@ class ReportTargetResolverTest {
 
         // When & Then
         assertThatThrownBy(() ->
-                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_COMMENT, 50L))
+                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_COMMENT, 50L, reporter()))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
@@ -294,7 +300,7 @@ class ReportTargetResolverTest {
                 .thenReturn(Optional.of(product));
 
         assertThatThrownBy(() ->
-                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L))
+                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L, reporter()))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
@@ -311,7 +317,7 @@ class ReportTargetResolverTest {
 
         // When & Then
         assertThatThrownBy(() ->
-                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L))
+                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L, reporter()))
                 .isInstanceOf(NotFoundException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);

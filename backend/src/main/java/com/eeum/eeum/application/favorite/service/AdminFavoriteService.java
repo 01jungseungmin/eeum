@@ -3,6 +3,8 @@ package com.eeum.eeum.application.favorite.service;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteRecalculateResponseDto;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteStatResponseDto;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import com.eeum.eeum.exception.BadRequestException;
+import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
 import com.eeum.eeum.domain.favorite.repository.FavoriteStatProjection;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -38,6 +40,8 @@ public class AdminFavoriteService {
             LocalDateTime to,
             int limit
     ) {
+        validatePeriod(from, to);
+
         List<FavoriteStatProjection> projections =
                 favoriteRepository.findFavoriteStats(refType, from, to, limit);
 
@@ -77,6 +81,14 @@ public class AdminFavoriteService {
             case STORE -> storeRepository.recalculateAllFavoriteCounts();
             case USED_PRODUCT -> usedProductRepository.recalculateAllFavoriteCounts();
         };
+    }
+
+    // 기간이 뒤집히면 결과가 반드시 빈다. 빈 통계로 응답하면 관리자는 "그 기간에 찜이 없었다"로
+    // 읽어 잘못된 조건을 계속 보낸다. 두 값을 함께 봐야 하는 검증이라 애노테이션으로는 표현할 수 없다.
+    private void validatePeriod(LocalDateTime from, LocalDateTime to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException(ErrorCode.FAVORITE_INVALID_PERIOD);
+        }
     }
 
     // 통계 대상 이름 배치 조회 — 대상이 사라진 refId는 map에 담기지 않아 삭제 표기로 넘어간다.

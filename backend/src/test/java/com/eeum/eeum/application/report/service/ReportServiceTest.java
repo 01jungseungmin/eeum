@@ -24,6 +24,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,7 +56,8 @@ class ReportServiceTest {
                 .content("삭제돼도 남아야 하는 전체 본문")
                 .ownerAccountId(2L)
                 .build();
-        when(reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_POST, targetId))
+        when(reportTargetResolver.resolveForCreation(
+                eq(ReportTargetType.COMMUNITY_POST), eq(targetId), any()))
                 .thenReturn(target);
         when(reportRepository.saveAndFlush(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);

@@ -13,6 +13,8 @@ import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -94,6 +97,23 @@ class AdminFavoriteServiceTest {
         assertThat(result).isEmpty();
         verify(storeRepository, never()).findAllById(any());
         verify(usedProductRepository, never()).findByUsedProductIdInAndDeletedAtIsNull(any());
+    }
+
+    @Test
+    void 조회_기간이_뒤집히면_거절한다() {
+        // given — 결과가 반드시 비는 조건이다. 빈 통계로 응답하면 관리자는
+        // "그 기간에 찜이 없었다"로 읽어 잘못된 조건을 계속 보낸다.
+        LocalDateTime from = LocalDateTime.now();
+        LocalDateTime to = from.minusDays(7);
+
+        // when & then
+        assertThatThrownBy(() -> adminFavoriteService.getFavoriteStats(
+                FavoriteRefType.USED_PRODUCT, from, to, 10))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FAVORITE_INVALID_PERIOD);
+
+        verify(favoriteRepository, never()).findFavoriteStats(any(), any(), any(), anyInt());
     }
 
     // ─────────────────── 정합성 재계산 ───────────────────

@@ -11,6 +11,8 @@ import com.eeum.eeum.application.report.dto.response.MyReportResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -55,6 +57,7 @@ class ReportSnapshotPersistenceIntegrationTest extends IntegrationTestSupport {
     private final CommunityPostRepository communityPostRepository;
     private final CategoryRepository categoryRepository;
     private final RegionRepository regionRepository;
+    private final AccountRegionRepository accountRegionRepository;
     private final AccountRepository accountRepository;
 
     private Long reporterId;
@@ -72,6 +75,14 @@ class ReportSnapshotPersistenceIntegrationTest extends IntegrationTestSupport {
 
         Region region = regionRepository.save(
                 Region.create("1168010100", "서울특별시", "강남구", "역삼동", 3));
+
+        // 커뮤니티 글은 대표 지역 단위로 공개된다. 신고도 같은 조건을 따르므로
+        // 신고자에게 글과 같은 인증 지역을 대표로 지정해 둔다.
+        AccountRegion reporterRegion = AccountRegion.create(reporter, region);
+        reporterRegion.verify();
+        accountRegionRepository.save(reporterRegion);
+        reporter.setPrimaryRegion(reporterRegion.getAccountRegionId());
+        accountRepository.saveAndFlush(reporter);
         Category category = categoryRepository.save(
                 Category.createRoot(CategoryType.COMMUNITY, "동네 이야기", 1));
         CommunityPost post = communityPostRepository.saveAndFlush(
@@ -85,6 +96,10 @@ class ReportSnapshotPersistenceIntegrationTest extends IntegrationTestSupport {
         communityCommentRepository.deleteAll();
         communityPostRepository.deleteAll();
         categoryRepository.deleteAll();
+        // account_region은 account를 참조하므로 먼저 지운다.
+        // 남겨두면 accountRepository.deleteAll()이 FK 제약으로 실패하고,
+        // 계정이 남은 채 다음 테스트가 같은 이메일로 다시 만들다 중복으로 죽는다.
+        accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
         accountRepository.deleteAll();
     }
