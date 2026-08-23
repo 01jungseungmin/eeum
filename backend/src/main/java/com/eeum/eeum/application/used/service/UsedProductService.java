@@ -178,7 +178,9 @@ public class UsedProductService {
             UsedProductUpdateRequestDto request
     ) {
         accountWriteGuard.lockActive(sellerId);
-        UsedProduct product = getOwnedOrThrow(sellerId, usedProductId);
+        // 관리자 숨김·삭제와 같은 행을 다투므로 같은 비관적 잠금을 쓴다.
+        // 잠그지 않으면 수정과 조치가 서로의 변경을 덮어쓴다.
+        UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
 
         product.updateInfo(
@@ -188,6 +190,9 @@ public class UsedProductService {
                 request.getPriceType(),
                 request.getPrice()
         );
+
+        // modifiedAt은 flush 시점에 채워진다. 먼저 반영하지 않으면 응답에 수정 전 값이 담긴다.
+        usedProductRepository.flush();
 
         return UsedProductDetailResponseDto.from(
                 product, usedProductImageService.getImages(usedProductId));
@@ -342,10 +347,11 @@ public class UsedProductService {
     }
 
     private void assertOwned(UsedProduct product, Long sellerId) {
-        // 숨김 글은 작성자에게만 보인다. 비소유자에게 403을 주면 상세 조회는 404인데 수정·삭제만
-        // 403이 되어, 그 차이로 숨김 글의 존재가 드러난다. 상세 조회와 같은 응답으로 맞춘다.
+        // 비공개 글(숨김·판매자 탈퇴)은 비소유자에게 없는 것으로 응답한다.
+        // 상세 조회는 404인데 수정·삭제만 403이면 그 차이로 존재가 드러난다.
+        // 숨김만 막고 판매자 탈퇴를 빠뜨리면 그쪽으로 같은 구멍이 남는다.
         // 공개 글의 403은 유지한다 — 존재가 이미 공개라 404로 바꾸면 정상적인 권한 오류를 가린다.
-        if (product.isHidden() && !product.isOwnedBy(sellerId)) {
+        if (!product.isPubliclyVisible() && !product.isOwnedBy(sellerId)) {
             throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
         }
 

@@ -130,10 +130,10 @@ public class UsedProductImageService {
                 .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
 
-        // 숨김 글은 작성자에게만 보인다. 비소유자에게 403을 주면 상세 조회는 404인데 수정·삭제만
-        // 403이 되어, 그 차이로 숨김 글의 존재가 드러난다. 상세 조회와 같은 응답으로 맞춘다.
+        // 비공개 글(숨김·판매자 탈퇴)은 비소유자에게 없는 것으로 응답한다.
+        // 상세 조회는 404인데 사진 변경만 403이면 그 차이로 존재가 드러난다.
         // 공개 글의 403은 유지한다 — 존재가 이미 공개라 404로 바꾸면 정상적인 권한 오류를 가린다.
-        if (product.isHidden() && !product.isOwnedBy(sellerId)) {
+        if (!product.isPubliclyVisible() && !product.isOwnedBy(sellerId)) {
             throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
         }
 

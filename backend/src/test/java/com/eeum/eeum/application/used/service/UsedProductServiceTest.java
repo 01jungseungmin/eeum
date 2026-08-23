@@ -576,7 +576,7 @@ class UsedProductServiceTest {
 
     @Test
     void 작성자는_게시글을_수정할_수_있다() {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
@@ -593,7 +593,7 @@ class UsedProductServiceTest {
     @Test
     void 수정_경로로도_가격_규칙을_우회할_수_없다() {
         // given — NEGOTIABLE인데 금액이 실려 오면 거부한다
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
@@ -607,7 +607,7 @@ class UsedProductServiceTest {
 
     @Test
     void 남의_게시글은_수정할_수_없다() {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
 
         assertThatThrownBy(() -> usedProductService.update(
@@ -622,7 +622,7 @@ class UsedProductServiceTest {
         // given — 상세 조회는 404인데 수정만 403이면 그 차이로 숨김 글의 존재가 드러난다
         UsedProduct hidden = product();
         hidden.hide();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(hidden));
 
         assertThatThrownBy(() -> usedProductService.update(
@@ -637,7 +637,7 @@ class UsedProductServiceTest {
         // given — 숨김은 노출 정책이지 작성자의 편집권 박탈이 아니다
         UsedProduct hidden = product();
         hidden.hide();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(hidden));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
@@ -646,6 +646,42 @@ class UsedProductServiceTest {
                 SELLER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100")));
 
         assertThat(hidden.getPrice()).isEqualByComparingTo(new BigDecimal("100"));
+    }
+
+    @Test
+    void 판매자가_탈퇴한_게시글은_비소유자에게_수정_요청에도_없는_것으로_응답한다() {
+        // given — 상세는 404인데 수정만 403이면 그 차이로 ID 존재가 드러난다.
+        // 숨김만 막고 판매자 탈퇴를 빠뜨리면 그쪽으로 같은 구멍이 남는다.
+        UsedProduct product = product();
+        product.getSeller().withdraw();
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> usedProductService.update(
+                OTHER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 수정은_관리자_조치와_같은_비관적_잠금으로_읽고_flush_후_응답한다() {
+        // given — 잠그지 않으면 수정과 숨김·삭제가 서로의 변경을 덮어쓴다.
+        // modifiedAt은 flush 시점에 채워지므로 DTO 생성 전에 반영해야 한다.
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
+                .thenReturn(Optional.of(usedCategory()));
+
+        // when
+        usedProductService.update(
+                SELLER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100")));
+
+        // then
+        InOrder inOrder = inOrder(usedProductRepository, usedProductImageService);
+        inOrder.verify(usedProductRepository).flush();
+        inOrder.verify(usedProductImageService).getImages(PRODUCT_ID);
+        verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID);
     }
 
     // ─────────────────── 삭제 ───────────────────
