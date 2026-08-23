@@ -13,6 +13,7 @@ import com.eeum.eeum.domain.notification.enums.NotificationType;
 import com.eeum.eeum.domain.notification.event.NotificationPushEvent;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationSettingsRepository;
+import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.infrastructure.sse.SseEmitterManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,6 +49,7 @@ class NotificationServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private UnreadCountService unreadCountService;
     @Mock private SseEmitterManager sseEmitterManager;
+    @Mock private RealtimeRelayPublisher realtimeRelayPublisher;
 
     private static final Long ACCOUNT_ID = 6L;
 
@@ -102,7 +104,6 @@ class NotificationServiceTest {
         stubUnreadCount();
         stubAccount("valid-token");
         when(settingsRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         NotificationResponseDto result = notificationService.createNotificationWithoutPush(request());
@@ -110,7 +111,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNotNull();
         verify(notificationRepository).save(any());
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(realtimeRelayPublisher).publishUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
         verify(eventPublisher, never()).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -167,7 +168,6 @@ class NotificationServiceTest {
         when(notification.isUnread()).thenReturn(true);
         when(notificationRepository.findByNotificationIdAndAccount_AccountId(notificationId, ACCOUNT_ID))
                 .thenReturn(Optional.of(notification));
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markAsRead(ACCOUNT_ID, notificationId);
@@ -175,7 +175,7 @@ class NotificationServiceTest {
         // then
         verify(notification).markAsRead();
         verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(realtimeRelayPublisher).publishUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
     @Test
@@ -193,7 +193,7 @@ class NotificationServiceTest {
         // then
         verify(notification, never()).markAsRead();
         verify(unreadCountService, never()).refreshFromDb(anyLong());
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(realtimeRelayPublisher, never()).publishUnreadCount(anyLong(), any());
     }
 
     @Test
@@ -202,14 +202,13 @@ class NotificationServiceTest {
         stubUnreadCount();
         when(notificationRepository.markAllAsReadByAccountId(eq(ACCOUNT_ID), any(LocalDateTime.class)))
                 .thenReturn(5);
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markAllAsRead(ACCOUNT_ID);
 
         // then
         verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(realtimeRelayPublisher).publishUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
     @Test
@@ -219,7 +218,6 @@ class NotificationServiceTest {
         when(notificationRepository.markAsReadByAccountIdAndTypes(
                 eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class)))
                 .thenReturn(4);
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER);
@@ -228,7 +226,7 @@ class NotificationServiceTest {
         verify(notificationRepository).markAsReadByAccountIdAndTypes(
                 eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class));
         verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(realtimeRelayPublisher).publishUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
     @Test
@@ -243,7 +241,7 @@ class NotificationServiceTest {
 
         // then
         verify(unreadCountService, never()).refreshFromDb(anyLong());
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(realtimeRelayPublisher, never()).publishUnreadCount(anyLong(), any());
     }
 
     @Test
@@ -259,7 +257,7 @@ class NotificationServiceTest {
         assertThatCode(() -> notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER))
                 .doesNotThrowAnyException();
         verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(realtimeRelayPublisher, never()).publishUnreadCount(anyLong(), any());
     }
 
     @Test
@@ -271,7 +269,6 @@ class NotificationServiceTest {
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class)))
                 .thenReturn(3);
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markAsReadByRef(
@@ -282,7 +279,7 @@ class NotificationServiceTest {
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class));
         verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(realtimeRelayPublisher).publishUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
     }
 
     @Test
@@ -299,6 +296,6 @@ class NotificationServiceTest {
 
         // then
         verify(unreadCountService, never()).refreshFromDb(anyLong());
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(realtimeRelayPublisher, never()).publishUnreadCount(anyLong(), any());
     }
 }

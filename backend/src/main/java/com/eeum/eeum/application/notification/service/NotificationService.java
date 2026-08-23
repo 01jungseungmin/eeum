@@ -16,6 +16,7 @@ import com.eeum.eeum.domain.notification.repository.NotificationSettingsReposito
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.infrastructure.push.PushMessage;
+import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.infrastructure.sse.SseEmitterManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,7 @@ public class NotificationService {
     private final ApplicationEventPublisher eventPublisher;
     private final UnreadCountService unreadCountService;
     private final SseEmitterManager sseEmitterManager;
+    private final RealtimeRelayPublisher realtimeRelayPublisher;
 
     // ===================== SSE 구독 =====================
 
@@ -275,10 +277,12 @@ public class NotificationService {
 
     // ===================== 내부 헬퍼 =====================
 
-    // 현재 unread 카운트(전체 + 카테고리별)를 SSE로 전송 — 미연결 계정은 카테고리 집계 쿼리 없이 스킵
+    // 현재 unread 카운트(전체 + 카테고리별)를 SSE로 전송.
+    // 이 인스턴스에 커넥션이 없을 수 있으므로 Redis로 중계한다 — 알림은 아무 인스턴스에서나
+    // 발생하지만 SSE 커넥션은 실시간 인스턴스에만 있다. 연결 여부는 받는 쪽에서 판단한다.
     private void pushUnreadCount(Long accountId) {
-        if (!sseEmitterManager.isConnected(accountId)) return;
-        sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
+        realtimeRelayPublisher.publishUnreadCount(
+                accountId, unreadCountService.getUnreadCount(accountId));
     }
 
     // DB 변경은 이미 커밋된 뒤이므로 Redis/SSE 실패를 API 실패로 전파하지 않는다.
