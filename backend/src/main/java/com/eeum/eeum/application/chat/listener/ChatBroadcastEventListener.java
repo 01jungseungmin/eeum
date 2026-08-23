@@ -4,6 +4,7 @@ import com.eeum.eeum.application.chat.dto.response.ChatRoomClosedResponseDto;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.event.ChatRoomClosedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -14,6 +15,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * DB 커밋 완료 후 동기 실행(@Async 없음) — 클라이언트에 일관된 상태를 전달하기 위해 커밋 후 전송.
  * TEXT/IMAGE / 삭제 / SYSTEM 메시지: 이 리스너가 처리
  */
+/**
+ * 인메모리 브로커로 직접 밀어내는 경로 — 브로커가 있는 인스턴스에서만 동작한다.
+ * TODO: Redis Pub/Sub 중계를 붙이면 이 조건을 없애고 모든 인스턴스에서 발행하게 한다.
+ */
+@ConditionalOnProperty(name = "eeum.realtime.enabled", havingValue = "true", matchIfMissing = true)
 @Component
 @RequiredArgsConstructor
 public class ChatBroadcastEventListener {

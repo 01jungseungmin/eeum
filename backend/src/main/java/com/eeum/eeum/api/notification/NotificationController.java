@@ -19,11 +19,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Tag(name = "14. Notification", description = "알림 / 알림 설정 API")
 @SecurityRequirement(name = "bearerAuth")
@@ -37,20 +35,6 @@ public class NotificationController {
     private final NotificationSettingsService settingsService;
 
     // ===================== SSE 실시간 구독 =====================
-
-     //SSE(Server-Sent Events)
-     //웹 클라이언트(사장님/관리자 대시보드)에서 한 번 연결하면 새 알림이 생성될 때마다 서버가 unread-count 이벤트를 자동으로 push
-     //클라이언트는 연결이 끊기면 EventSource API가 자동으로 재연결한다.
-    @Operation(
-            summary = "SSE 실시간 알림 구독",
-            description = "웹 사장님/관리자 대시보드용 실시간 배지 카운트 스트림. " +
-                    "연결 즉시 현재 unread 카운트를 전송하고, 이후 변경될 때마다 push한다."
-    )
-    @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe() {
-        Long accountId = SecurityUtil.getCurrentAccountId();
-        return notificationService.subscribe(accountId);
-    }
 
     // ===================== 알림 목록 조회 =====================
 
