@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.account.entity.QAccount;
+import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.used.entity.QUsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
@@ -9,6 +10,7 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.ComparableExpressionBase;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -78,10 +80,15 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
                 .set(PRODUCT.viewCount, PRODUCT.viewCount.add(1))
                 .where(
                         PRODUCT.usedProductId.eq(usedProductId),
-                        // 공개 확인과 이 UPDATE 사이에 숨김·삭제가 커밋될 수 있다.
+                        // 공개 확인과 이 UPDATE 사이에 숨김·삭제·판매자 탈퇴가 커밋될 수 있다.
                         // 조건을 UPDATE에 함께 걸어야 비공개 글의 조회수가 오르지 않는다.
+                        // bulk UPDATE는 조인을 쓸 수 없어 판매자 조건은 FK IN 서브쿼리로 건다.
                         PRODUCT.deletedAt.isNull(),
-                        PRODUCT.hidden.isFalse())
+                        PRODUCT.hidden.isFalse(),
+                        PRODUCT.seller.accountId.in(
+                                JPAExpressions.select(SELLER.accountId)
+                                        .from(SELLER)
+                                        .where(SELLER.status.eq(AccountStatus.ACTIVE))))
                 .execute();
     }
 

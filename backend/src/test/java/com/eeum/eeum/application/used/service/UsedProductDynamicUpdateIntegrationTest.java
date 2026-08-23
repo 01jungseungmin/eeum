@@ -132,6 +132,40 @@ class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(1);
     }
 
+    @Test
+    void 판매자가_탈퇴하면_조회수도_오르지_않는다() {
+        // given: 공개 확인과 조회수 UPDATE 사이에 판매자 탈퇴가 커밋될 수 있다.
+        // bulk UPDATE는 조인을 쓸 수 없어 FK IN 서브쿼리로 조건을 걸었다 —
+        // 실제로 그 SQL이 동작하는지는 DB에서만 확인된다.
+        adminUsedProductService.show(productId);   // setUp이 숨김으로 만들어 두므로 먼저 노출
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        Account seller = accountRepository.findById(product.getSeller().getAccountId()).orElseThrow();
+        seller.withdraw();
+        accountRepository.saveAndFlush(seller);
+
+        // when — @Modifying 쿼리라 트랜잭션 안에서 실행해야 한다
+        long updated = increaseViewCountInTransaction();
+
+        // then
+        assertThat(updated).isZero();
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getViewCount()).isZero();
+    }
+
+    @Test
+    void 공개_상태면_조회수가_오른다() {
+        // 위 조건이 정상 글까지 막지 않는지 확인한다
+        adminUsedProductService.show(productId);
+
+        long updated = increaseViewCountInTransaction();
+
+        assertThat(updated).isEqualTo(1);
+    }
+
+    private long increaseViewCountInTransaction() {
+        return new TransactionTemplate(transactionManager)
+                .execute(status -> usedProductRepository.increaseViewCount(productId));
+    }
+
     // 별도 스레드 + 별도 트랜잭션으로 찜 카운트를 올린다.
     // 같은 스레드의 REQUIRES_NEW로는 @Modifying(clearAutomatically)이 바깥 영속성 컨텍스트까지 건드려
     // 검증하려는 상황(엔티티를 읽어둔 채로 DB만 바뀐 상태)이 만들어지지 않는다.
