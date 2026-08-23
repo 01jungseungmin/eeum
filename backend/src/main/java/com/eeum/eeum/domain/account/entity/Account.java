@@ -181,7 +181,16 @@ public class Account extends BaseEntity {
         this.deletedAt = null;
     }
 
+    /**
+     * 탈퇴 취소 — 유예 기간 안에서만 되돌릴 수 있다.
+     *
+     * <p>개인정보가 이미 파기된 계정은 되돌리지 않는다. 되살리면 email·이름·전화가 지워진 채
+     * ACTIVE가 되어, 로그인도 안 되고 다른 사용자에게는 "탈퇴한 회원"으로 보이는 계정이 남는다.
+     */
     public void cancelWithdrawal() {
+        if (isAnonymized()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_ANONYMIZED);
+        }
         this.status = AccountStatus.ACTIVE;
         this.deletedAt = null;
     }

@@ -28,27 +28,29 @@ public class RealtimeRelayPublisher {
     private final ObjectMapper objectMapper;
 
     public void publishStomp(String destination, Object payload) {
-        publish(RealtimeRelayChannels.STOMP, new StompRelayMessage(destination, toJson(payload)));
+        publish(RealtimeRelayChannels.STOMP,
+                () -> new StompRelayMessage(destination, objectMapper.writeValueAsString(payload)));
     }
 
     public void publishUnreadCount(Long accountId, Object unreadCount) {
         publish(RealtimeRelayChannels.SSE_UNREAD,
-                new UnreadRelayMessage(accountId, toJson(unreadCount)));
+                () -> new UnreadRelayMessage(accountId, objectMapper.writeValueAsString(unreadCount)));
     }
 
-    private void publish(String channel, Object message) {
+    // payload 직렬화까지 이 경계 안에서 한다.
+    // 호출부는 대부분 @TransactionalEventListener(AFTER_COMMIT)이라, 여기서 예외가 새어 나가면
+    // 이미 커밋이 끝난 요청이 실패로 응답된다 — 실시간 push 하나 때문에 주문·메시지가 실패하면 안 된다.
+    private void publish(String channel, RelayMessageSupplier messageSupplier) {
         try {
-            redisTemplate.convertAndSend(channel, objectMapper.writeValueAsString(message));
+            redisTemplate.convertAndSend(
+                    channel, objectMapper.writeValueAsString(messageSupplier.get()));
         } catch (Exception e) {
             log.warn("실시간 중계 발행 실패 — channel={}", channel, e);
         }
     }
 
-    private String toJson(Object payload) {
-        try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("실시간 중계 payload 직렬화 실패", e);
-        }
+    @FunctionalInterface
+    private interface RelayMessageSupplier {
+        Object get() throws JsonProcessingException;
     }
 }

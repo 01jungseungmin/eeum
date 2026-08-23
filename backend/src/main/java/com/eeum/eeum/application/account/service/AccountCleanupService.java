@@ -21,18 +21,21 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AccountCleanupService {
 
+    // 탈퇴 후 개인정보를 파기하기까지의 유예 기간. 대상 조회와 잠금 후 재검증이 같은 값을 써야 한다.
+    private static final int WITHDRAWAL_GRACE_DAYS = 30;
+
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final SettlementAccountDeleteService settlementAccountDeleteService;
     private final FavoriteService favoriteService;
 
-    // 탈퇴 후 30일이 지난 계정의 개인정보를 파기한다.
+    // 탈퇴 후 유예 기간이 지난 계정의 개인정보를 파기한다.
     // 대상 조회만 하고 파기는 계정별 트랜잭션으로 넘긴다 — 한 계정의 실패가 회차 전체를 되돌리면
     // 정상 처리 가능한 계정까지 함께 죽고, 대상이 쌓이며 매일 같은 실패를 반복한다.
     @Transactional(readOnly = true)
     public List<Long> findAnonymizeTargetIds() {
-        LocalDateTime threshold = LocalDateTime.now().minusDays(30);
+        LocalDateTime threshold = anonymizeThreshold();
 
         return accountRepository.findWithdrawnAccountsBefore(AccountStatus.WITHDRAWN, threshold)
                 .stream()
@@ -54,7 +57,9 @@ public class AccountCleanupService {
         Account account = accountRepository.findByIdWithLock(accountId)
                 .orElse(null);
 
-        if (account == null || account.isAnonymized()) {
+        // 잠금을 잡은 뒤 자격을 다시 확인한다. 대상 조회와 이 시점 사이에 관리자가 탈퇴를
+        // 취소했을 수 있고, 그대로 진행하면 활성 계정의 개인정보를 파기하게 된다.
+        if (account == null || !isAnonymizable(account)) {
             return;
         }
 
@@ -75,5 +80,16 @@ public class AccountCleanupService {
         settlementAccountDeleteService.deleteByAccountId(accountId);
 
         log.info("탈퇴 후 30일 경과 계정 개인정보 파기 완료: accountId={}", accountId);
+    }
+
+    private LocalDateTime anonymizeThreshold() {
+        return LocalDateTime.now().minusDays(WITHDRAWAL_GRACE_DAYS);
+    }
+
+    private boolean isAnonymizable(Account account) {
+        return account.isWithdrawn()
+                && !account.isAnonymized()
+                && account.getDeletedAt() != null
+                && !account.getDeletedAt().isAfter(anonymizeThreshold());
     }
 }

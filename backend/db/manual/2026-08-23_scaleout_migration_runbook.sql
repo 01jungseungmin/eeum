@@ -16,12 +16,13 @@
 --   5) account.anonymized_at                       (COLUMN)  개인정보 파기 시각
 --
 -- ── 실행 순서 ────────────────────────────────────────────────────────────────
---   STEP 0 → STEP 1 → (중복 있으면 STEP 2) → STEP 3 → STEP 4 → STEP 5
+--   STEP 0 → STEP 1 → STEP 2 → STEP 3 → STEP 4 → STEP 5
+--   (STEP 2는 중복·dangling이 0건이면 실행할 것이 없지만, 쓰기 중단은 그대로 유지한다)
 --
--- ⚠ 쓰기 중단 구간: STEP 2 시작 ~ STEP 5 완료
---    중복을 지운 뒤 재계산까지 사이에 찜 등록·해제가 들어오면 카운트가 다시 어긋나고,
---    UNIQUE 제약 생성 전에 들어온 중복 요청은 그대로 통과한다.
---    중복이 0건이면(STEP 1 확인) 쓰기를 멈추지 않아도 된다 — STEP 3만 실행하면 된다.
+-- ⚠ 쓰기 중단 구간: STEP 0 확인 시작 ~ STEP 5 완료
+--    중복이 0건이어도 멈춰야 한다. 확인 시점과 UNIQUE 설치 사이에 중복이 들어오면
+--    그 요청은 제약 없이 통과하고, 설치는 실패한다.
+--    중복을 지운 뒤 재계산까지 사이에 들어온 찜 등록·해제도 카운트를 다시 어긋나게 한다.
 --
 -- ⚠ 5번(anonymized_at)이 없으면 탈퇴 계정 정리 스케줄러가 매일 실패한다.
 --    findWithdrawnAccountsBefore 쿼리가 이 컬럼을 참조한다.
@@ -38,16 +39,24 @@ FROM favorite
 GROUP BY account_id, ref_type, ref_id
 HAVING dup_count > 1;
 
--- 0-2. dangling 찜 — 대상이 사라진 찜 (제약과 무관하나 정합성 확인용)
-SELECT 'STORE' AS ref_type, COUNT(*) AS dangling
+-- 0-2. 정리 대상 찜 — 대상이 사라졌거나 이미 삭제된 글을 가리키는 찜.
+--      중고 게시글은 Soft Delete라 행이 남아 있다. "존재하지 않는 대상"만 세면
+--      soft-deleted 글을 가리키는 찜이 빠지고, 그 찜은 STEP 5 재계산에서 다시 카운트된다.
+SELECT 'STORE / 물리 미존재' AS category, COUNT(*) AS cnt
 FROM favorite f
 WHERE f.ref_type = 'STORE'
   AND NOT EXISTS (SELECT 1 FROM store s WHERE s.store_id = f.ref_id)
 UNION ALL
-SELECT 'USED_PRODUCT', COUNT(*)
+SELECT 'USED_PRODUCT / 물리 미존재', COUNT(*)
 FROM favorite f
 WHERE f.ref_type = 'USED_PRODUCT'
-  AND NOT EXISTS (SELECT 1 FROM used_product p WHERE p.used_product_id = f.ref_id);
+  AND NOT EXISTS (SELECT 1 FROM used_product p WHERE p.used_product_id = f.ref_id)
+UNION ALL
+SELECT 'USED_PRODUCT / soft-deleted', COUNT(*)
+FROM favorite f
+JOIN used_product p ON p.used_product_id = f.ref_id
+WHERE f.ref_type = 'USED_PRODUCT'
+  AND p.deleted_at IS NOT NULL;
 
 -- 0-3. 대표 이미지 중복·부재 (사진이 있는데 대표가 0개 또는 2개 이상)
 SELECT used_product_id, SUM(is_thumbnail) AS thumbnail_count
@@ -138,6 +147,39 @@ SELECT account_id, ref_type, ref_id, COUNT(*) AS dup_count
 FROM favorite
 GROUP BY account_id, ref_type, ref_id
 HAVING dup_count > 1;
+
+-- 2-4. 대상이 사라진 찜 정리 (STEP 0-2에서 나온 것들).
+--      대상 삭제 시 찜을 함께 지우는 배선은 이번 배포부터 동작한다.
+--      그 이전에 삭제된 대상의 찜은 남아 있고, 지우지 않으면 재계산이 그 찜을 다시 센다.
+DELETE f FROM favorite f
+WHERE f.ref_type = 'STORE'
+  AND NOT EXISTS (SELECT 1 FROM store s WHERE s.store_id = f.ref_id);
+
+DELETE f FROM favorite f
+WHERE f.ref_type = 'USED_PRODUCT'
+  AND NOT EXISTS (SELECT 1 FROM used_product p WHERE p.used_product_id = f.ref_id);
+
+DELETE f FROM favorite f
+JOIN used_product p ON p.used_product_id = f.ref_id
+WHERE f.ref_type = 'USED_PRODUCT'
+  AND p.deleted_at IS NOT NULL;
+
+-- 2-5. 정리 결과 재확인 — 세 값 모두 0이어야 STEP 3으로 넘어간다
+SELECT 'STORE / 물리 미존재' AS category, COUNT(*) AS cnt
+FROM favorite f
+WHERE f.ref_type = 'STORE'
+  AND NOT EXISTS (SELECT 1 FROM store s WHERE s.store_id = f.ref_id)
+UNION ALL
+SELECT 'USED_PRODUCT / 물리 미존재', COUNT(*)
+FROM favorite f
+WHERE f.ref_type = 'USED_PRODUCT'
+  AND NOT EXISTS (SELECT 1 FROM used_product p WHERE p.used_product_id = f.ref_id)
+UNION ALL
+SELECT 'USED_PRODUCT / soft-deleted', COUNT(*)
+FROM favorite f
+JOIN used_product p ON p.used_product_id = f.ref_id
+WHERE f.ref_type = 'USED_PRODUCT'
+  AND p.deleted_at IS NOT NULL;
 
 
 -- ============================================================================

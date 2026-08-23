@@ -11,16 +11,15 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.client.RestClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 /**
  * JWT 인증 필터 체인 통합 테스트.
@@ -38,15 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </ol>
  */
 @EnabledIfDockerAvailable
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @RequiredArgsConstructor
 class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
 
-
-
-    @LocalServerPort
-    private int port;
-
+    private final MockMvc mockMvc;
     private final AccountRepository accountRepository;
     private final JwtProvider jwtProvider;
     private final TokenService tokenService;
@@ -178,31 +172,25 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
 
     /**
      * Bearer 토큰을 포함한 GET /accounts/me 요청을 보내고 HTTP 상태 코드를 반환한다.
-     * RestClient는 4xx/5xx 응답에서 기본적으로 예외를 던지므로,
-     * exchange()로 직접 응답 객체를 받아 상태 코드를 추출한다.
+     *
+     * <p>MockMvc를 쓴다 — 검증 대상은 Security 필터 체인(JwtAuthenticationFilter)이고
+     * MockMvc도 그 체인을 그대로 통과시킨다. RANDOM_PORT로 실제 서블릿 컨테이너를 띄우면
+     * 이 클래스만 별도 Spring 컨텍스트를 쓰게 되어 컨텍스트 로딩이 한 번 더 일어난다.
      */
     private HttpStatusCode getMyPageStatus(String accessToken) {
-        AtomicReference<HttpStatusCode> statusRef = new AtomicReference<>();
-        RestClient.create("http://localhost:" + port)
-                .get()
-                .uri("/accounts/me")
-                .header("Authorization", "Bearer " + accessToken)
-                .exchange((request, response) -> {
-                    statusRef.set(response.getStatusCode());
-                    return response.bodyTo(String.class);
-                });
-        return statusRef.get();
+        return request(get("/accounts/me").header("Authorization", "Bearer " + accessToken));
+    }
+
+    private HttpStatusCode request(MockHttpServletRequestBuilder builder) {
+        try {
+            return HttpStatusCode.valueOf(
+                    mockMvc.perform(builder).andReturn().getResponse().getStatus());
+        } catch (Exception e) {
+            throw new IllegalStateException("요청 실행 실패", e);
+        }
     }
 
     private HttpStatusCode getMyPageStatusWithoutToken() {
-        AtomicReference<HttpStatusCode> statusRef = new AtomicReference<>();
-        RestClient.create("http://localhost:" + port)
-                .get()
-                .uri("/accounts/me")
-                .exchange((request, response) -> {
-                    statusRef.set(response.getStatusCode());
-                    return response.bodyTo(String.class);
-                });
-        return statusRef.get();
+        return request(get("/accounts/me"));
     }
 }

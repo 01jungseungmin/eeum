@@ -94,6 +94,36 @@ class AccountCleanupServiceTest {
     }
 
     @Test
+    void 탈퇴가_취소된_계정은_파기하지_않는다() {
+        // given — 대상 조회와 잠금 사이에 관리자가 탈퇴를 취소할 수 있다.
+        // 그대로 진행하면 활성 계정의 개인정보를 파기하게 된다.
+        Account account = account();
+        account.cancelWithdrawal();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
+
+        // then
+        assertThat(account.isAnonymized()).isFalse();
+        verifyNoInteractions(favoriteService, settlementAccountDeleteService);
+    }
+
+    @Test
+    void 유예_기간이_남은_계정은_파기하지_않는다() {
+        // given — 탈퇴 직후 다시 탈퇴하면 deletedAt이 갱신된다. 임계값을 다시 확인해야 한다.
+        Account account = account();
+        ReflectionTestUtils.setField(account, "deletedAt", LocalDateTime.now().minusDays(1));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        accountCleanupService.anonymizeAccount(ACCOUNT_ID);
+
+        // then
+        assertThat(account.isAnonymized()).isFalse();
+    }
+
+    @Test
     void 이미_파기한_계정은_다시_처리하지_않는다() {
         // given — 재처리하면 이미 익명화된 값 위에 또 덮어써 파기 시각이 계속 갱신된다
         Account account = account();
