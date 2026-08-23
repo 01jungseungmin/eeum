@@ -324,8 +324,26 @@ export const ADMIN_MENU_CONFIG = [
   },
 ];
 
+// 사이드바 메뉴에 나타나지 않는 서브 페이지 전용 타이틀 정보 정의
+const SUB_PAGE_CONFIG = {
+  '/ai-manager/chat': {
+    id: 'ai-chat',
+    name: 'AI 매니저 상담',
+    subtitle: '리뷰·공지·이벤트·고객 메시지·문의 답변을 도와드립니다',
+  },
+  '/ai-manager/care': {
+    id: 'ai-care-detail',
+    name: 'AI 고객 케어 상세',
+    subtitle: '다시 안내하면 좋을 고객 분석과 AI 준비 메시지 현황을 보여줘요.',
+  },
+};
+
 // 브레드크럼이나 헤더 타이틀 매칭 함수 리팩토링
 export const findMenuByPath = (path, role) => {
+  if (SUB_PAGE_CONFIG[path]) {
+    return SUB_PAGE_CONFIG[path];
+  }
+
   const targetConfig =
     role === 'ROLE_ADMIN' ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 
@@ -334,6 +352,14 @@ export const findMenuByPath = (path, role) => {
   for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;
+
+    // 만약 children(서브메뉴) 안에 정의된 path가 있다면 검색
+    for (const item of group.items) {
+      if (item.children) {
+        const subFound = item.children.find((sub) => sub.path === path);
+        if (subFound) return subFound;
+      }
+    }
   }
   return null;
 };

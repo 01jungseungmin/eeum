@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import {
   Users,
@@ -6,8 +6,10 @@ import {
   ShoppingCart,
   Heart,
   MessageSquare,
-  Send,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import CustomerCareCard from './CustomerCareCard';
+import CustomerCareModal from './modal/CustomerCareModal';
 
 const CareContainer = styled.div`
   background: #ffffff;
@@ -75,111 +77,94 @@ const CardGrid = styled.div`
   gap: 16px;
 `;
 
-const Card = styled.div`
-  background: #fafafa;
-  border: 1px solid #f3f4f6;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-`;
-
-const CardTop = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-`;
-
-const CardCategoryIcon = styled.div`
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: ${(props) => props.$bgColor || '#f3f4f6'};
-  color: ${(props) => props.$color || '#374151'};
-`;
-
-const PriorityBadge = styled.span`
-  font-size: 11px;
-  font-weight: 600;
-  color: #15803d;
-  background-color: #dcfce7;
-  padding: 2px 8px;
-  border-radius: 6px;
-`;
-
-const CardTitle = styled.h4`
-  font-size: 15px;
-  font-weight: 700;
-  color: #1f2937;
-  margin: 0 0 6px 0;
-`;
-
-const CardDesc = styled.p`
-  font-size: 12px;
-  color: #6b7280;
-  margin: 0 0 16px 0;
-  line-height: 1.4;
-  height: 34px;
-`;
-
-const AiMessageBox = styled.div`
-  background-color: #ffffff;
-  border: 1px dashed #bbf7d0;
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 16px;
-`;
-
-const AiMessageLabel = styled.div`
-  font-size: 11px;
-  font-weight: 700;
-  color: #16a34a;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 6px;
-`;
-
-const AiMessageText = styled.p`
-  font-size: 12px;
-  color: #374151;
-  margin: 0;
-  line-height: 1.45;
-`;
-
-const SubmitButton = styled.button`
-  width: 100%;
-  background-color: ${(props) => (props.$secondary ? '#ffffff' : '#10b981')};
-  color: ${(props) => (props.$secondary ? '#374151' : '#ffffff')};
-  border: ${(props) => (props.$secondary ? '1px solid #e5e7eb' : 'none')};
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: opacity 0.2s;
-
-  &:hover {
-    opacity: 0.9;
-  }
-`;
-
 const FooterInfo = styled.p`
   font-size: 11px;
   color: #9ca3af;
   margin: 16px 0 0;
 `;
 
+// 카드 목록 데이터
+const CARD_DATA_LIST = [
+  {
+    id: 'card-1',
+    icon: ShoppingCart,
+    iconBgColor: '#e0f2fe',
+    iconColor: '#0284c7',
+    priority: '우선순위 1',
+    title: '구매 관심이 높은 고객 2명',
+    description:
+      '장바구니에 상품을 담았지만 아직 주문하지 않은 고객, 같은 상품을 여러 번 확인한 고객',
+    bannerText:
+      '장바구니에 상품을 담은 뒤 아직 주문하지 않았고, 이전에 비슷한 메뉴를 이용한 이력이 있는 고객입니다.',
+    message:
+      '담아두신 김치찌개 세트가 오늘 점심 포장 할인 중입니다. 필요하실 때 편하게 이용해보세요.',
+    secondaryAction: false,
+  },
+  {
+    id: 'card-2',
+    icon: Heart,
+    iconBgColor: '#fce7f3',
+    iconColor: '#db2777',
+    priority: '우선순위 2',
+    title: '한동안 방문이 없는 단골 5명',
+    description: '최근 3주간 주문이 없는 기존 단골 고객',
+    bannerText: '최근 3주간 주문 이력이 없는 단골 고객입니다.',
+    message:
+      '오랜만이에요. 자주 찾아주셨던 메뉴가 이번 주 다시 준비되었습니다.',
+    secondaryAction: false,
+  },
+  {
+    id: 'card-3',
+    icon: MessageSquare,
+    iconBgColor: '#f3e8ff',
+    iconColor: '#9333ea',
+    priority: '우선순위 3',
+    title: '문의 후 망설이는 고객 2명',
+    description: '문의까지 했지만 주문으로 이어지지 않은 고객',
+    message: null,
+    secondaryAction: true,
+  },
+];
+
 export default function AiCustomerCare() {
+  const navigate = useNavigate();
+
+  // 모달 상태
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    step: 'review',
+    cardData: null,
+  });
+
+  // 발송 완료 상태 저장
+  const [sentStatus, setSentStatus] = useState({});
+
+  /* Action 핸들러 */
+  const handleCardAction = (cardData) => {
+    if (cardData.secondaryAction) {
+      // 답변 초안 모달 혹은 페이지 이동 등의 동작 연결
+      return;
+    }
+    if (sentStatus[cardData.id]) return;
+
+    setModalState({
+      isOpen: true,
+      step: 'review',
+      cardData,
+    });
+  };
+
+  const handleSendSubmit = () => {
+    if (modalState.cardData) {
+      setSentStatus((prev) => ({ ...prev, [modalState.cardData.id]: true }));
+    }
+    setModalState((prev) => ({ ...prev, step: 'success' }));
+  };
+
+  const handleCloseModal = () => {
+    setModalState({ isOpen: false, step: 'review', cardData: null });
+  };
+
   return (
     <CareContainer id="section-ai-care">
       <Header>
@@ -192,88 +177,20 @@ export default function AiCustomerCare() {
             <p>다시 안내하면 올 고객</p>
           </TitleArea>
         </HeaderLeft>
-        <MoreButton>
+        <MoreButton onClick={() => navigate('/ai-manager/care')}>
           더보기 <ChevronRight size={16} />
         </MoreButton>
       </Header>
 
       <CardGrid>
-        {/* 카드 1 */}
-        <Card>
-          <div>
-            <CardTop>
-              <CardCategoryIcon
-                $bgColor="#e0f2fe"
-                $color="#0284c7"
-              >
-                <ShoppingCart size={16} />
-              </CardCategoryIcon>
-              <PriorityBadge>우선순위 1</PriorityBadge>
-            </CardTop>
-            <CardTitle>구매 관심이 높은 고객 2명</CardTitle>
-            <CardDesc>
-              장바구니에 상품을 담았지만 아직 주문하지 않은 고객, 같은 상품을
-              여러 번 확인한 고객
-            </CardDesc>
-
-            <AiMessageBox>
-              <AiMessageLabel>✨ AI 준비 메시지</AiMessageLabel>
-              <AiMessageText>
-                담아두신 김치찌개 세트가 오늘 점심 포장 할인 중입니다. 필요하실
-                때 편하게 이용해보세요.
-              </AiMessageText>
-            </AiMessageBox>
-          </div>
-          <SubmitButton>
-            <Send size={14} /> 검토 후 보내기
-          </SubmitButton>
-        </Card>
-
-        {/* 카드 2 */}
-        <Card>
-          <div>
-            <CardTop>
-              <CardCategoryIcon
-                $bgColor="#fce7f3"
-                $color="#db2777"
-              >
-                <Heart size={16} />
-              </CardCategoryIcon>
-              <PriorityBadge>우선순위 2</PriorityBadge>
-            </CardTop>
-            <CardTitle>한동안 방문이 없는 단골 5명</CardTitle>
-            <CardDesc>최근 3주간 주문이 없는 기존 단골 고객</CardDesc>
-
-            <AiMessageBox>
-              <AiMessageLabel>✨ AI 준비 메시지</AiMessageLabel>
-              <AiMessageText>
-                오랜만이에요. 자주 찾아주셨던 메뉴가 이번 주 다시
-                준비되었습니다.
-              </AiMessageText>
-            </AiMessageBox>
-          </div>
-          <SubmitButton>
-            <Send size={14} /> 검토 후 보내기
-          </SubmitButton>
-        </Card>
-
-        {/* 카드 3 */}
-        <Card>
-          <div>
-            <CardTop>
-              <CardCategoryIcon
-                $bgColor="#f3e8ff"
-                $color="#9333ea"
-              >
-                <MessageSquare size={16} />
-              </CardCategoryIcon>
-              <PriorityBadge>우선순위 3</PriorityBadge>
-            </CardTop>
-            <CardTitle>문의 후 망설이는 고객 2명</CardTitle>
-            <CardDesc>문의까지 했지만 주문으로 이어지지 않은 고객</CardDesc>
-          </div>
-          <SubmitButton $secondary>답변 초안 보기</SubmitButton>
-        </Card>
+        {CARD_DATA_LIST.map((item) => (
+          <CustomerCareCard
+            key={item.id}
+            data={item}
+            isSent={!!sentStatus[item.id]}
+            onActionClick={handleCardAction}
+          />
+        ))}
       </CardGrid>
 
       <FooterInfo>
@@ -281,6 +198,15 @@ export default function AiCustomerCare() {
         제외됐습니다. 상세 행동 로그는 노출하지 않고, 요약된 관계 신호만
         제공합니다.
       </FooterInfo>
+
+      {/* 모달 */}
+      <CustomerCareModal
+        isOpen={modalState.isOpen}
+        step={modalState.step}
+        cardData={modalState.cardData}
+        onClose={handleCloseModal}
+        onSubmit={handleSendSubmit}
+      />
     </CareContainer>
   );
 }

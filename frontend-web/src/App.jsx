@@ -23,6 +23,8 @@ import ChatManagementPage from './pages/owner/main/ChatManagementPage';
 import CustomerManagementPage from './pages/owner/main/CustomerManagementPage';
 import OwnerReportManagementPage from './pages/owner/main/ReportManagementPage';
 import AiManagerPage from './pages/owner/main/AiManagerPage';
+import AiChatPage from './pages/owner/main/AiChatPage';
+import AiCareDetailPage from './pages/owner/main/AiCareDetailPage';
 import AdminReportManagementPage from './pages/admin/main/ReportManagementPage';
 import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
@@ -212,6 +214,14 @@ function App() {
           <Route
             path="/ai-manager"
             element={<AiManagerPage />}
+          />
+          <Route
+            path="/ai-manager/chat"
+            element={<AiChatPage />}
+          />
+          <Route
+            path="/ai-manager/care"
+            element={<AiCareDetailPage />}
           />
         </Route>
       </Route>
