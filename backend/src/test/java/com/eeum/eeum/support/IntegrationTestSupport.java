@@ -9,6 +9,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.utility.DockerImageName;
 
 import java.sql.Connection;
@@ -16,7 +18,11 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 통합 테스트 공통 기반.
@@ -124,6 +130,64 @@ public abstract class IntegrationTestSupport {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * 같은 자원을 건드리는 두 쓰기를 실제 행 잠금 위에서 경쟁시킨다.
+     *
+     * <p>{@code first}는 작업 후 커밋하지 않고 잠금을 쥔 채 대기하고, {@code second}는 그 사이에
+     * 같은 경로로 진입한다. MySQL이 {@code lockTable}에서 잠금 대기를 실제로 보고할 때까지
+     * 기다린 뒤 첫 트랜잭션을 커밋시킨다 — 경과 시간으로 판정하면 스케줄링이 밀렸을 때
+     * 잠금이 없어도 통과한다.
+     *
+     * <p>잠금이 아예 없는 코드에서는 {@code second}가 대기 없이 지나가므로 여기서 실패한다.
+     * 즉 이 헬퍼는 결과 불변식과 별개로 "이 경로가 직렬화된다"는 사실 자체를 고정한다.
+     *
+     * @param secondFailure {@code second}가 던진 예외를 담아 돌려줄 자리
+     */
+    protected static void raceOnLock(
+            PlatformTransactionManager transactionManager,
+            String lockTable,
+            Runnable first,
+            Runnable second,
+            AtomicReference<Throwable> secondFailure
+    ) throws Exception {
+        CountDownLatch firstDone = new CountDownLatch(1);
+        CountDownLatch secondStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<?> t1 = executor.submit(() ->
+                    new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                        first.run();
+                        firstDone.countDown();
+                        awaitQuietly(releaseFirst);
+                    }));
+
+            Future<?> t2 = executor.submit(() -> {
+                awaitQuietly(firstDone);
+                secondStarted.countDown();
+                try {
+                    second.run();
+                } catch (Throwable e) {
+                    secondFailure.set(e);
+                }
+            });
+
+            awaitQuietly(secondStarted);
+            if (!awaitLockWait(lockTable)) {
+                throw new AssertionError(
+                        "두 번째 요청이 " + lockTable + " 행 잠금을 기다리지 않았다 — 경쟁이 재현되지 않음");
+            }
+            releaseFirst.countDown();
+
+            t1.get(30, TimeUnit.SECONDS);
+            t2.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseFirst.countDown();
+            executor.shutdownNow();
         }
     }
 

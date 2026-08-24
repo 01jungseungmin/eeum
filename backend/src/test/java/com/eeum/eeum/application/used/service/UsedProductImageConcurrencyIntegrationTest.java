@@ -23,18 +23,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -100,7 +94,7 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
         // given: 6장씩 두 번. 각자 "현재 0장"을 읽고 진행하면 12장이 된다.
         AtomicReference<Throwable> secondFailure = new AtomicReference<>();
 
-        race(
+        raceOnLock(transactionManager, "account",
                 () -> usedProductImageService.addImages(sellerId, productId, upload(6, "first")),
                 () -> usedProductImageService.addImages(sellerId, productId, upload(6, "second")),
                 secondFailure);
@@ -118,7 +112,7 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
     void 동시_사진_추가로_대표_사진이_둘이_되지_않는다() throws Exception {
         // given: 빈 게시글에 동시에 첫 장을 올린다.
         // 첫 장 판정이 currentCount == 0이라, 둘 다 0을 읽으면 대표가 두 장이 된다.
-        race(
+        raceOnLock(transactionManager, "account",
                 () -> usedProductImageService.addImages(sellerId, productId, upload(1, "first")),
                 () -> usedProductImageService.addImages(sellerId, productId, upload(1, "second")),
                 new AtomicReference<>());
@@ -144,7 +138,7 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
         Long lastId = initial.get(2).getImageId();
         assertThat(initial.get(0).isThumbnail()).isTrue();
 
-        race(
+        raceOnLock(transactionManager, "account",
                 () -> usedProductImageService.deleteImage(sellerId, productId, thumbnailId),
                 () -> usedProductImageService.changeThumbnail(sellerId, productId, lastId),
                 new AtomicReference<>());
@@ -157,55 +151,6 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
                 .isEqualTo(1);
         assertThat(remaining.stream().filter(UsedProductImage::isThumbnail).findFirst().orElseThrow().getImageId())
                 .isEqualTo(lastId);
-    }
-
-    /**
-     * 두 쓰기를 같은 게시글에서 경쟁시킨다.
-     *
-     * <p>T1은 작업 후 커밋하지 않고 잠금을 쥐고 있고, T2는 그 사이에 같은 경로로 진입한다.
-     * MySQL이 실제로 잠금 대기를 보고할 때까지 기다린 뒤 T1을 커밋시킨다 —
-     * 경과 시간으로 판정하면 스케줄링이 밀렸을 때 잠금 없이도 통과한다.
-     *
-     * <p>대기 지점이 {@code account}인 것은 두 요청의 판매자가 같기 때문이다.
-     * 잠금 순서 account → used_product의 첫 단계에서 이미 막힌다.
-     */
-    private void race(Runnable first, Runnable second, AtomicReference<Throwable> secondFailure)
-            throws Exception {
-        CountDownLatch firstDone = new CountDownLatch(1);
-        CountDownLatch secondStarted = new CountDownLatch(1);
-        CountDownLatch releaseFirst = new CountDownLatch(1);
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-
-        try {
-            Future<?> t1 = executor.submit(() ->
-                    new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-                        first.run();
-                        firstDone.countDown();
-                        awaitQuietly(releaseFirst);
-                    }));
-
-            Future<?> t2 = executor.submit(() -> {
-                awaitQuietly(firstDone);
-                secondStarted.countDown();
-                try {
-                    second.run();
-                } catch (Throwable e) {
-                    secondFailure.set(e);
-                }
-            });
-
-            awaitQuietly(secondStarted);
-            assertThat(awaitLockWait("account"))
-                    .as("두 번째 요청이 행 잠금을 기다리지 않았다 — 경쟁이 재현되지 않음")
-                    .isTrue();
-            releaseFirst.countDown();
-
-            t1.get(30, TimeUnit.SECONDS);
-            t2.get(30, TimeUnit.SECONDS);
-        } finally {
-            releaseFirst.countDown();
-            executor.shutdownNow();
-        }
     }
 
     private List<UsedProductImage> images() {
