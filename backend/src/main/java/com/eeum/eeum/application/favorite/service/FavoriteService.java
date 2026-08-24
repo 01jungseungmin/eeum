@@ -82,7 +82,17 @@ public class FavoriteService {
     }
 
     // 찜 삭제 — favoriteId 기반 내 찜 목록 화면처럼 favoriteId를 이미 알고 있을 때 사용
-
+    //
+    // 계약: favoriteId는 "지울 대상(refType + refId)을 알아내는 식별자"이고,
+    // 실제 삭제 단위는 (accountId, refType, refId)다. 행 하나를 지목해 지우는 API가 아니다.
+    //
+    // 그래서 조회와 삭제 사이에 같은 사용자가 다른 기기에서 해제 후 재등록하면(ABA),
+    // 처음 지목한 A가 아니라 새로 생긴 B가 지워진다. 의도된 동작이다 —
+    //   * 쿼리가 accountId로 묶여 있어 남의 찜은 지울 수 없고,
+    //   * 잠금 후 current read + 단건 삭제라 카운터는 정확히 한 번만 감소하며,
+    //   * 최종 상태가 "그 대상이 찜 해제됨"으로, 삭제 버튼을 누른 사용자의 의도와 같다.
+    // 반대로 ID 불일치를 404로 돌려주면 클라이언트에는 실패라고 답하면서 찜은 남아 있는
+    // 상태가 되어 더 나쁘다. 특정 행만 지워야 하는 요구가 생기면 그때 별도 경로를 만든다.
     @Transactional
     public void deleteFavorite(Long accountId, Long favoriteId) {
         // 대상을 알아내기 위한 선행 조회(잠금 없음). 엔티티가 아니라 refType·refId만 읽는다 —
