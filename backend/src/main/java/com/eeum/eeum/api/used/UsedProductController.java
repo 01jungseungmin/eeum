@@ -15,6 +15,7 @@ import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Positive;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -75,7 +76,9 @@ public class UsedProductController {
             @Digits(integer = 8, fraction = 2, message = "가격은 정수 8자리, 소수 2자리까지 입력할 수 있습니다")
             BigDecimal maxPrice,
             @Parameter(description = "거래 상태. 여러 번 보낼 수 있다. 거래완료를 숨기려면 SELLING·RESERVED")
-            @RequestParam(required = false) List<UsedProductStatus> status,
+            // 요소에 @NotNull이 없으면 ?status= 같은 빈 값이 null 원소로 변환돼
+            // status IN (null)로 나가고, 잘못된 요청이 400 대신 조용히 0건으로 끝난다.
+            @RequestParam(required = false) List<@NotNull UsedProductStatus> status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.

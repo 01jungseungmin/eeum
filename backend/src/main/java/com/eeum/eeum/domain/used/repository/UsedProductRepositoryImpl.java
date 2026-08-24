@@ -24,6 +24,7 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,11 +44,26 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
+    // 동점 시 페이지 경계가 흔들리지 않도록 항상 마지막에 붙는 고유 키.
+    // SORTABLE에는 넣지 않는다 — 클라이언트가 직접 지정할 수 있는 정렬 필드가 아니다.
+    private static final String TIE_BREAK_PROPERTY = "usedProductId";
+
+    // SQL 변환용 경로 표 — 허용 정렬 필드에 tie-break 키를 더한 것.
+    private static final Map<String, ComparableExpressionBase<?>> ORDER_PATHS = buildOrderPaths();
+
+    private static Map<String, ComparableExpressionBase<?>> buildOrderPaths() {
+        Map<String, ComparableExpressionBase<?>> paths = new HashMap<>(SORTABLE);
+        paths.put(TIE_BREAK_PROPERTY, PRODUCT.usedProductId);
+        return Map.copyOf(paths);
+    }
+
     private final JPAQueryFactory queryFactory;
 
     @Override
     public Slice<UsedProduct> search(UsedProductSearchCondition condition, Pageable pageable) {
         int size = pageable.getPageSize();
+        // tie-break까지 포함해 확정한다. SQL에만 붙이고 메타데이터에서 빠뜨리면
+        // 응답 Slice.pageable.sort가 실제 정렬 순서와 달라진다.
         Sort appliedSort = resolveSort(pageable.getSort());
 
         List<UsedProduct> content = queryFactory
@@ -141,20 +157,21 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
         List<Sort.Order> applied = requested.stream()
                 .filter(order -> SORTABLE.containsKey(order.getProperty()))
                 .toList();
-        return applied.isEmpty() ? DEFAULT_SORT : Sort.by(applied);
+        Sort base = applied.isEmpty() ? DEFAULT_SORT : Sort.by(applied);
+        // 동점 시 페이지 경계가 흔들리지 않도록 고유 키를 마지막에 붙인다.
+        // toOrderSpecifiers가 SQL에 넣는 것과 반드시 같아야 한다.
+        return base.and(Sort.by(Sort.Order.desc(TIE_BREAK_PROPERTY)));
     }
 
     private OrderSpecifier<?>[] toOrderSpecifiers(Sort sort) {
         List<OrderSpecifier<?>> orders = new ArrayList<>();
         for (Sort.Order order : sort) {
-            ComparableExpressionBase<?> path = SORTABLE.get(order.getProperty());
+            ComparableExpressionBase<?> path = ORDER_PATHS.get(order.getProperty());
             if (path != null) {
                 // NEGOTIABLE은 price가 null 가격순 정렬에서 맨 뒤로 보내기
                 orders.add(order.isAscending() ? path.asc().nullsLast() : path.desc().nullsLast());
             }
         }
-        // 동점 시 페이지 경계가 흔들리지 않도록 고유 키를 마지막에 붙이기
-        orders.add(PRODUCT.usedProductId.desc());
         return orders.toArray(new OrderSpecifier<?>[0]);
     }
 }
