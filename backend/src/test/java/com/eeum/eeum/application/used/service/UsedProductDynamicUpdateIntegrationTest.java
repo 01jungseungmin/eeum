@@ -161,6 +161,31 @@ class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
         assertThat(updated).isEqualTo(1);
     }
 
+    @Test
+    void 숨김_상태면_조회수가_오르지_않는다() {
+        // setUp이 숨김으로 만들어 둔 상태 그대로 센다.
+        // 상세 조회의 공개 확인과 이 UPDATE 사이에 숨김이 커밋될 수 있으므로,
+        // 조건이 UPDATE 자체에 걸려 있어야 비공개 글의 조회수가 오르지 않는다.
+        long updated = increaseViewCountInTransaction();
+
+        assertThat(updated).isZero();
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getViewCount()).isZero();
+    }
+
+    @Test
+    void 삭제된_글은_조회수가_오르지_않는다() {
+        // 판매자 삭제·신고 삭제 조치가 상세 조회와 겹치는 경우.
+        adminUsedProductService.show(productId);   // setUp이 숨김으로 만들어 두므로 먼저 노출
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        product.softDelete();
+        usedProductRepository.saveAndFlush(product);
+
+        long updated = increaseViewCountInTransaction();
+
+        assertThat(updated).isZero();
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getViewCount()).isZero();
+    }
+
     private long increaseViewCountInTransaction() {
         return new TransactionTemplate(transactionManager)
                 .execute(status -> usedProductRepository.increaseViewCount(productId));
