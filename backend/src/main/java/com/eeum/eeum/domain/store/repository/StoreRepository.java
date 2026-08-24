@@ -43,14 +43,20 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
 
     //찜 카운트 +1 — DB 원자 UPDATE, 영향받은 행 수 반환
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE Store s SET s.favoriteCount = s.favoriteCount + 1 WHERE s.storeId = :storeId")
+    @Query("""
+        UPDATE Store s
+        SET s.favoriteCount = s.favoriteCount + 1,
+            s.version = s.version + 1
+        WHERE s.storeId = :storeId
+        """)
     int incrementFavoriteCount(@Param("storeId") Long storeId);
 
     // 찜 카운트 -1 — favoriteCount > 0 가드, 영향받은 행 수 반환
     @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE Store s
-        SET s.favoriteCount = s.favoriteCount - 1
+        SET s.favoriteCount = s.favoriteCount - 1,
+            s.version = s.version + 1
         WHERE s.storeId = :storeId
           AND s.favoriteCount > 0
         """)
@@ -61,7 +67,8 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
     @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE Store s
-        SET s.favoriteCount = s.favoriteCount - 1
+        SET s.favoriteCount = s.favoriteCount - 1,
+            s.version = s.version + 1
         WHERE s.storeId IN :storeIds
           AND s.favoriteCount > 0
         """)
@@ -69,7 +76,12 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
 
     // 대상 삭제 시 찜 카운트 0으로 전이 — 찜 행을 지우면 카운트도 함께 0이어야 한다.
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE Store s SET s.favoriteCount = 0 WHERE s.storeId = :storeId")
+    @Query("""
+        UPDATE Store s
+        SET s.favoriteCount = 0,
+            s.version = s.version + 1
+        WHERE s.storeId = :storeId
+        """)
     int resetFavoriteCount(@Param("storeId") Long storeId);
 
     // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 상점의 favoriteCount 일괄 갱신
@@ -80,7 +92,8 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
         SET s.favorite_count = (
             SELECT COUNT(*) FROM favorite f
             WHERE f.ref_type = 'STORE' AND f.ref_id = s.store_id
-        )
+        ),
+        s.version = s.version + 1
         """, nativeQuery = true)
     int recalculateAllFavoriteCounts();
 }
