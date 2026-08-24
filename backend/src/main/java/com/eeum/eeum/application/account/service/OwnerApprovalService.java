@@ -213,9 +213,9 @@ public class OwnerApprovalService {
         Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (!account.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
-        }
+        // 상태 판정은 assertWritable()에 맡긴다. !isActive()를 한 덩어리로 묶으면
+        // 정지·탈퇴 계정까지 "가입 미완료"로 응답해 공개 오류 계약이 어긋난다.
+        account.assertWritable();
 
         // 잠금을 잡은 뒤 읽는다. getOwnerInfo()로 먼저 읽으면 그 인스턴스가 영속성 컨텍스트에
         // 남아 잠금 조회가 DB 최신 행 대신 1차 캐시를 돌려주고, 재조회의 의미가 사라진다.
@@ -228,9 +228,8 @@ public class OwnerApprovalService {
 
         // 재신청은 미접수·거절 상태에서만 허용한다. 이미 접수된 건을 다시 접수하면
         // 신청 시각이 갱신돼 대기열 순서가 밀리고, 관리자 알림이 요청 횟수만큼 재발행된다.
-        // (거절 시 reviewRequestedAt은 남지만 REJECTED는 재신청 대상이므로 상태로 구분한다.)
-        if (ownerInfo.isReviewRequested()
-                && ownerInfo.getApprovalStatus() != ApprovalStatus.REJECTED) {
+        // 승인·거절과 정확히 같은 판별식을 반대로 쓴다 — 심사 대기 중이면 재접수 금지.
+        if (ownerInfo.isAwaitingReview()) {
             throw new BusinessException(ErrorCode.OWNER_REVIEW_ALREADY_REQUESTED);
         }
 
