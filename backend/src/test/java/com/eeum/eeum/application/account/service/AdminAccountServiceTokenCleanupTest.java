@@ -7,7 +7,6 @@ import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
-import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -225,7 +224,9 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getLongitude()).thenReturn(127.0);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
+        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(account.isActive()).thenReturn(true);
 
         // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
@@ -255,14 +256,13 @@ class AdminAccountServiceTokenCleanupTest {
         Long ownerInfoId = 10L;
         Long accountId = 3L;
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.APPROVED);
+        when(ownerInfo.isApproved()).thenReturn(true);
 
         Account account = mock(Account.class);
         // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
         when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
-        when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(mock(Store.class)));
 
         // when & then
         assertThatThrownBy(() -> adminAccountService.approveOwner(0L, ownerInfoId))
@@ -279,9 +279,14 @@ class AdminAccountServiceTokenCleanupTest {
     void rejectOwner_승인된_신청_거절_시도_차단() {
         // given
         Long ownerInfoId = 20L;
+        Long accountId = 4L;
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.APPROVED);
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        when(ownerInfo.isApproved()).thenReturn(true);
+
+        // 승인과 같은 잠금 규약 — ID projection 선행 조회 후 account → owner_info 순서로 잠근다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(mock(Account.class)));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
 
         // when & then
         assertThatThrownBy(() -> adminAccountService.rejectOwner(
@@ -298,10 +303,13 @@ class AdminAccountServiceTokenCleanupTest {
     void rejectOwner_PENDING_신청_거절_시_reject_호출() {
         // given
         Long ownerInfoId = 21L;
+        Long accountId = 5L;
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(mock(Account.class));
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(mock(Account.class)));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
 
         com.eeum.eeum.application.account.dto.request.RejectRequestDto rejectRequest =
                 mock(com.eeum.eeum.application.account.dto.request.RejectRequestDto.class);
@@ -485,7 +493,9 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getLongitude()).thenReturn(127.0);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
+        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(account.isActive()).thenReturn(true);
 
         // 미인증 AccountRegion이 이미 존재하는 경우
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
@@ -531,7 +541,9 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getLongitude()).thenReturn(127.0);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
+        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(account.isActive()).thenReturn(true);
 
         // 이미 인증된 AccountRegion
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
@@ -574,7 +586,9 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getRegion()).thenReturn(null).thenReturn(region);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
+        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(account.isActive()).thenReturn(true);
 
         // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
@@ -619,7 +633,9 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getStoreId()).thenReturn(200L);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
+        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(account.isActive()).thenReturn(true);
 
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
                 mock(com.eeum.eeum.domain.account.entity.AccountRegion.class);
@@ -664,7 +680,9 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getStoreId()).thenReturn(201L);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
+        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
+        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(account.isActive()).thenReturn(true);
 
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
                 mock(com.eeum.eeum.domain.account.entity.AccountRegion.class);

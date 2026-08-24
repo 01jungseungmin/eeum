@@ -228,12 +228,21 @@ public class AdminAccountService {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
+        // 선행조건을 먼저 검증한다 — 상태를 확정하기 전에는 Store 조회·좌표 보정 같은
+        // 부수효과를 시작하지 않는다.
+        //
+        // 신청 상태가 계정 상태보다 우선한다. 접수되지 않은 신청은 승인 대상이 아니다.
+        // PENDING만 보면 아직 체크리스트도 안 끝낸 신규 OwnerInfo(create 직후·사업자번호
+        // 변경 직후)까지 ownerInfoId만 알면 승인된다.
+        assertReviewable(ownerInfo);
+
+        // 승인은 ROLE_OWNER를 부여한다 — 살아 있지 않은 계정에 권한을 주면 정지·탈퇴가 무력화된다.
+        // 거절과 달리 승인만 ACTIVE를 요구하는 이유다. (거절은 아무 권한도 주지 않으므로
+        // 탈퇴한 신청자의 대기열 정리를 막지 않는다.)
+        assertApprovableAccount(account);
+
         Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
-
-        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
-        }
 
         if (store.getRegion() == null || store.getLatitude() == null || store.getLongitude() == null) {
             storeLocationResolver.resolveAndApplyLocation(store);
@@ -273,19 +282,54 @@ public class AdminAccountService {
 
     @Transactional
     public void rejectOwner(Long adminId, Long ownerInfoId, RejectRequestDto request) {
-        OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
+        // 승인과 같은 잠금 규약을 쓴다. 잠그지 않고 읽으면 PENDING을 본 뒤 approveOwner가
+        // ROLE_OWNER + APPROVED를 커밋하고, 이 트랜잭션이 나중에 flush하며 상태만 REJECTED로
+        // 덮는다. reject()는 계정 권한을 되돌리지 않으므로 "거절당했는데 /owner/**는 계속 되는"
+        // ROLE_OWNER + REJECTED가 DB에 남고, 수동 복구 외에는 회복되지 않는다.
+        // OwnerInfo에는 @Version이 없어 dirty checking이 행 전체를 덮어쓴다.
+        Long accountId = ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
-        }
+        // 잠금 순서 account → owner_info. approveOwner·requestReview와 같은 순서다.
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        Account account = ownerInfo.getAccount();
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
+
+        // 잠금을 잡은 뒤 재검증 — 먼저 커밋된 승인을 여기서 보고 멈춘다.
+        assertReviewable(ownerInfo);
 
         ownerInfo.reject(request.getReason());
 
         log.info("사장 거절: adminId={}, ownerInfoId={}, accountId={}",
                 adminId, ownerInfoId, account.getAccountId());
+    }
+
+    // 승인·거절 공통 선행조건 — 접수 완료된 미승인 신청만 심사할 수 있다.
+    private void assertReviewable(OwnerInfo ownerInfo) {
+        if (ownerInfo.isApproved()) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
+        if (!ownerInfo.isReviewRequested()) {
+            throw new BusinessException(ErrorCode.OWNER_REVIEW_NOT_REQUESTED);
+        }
+    }
+
+    // 승인 전용 — 권한 부여 대상 계정이 살아 있는지 확인한다.
+    private void assertApprovableAccount(Account account) {
+        if (account.isWithdrawn()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
+
+        if (account.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+        }
+
+        if (!account.isActive()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
+        }
     }
 
     // ===================== 내부 유틸 =====================
