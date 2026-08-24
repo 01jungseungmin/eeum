@@ -62,6 +62,22 @@ public class OwnerInfo extends BaseEntity {
         return ownerInfo;
     }
 
+    /**
+     * 심사 접수 여부 — 상태 전이의 실제 판별식이다.
+     *
+     * <p>{@code approvalStatus == PENDING}으로 판별하면 안 된다. PENDING은 두 상태를 겸한다:
+     * {@link #create}와 {@link #updateInfo}(사업자번호 변경)는 PENDING + {@code reviewRequestedAt = null}
+     * ("아직 제출 안 함")을 만들고, {@link #requestReview}는 PENDING + 접수 시각("심사 대기")을 만든다.
+     * 승인·거절은 후자만, 재신청은 전자만 허용해야 하므로 두 서비스가 같은 정의를 공유한다.
+     */
+    public boolean isReviewRequested() {
+        return this.reviewRequestedAt != null;
+    }
+
+    public boolean isApproved() {
+        return this.approvalStatus == ApprovalStatus.APPROVED;
+    }
+
     public void requestReview() {
         this.approvalStatus = ApprovalStatus.PENDING;
         this.rejectionReason = null;

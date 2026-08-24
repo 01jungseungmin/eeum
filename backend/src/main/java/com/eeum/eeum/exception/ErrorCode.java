@@ -67,6 +67,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     OWNER_REVIEW_ALREADY_REQUESTED("OWNER_002","이미 입점 심사 요청이 접수되었습니다.",HttpStatus.CONFLICT),
     OWNER_CHECKLIST_NOT_COMPLETED( "OWNER_003","입점 심사 필수 항목을 모두 완료해야 합니다.",HttpStatus.BAD_REQUEST),
     OWNER_INFO_NOT_FOUND( "OWNER_004","사장 신청 정보를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
+    OWNER_REVIEW_NOT_REQUESTED("OWNER_005","입점 심사 요청이 접수되지 않았습니다.",HttpStatus.CONFLICT),
 
     // ===================== 사업자 인증 (BUSINESST) =====================
     BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
