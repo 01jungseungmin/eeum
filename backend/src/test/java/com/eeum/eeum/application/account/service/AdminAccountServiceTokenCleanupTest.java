@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -55,6 +56,9 @@ class AdminAccountServiceTokenCleanupTest {
     @Mock StoreApprovalMapper storeApprovalMapper;
     @Mock SanctionHistoryService sanctionHistoryService;
     @Mock AccountWithdrawalProcessor accountWithdrawalProcessor;
+
+    // 제재 자격 판정은 Mock으로 두면 관리자 대상 차단·중복 정지 차단이 무력화된다.
+    @Spy AccountSanctionPolicy accountSanctionPolicy = new AccountSanctionPolicy();
     @Mock ApplicationEventPublisher eventPublisher;
 
     // ─────────────────── suspendAccount ───────────────────
@@ -94,6 +98,59 @@ class AdminAccountServiceTokenCleanupTest {
         // WITHDRAWN 최종 상태 우선 — suspend가 실행되지 않아야 함
         verify(target, never()).suspend();
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void suspendAccount_관리자_계정은_정지할_수_없다() {
+        // given: 자기 자신도 여기 걸린다 — 이 경로는 ROLE_ADMIN 전용이라 actor == target이면 관리자다.
+        Long targetId = 1L;
+        Account target = mock(Account.class);
+        when(target.isAdmin()).thenReturn(true);
+        when(accountRepository.findByIdWithLock(targetId)).thenReturn(Optional.of(target));
+
+        // when & then: 신고 처리 경로와 같은 오류로 통일한다.
+        assertThatThrownBy(() -> adminAccountService.suspendAccount(0L, targetId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_ADMIN_SANCTION_NOT_ALLOWED);
+
+        verify(target, never()).suspend();
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void forceDeleteAccount_관리자_계정은_강제_탈퇴시킬_수_없다() {
+        // given
+        Long targetId = 1L;
+        Account target = mock(Account.class);
+        when(target.isAdmin()).thenReturn(true);
+        when(accountRepository.findByIdWithLock(targetId)).thenReturn(Optional.of(target));
+
+        // when & then
+        assertThatThrownBy(() -> adminAccountService.forceDeleteAccount(0L, targetId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_ADMIN_SANCTION_NOT_ALLOWED);
+
+        verify(accountWithdrawalProcessor, never()).process(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void forceDeleteAccount_정지된_계정은_그대로_강제_탈퇴할_수_있다() {
+        // given: 정지 → 탈퇴는 정상 순서다. 제재 자격 판정을 하나로 합치면 이 경로가 막힌다.
+        Long targetId = 1L;
+        Account target = mock(Account.class);
+        when(target.isWithdrawn()).thenReturn(false);
+        when(target.isAdmin()).thenReturn(false);
+        when(accountRepository.findByIdWithLock(targetId)).thenReturn(Optional.of(target));
+
+        // when
+        adminAccountService.forceDeleteAccount(0L, targetId);
+
+        // then
+        verify(accountWithdrawalProcessor).process(target);
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(targetId));
     }
 
     // ─────────────────── forceDeleteAccount ───────────────────
@@ -169,9 +226,11 @@ class AdminAccountServiceTokenCleanupTest {
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(account);
 
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(accountId, 100L))
                 .thenReturn(Optional.empty());
@@ -194,14 +253,16 @@ class AdminAccountServiceTokenCleanupTest {
     void approveOwner_이미_승인된_신청_거절_이벤트_미발행() {
         // given
         Long ownerInfoId = 10L;
+        Long accountId = 3L;
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.APPROVED);
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
 
         Account account = mock(Account.class);
-        when(ownerInfo.getAccount()).thenReturn(account);
-        when(account.getAccountId()).thenReturn(3L);
-        when(storeRepository.findByAccount_AccountId(3L)).thenReturn(Optional.of(mock(Store.class)));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
+        when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(mock(Store.class)));
 
         // when & then
         assertThatThrownBy(() -> adminAccountService.approveOwner(0L, ownerInfoId))
@@ -425,7 +486,6 @@ class AdminAccountServiceTokenCleanupTest {
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(account);
 
         // 미인증 AccountRegion이 이미 존재하는 경우
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
@@ -433,7 +493,10 @@ class AdminAccountServiceTokenCleanupTest {
         when(existingRegion.isVerified()).thenReturn(false);
         when(existingRegion.getAccountRegionId()).thenReturn(300L);
 
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(accountId, regionId))
                 .thenReturn(Optional.of(existingRegion));
@@ -469,7 +532,6 @@ class AdminAccountServiceTokenCleanupTest {
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(account);
 
         // 이미 인증된 AccountRegion
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
@@ -477,7 +539,10 @@ class AdminAccountServiceTokenCleanupTest {
         when(existingRegion.isVerified()).thenReturn(true);
         when(existingRegion.getAccountRegionId()).thenReturn(400L);
 
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(accountId, regionId))
                 .thenReturn(Optional.of(existingRegion));
@@ -510,9 +575,11 @@ class AdminAccountServiceTokenCleanupTest {
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(account);
 
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
 
         // resolver 호출 후 region이 반환되도록 설정
@@ -553,14 +620,16 @@ class AdminAccountServiceTokenCleanupTest {
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(account);
 
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
                 mock(com.eeum.eeum.domain.account.entity.AccountRegion.class);
         when(existingRegion.isVerified()).thenReturn(true);
         when(existingRegion.getAccountRegionId()).thenReturn(700L);
 
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(accountId, regionId))
                 .thenReturn(Optional.of(existingRegion));
@@ -596,14 +665,16 @@ class AdminAccountServiceTokenCleanupTest {
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.PENDING);
-        when(ownerInfo.getAccount()).thenReturn(account);
 
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
                 mock(com.eeum.eeum.domain.account.entity.AccountRegion.class);
         when(existingRegion.isVerified()).thenReturn(true);
         when(existingRegion.getAccountRegionId()).thenReturn(800L);
 
-        when(ownerInfoRepository.findById(ownerInfoId)).thenReturn(Optional.of(ownerInfo));
+        // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
+        when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(accountId, regionId))
                 .thenReturn(Optional.of(existingRegion));

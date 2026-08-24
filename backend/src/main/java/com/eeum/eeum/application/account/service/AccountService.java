@@ -24,9 +24,11 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -158,9 +160,12 @@ public class AccountService {
 
     @Transactional
     public void updateOwnerInfo(Long accountId, OwnerInfoRequestDto request) {
-        getActiveAccount(accountId);
+        // 잠금 순서 account → owner_info. 사장 승인(AdminAccountService.approveOwner)과 같은 순서다.
+        // 잠그지 않으면 승인 트랜잭션과 겹쳐 승인 결과(APPROVED)를 이 트랜잭션의 옛 스냅샷이 덮어
+        // ROLE_OWNER인데 심사는 PENDING이고 사업자번호는 미검증인 상태가 남는다.
+        getActiveAccountWithLock(accountId);
 
-        OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
         String normalizedBusinessNumber = normalizeBusinessNumber(request.getBusinessNumber());
@@ -180,6 +185,15 @@ public class AccountService {
         }
 
         ownerInfo.updateInfo(normalizedBusinessNumber);
+
+        // existsByBusinessNumber를 둘 다 통과한 동시 요청은 UNIQUE 제약에서 갈린다.
+        // flush하지 않으면 커밋 시점에 터져 GlobalExceptionHandler의 generic 409로 끝나므로,
+        // 여기서 앞당겨 정확한 ACCOUNT_DUPLICATE_BUSINESS_NUMBER로 변환한다.
+        try {
+            ownerInfoRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
+        }
 
         log.info("사장 정보 수정 완료: accountId={}", accountId);
     }
