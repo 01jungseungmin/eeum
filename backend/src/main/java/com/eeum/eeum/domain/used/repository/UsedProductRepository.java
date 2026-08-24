@@ -46,6 +46,16 @@ public interface UsedProductRepository
         """)
     int decrementFavoriteCount(@Param("usedProductId") Long usedProductId);
 
+    // 신고 조치 폴백용 판매자 ID 조회 — 잠금 없이 읽는다.
+    // 여기서 상품 행을 잠그면 뒤이어 계정을 잠그게 되어 used_product → account 순서가 되는데,
+    // 판매자 경로(AccountWriteGuard)는 account → used_product라 정반대다. 두 요청이 겹치면 교착이다.
+    // 이 경로는 상품을 수정하지 않고 조치 대상(계정)만 찾으므로 잠글 이유가 없다.
+    @Query("""
+        SELECT p.seller.accountId FROM UsedProduct p
+        WHERE p.usedProductId = :usedProductId AND p.deletedAt IS NULL
+        """)
+    Optional<Long> findSellerAccountIdByUsedProductId(@Param("usedProductId") Long usedProductId);
+
     // 찜 카운트 일괄 -1 — 회원 탈퇴처럼 한 사람의 찜을 한꺼번에 정리할 때 사용.
     // 같은 회원이 같은 글을 두 번 찜할 수 없어(UNIQUE) ID가 중복되지 않으므로 단건 -1의 반복과 결과가 같다.
     @Modifying(clearAutomatically = true)

@@ -107,14 +107,34 @@ class UsedProductReportActionExecutorTest {
     }
 
     @Test
-    void 저장된_판매자_ID가_없으면_게시글에서_찾는다() {
-        givenProductForUpdate(product());
+    void 저장된_판매자_ID가_없으면_게시글에서_찾되_상품을_잠그지_않는다() {
+        // 폴백에서 상품을 잠그면 곧바로 계정을 잠그게 되어 used_product → account 순서가 된다.
+        // 판매자 경로(AccountWriteGuard)는 account → used_product라 정반대여서 교착이 난다.
+        // 이 경로는 상품을 수정하지 않으므로 잠금 없는 조회로 대상만 찾는다.
+        when(usedProductRepository.findSellerAccountIdByUsedProductId(PRODUCT_ID))
+                .thenReturn(Optional.of(SELLER_ID));
         when(reportedAccountActionService.apply(ReportAction.WARN_AUTHOR, SELLER_ID))
                 .thenReturn(SELLER_ID);
 
         executor.execute(ReportAction.WARN_AUTHOR, PRODUCT_ID, null, "경고");
 
         verify(reportedAccountActionService).apply(ReportAction.WARN_AUTHOR, SELLER_ID);
+        verify(usedProductRepository, never()).findByUsedProductIdForUpdate(any());
+    }
+
+    @Test
+    void 저장된_판매자_ID가_없고_게시글도_없으면_대상_없음으로_끝난다() {
+        // 잠금 조회에서 잠금 없는 조회로 바꿔도 삭제 필터는 유지돼야 한다.
+        when(usedProductRepository.findSellerAccountIdByUsedProductId(PRODUCT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                executor.execute(ReportAction.WARN_AUTHOR, PRODUCT_ID, null, "경고"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REPORT_TARGET_NOT_AVAILABLE);
+
+        verify(reportedAccountActionService, never()).apply(any(), any());
     }
 
     // ─────────────────── 알림 ───────────────────

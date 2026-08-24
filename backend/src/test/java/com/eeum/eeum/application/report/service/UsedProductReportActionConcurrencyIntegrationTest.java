@@ -21,6 +21,7 @@ import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.support.IntegrationTestSupport;
+import com.eeum.eeum.support.SqlCaptureInspector;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,10 +33,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 신고 조치(숨김·삭제)와 같은 게시글에 대한 다른 쓰기의 경쟁을 실제 MySQL에서 검증한다.
@@ -195,6 +198,58 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
         assertThat(product.isHidden())
                 .as("이미 삭제된 글에 숨김이 적용되면 안 된다")
                 .isFalse();
+    }
+
+    @Test
+    void 판매자_ID_스냅샷이_없는_신고도_상품을_잠그지_않는다() throws Exception {
+        // given: 스냅샷 컬럼이 생기기 전의 과거 신고를 재현한다(storedSellerAccountId = null).
+        // 이 폴백이 상품을 잠그면 used_product → account 순서가 되는데, 판매자 경로는
+        // account → used_product다. 두 요청이 겹치면 서로의 잠금을 기다려 교착이 난다.
+        SqlCaptureInspector.reset();
+
+        Long resolved = inTransactionReturning(() -> reportActionExecutor.execute(
+                ReportAction.WARN_AUTHOR, productId, null, "경고 조치"));
+
+        // then: 대상은 정확히 찾되
+        assertThat(resolved).isEqualTo(sellerId);
+
+        // 상품은 잠그지 않고, 계정만 잠근다.
+        assertThat(lockingSelectsOn("used_product"))
+                .as("상품 잠금 후 계정을 잠그면 판매자 경로와 순서가 뒤집혀 교착이 난다: %s",
+                        lockingSelectsOn("used_product"))
+                .isEmpty();
+        assertThat(lockingSelectsOn("account"))
+                .as("조치 대상 계정은 잠근 뒤 상태를 확인해야 한다")
+                .isNotEmpty();
+    }
+
+    @Test
+    void 판매자_ID_스냅샷이_없는데_글이_삭제됐으면_대상_없음으로_끝난다() throws Exception {
+        // given
+        UsedProduct product = product();
+        product.softDelete();
+        usedProductRepository.saveAndFlush(product);
+
+        // when & then: 폴백이 잠금 조회에서 잠금 없는 조회로 바뀌어도 삭제 필터는 유지돼야 한다.
+        assertThatThrownBy(() -> inTransactionReturning(() -> reportActionExecutor.execute(
+                ReportAction.WARN_AUTHOR, productId, null, "경고 조치")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REPORT_TARGET_NOT_AVAILABLE);
+    }
+
+    // 지정 테이블을 읽으면서 행 잠금을 거는 SELECT만 골라낸다.
+    private List<String> lockingSelectsOn(String table) {
+        return SqlCaptureInspector.captured().stream()
+                .map(String::toLowerCase)
+                .filter(sql -> sql.startsWith("select"))
+                .filter(sql -> sql.contains(" " + table + " ") || sql.contains(" " + table + "("))
+                .filter(sql -> sql.contains("for update"))
+                .toList();
+    }
+
+    private Long inTransactionReturning(java.util.function.Supplier<Long> action) {
+        return new TransactionTemplate(transactionManager).execute(status -> action.get());
     }
 
     // 신고 조치 경로를 거치지 않고 초기 상태만 숨김으로 만든다.

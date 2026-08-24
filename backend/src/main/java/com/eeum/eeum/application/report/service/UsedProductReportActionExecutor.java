@@ -81,12 +81,25 @@ public class UsedProductReportActionExecutor implements ReportTargetActionExecut
         return sellerAccountId;
     }
 
-    // 신고 시점에 저장해 둔 판매자 ID를 우선 쓴다. 글이 지워졌어도 조치 대상을 찾을 수 있다.
+    /**
+     * 조치 대상 판매자를 찾는다. 신고 접수 시 저장해 둔 ID를 우선 쓰므로,
+     * 글이 지워졌어도 경고·정지 대상을 잃지 않는다.
+     *
+     * <p>스냅샷이 없는 과거 신고를 위한 폴백은 <b>잠금 없이</b> 읽는다.
+     * 여기서 {@code getProductForUpdate}로 상품을 잠그면 곧바로 계정을 잠그게 되어
+     * used_product → account 순서가 되는데, 판매자 경로({@code AccountWriteGuard})는
+     * account → used_product라 정반대다. 판매자가 자기 글을 수정하는 중에 이 조치가 들어오면
+     * 서로 상대의 잠금을 기다리는 교착이 난다.
+     *
+     * <p>이 경로는 상품을 수정하지 않고 대상 계정만 찾는다. 실제 변경은
+     * {@code ReportedAccountActionService}가 계정을 잠근 뒤 수행하므로 여기서 잠글 이유가 없다.
+     */
     private Long resolveSellerAccountId(Long usedProductId, Long storedSellerAccountId) {
         if (storedSellerAccountId != null) {
             return storedSellerAccountId;
         }
-        return getProductForUpdate(usedProductId).getSeller().getAccountId();
+        return usedProductRepository.findSellerAccountIdByUsedProductId(usedProductId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
     }
 
     private UsedProduct getProductForUpdate(Long usedProductId) {
