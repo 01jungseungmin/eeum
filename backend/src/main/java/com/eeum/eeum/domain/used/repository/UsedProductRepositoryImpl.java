@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RequiredArgsConstructor
 public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
@@ -41,6 +42,11 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
             "favoriteCount", PRODUCT.favoriteCount,
             "viewCount", PRODUCT.viewCount
     );
+
+    // NULL이 섞일 수 있는 정렬 필드. NEGOTIABLE(가격제안)은 price가 null이라
+    // 가격순 정렬에서 맨 뒤로 보낸다. 나머지 필드는 NOT NULL이라 NULL 처리를 지정하지 않는다 —
+    // 지정해 봐야 SQL에 불필요한 case 식만 붙는다.
+    private static final Set<String> NULLABLE_SORT_PROPERTIES = Set.of("price");
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
@@ -156,6 +162,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
     private Sort resolveSort(Sort requested) {
         List<Sort.Order> applied = requested.stream()
                 .filter(order -> SORTABLE.containsKey(order.getProperty()))
+                .map(UsedProductRepositoryImpl::normalizeNullHandling)
                 .toList();
         Sort base = applied.isEmpty() ? DEFAULT_SORT : Sort.by(applied);
         // 동점 시 페이지 경계가 흔들리지 않도록 고유 키를 마지막에 붙인다.
@@ -163,15 +170,40 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
         return base.and(Sort.by(Sort.Order.desc(TIE_BREAK_PROPERTY)));
     }
 
+    /**
+     * NULL이 섞이는 정렬 필드의 NULL 처리를 확정한다.
+     *
+     * <p>요청 파라미터({@code sort=price,asc})로는 NULL 처리를 지정할 수 없어 항상 NATIVE로 들어온다.
+     * 그대로 두면 응답 메타데이터는 NATIVE(MySQL ASC 기준 NULL이 앞)라고 말하는데 실제 결과는
+     * NULL이 뒤에 오는, <b>정반대</b> 상태가 된다. 여기서 확정하고 SQL은 이 값을 따라간다.
+     */
+    private static Sort.Order normalizeNullHandling(Sort.Order order) {
+        return NULLABLE_SORT_PROPERTIES.contains(order.getProperty()) ? order.nullsLast() : order;
+    }
+
     private OrderSpecifier<?>[] toOrderSpecifiers(Sort sort) {
         List<OrderSpecifier<?>> orders = new ArrayList<>();
         for (Sort.Order order : sort) {
             ComparableExpressionBase<?> path = ORDER_PATHS.get(order.getProperty());
             if (path != null) {
-                // NEGOTIABLE은 price가 null 가격순 정렬에서 맨 뒤로 보내기
-                orders.add(order.isAscending() ? path.asc().nullsLast() : path.desc().nullsLast());
+                // NULL 처리는 resolveSort가 확정한 메타데이터를 그대로 따른다.
+                // 여기서 독립적으로 붙이면 응답 Sort와 실제 SQL이 갈린다.
+                orders.add(applyNullHandling(
+                        order.isAscending() ? path.asc() : path.desc(),
+                        order.getNullHandling()));
             }
         }
         return orders.toArray(new OrderSpecifier<?>[0]);
+    }
+
+    private static OrderSpecifier<?> applyNullHandling(
+            OrderSpecifier<?> specifier,
+            Sort.NullHandling nullHandling
+    ) {
+        return switch (nullHandling) {
+            case NULLS_LAST -> specifier.nullsLast();
+            case NULLS_FIRST -> specifier.nullsFirst();
+            case NATIVE -> specifier;
+        };
     }
 }
