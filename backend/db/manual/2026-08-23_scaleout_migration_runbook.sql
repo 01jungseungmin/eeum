@@ -77,40 +77,99 @@ WHERE p.favorite_count <> (
 -- ============================================================================
 -- STEP 1. 현재 상태 확인 — 재개 지점
 --         중단 후 다시 시작할 때 이 쿼리만 돌리면 무엇이 남았는지 알 수 있다.
---         DONE인 항목은 건너뛴다.
+--
+--         status 판정은 이름이 아니라 실제 정의로 한다. 이름만 보면 컬럼 순서가 다르거나
+--         UNIQUE 여부가 뒤집힌 인덱스, precision이 다른 컬럼까지 DONE으로 처리되어
+--         STEP 3-ALT의 "이미 존재 — 건너뜀"과 겹치며 잘못된 스키마가 그대로 통과한다.
+--           DONE     — 건너뛴다
+--           TODO     — STEP 3(또는 3-ALT)을 실행한다
+--           MISMATCH — 같은 이름의 다른 객체가 있다. 자동 수정 금지.
+--                      actual/expected를 비교해 사람이 DROP 후 재생성할지 판단한다.
 -- ============================================================================
 
 SELECT 'uk_favorite_account_ref' AS object_name,
-       IF(COUNT(*) > 0, 'DONE', 'TODO') AS status
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 0
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'account_id,ref_type,ref_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=0 cols=account_id,ref_type,ref_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'favorite'
   AND index_name = 'uk_favorite_account_ref'
 UNION ALL
-SELECT 'idx_favorite_ref',
-       IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_favorite_ref' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'ref_type,ref_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=ref_type,ref_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'favorite'
   AND index_name = 'idx_favorite_ref'
 UNION ALL
-SELECT 'idx_favorite_account_type_created',
-       IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_favorite_account_type_created' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'account_id,ref_type,created_at,favorite_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=account_id,ref_type,created_at,favorite_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'favorite'
   AND index_name = 'idx_favorite_account_type_created'
 UNION ALL
-SELECT 'idx_used_product_public_list',
-       IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_used_product_public_list' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'region_id,deleted_at,is_hidden,created_at'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=region_id,deleted_at,is_hidden,created_at' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'used_product'
   AND index_name = 'idx_used_product_public_list'
 UNION ALL
 SELECT 'account.anonymized_at',
-       IF(COUNT(*) > 0, 'DONE', 'TODO')
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(column_type) = 'datetime(6)' AND MAX(is_nullable) = 'YES' THEN 'DONE'
+           ELSE 'MISMATCH'
+       END,
+       IFNULL(CONCAT(MAX(column_type), ' nullable=', MAX(is_nullable)), '-'),
+       'datetime(6) nullable=YES'
 FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'account'
   AND column_name = 'anonymized_at'
 UNION ALL
-SELECT 'account.idx_account_anonymize_target', IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_account_anonymize_target' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'status,anonymized_at,deleted_at,account_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=status,anonymized_at,deleted_at,account_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'account'
   AND index_name = 'idx_account_anonymize_target';
@@ -288,37 +347,95 @@ PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 
 -- ============================================================================
--- STEP 4. 검증 — 5개가 모두 DONE이어야 한다
---         STEP 1과 같은 쿼리다. 여기서 TODO가 남으면 STEP 3으로 돌아간다.
+-- STEP 4. 검증 — 6개가 모두 DONE이어야 한다
+--         STEP 1과 같은 쿼리다. TODO가 남으면 STEP 3으로 돌아가고,
+--         MISMATCH가 나오면 STEP 3을 다시 돌려도 해결되지 않는다(이름이 이미 존재하므로
+--         3-ALT는 건너뛴다). 해당 객체를 DROP 후 재생성할지 사람이 판단한다.
 -- ============================================================================
 
 SELECT 'uk_favorite_account_ref' AS object_name,
-       IF(COUNT(*) > 0, 'DONE', 'TODO') AS status
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 0
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'account_id,ref_type,ref_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=0 cols=account_id,ref_type,ref_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'favorite'
   AND index_name = 'uk_favorite_account_ref'
 UNION ALL
-SELECT 'idx_favorite_ref', IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_favorite_ref' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'ref_type,ref_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=ref_type,ref_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'favorite'
   AND index_name = 'idx_favorite_ref'
 UNION ALL
-SELECT 'idx_favorite_account_type_created', IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_favorite_account_type_created' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'account_id,ref_type,created_at,favorite_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=account_id,ref_type,created_at,favorite_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'favorite'
   AND index_name = 'idx_favorite_account_type_created'
 UNION ALL
-SELECT 'idx_used_product_public_list', IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_used_product_public_list' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'region_id,deleted_at,is_hidden,created_at'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=region_id,deleted_at,is_hidden,created_at' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'used_product'
   AND index_name = 'idx_used_product_public_list'
 UNION ALL
-SELECT 'account.anonymized_at', IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'account.anonymized_at',
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(column_type) = 'datetime(6)' AND MAX(is_nullable) = 'YES' THEN 'DONE'
+           ELSE 'MISMATCH'
+       END,
+       IFNULL(CONCAT(MAX(column_type), ' nullable=', MAX(is_nullable)), '-'),
+       'datetime(6) nullable=YES'
 FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'account'
   AND column_name = 'anonymized_at'
 UNION ALL
-SELECT 'account.idx_account_anonymize_target', IF(COUNT(*) > 0, 'DONE', 'TODO')
+SELECT 'idx_account_anonymize_target' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN MAX(non_unique) = 1
+            AND GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'status,anonymized_at,deleted_at,account_id'
+               THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       IFNULL(CONCAT('non_unique=', MAX(non_unique),
+                     ' cols=', GROUP_CONCAT(column_name ORDER BY seq_in_index)), '-') AS actual,
+       'non_unique=1 cols=status,anonymized_at,deleted_at,account_id' AS expected
 FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'account'
   AND index_name = 'idx_account_anonymize_target';
