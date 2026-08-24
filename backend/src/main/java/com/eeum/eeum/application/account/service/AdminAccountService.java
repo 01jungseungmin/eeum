@@ -237,9 +237,10 @@ public class AdminAccountService {
         assertReviewable(ownerInfo);
 
         // 승인은 ROLE_OWNER를 부여한다 — 살아 있지 않은 계정에 권한을 주면 정지·탈퇴가 무력화된다.
-        // 거절과 달리 승인만 ACTIVE를 요구하는 이유다. (거절은 아무 권한도 주지 않으므로
+        // 거절과 달리 승인만 계정 상태를 요구하는 이유다. (거절은 아무 권한도 주지 않으므로
         // 탈퇴한 신청자의 대기열 정리를 막지 않는다.)
-        assertApprovableAccount(account);
+        // 상태 판정은 assertWritable()에 맡긴다 — 탈퇴·정지·가입 미완료를 구분해 던진다.
+        account.assertWritable();
 
         Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
@@ -306,29 +307,17 @@ public class AdminAccountService {
                 adminId, ownerInfoId, account.getAccountId());
     }
 
-    // 승인·거절 공통 선행조건 — 접수 완료된 미승인 신청만 심사할 수 있다.
+    // 승인·거절 공통 선행조건 — 심사 대기 중인 신청만 처리할 수 있다.
+    // 미접수(제출 전)와 REJECTED(재신청 전) 둘 다 여기서 걸린다. 거절은 접수 시각을 남기므로
+    // 시각만 보면 거절된 신청이 재신청 없이 승인되고, 이미 거절된 건이 다시 거절돼
+    // 거절 사유가 덮인다.
     private void assertReviewable(OwnerInfo ownerInfo) {
         if (ownerInfo.isApproved()) {
             throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
         }
 
-        if (!ownerInfo.isReviewRequested()) {
-            throw new BusinessException(ErrorCode.OWNER_REVIEW_NOT_REQUESTED);
-        }
-    }
-
-    // 승인 전용 — 권한 부여 대상 계정이 살아 있는지 확인한다.
-    private void assertApprovableAccount(Account account) {
-        if (account.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
-
-        if (account.isSuspended()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-        }
-
-        if (!account.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
+        if (!ownerInfo.isAwaitingReview()) {
+            throw new BusinessException(ErrorCode.OWNER_REVIEW_NOT_PENDING);
         }
     }
 

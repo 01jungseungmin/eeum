@@ -224,9 +224,8 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getLongitude()).thenReturn(127.0);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
-        when(account.isActive()).thenReturn(true);
+        // 승인 대상은 "심사 대기 중인 신청"이다 (PENDING + 접수 시각).
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
@@ -305,7 +304,7 @@ class AdminAccountServiceTokenCleanupTest {
         Long ownerInfoId = 21L;
         Long accountId = 5L;
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
         when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(mock(Account.class)));
@@ -493,9 +492,8 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getLongitude()).thenReturn(127.0);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
-        when(account.isActive()).thenReturn(true);
+        // 승인 대상은 "심사 대기 중인 신청"이다 (PENDING + 접수 시각).
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         // 미인증 AccountRegion이 이미 존재하는 경우
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
@@ -541,9 +539,8 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getLongitude()).thenReturn(127.0);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
-        when(account.isActive()).thenReturn(true);
+        // 승인 대상은 "심사 대기 중인 신청"이다 (PENDING + 접수 시각).
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         // 이미 인증된 AccountRegion
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
@@ -586,9 +583,8 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getRegion()).thenReturn(null).thenReturn(region);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
-        when(account.isActive()).thenReturn(true);
+        // 승인 대상은 "심사 대기 중인 신청"이다 (PENDING + 접수 시각).
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         // 잠금 순서 account → owner_info. 선행 조회는 잠글 대상을 정하는 ID projection이다.
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)).thenReturn(Optional.of(accountId));
@@ -633,9 +629,8 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getStoreId()).thenReturn(200L);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
-        when(account.isActive()).thenReturn(true);
+        // 승인 대상은 "심사 대기 중인 신청"이다 (PENDING + 접수 시각).
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
                 mock(com.eeum.eeum.domain.account.entity.AccountRegion.class);
@@ -680,9 +675,8 @@ class AdminAccountServiceTokenCleanupTest {
         when(store.getStoreId()).thenReturn(201L);
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        // 승인 대상은 "접수 완료된 미승인 신청" + "살아 있는 계정"이다.
-        when(ownerInfo.isReviewRequested()).thenReturn(true);
-        when(account.isActive()).thenReturn(true);
+        // 승인 대상은 "심사 대기 중인 신청"이다 (PENDING + 접수 시각).
+        when(ownerInfo.isAwaitingReview()).thenReturn(true);
 
         com.eeum.eeum.domain.account.entity.AccountRegion existingRegion =
                 mock(com.eeum.eeum.domain.account.entity.AccountRegion.class);
