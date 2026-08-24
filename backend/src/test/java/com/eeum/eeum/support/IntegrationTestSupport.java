@@ -11,6 +11,13 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 /**
  * 통합 테스트 공통 기반.
  *
@@ -74,6 +81,58 @@ public abstract class IntegrationTestSupport {
 
     protected static String mysqlPassword() {
         return MYSQL.getPassword();
+    }
+
+    /**
+     * 지정한 테이블에서 행 잠금 대기가 실제로 발생할 때까지 기다린다.
+     *
+     * <p>경쟁 테스트를 경과 시간으로 판정하면 스레드 스케줄링이 밀렸을 때 잠금이 없어도 통과한다.
+     * MySQL이 "이 트랜잭션은 잠금 대기 중"이라고 보고할 때까지 기다린 뒤 경쟁을 진행시켜야 한다.
+     *
+     * <p>대기 "개수"만 세면 이 테스트와 무관한 트랜잭션(다른 클래스·스케줄러)이 잡혀 경쟁이
+     * 재현되지 않았는데도 통과할 수 있으므로, 대기 중인 잠금의 대상 테이블까지 확인한다.
+     * performance_schema 조회는 권한이 필요해 컨테이너 root 계정으로 별도 접속한다.
+     *
+     * @return 제한 시간(15초) 안에 해당 테이블의 잠금 대기를 관측했으면 true
+     */
+    protected static boolean awaitLockWait(String table) throws Exception {
+        long deadline = System.currentTimeMillis() + 15_000L;
+        try (Connection connection = DriverManager.getConnection(
+                mysqlJdbcUrl(), "root", mysqlPassword())) {
+            while (System.currentTimeMillis() < deadline) {
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery(
+                             """
+                             SELECT COUNT(*)
+                             FROM performance_schema.data_lock_waits w
+                             JOIN performance_schema.data_locks l
+                               ON w.REQUESTING_ENGINE_LOCK_ID = l.ENGINE_LOCK_ID
+                             WHERE l.OBJECT_NAME = '%s'
+                             """.formatted(table))) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        return true;
+                    }
+                }
+                sleepQuietly(100);
+            }
+        }
+        return false;
+    }
+
+    protected static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    protected static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static synchronized void startContainers() {
