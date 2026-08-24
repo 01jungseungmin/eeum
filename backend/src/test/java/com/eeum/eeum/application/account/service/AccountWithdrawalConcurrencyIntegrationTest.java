@@ -8,7 +8,9 @@ import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadRequestD
 import com.eeum.eeum.application.used.service.UsedProductImageService;
 import com.eeum.eeum.application.used.service.UsedProductService;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -32,6 +34,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -64,6 +67,7 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
     private final UsedProductRepository usedProductRepository;
     private final UsedProductImageRepository usedProductImageRepository;
     private final AccountRepository accountRepository;
+    private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
     private final PlatformTransactionManager transactionManager;
@@ -92,11 +96,20 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
         memberId = member.getAccountId();
 
         Region region = regionRepository.save(
-                Region.create("11680101" + tag.substring(0, 2), "서울특별시", "강남구", "역삼동", 3));
+                Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
         Category category = categoryRepository.save(
                 Category.createRoot(CategoryType.USED, "디지털기기" + tag, 1));
         regionId = region.getRegionId();
         categoryId = category.getCategoryId();
+
+        // 중고 게시글 등록은 GPS 인증된 활동 지역을 요구한다. 이게 없으면 탈퇴와 무관하게
+        // 등록이 실패해, "탈퇴가 막았다"가 아니라 "원래 안 됐다"를 검증하게 된다.
+        accountRegionRepository.save(AccountRegion.builder()
+                .account(member)
+                .region(region)
+                .verified(true)
+                .verifiedAt(LocalDateTime.now())
+                .build());
 
         favoritedProductId = saveProduct(seller, category, region, "이미 찜한 글");
         otherProductId = saveProduct(seller, category, region, "탈퇴 중에 찜하려는 글");
@@ -113,6 +126,9 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
         favoriteRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
+        // account_region은 account와 region 양쪽을 FK로 잡는다. 먼저 지우지 않으면
+        // 두 삭제가 모두 막히고, 공유 DB라 다음 클래스까지 잔여 데이터로 무너진다.
+        accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
         accountRepository.deleteAll();
     }
@@ -133,9 +149,11 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
                 .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
 
         // 잠금이 없으면 정리(deleteAllByAccountId)를 지나친 찜 1건이 남는다.
-        assertThat(favoriteRepository.count())
+        // 공유 DB라 전역 count는 다른 클래스가 남긴 데이터에 흔들린다 — 이 픽스처로만 좁혀 본다.
+        assertThat(hasFavorite(otherProductId))
                 .as("탈퇴 정리 후에 커밋된 찜은 영영 남는다")
-                .isZero();
+                .isFalse();
+        assertThat(hasFavorite(favoritedProductId)).isFalse();
         assertThat(favoriteCountOf(otherProductId)).isZero();
         assertThat(favoriteCountOf(favoritedProductId))
                 .as("정리 대상 찜의 카운터는 0으로 내려가야 한다")
@@ -179,13 +197,31 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
     }
 
     @Test
+    void 경쟁이_없으면_중고_게시글_등록은_성공한다() {
+        // 위 경쟁 테스트가 "탈퇴가 막았다"를 검증하려면, 같은 요청이 평소에는 통과해야 한다.
+        // 이 기준선이 없으면 픽스처가 잘못돼 원래부터 실패하는 요청을 검증하게 된다.
+        long before = usedProductRepository.count();
+
+        usedProductService.create(memberId, createRequest());
+
+        assertThat(usedProductRepository.count()).isEqualTo(before + 1);
+    }
+
+    @Test
     void 탈퇴_처리_자체는_찜과_카운터를_정리하고_커밋된다() {
         // 경쟁이 없을 때의 기준선. 이게 깨지면 위 세 테스트의 "정리를 지나쳤다" 판정도 의미가 없다.
         adminAccountService.forceDeleteAccount(adminId, memberId);
 
         assertThat(accountRepository.findById(memberId).orElseThrow().isWithdrawn()).isTrue();
-        assertThat(favoriteRepository.count()).isZero();
+        assertThat(hasFavorite(favoritedProductId)).isFalse();
         assertThat(favoriteCountOf(favoritedProductId)).isZero();
+    }
+
+    // 공유 DB에서 전역 count()는 다른 클래스의 잔여 데이터에 걸려 거짓 실패를 낸다.
+    // IntegrationTestSupport가 경고하는 지점이라, 이 테스트의 픽스처 범위로만 확인한다.
+    private boolean hasFavorite(Long productId) {
+        return favoriteRepository.existsByAccount_AccountIdAndRefTypeAndRefId(
+                memberId, FavoriteRefType.USED_PRODUCT, productId);
     }
 
     private int favoriteCountOf(Long productId) {

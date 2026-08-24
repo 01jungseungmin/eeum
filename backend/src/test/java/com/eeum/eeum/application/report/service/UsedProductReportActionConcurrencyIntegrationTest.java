@@ -84,7 +84,7 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
         sellerId = seller.getAccountId();
 
         Region region = regionRepository.save(
-                Region.create("11680101" + tag.substring(0, 2), "서울특별시", "강남구", "역삼동", 3));
+                Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
         Category category = categoryRepository.save(
                 Category.createRoot(CategoryType.USED, "디지털기기" + tag, 1));
 
@@ -165,7 +165,10 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
 
         assertThat(product().isDeleted()).isTrue();
-        assertThat(favoriteRepository.count()).isZero();
+        assertThat(favoriteRepository.countByRefTypeAndRefId(
+                FavoriteRefType.USED_PRODUCT, productId))
+                .as("공유 DB라 전역 count 대신 이 게시글에 달린 찜만 센다")
+                .isZero();
         assertThat(product().getFavoriteCount()).isZero();
     }
 

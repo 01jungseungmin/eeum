@@ -2,6 +2,7 @@ package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadRequestDto;
+import com.eeum.eeum.application.report.service.UsedProductReportActionExecutor;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -9,10 +10,13 @@ import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
+import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -21,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
@@ -50,8 +55,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport {
 
     private final UsedProductImageService usedProductImageService;
+    private final UsedProductReportActionExecutor reportActionExecutor;
     private final UsedProductImageRepository usedProductImageRepository;
     private final UsedProductRepository usedProductRepository;
+    private final FavoriteRepository favoriteRepository;
+    private final NotificationRepository notificationRepository;
     private final AccountRepository accountRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
@@ -70,7 +78,7 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
         sellerId = seller.getAccountId();
 
         Region region = regionRepository.save(
-                Region.create("11680101" + tag.substring(0, 2), "서울특별시", "강남구", "역삼동", 3));
+                Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
         Category category = categoryRepository.save(
                 Category.createRoot(CategoryType.USED, "디지털기기" + tag, 1));
 
@@ -83,10 +91,22 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
     @AfterEach
     void tearDown() {
         usedProductImageRepository.deleteAll();
+        favoriteRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
+        // 신고 조치는 AFTER_COMMIT + @Async로 알림을 남긴다. notification이 account를 FK로
+        // 참조하므로, 늦게 도착한 알림이 남아 있으면 계정 삭제가 막힌다.
+        for (int attempt = 0; attempt < 20; attempt++) {
+            notificationRepository.deleteAllInBatch();
+            try {
+                accountRepository.deleteAll();
+                return;
+            } catch (DataIntegrityViolationException retryable) {
+                sleepQuietly(100);
+            }
+        }
+        throw new IllegalStateException("비동기 알림이 계속 도착해 테스트 계정을 정리하지 못했다");
     }
 
     @Test
@@ -151,6 +171,32 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
                 .isEqualTo(1);
         assertThat(remaining.stream().filter(UsedProductImage::isThumbnail).findFirst().orElseThrow().getImageId())
                 .isEqualTo(lastId);
+    }
+
+    @Test
+    void 신고_삭제_조치_중에_들어온_사진_추가는_사라진_글에_붙지_않는다() throws Exception {
+        // given: 앞의 세 테스트는 판매자가 양쪽이라 account 잠금에서 직렬화된다.
+        // used_product 잠금이 실제로 필요한 것은 계정 잠금을 잡지 않는 경쟁 상대 —
+        // 즉 관리자 신고 조치와 겹칠 때다. 이 경우 account 잠금은 아무 역할도 하지 않는다.
+        usedProductImageService.addImages(sellerId, productId, upload(1, "before"));
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        raceOnLock(transactionManager, "used_product",
+                // 신고 조치는 @Transactional이 없다 — 호출자의 트랜잭션을 전제하므로 감싸서 부른다.
+                () -> reportActionExecutor.execute(
+                        ReportAction.DELETE_POST, productId, sellerId, "삭제 조치"),
+                () -> usedProductImageService.addImages(sellerId, productId, upload(1, "after")),
+                failure);
+
+        // then: 사진 추가는 잠금 해제 후 삭제된 글을 보고 멈춘다.
+        assertThat(failure.get())
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+
+        assertThat(images())
+                .as("삭제된 글에 사진이 붙으면 안 된다")
+                .hasSize(1);
     }
 
     private List<UsedProductImage> images() {

@@ -154,7 +154,7 @@ class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSuppo
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
 
         // then 2: 잠금이 없으면 여기서 죽은 찜 1건이 남는다.
-        assertThat(favoriteRepository.count()).isZero();
+        assertThat(favoritesOnProduct()).isZero();
         assertThat(usedProductRepository.findById(productId).orElseThrow().getFavoriteCount()).isZero();
     }
 
@@ -213,7 +213,7 @@ class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSuppo
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.FAVORITE_NOT_FOUND);
 
-        assertThat(favoriteRepository.count()).isZero();
+        assertThat(favoritesOnProduct()).isZero();
         assertThat(usedProductRepository.findById(productId).orElseThrow().getFavoriteCount()).isZero();
     }
 
@@ -272,10 +272,16 @@ class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSuppo
         // 남의 찜 1건이 남아 있으므로 정답은 1이다. 스냅샷을 읽으면 두 번째 요청이 flush에서
         // 터져 롤백되므로 카운터는 결과적으로 지켜진다 — 이 단언은 회귀 검출용이 아니라
         // 정상 경로의 불변식 고정용이고, 회귀를 잡는 것은 위의 예외 타입 단언이다.
-        assertThat(favoriteRepository.count()).isEqualTo(1);
+        assertThat(favoritesOnProduct()).isEqualTo(1);
         assertThat(usedProductRepository.findById(productId).orElseThrow().getFavoriteCount())
                 .as("해제 1건은 정확히 1만 깎아야 한다")
                 .isEqualTo(1);
+    }
+
+    // 공유 DB에서 전역 count()는 다른 클래스의 잔여 데이터에 걸려 거짓 실패를 낸다.
+    // IntegrationTestSupport가 경고하는 지점이라, 이 게시글에 달린 찜만 센다.
+    private long favoritesOnProduct() {
+        return favoriteRepository.countByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, productId);
     }
 
     // favoriteId 경로를 쓰는 이유: 이 경로만 잠금 전에 일반 SELECT(findRefByFavoriteIdAndAccountId)로
