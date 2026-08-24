@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -33,14 +35,22 @@ public class AccountCleanupService {
     // 탈퇴 후 유예 기간이 지난 계정의 개인정보를 파기한다.
     // 대상 조회만 하고 파기는 계정별 트랜잭션으로 넘긴다 — 한 계정의 실패가 회차 전체를 되돌리면
     // 정상 처리 가능한 계정까지 함께 죽고, 대상이 쌓이며 매일 같은 실패를 반복한다.
+    /**
+     * 파기 대상 ID를 {@code lastAccountId} 다음부터 최대 {@code batchSize}건 읽는다.
+     *
+     * <p>한 번에 다 읽지 않는다 — backlog가 쌓여 있으면 전체 적재만으로 메모리를 밀어내고,
+     * 스케줄러 잠금(ShedLock)을 쥔 채 조회에만 시간을 쓰게 된다.
+     *
+     * <p>실패한 계정은 anonymizedAt이 비어 있어 다음 회차에 다시 대상이 되지만,
+     * 커서가 앞으로만 가므로 같은 회차에서 무한히 반복하지는 않는다.
+     */
     @Transactional(readOnly = true)
-    public List<Long> findAnonymizeTargetIds() {
-        LocalDateTime threshold = anonymizeThreshold();
-
-        return accountRepository.findWithdrawnAccountsBefore(AccountStatus.WITHDRAWN, threshold)
-                .stream()
-                .map(Account::getAccountId)
-                .toList();
+    public List<Long> findAnonymizeTargetIds(Long lastAccountId, int batchSize) {
+        return accountRepository.findAnonymizeTargetIdsAfter(
+                AccountStatus.WITHDRAWN,
+                anonymizeThreshold(),
+                lastAccountId,
+                PageRequest.of(0, batchSize));
     }
 
     /**

@@ -35,17 +35,23 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
             String providerId
     );
 
-    // 탈퇴 후 30일 경과 + 아직 개인정보를 파기하지 않은 계정 (스케줄러용).
+    // 탈퇴 후 유예가 지난 + 아직 개인정보를 파기하지 않은 계정 ID (스케줄러용).
+    // 엔티티가 아니라 ID만, 그것도 한 번에 다 읽지 않고 keyset으로 나눠 읽는다 —
+    // backlog가 쌓여 있으면 전체 적재만으로 메모리와 잠금 보유 시간을 밀어낸다.
     // anonymizedAt 조건이 없으면 이미 파기한 계정을 매일 다시 처리한다.
     @Query("""
-        SELECT a FROM Account a
+        SELECT a.accountId FROM Account a
         WHERE a.status = :status
           AND a.deletedAt <= :threshold
           AND a.anonymizedAt IS NULL
+          AND a.accountId > :lastAccountId
+        ORDER BY a.accountId ASC
         """)
-    List<Account> findWithdrawnAccountsBefore(
+    List<Long> findAnonymizeTargetIdsAfter(
             @Param("status") AccountStatus status,
-            @Param("threshold") LocalDateTime threshold
+            @Param("threshold") LocalDateTime threshold,
+            @Param("lastAccountId") Long lastAccountId,
+            Pageable pageable
     );
 
     // 무효/만료 FCM 토큰 감지 시 해당 토큰을 null로 초기화

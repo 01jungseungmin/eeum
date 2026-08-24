@@ -14,6 +14,7 @@
 --   3) favorite.idx_favorite_account_type_created            내 찜 목록 정렬
 --   4) used_product.idx_used_product_public_list             공개 목록 기본 조회
 --   5) account.anonymized_at                       (COLUMN)  개인정보 파기 시각
+--   6) account.idx_account_anonymize_target                  파기 대상 조회(keyset)
 --
 -- ── 실행 순서 ────────────────────────────────────────────────────────────────
 --   STEP 0 → STEP 1 → STEP 2 → STEP 3 → STEP 4 → STEP 5
@@ -107,7 +108,12 @@ SELECT 'account.anonymized_at',
        IF(COUNT(*) > 0, 'DONE', 'TODO')
 FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'account'
-  AND column_name = 'anonymized_at';
+  AND column_name = 'anonymized_at'
+UNION ALL
+SELECT 'account.idx_account_anonymize_target', IF(COUNT(*) > 0, 'DONE', 'TODO')
+FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = 'account'
+  AND index_name = 'idx_account_anonymize_target';
 
 
 -- ============================================================================
@@ -213,6 +219,12 @@ CREATE INDEX idx_used_product_public_list
 --      이 컬럼이 없으면 탈퇴 계정 정리 스케줄러가 매일 실패한다.
 ALTER TABLE account ADD COLUMN anonymized_at DATETIME(6) NULL;
 
+-- 3-6. 파기 대상 조회 전용 인덱스.
+--      조건(status, anonymized_at, deleted_at) 뒤에 keyset 커서(account_id)를 둔다.
+--      3-5를 먼저 실행해야 한다(컬럼이 있어야 인덱스를 만들 수 있다).
+CREATE INDEX idx_account_anonymize_target
+    ON account (status, anonymized_at, deleted_at, account_id);
+
 
 -- ============================================================================
 -- STEP 3-ALT. 조건부 실행 (이미 적용된 항목을 건너뛴다)
@@ -265,6 +277,15 @@ SET @ddl := IF(@exists = 0,
     'SELECT "account.anonymized_at 이미 존재 — 건너뜀"');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- 3-ALT-6. idx_account_anonymize_target (3-ALT-5 이후에 실행)
+SET @exists := (SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'account'
+                  AND index_name = 'idx_account_anonymize_target');
+SET @ddl := IF(@exists = 0,
+    'CREATE INDEX idx_account_anonymize_target ON account (status, anonymized_at, deleted_at, account_id)',
+    'SELECT "idx_account_anonymize_target 이미 존재 — 건너뜀"');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 
 -- ============================================================================
 -- STEP 4. 검증 — 5개가 모두 DONE이어야 한다
@@ -295,7 +316,12 @@ UNION ALL
 SELECT 'account.anonymized_at', IF(COUNT(*) > 0, 'DONE', 'TODO')
 FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'account'
-  AND column_name = 'anonymized_at';
+  AND column_name = 'anonymized_at'
+UNION ALL
+SELECT 'account.idx_account_anonymize_target', IF(COUNT(*) > 0, 'DONE', 'TODO')
+FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = 'account'
+  AND index_name = 'idx_account_anonymize_target';
 
 -- UNIQUE 제약이 실제로 UNIQUE인지 확인 (NON_UNIQUE = 0 이어야 한다)
 SELECT index_name, non_unique, seq_in_index, column_name

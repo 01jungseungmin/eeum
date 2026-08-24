@@ -23,7 +23,11 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uk_account_provider", columnNames = {"provider", "provider_id"})
         },
         indexes = { //인덱스 primary_region_id 컬럼으로 검색할 일이 있을 때 더 빠르게 찾기 위한 설정
-                @Index(name = "idx_account_primary_region", columnList = "primary_region_id")
+                @Index(name = "idx_account_primary_region", columnList = "primary_region_id"),
+                // 개인정보 파기 대상 조회 전용 — 조건(status, anonymized_at, deleted_at) 뒤에
+                // keyset 커서(account_id)를 둬서 배치마다 이어서 읽는다.
+                @Index(name = "idx_account_anonymize_target",
+                        columnList = "status, anonymized_at, deleted_at, account_id")
         }
 )
 @Getter

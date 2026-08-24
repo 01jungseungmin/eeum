@@ -95,7 +95,7 @@ class AccountCleanupFavoriteIntegrationTest extends IntegrationTestSupport {
         assertThat(favoriteRepository.count()).isEqualTo(3);
 
         // when: 찜을 정리하지 않으면 카운트가 어긋난 채로 남는다.
-        accountCleanupService.findAnonymizeTargetIds()
+        accountCleanupService.findAnonymizeTargetIds(0L, 100)
                 .forEach(accountCleanupService::anonymizeAccount);
 
         // then: 계정 행은 남기고 개인정보만 지운다 — 주문·결제·신고가 이 계정을 참조한다

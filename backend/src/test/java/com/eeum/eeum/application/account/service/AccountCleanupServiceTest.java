@@ -7,6 +7,8 @@ import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -147,16 +150,21 @@ class AccountCleanupServiceTest {
     }
 
     @Test
-    void 삭제_대상_조회는_ID만_넘긴다() {
-        // given — 삭제는 계정별 트랜잭션으로 분리되므로 엔티티가 아니라 ID로 넘긴다
-        when(accountRepository.findWithdrawnAccountsBefore(any(), any()))
-                .thenReturn(List.of(account()));
+    void 대상_조회는_커서_다음부터_배치_크기만큼_ID만_읽는다() {
+        // given — 엔티티 전체를 적재하면 backlog가 쌓였을 때 메모리와 잠금 보유 시간을 밀어낸다
+        when(accountRepository.findAnonymizeTargetIdsAfter(any(), any(), any(), any()))
+                .thenReturn(List.of(11L, 12L));
 
         // when
-        List<Long> targets = accountCleanupService.findAnonymizeTargetIds();
+        List<Long> targets = accountCleanupService.findAnonymizeTargetIds(10L, 100);
 
         // then
-        assertThat(targets).containsExactly(ACCOUNT_ID);
+        assertThat(targets).containsExactly(11L, 12L);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(accountRepository).findAnonymizeTargetIdsAfter(
+                eq(AccountStatus.WITHDRAWN), any(), eq(10L), pageable.capture());
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(100);
     }
 
     private Account account() {
