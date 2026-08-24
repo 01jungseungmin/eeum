@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import com.eeum.eeum.domain.favorite.repository.FavoriteRefProjection;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
 import com.eeum.eeum.domain.favorite.repository.FavoriteStoreRow;
 import com.eeum.eeum.domain.favorite.repository.FavoriteUsedProductRow;
@@ -84,10 +85,11 @@ public class FavoriteService {
 
     @Transactional
     public void deleteFavorite(Long accountId, Long favoriteId) {
-        // 대상을 알아내기 위한 선행 조회(잠금 없음). 이 값으로 잠금 대상만 정하고,
-        // 실제 삭제는 잠금을 잡은 뒤 다시 읽은 행으로 한다.
-        Favorite peeked = favoriteRepository
-                .findByFavoriteIdAndAccount_AccountId(favoriteId, accountId)
+        // 대상을 알아내기 위한 선행 조회(잠금 없음). 엔티티가 아니라 refType·refId만 읽는다 —
+        // 여기서 Favorite을 엔티티로 읽으면 영속성 컨텍스트에 남아, 아래 잠금 재조회가
+        // DB 최신 행 대신 그 인스턴스를 돌려주고 재조회의 의미가 사라진다.
+        FavoriteRefProjection peeked = favoriteRepository
+                .findRefByFavoriteIdAndAccountId(favoriteId, accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAVORITE_NOT_FOUND));
 
         deleteFavoriteByRef(accountId, peeked.getRefType(), peeked.getRefId());
@@ -103,8 +105,10 @@ public class FavoriteService {
 
         // 잠금을 잡은 뒤 다시 읽는다. 먼저 읽어둔 행으로 지우면 그 사이 대상 삭제 트랜잭션이
         // 같은 찜을 정리한 경우 없는 행을 지우고 카운터만 한 번 더 깎는다.
+        // 일반 SELECT는 REPEATABLE READ 스냅샷을 읽어 이미 커밋된 삭제를 보지 못하므로
+        // 잠금 조회(current read)여야 한다. 아니면 없는 행을 지우려다 flush에서 409로 끝난다.
         Favorite favorite = favoriteRepository
-                .findByAccount_AccountIdAndRefTypeAndRefId(accountId, refType, refId)
+                .findForUpdate(accountId, refType, refId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAVORITE_NOT_FOUND));
 
         favoriteRepository.delete(favorite);
@@ -142,29 +146,54 @@ public class FavoriteService {
      * 조회 1번 + count 1번 + 대표 사진 1번 = 총 3 쿼리.
      */
     @Transactional(readOnly = true)
-    public Page<FavoriteStoreResponseDto> getMyFavoriteStores(Long accountId, Pageable pageable) {
+    public Slice<FavoriteStoreResponseDto> getMyFavoriteStores(Long accountId, Pageable pageable) {
+        Slice<FavoriteStoreRow> rows = favoriteRepository.findFavoriteStoresSlice(accountId, pageable);
+
+        if (rows.isEmpty()) {
+            // 썸네일 배치 조회만 건너뛴다. 정렬·다음 페이지 여부는 리포지토리 판정을 그대로 쓴다.
+            return new SliceImpl<>(List.of(), rows.getPageable(), rows.hasNext());
+        }
+        return rows.map(toStoreDto(resolveStoreThumbnails(rows.getContent())));
+    }
+
+    /**
+     * 상점 찜 목록(번호 페이징) — 레거시 경로 {@code GET /favorites/me/STORE} 전용.
+     *
+     * <p>이미 배포된 계약이라 응답 형태를 바꿀 수 없어 남겨둔다. 신규 경로
+     * {@code GET /favorites/me/store}는 프로젝트 기준대로 Slice를 쓴다.
+     * 프론트가 신규 경로로 옮기면 이 메서드와 findFavoriteStores를 함께 지운다.
+     */
+    @Deprecated(forRemoval = true)
+    @Transactional(readOnly = true)
+    public Page<FavoriteStoreResponseDto> getMyFavoriteStoresPaged(Long accountId, Pageable pageable) {
         Page<FavoriteStoreRow> rows = favoriteRepository.findFavoriteStores(accountId, pageable);
 
         if (rows.isEmpty()) {
             // 썸네일 배치 조회만 건너뛴다. 정렬·전체 건수는 리포지토리가 판정한 값을 그대로 쓴다.
             return new PageImpl<>(List.of(), rows.getPageable(), rows.getTotalElements());
         }
+        return rows.map(toStoreDto(resolveStoreThumbnails(rows.getContent())));
+    }
 
-        List<Long> storeIds = rows.getContent().stream()
+    // 대표 사진 배치 조회 — 항목마다 조회하면 페이지 크기만큼 쿼리가 나간다(N+1).
+    private Map<Long, String> resolveStoreThumbnails(List<FavoriteStoreRow> rows) {
+        List<Long> storeIds = rows.stream()
                 .map(FavoriteStoreRow::store)
                 .map(Store::getStoreId)
                 .toList();
 
-        Map<Long, String> thumbnailMap = storeImageRepository
+        return storeImageRepository
                 .findByStore_StoreIdInAndIsThumbnailTrue(storeIds).stream()
                 .collect(Collectors.toMap(
                         img -> img.getStore().getStoreId(),
                         StoreImage::getImageUrl,
                         (first, second) -> first));
+    }
 
-        return rows.map(row -> FavoriteStoreResponseDto.of(
+    private Function<FavoriteStoreRow, FavoriteStoreResponseDto> toStoreDto(Map<Long, String> thumbnailMap) {
+        return row -> FavoriteStoreResponseDto.of(
                 row.favoriteId(), row.store(),
-                thumbnailMap.get(row.store().getStoreId()), row.favoritedAt()));
+                thumbnailMap.get(row.store().getStoreId()), row.favoritedAt());
     }
 
     /**
