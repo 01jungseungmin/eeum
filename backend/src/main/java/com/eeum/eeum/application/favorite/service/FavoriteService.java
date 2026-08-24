@@ -132,10 +132,32 @@ public class FavoriteService {
 
     // 내 찜 전체 목록 — refType 무관, 최신순
 
+    /**
+     * 내 찜 전체 목록(무한 스크롤).
+     *
+     * <p>모바일 목록이므로 프로젝트 기준대로 Slice를 쓴다. 타입별 목록
+     * ({@code /me/store}, {@code /me/used})과 페이징 계약을 맞춘 것이기도 하다.
+     */
     @Transactional(readOnly = true)
-    public Page<FavoriteResponseDto> getMyFavorites(Long accountId, Pageable pageable) {
+    public Slice<FavoriteResponseDto> getMyFavorites(Long accountId, Pageable pageable) {
         // 정렬은 찜 등록 최신순으로 고정한다. 요청 sort를 그대로 두면 실제 순서와
-        // 응답 Page 메타데이터가 달라 클라이언트가 잘못된 순서를 전제하게 된다.
+        // 응답 메타데이터가 달라 클라이언트가 잘못된 순서를 전제하게 된다.
+        return favoriteRepository
+                .findSliceByAccount_AccountIdOrderByCreatedAtDesc(accountId, latestFirst(pageable))
+                .map(FavoriteResponseDto::from);
+    }
+
+    /**
+     * 내 찜 전체 목록(번호 페이징) — 레거시 경로 {@code GET /favorites/me} 전용.
+     *
+     * <p>이미 배포된 계약이라 응답 형태를 바꿀 수 없어 남겨둔다. 상점 찜 목록과 같은 방식이다
+     * ({@link #getMyFavoriteStoresPaged}). 프론트가 {@code GET /favorites/me/all}로 옮기면
+     * 이 메서드와 findByAccount_AccountIdOrderByCreatedAtDesc를 함께 지운다.
+     */
+    @Deprecated(forRemoval = true)
+    @SuppressWarnings("removal")
+    @Transactional(readOnly = true)
+    public Page<FavoriteResponseDto> getMyFavoritesPaged(Long accountId, Pageable pageable) {
         return favoriteRepository
                 .findByAccount_AccountIdOrderByCreatedAtDesc(accountId, latestFirst(pageable))
                 .map(FavoriteResponseDto::from);

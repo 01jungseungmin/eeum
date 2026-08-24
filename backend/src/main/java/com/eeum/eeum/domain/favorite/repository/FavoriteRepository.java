@@ -4,6 +4,7 @@ import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -54,7 +55,12 @@ public interface FavoriteRepository
     boolean existsByAccount_AccountIdAndRefTypeAndRefId(
             Long accountId, FavoriteRefType refType, Long refId);
 
-    // 내 찜 전체 목록 (refType 무관, 최신순)
+    // 내 찜 전체 목록 (refType 무관, 최신순) — 무한 스크롤용.
+    // count 쿼리 없이 size+1을 읽어 다음 페이지 여부만 판정한다.
+    Slice<Favorite> findSliceByAccount_AccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);
+
+    // 내 찜 전체 목록 (번호 페이징) — 레거시 경로 GET /favorites/me 전용.
+    @Deprecated(forRemoval = true)
     Page<Favorite> findByAccount_AccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);
 
     // 타입별 내 찜 목록 (최신순)
