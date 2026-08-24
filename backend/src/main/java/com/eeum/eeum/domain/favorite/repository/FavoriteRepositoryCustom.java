@@ -34,4 +34,7 @@ public interface FavoriteRepositoryCustom {
     // 상점 찜 목록 — 공개 조건(계정 활성·미정지·사장 승인)을 페이징과 count 전에 적용한다.
     // 조회 후 메모리에서 거르면 페이지 크기·전체 건수·페이지 경계가 모두 어긋난다.
     Page<FavoriteStoreRow> findFavoriteStores(Long accountId, Pageable pageable);
+
+    // 무한 스크롤용 — count 쿼리 없이 다음 페이지 존재 여부만 판정한다.
+    Slice<FavoriteStoreRow> findFavoriteStoresSlice(Long accountId, Pageable pageable);
 }

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -72,23 +73,34 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 비공개_상점은_페이징_전에_걸러져_요청한_페이지_크기와_전체_건수가_유지된다() {
+    void 비공개_상점은_페이징_전에_걸러져_요청한_페이지_크기와_다음_페이지_판정이_유지된다() {
         // when: 노출 대상은 3곳뿐이다.
-        Page<FavoriteStoreResponseDto> first =
+        Slice<FavoriteStoreResponseDto> first =
                 favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(0, 2));
-        Page<FavoriteStoreResponseDto> second =
+        Slice<FavoriteStoreResponseDto> second =
                 favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(1, 2));
 
-        // then: 조회 후 걸렀다면 첫 페이지가 2건보다 적거나 전체 건수가 6으로 잡힌다.
+        // then: 조회 후 걸렀다면 첫 페이지가 2건보다 적거나 hasNext 판정이 어긋난다.
         assertThat(first.getContent()).hasSize(2);
+        assertThat(first.hasNext()).isTrue();
         assertThat(second.getContent()).hasSize(1);
+        assertThat(second.hasNext()).isFalse();
+    }
+
+    @Test
+    void 비공개_상점은_레거시_번호_페이징에서도_전체_건수에_잡히지_않는다() {
+        // 레거시 경로(/favorites/me/STORE)는 배포된 계약이라 Page 응답을 유지한다.
+        Page<FavoriteStoreResponseDto> first =
+                favoriteService.getMyFavoriteStoresPaged(viewer.getAccountId(), PageRequest.of(0, 2));
+
+        assertThat(first.getContent()).hasSize(2);
         assertThat(first.getTotalElements()).isEqualTo(3);
         assertThat(first.getTotalPages()).isEqualTo(2);
     }
 
     @Test
     void 미승인_정지_탈퇴_상점은_목록에_나오지_않는다() {
-        Page<FavoriteStoreResponseDto> result =
+        Slice<FavoriteStoreResponseDto> result =
                 favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(0, 20));
 
         assertThat(result.getContent())
@@ -97,31 +109,46 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 전체_건수는_한_번의_count_쿼리로만_구한다() {
-        // given: fetchOne()을 삼항 연산자 양쪽에서 부르면 같은 count가 두 번 실행된다.
+    void 무한_스크롤_목록은_count_쿼리를_실행하지_않는다() {
+        // given: Slice로 바꾼 이유가 count 제거다. Page 구현으로 되돌아가면 여기서 걸린다.
         SqlCaptureInspector.reset();
 
         // when
         favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(0, 20));
 
         // then
-        List<String> countQueries = SqlCaptureInspector.captured().stream()
-                .filter(sql -> sql.toLowerCase().startsWith("select count("))
-                .toList();
-        assertThat(countQueries).as("실행된 count 쿼리: %s", countQueries).hasSize(1);
+        assertThat(countQueries()).as("실행된 count 쿼리: %s", countQueries()).isEmpty();
     }
 
     @Test
-    void 찜한_상점이_없으면_실제_적용된_정렬을_담아_빈_페이지를_반환한다() {
+    void 레거시_번호_페이징의_전체_건수는_한_번의_count_쿼리로만_구한다() {
+        // given: fetchOne()을 삼항 연산자 양쪽에서 부르면 같은 count가 두 번 실행된다.
+        SqlCaptureInspector.reset();
+
+        // when
+        favoriteService.getMyFavoriteStoresPaged(viewer.getAccountId(), PageRequest.of(0, 20));
+
+        // then
+        assertThat(countQueries()).as("실행된 count 쿼리: %s", countQueries()).hasSize(1);
+    }
+
+    @Test
+    void 찜한_상점이_없으면_실제_적용된_정렬을_담아_빈_목록을_반환한다() {
         favoriteRepository.deleteAll();
 
-        Page<FavoriteStoreResponseDto> result = favoriteService.getMyFavoriteStores(
+        Slice<FavoriteStoreResponseDto> result = favoriteService.getMyFavoriteStores(
                 viewer.getAccountId(),
                 PageRequest.of(0, 20, org.springframework.data.domain.Sort.by("name")));
 
         assertThat(result.getContent()).isEmpty();
-        assertThat(result.getTotalElements()).isZero();
+        assertThat(result.hasNext()).isFalse();
         assertThat(result.getSort().getOrderFor("createdAt")).isNotNull();
+    }
+
+    private List<String> countQueries() {
+        return SqlCaptureInspector.captured().stream()
+                .filter(sql -> sql.toLowerCase().startsWith("select count("))
+                .toList();
     }
 
     // 상점 하나를 만들고 viewer가 찜한 상태로 둔다. 비공개 상점은 toggleFavorite이 막으므로 직접 저장한다.

@@ -139,25 +139,30 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
         return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
     }
 
+    // 상점 찜 목록(무한 스크롤) — 중고 게시글 목록과 같은 limit + 1 방식이라 count 쿼리가 없다.
+    // 전체 건수를 쓰지 않는 화면에서 count는 순수 비용이다.
+    @Override
+    public Slice<FavoriteStoreRow> findFavoriteStoresSlice(Long accountId, Pageable pageable) {
+        List<FavoriteStoreRow> rows = new ArrayList<>(favoriteStoreQuery(accountId)
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize() + 1L)   // +1건으로 다음 페이지 존재 여부 판정
+                .fetch());
+
+        boolean hasNext = rows.size() > pageable.getPageSize();
+        if (hasNext) {
+            rows.remove(rows.size() - 1);
+        }
+        return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
+    }
+
     // 상점 찜 목록 — 공개 조건을 조인·where로 걸어 페이징과 count 이전에 적용한다.
     // Favorite은 FK 없는 polymorphic 참조지만 refId ↔ storeId theta join으로 묶을 수 있다.
+    //
+    // 번호 페이징 응답을 쓰는 레거시 경로(/favorites/me/STORE) 전용이다.
+    // 신규 경로는 count 쿼리가 없는 findFavoriteStoresSlice를 쓴다.
     @Override
     public Page<FavoriteStoreRow> findFavoriteStores(Long accountId, Pageable pageable) {
-        List<FavoriteStoreRow> rows = queryFactory
-                .select(Projections.constructor(
-                        FavoriteStoreRow.class,
-                        favorite.favoriteId,
-                        favorite.createdAt,
-                        store))
-                .from(favorite)
-                .join(store).on(store.storeId.eq(favorite.refId))
-                .join(store.account, account)
-                .where(
-                        favorite.account.accountId.eq(accountId),
-                        favorite.refType.eq(FavoriteRefType.STORE),
-                        StoreVisibilityPredicate.publiclyVisible(store, account))
-                // createdAt 동률 시 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
-                .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc())
+        List<FavoriteStoreRow> rows = favoriteStoreQuery(accountId)
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
@@ -175,5 +180,25 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
         // fetchOne()을 삼항 연산자 양쪽에서 호출하면 같은 count 쿼리가 두 번 실행된다.
         Long total = countQuery.fetchOne();
         return new PageImpl<>(rows, withAppliedSort(pageable), total == null ? 0L : total);
+    }
+
+    // 상점 찜 조회 본문 — Page/Slice 두 경로가 공개 조건과 정렬을 공유해야 한다.
+    // 한쪽만 조건이 바뀌면 같은 화면인데 목록이 달라진다.
+    private JPAQuery<FavoriteStoreRow> favoriteStoreQuery(Long accountId) {
+        return queryFactory
+                .select(Projections.constructor(
+                        FavoriteStoreRow.class,
+                        favorite.favoriteId,
+                        favorite.createdAt,
+                        store))
+                .from(favorite)
+                .join(store).on(store.storeId.eq(favorite.refId))
+                .join(store.account, account)
+                .where(
+                        favorite.account.accountId.eq(accountId),
+                        favorite.refType.eq(FavoriteRefType.STORE),
+                        StoreVisibilityPredicate.publiclyVisible(store, account))
+                // createdAt 동률 시 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
+                .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc());
     }
 }

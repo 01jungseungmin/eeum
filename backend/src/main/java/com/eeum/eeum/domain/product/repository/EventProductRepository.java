@@ -35,7 +35,6 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     List<EventProduct> findByProduct_Store_StoreId(Long storeId);
 
-    void deleteByProduct_ProductId(Long productId);
 
 
     // 특정 상품의 현재 진행 중인 이벤트 조회.
