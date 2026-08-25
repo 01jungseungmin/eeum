@@ -25,4 +25,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long>,
     Optional<ChatMessage> findFirstByChatRoom_ChatroomIdOrderBySentAtDesc(Long roomId);
 
     long countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(Long roomId, LocalDateTime lastReadTime, Long accountId);
+
+    // 중고 문의방의 "첫 문의" 판정용. 방 생성 시 시스템 메시지를 남기지 않으므로
+    // 이 값이 1이면 방금 저장된 그 메시지가 방의 첫 메시지다.
+    long countByChatRoom_ChatroomId(Long roomId);
 }
