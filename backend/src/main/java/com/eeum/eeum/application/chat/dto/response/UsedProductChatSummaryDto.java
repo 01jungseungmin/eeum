@@ -15,8 +15,12 @@ import java.math.BigDecimal;
  * <p>1:1 문의방은 이름을 두지 않으므로(상대와 상품이 방을 식별한다) 목록·상세 모두 이 값으로
  * "무엇에 대한 대화인지"를 표시한다. 이 값이 없으면 사용자는 방을 구분할 수 없다.
  *
- * <p>삭제된 게시글도 내려보낸다 — 기존 대화는 유지하는 정책이라, 프론트가 {@code deleted}로
- * "삭제된 게시글입니다"를 표시하고 상세 진입만 막을 수 있어야 한다.
+ * <p>비공개가 된 게시글도 내려보낸다 — 기존 대화는 유지하는 정책이라, 프론트가
+ * {@code visible}로 "사라진 게시글입니다"를 표시하고 상세 진입만 막을 수 있어야 한다.
+ *
+ * <p>제목·가격은 감추지 않는다. 이 요약을 보는 사람은 참여자 검증을 통과한 거래 당사자
+ * (구매자·판매자)뿐이고, 둘 다 그 게시글을 보고 대화를 시작한 사람이라 숨길 것이 없다.
+ * 제3자에게 비공개 글의 제목을 감추는 것은 후기 목록의 몫이다({@code UsedReviewResponseDto}).
  */
 @Getter
 @Builder
@@ -41,8 +45,16 @@ public class UsedProductChatSummaryDto {
     @Schema(description = "거래 상태", example = "SELLING")
     private final UsedProductStatus status;
 
-    @Schema(description = "삭제 여부. true면 게시글 상세로 이동할 수 없다", example = "false")
-    private final boolean deleted;
+    /**
+     * 게시글이 아직 공개 상태인지. false면 상세로 이동할 수 없다.
+     *
+     * <p>삭제만이 아니라 <b>관리자 숨김과 판매자 탈퇴까지</b> 함께 본다({@code isPubliclyVisible}).
+     * 삭제만 보면 숨겨진 게시글이 정상 글로 내려가 프론트가 이동을 막지 않고, 사용자는 404를 만난다.
+     * 판정 축은 같은 성격의 {@code UsedReviewResponseDto.usedProductVisible}과 동일하게 맞춘다.
+     */
+    @Schema(description = "게시글 공개 여부. false면 상세로 이동할 수 없다 (삭제·숨김·판매자 탈퇴)",
+            example = "true")
+    private final boolean visible;
 
     public static UsedProductChatSummaryDto of(UsedProduct product, String thumbnailUrl) {
         return UsedProductChatSummaryDto.builder()
@@ -52,7 +64,7 @@ public class UsedProductChatSummaryDto {
                 .priceType(product.getPriceType())
                 .price(product.getPrice())
                 .status(product.getStatus())
-                .deleted(product.isDeleted())
+                .visible(product.isPubliclyVisible())
                 .build();
     }
 }

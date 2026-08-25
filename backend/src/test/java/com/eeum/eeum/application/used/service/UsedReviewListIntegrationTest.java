@@ -238,6 +238,23 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void 판매자에게는_자기_글의_후기_제목이_보인다() {
+        // 허용 예외는 "작성자·소유자 본인"이다. 작성자만 인정하면 판매자가 자기 글을 지운 뒤
+        // 받은 후기 목록에서 어느 거래에 대한 후기인지 알 수 없게 된다.
+        // 숨김 글은 상세 조회에서 이미 소유자에게 열려 있어(UsedProductService.getVisibleOrThrow)
+        // 여기서만 막으면 같은 판매자가 경로에 따라 다른 것을 보게 된다.
+        Long productId = soldProduct("자전거 팝니다");
+        usedReviewService.create(buyerId, productId, request(2, "별로였어요"));
+        softDelete(productId);
+
+        UsedReviewResponseDto asSeller = usedReviewService
+                .getSellerReviews(sellerId, sellerId, PageRequest.of(0, 20)).getContent().get(0);
+
+        assertThat(asSeller.getUsedProductTitle()).isEqualTo("자전거 팝니다");
+        assertThat(asSeller.isUsedProductVisible()).isFalse();
+    }
+
+    @Test
     void 비회원에게는_비공개_게시글의_제목을_감춘다() {
         // 판매자 후기 목록은 비회원도 볼 수 있어 뷰어가 null로 들어온다.
         Long productId = soldProduct("자전거 팝니다");

@@ -112,7 +112,7 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
         assertThat(summary.getThumbnailUrl()).isEqualTo("https://cdn.test/bike.jpg");
         assertThat(summary.getPriceType()).isEqualTo(UsedProductPriceType.FIXED);
         assertThat(summary.getPrice()).isEqualByComparingTo("10000");
-        assertThat(summary.isDeleted()).isFalse();
+        assertThat(summary.isVisible()).isTrue();
     }
 
     @Test
@@ -136,7 +136,23 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 삭제된_게시글도_삭제_표시와_함께_담는다() {
+    void 숨겨진_게시글은_이동_불가로_표시된다() {
+        // 삭제만 보면 숨겨진 게시글이 정상 글로 내려가 프론트가 이동을 막지 않고,
+        // 구매자가 탭하면 상세에서 404를 만난다. 판정은 세 축 전체여야 한다.
+        chatRoomService.createUsedProductInquiry(buyerId, productId);
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        product.hide();
+        usedProductRepository.saveAndFlush(product);
+
+        UsedProductChatSummaryDto summary = firstRoomSummary();
+
+        assertThat(summary.isVisible()).isFalse();
+        // 당사자에게 제목까지 감추지는 않는다 — 그 게시글을 보고 대화를 시작한 사람들이다.
+        assertThat(summary.getTitle()).isEqualTo("자전거 팝니다");
+    }
+
+    @Test
+    void 삭제된_게시글도_이동_불가_표시와_함께_담는다() {
         // 기존 대화는 유지하는 정책이라, 요약을 빼면 "삭제된 게시글입니다"를 표시할 수 없다.
         chatRoomService.createUsedProductInquiry(buyerId, productId);
         UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
@@ -146,7 +162,7 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
         UsedProductChatSummaryDto summary = firstRoomSummary();
 
         assertThat(summary).isNotNull();
-        assertThat(summary.isDeleted()).isTrue();
+        assertThat(summary.isVisible()).isFalse();
         assertThat(summary.getTitle()).isEqualTo("자전거 팝니다");
     }
 

@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.used.dto.response;
 
+import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedReview;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -49,23 +50,28 @@ public class UsedReviewResponseDto {
      * 지워 평판을 세탁할 수 있다. 다만 비공개 게시글의 <b>제목은 제3자에게 감춘다.</b>
      * 관리자가 숨긴 글의 제목이 후기 목록을 통해 그대로 새어 나가면 숨김 조치가 무의미해진다.
      *
-     * <p><b>작성자 본인에게는 감추지 않는다.</b> 감추는 목적이 "비공개 글의 내용이 제3자에게
-     * 새어 나가는 것"을 막는 것인데, 작성자는 그 글을 보고 후기를 쓴 사람이라 숨길 것이 없다.
-     * 오히려 감추면 판매자가 글을 지운 뒤 작성자가 자기 후기의 대상을 알 수 없게 된다
-     * (내가 쓴 후기 목록이 전부 제목 없이 나온다).
+     * <p><b>당사자에게는 감추지 않는다 — 후기 작성자와 게시글 소유자 둘 다.</b>
+     * 감추는 목적이 "비공개 글의 내용이 제3자에게 새어 나가는 것"을 막는 것인데,
+     * 작성자는 그 글을 보고 후기를 쓴 사람이고 판매자는 그 글의 주인이라 숨길 것이 없다.
+     * 오히려 감추면 각자 자기 화면에서 대상을 알 수 없게 된다 —
+     * 작성자는 내가 쓴 후기 목록이, 판매자는 자기가 받은 후기 목록이 전부 제목 없이 나온다.
+     * (숨김 글은 상세 조회에서 이미 소유자에게 열려 있다. UsedProductService.getVisibleOrThrow 참고 —
+     * 여기서만 막으면 같은 판매자가 경로에 따라 다른 것을 보게 된다.)
      *
      * @param viewerId 조회 주체. 비회원 조회에서는 null이다.
      */
     public static UsedReviewResponseDto from(UsedReview review, Long viewerId) {
-        boolean visible = review.getUsedProduct().isPubliclyVisible()
-                || (viewerId != null && review.isWrittenBy(viewerId));
+        UsedProduct product = review.getUsedProduct();
+        boolean party = viewerId != null
+                && (review.isWrittenBy(viewerId) || product.isOwnedBy(viewerId));
+        boolean visible = product.isPubliclyVisible() || party;
         return UsedReviewResponseDto.builder()
                 .usedReviewId(review.getUsedReviewId())
-                .usedProductId(review.getUsedProduct().getUsedProductId())
+                .usedProductId(product.getUsedProductId())
                 // 게시글 공개 여부는 사실 그대로 내린다. 작성자에게 제목을 보여주더라도
                 // 그 글이 비공개라는 사실은 알려야 프론트가 상세 이동을 막을 수 있다.
-                .usedProductVisible(review.getUsedProduct().isPubliclyVisible())
-                .usedProductTitle(visible ? review.getUsedProduct().getTitle() : null)
+                .usedProductVisible(product.isPubliclyVisible())
+                .usedProductTitle(visible ? product.getTitle() : null)
                 .reviewerAccountId(review.getReviewer().getAccountId())
                 .reviewerNickname(review.getReviewer().getNickname())
                 .rating(review.getRating())
