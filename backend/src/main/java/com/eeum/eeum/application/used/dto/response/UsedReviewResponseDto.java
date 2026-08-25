@@ -46,15 +46,25 @@ public class UsedReviewResponseDto {
      * 후기 응답.
      *
      * <p>후기 자체는 게시글이 삭제·숨김돼도 노출한다 — 거르면 판매자가 나쁜 후기가 달린 글을
-     * 지워 평판을 세탁할 수 있다. 다만 비공개 게시글의 <b>제목은 감춘다.</b>
+     * 지워 평판을 세탁할 수 있다. 다만 비공개 게시글의 <b>제목은 제3자에게 감춘다.</b>
      * 관리자가 숨긴 글의 제목이 후기 목록을 통해 그대로 새어 나가면 숨김 조치가 무의미해진다.
+     *
+     * <p><b>작성자 본인에게는 감추지 않는다.</b> 감추는 목적이 "비공개 글의 내용이 제3자에게
+     * 새어 나가는 것"을 막는 것인데, 작성자는 그 글을 보고 후기를 쓴 사람이라 숨길 것이 없다.
+     * 오히려 감추면 판매자가 글을 지운 뒤 작성자가 자기 후기의 대상을 알 수 없게 된다
+     * (내가 쓴 후기 목록이 전부 제목 없이 나온다).
+     *
+     * @param viewerId 조회 주체. 비회원 조회에서는 null이다.
      */
-    public static UsedReviewResponseDto from(UsedReview review) {
-        boolean visible = review.getUsedProduct().isPubliclyVisible();
+    public static UsedReviewResponseDto from(UsedReview review, Long viewerId) {
+        boolean visible = review.getUsedProduct().isPubliclyVisible()
+                || (viewerId != null && review.isWrittenBy(viewerId));
         return UsedReviewResponseDto.builder()
                 .usedReviewId(review.getUsedReviewId())
                 .usedProductId(review.getUsedProduct().getUsedProductId())
-                .usedProductVisible(visible)
+                // 게시글 공개 여부는 사실 그대로 내린다. 작성자에게 제목을 보여주더라도
+                // 그 글이 비공개라는 사실은 알려야 프론트가 상세 이동을 막을 수 있다.
+                .usedProductVisible(review.getUsedProduct().isPubliclyVisible())
                 .usedProductTitle(visible ? review.getUsedProduct().getTitle() : null)
                 .reviewerAccountId(review.getReviewer().getAccountId())
                 .reviewerNickname(review.getReviewer().getNickname())

@@ -56,6 +56,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
 
     private Long sellerId;
     private Long buyerId;
+    private Long strangerId;
     private Account seller;
     private Region region;
     private Category category;
@@ -68,8 +69,11 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
                 "l-seller-" + tag + "@test.com", "pw", "판매자", "판매자" + tag, "010-2222-2222"));
         Account buyer = accountRepository.save(Account.createUser(
                 "l-buyer-" + tag + "@test.com", "pw", "구매자", "구매자" + tag, "010-1111-1111"));
+        Account stranger = accountRepository.save(Account.createUser(
+                "l-stranger-" + tag + "@test.com", "pw", "제3자", "제3자" + tag, "010-5555-5555"));
         sellerId = seller.getAccountId();
         buyerId = buyer.getAccountId();
+        strangerId = stranger.getAccountId();
 
         region = regionRepository.save(Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
         category = categoryRepository.save(Category.createRoot(CategoryType.USED, "디지털기기" + tag, 1));
@@ -93,7 +97,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         }
 
         Slice<UsedReviewResponseDto> result =
-                usedReviewService.getSellerReviews(sellerId, PageRequest.of(0, 20));
+                usedReviewService.getSellerReviews(sellerId, strangerId, PageRequest.of(0, 20));
 
         // 마지막에 쓴 후기가 먼저 온다.
         assertThat(result.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
@@ -109,7 +113,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         }
 
         Slice<UsedReviewResponseDto> result = usedReviewService.getSellerReviews(
-                sellerId, PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "rating")));
+                sellerId, strangerId, PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "rating")));
 
         assertThat(result.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
                 .containsExactly(reviewIds.get(2), reviewIds.get(1), reviewIds.get(0));
@@ -122,9 +126,9 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         }
 
         Slice<UsedReviewResponseDto> first =
-                usedReviewService.getSellerReviews(sellerId, PageRequest.of(0, 2));
+                usedReviewService.getSellerReviews(sellerId, strangerId, PageRequest.of(0, 2));
         Slice<UsedReviewResponseDto> second =
-                usedReviewService.getSellerReviews(sellerId, PageRequest.of(1, 2));
+                usedReviewService.getSellerReviews(sellerId, strangerId, PageRequest.of(1, 2));
 
         assertThat(first.getContent()).hasSize(2);
         assertThat(first.hasNext()).isTrue();
@@ -159,7 +163,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.saveAndFlush(product);
 
         UsedReviewResponseDto review = usedReviewService
-                .getSellerReviews(sellerId, PageRequest.of(0, 20)).getContent().get(0);
+                .getSellerReviews(sellerId, strangerId, PageRequest.of(0, 20)).getContent().get(0);
 
         assertThat(review.getContent()).isEqualTo("별로였어요");
         assertThat(review.isUsedProductVisible()).isFalse();
@@ -178,7 +182,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.saveAndFlush(product);
 
         UsedReviewResponseDto review = usedReviewService
-                .getSellerReviews(sellerId, PageRequest.of(0, 20)).getContent().get(0);
+                .getSellerReviews(sellerId, strangerId, PageRequest.of(0, 20)).getContent().get(0);
 
         assertThat(review.isUsedProductVisible()).isFalse();
         assertThat(review.getUsedProductTitle()).isNull();
@@ -194,10 +198,63 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         SqlCaptureInspector.reset();
 
         Slice<UsedReviewResponseDto> result =
-                usedReviewService.getSellerReviews(sellerId, PageRequest.of(0, 20));
+                usedReviewService.getSellerReviews(sellerId, strangerId, PageRequest.of(0, 20));
         result.getContent().forEach(UsedReviewResponseDto::getUsedProductTitle);
 
         assertThat(selectCount()).as("실행된 select: %s", SqlCaptureInspector.captured()).isEqualTo(1);
+    }
+
+    @Test
+    void 작성자에게는_삭제된_게시글의_제목도_보인다() {
+        // 제목을 감추는 목적은 비공개 글의 내용이 제3자에게 새어 나가는 것을 막는 것이다.
+        // 작성자는 그 글을 보고 후기를 쓴 사람이라 감출 것이 없고, 감추면 판매자가 글을 지운 뒤
+        // 자기 후기가 어느 거래에 대한 것인지 알 수 없게 된다.
+        Long productId = soldProduct("자전거 팝니다");
+        usedReviewService.create(buyerId, productId, request(2, "별로였어요"));
+        softDelete(productId);
+
+        UsedReviewResponseDto mine = usedReviewService
+                .getMyReviews(buyerId, PageRequest.of(0, 20)).getContent().get(0);
+
+        assertThat(mine.getUsedProductTitle()).isEqualTo("자전거 팝니다");
+        assertThat(mine.isUsedProductVisible())
+                .as("제목을 보여주더라도 게시글이 비공개라는 사실은 그대로 알려야 상세 이동을 막을 수 있다")
+                .isFalse();
+    }
+
+    @Test
+    void 판매자_목록에서도_자기가_쓴_후기의_제목은_보인다() {
+        Long productId = soldProduct("자전거 팝니다");
+        usedReviewService.create(buyerId, productId, request(2, "별로였어요"));
+        softDelete(productId);
+
+        UsedReviewResponseDto asAuthor = usedReviewService
+                .getSellerReviews(sellerId, buyerId, PageRequest.of(0, 20)).getContent().get(0);
+        UsedReviewResponseDto asStranger = usedReviewService
+                .getSellerReviews(sellerId, strangerId, PageRequest.of(0, 20)).getContent().get(0);
+
+        assertThat(asAuthor.getUsedProductTitle()).isEqualTo("자전거 팝니다");
+        assertThat(asStranger.getUsedProductTitle()).isNull();
+    }
+
+    @Test
+    void 비회원에게는_비공개_게시글의_제목을_감춘다() {
+        // 판매자 후기 목록은 비회원도 볼 수 있어 뷰어가 null로 들어온다.
+        Long productId = soldProduct("자전거 팝니다");
+        usedReviewService.create(buyerId, productId, request(2, "별로였어요"));
+        softDelete(productId);
+
+        UsedReviewResponseDto anonymous = usedReviewService
+                .getSellerReviews(sellerId, null, PageRequest.of(0, 20)).getContent().get(0);
+
+        assertThat(anonymous.getUsedProductTitle()).isNull();
+        assertThat(anonymous.getContent()).isEqualTo("별로였어요");
+    }
+
+    private void softDelete(Long usedProductId) {
+        UsedProduct product = usedProductRepository.findById(usedProductId).orElseThrow();
+        product.softDelete();
+        usedProductRepository.saveAndFlush(product);
     }
 
     private long selectCount() {

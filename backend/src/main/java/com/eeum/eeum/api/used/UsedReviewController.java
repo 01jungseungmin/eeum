@@ -51,15 +51,17 @@ public class UsedReviewController {
     @Operation(
             summary = "판매자가 받은 후기 목록",
             description = "판매자 평판이므로 로그인 없이 볼 수 있습니다. 작성 최신순 무한 스크롤(Slice)입니다. " +
-                    "게시글이 삭제·숨김된 후기도 그대로 보이며, 그 경우 게시글 제목은 비어 있고 " +
-                    "usedProductVisible이 false입니다."
+                    "게시글이 삭제·숨김된 후기도 그대로 보이며, 그 경우 usedProductVisible이 false이고 " +
+                    "게시글 제목은 비어 있습니다(단, 자기가 쓴 후기에는 제목이 그대로 보입니다)."
     )
     public ResponseEntity<ApiResponse<Slice<UsedReviewResponseDto>>> getSellerReviews(
             @Parameter(description = "판매자 계정 ID") @PathVariable @Positive Long sellerId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
+        // 비회원도 볼 수 있는 경로라 뷰어가 없을 수 있다.
+        Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(
-                usedReviewService.getSellerReviews(sellerId, pageable)));
+                usedReviewService.getSellerReviews(sellerId, viewerId, pageable)));
     }
 
     @GetMapping("/reviews/me")

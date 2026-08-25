@@ -82,7 +82,7 @@ public class UsedReviewService {
 
         log.info("중고거래 후기 작성: usedReviewId={}, usedProductId={}, reviewerId={}",
                 review.getUsedReviewId(), usedProductId, reviewerId);
-        return UsedReviewResponseDto.from(review);
+        return UsedReviewResponseDto.from(review, reviewerId);
     }
 
     @Transactional
@@ -98,7 +98,7 @@ public class UsedReviewService {
         usedReviewRepository.flush();
 
         log.info("중고거래 후기 수정: usedReviewId={}, reviewerId={}", usedReviewId, reviewerId);
-        return UsedReviewResponseDto.from(review);
+        return UsedReviewResponseDto.from(review, reviewerId);
     }
 
     @Transactional
@@ -118,16 +118,21 @@ public class UsedReviewService {
      * 페이지 번호·크기만 쓰도록 Pageable을 다시 만든다 — 그대로 넘기면 Spring이 요청 sort를
      * 쿼리의 ORDER BY 뒤에 덧붙여 실제 순서가 달라진다.
      */
+    /**
+     * @param viewerId 조회 주체. 비회원 조회에서는 null이다 — 자기 후기의 제목을 가리지 않기 위해 받는다.
+     */
     @Transactional(readOnly = true)
-    public Slice<UsedReviewResponseDto> getSellerReviews(Long sellerId, Pageable pageable) {
+    public Slice<UsedReviewResponseDto> getSellerReviews(
+            Long sellerId, Long viewerId, Pageable pageable) {
         return usedReviewRepository.findSellerReviews(sellerId, unsorted(pageable))
-                .map(UsedReviewResponseDto::from);
+                .map(review -> UsedReviewResponseDto.from(review, viewerId));
     }
 
     @Transactional(readOnly = true)
     public Slice<UsedReviewResponseDto> getMyReviews(Long reviewerId, Pageable pageable) {
+        // 조회 조건이 작성자로 좁혀져 있어 모든 행의 작성자가 곧 뷰어다.
         return usedReviewRepository.findMyReviews(reviewerId, unsorted(pageable))
-                .map(UsedReviewResponseDto::from);
+                .map(review -> UsedReviewResponseDto.from(review, reviewerId));
     }
 
     private Pageable unsorted(Pageable pageable) {
