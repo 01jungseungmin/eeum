@@ -24,11 +24,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +56,7 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
     private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final PlatformTransactionManager transactionManager;
 
     private Long sellerId;
     private Long buyerId;
@@ -286,6 +289,50 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
                 usedReviewService.create(buyerId, productId, createRequest(4, "다시 씁니다"));
 
         assertThat(rewritten.getUsedReviewId()).isNotEqualTo(created.getUsedReviewId());
+    }
+
+    // ─────────────────── 잠금·계정 상태 ───────────────────
+
+    @Test
+    void 수정_삭제가_겹쳐도_500이_아니라_찾을_수_없음으로_끝난다() throws Exception {
+        // 후기는 작성자만 고칠 수 있어 경쟁하는 두 요청의 actor가 언제나 같다.
+        // 그래서 직렬화는 쓰기 경로 첫 단계인 계정 행 잠금이 하고, 뒤에 온 요청은 그 뒤에
+        // current read로 사라진 행을 본다. 일반 조회였다면 flush에서 StaleStateException(500)이다.
+        usedProductService.markSold(sellerId, productId, buyerId);
+        Long reviewId = usedReviewService
+                .create(buyerId, productId, createRequest(5, "좋아요")).getUsedReviewId();
+
+        AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+        raceOnLock(transactionManager, "account",
+                () -> usedReviewService.delete(buyerId, reviewId),
+                () -> usedReviewService.update(buyerId, reviewId, updateRequest(1, "수정")),
+                secondFailure);
+
+        assertThat(secondFailure.get())
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_REVIEW_NOT_FOUND);
+
+        assertThat(usedReviewRepository.findById(reviewId)).isEmpty();
+    }
+
+    @Test
+    void 탈퇴한_계정은_자기_후기를_고칠_수_없다() {
+        // 다른 쓰기 경로와 같은 규약이다 — 탈퇴 정리가 지나간 뒤 살아 있는 토큰으로 들어오는 쓰기를 막는다.
+        usedProductService.markSold(sellerId, productId, buyerId);
+        Long reviewId = usedReviewService
+                .create(buyerId, productId, createRequest(5, "좋아요")).getUsedReviewId();
+
+        Account buyer = accountRepository.findById(buyerId).orElseThrow();
+        buyer.withdraw();
+        accountRepository.saveAndFlush(buyer);
+
+        assertThatThrownBy(() -> usedReviewService.update(buyerId, reviewId, updateRequest(1, "수정")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
+
+        assertThat(usedReviewRepository.findById(reviewId).orElseThrow().getRating()).isEqualTo(5);
     }
 
     private UsedReviewCreateRequestDto createRequest(int rating, String content) {

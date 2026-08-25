@@ -91,7 +91,7 @@ public class UsedReviewService {
             Long usedReviewId,
             UsedReviewUpdateRequestDto request
     ) {
-        UsedReview review = getOwnedOrThrow(reviewerId, usedReviewId);
+        UsedReview review = getOwnedForUpdateOrThrow(reviewerId, usedReviewId);
         review.update(request.getRating(), request.getContent());
 
         // modifiedAt은 flush 시점에 채워진다. 먼저 반영하지 않으면 응답에 수정 전 값이 담긴다.
@@ -103,7 +103,7 @@ public class UsedReviewService {
 
     @Transactional
     public void delete(Long reviewerId, Long usedReviewId) {
-        UsedReview review = getOwnedOrThrow(reviewerId, usedReviewId);
+        UsedReview review = getOwnedForUpdateOrThrow(reviewerId, usedReviewId);
         usedReviewRepository.delete(review);
 
         log.info("중고거래 후기 삭제: usedReviewId={}, reviewerId={}", usedReviewId, reviewerId);
@@ -155,10 +155,14 @@ public class UsedReviewService {
      * <p>조회 조건에 작성자를 함께 넣는다. 후기를 먼저 읽고 소유권을 나중에 비교하면
      * 남의 후기 ID로 존재 여부를 알아낼 수 있다(404와 403이 갈린다).
      * 여기서는 남의 후기든 없는 후기든 같은 404로 응답한다.
+     *
+     * <p>잠금 순서는 다른 쓰기 경로와 같은 account → used_review다. 계정을 먼저 잠그고
+     * 사용 가능 상태를 확인하므로, 탈퇴 정리가 지나간 뒤 살아 있는 토큰으로 후기를 고치는 것도 막힌다.
      */
-    private UsedReview getOwnedOrThrow(Long reviewerId, Long usedReviewId) {
+    private UsedReview getOwnedForUpdateOrThrow(Long reviewerId, Long usedReviewId) {
+        accountWriteGuard.lockActive(reviewerId);
         return usedReviewRepository
-                .findByUsedReviewIdAndReviewer_AccountId(usedReviewId, reviewerId)
+                .findForUpdateByIdAndReviewer(usedReviewId, reviewerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USED_REVIEW_NOT_FOUND));
     }
 }
