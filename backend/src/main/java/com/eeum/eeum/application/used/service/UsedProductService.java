@@ -41,6 +41,7 @@ import org.springframework.data.domain.Slice;
 import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -194,6 +195,60 @@ public class UsedProductService {
         // modifiedAt은 flush 시점에 채워진다. 먼저 반영하지 않으면 응답에 수정 전 값이 담긴다.
         usedProductRepository.flush();
 
+        return UsedProductDetailResponseDto.from(
+                product, usedProductImageService.getImages(usedProductId));
+    }
+
+    // ===================== 거래 상태 =====================
+
+    /**
+     * 예약 처리. 구매자 지정은 선택이다 — 상대 없이 "예약중"만 표시하는 흐름을 막지 않는다.
+     *
+     * <p>잠금 순서는 수정·삭제와 같은 account → used_product다. 관리자 숨김·삭제 조치와
+     * 같은 행을 다투므로, 잠그지 않으면 사라진 글이 예약 상태로 되살아난다.
+     */
+    @Transactional
+    public UsedProductDetailResponseDto reserve(Long sellerId, Long usedProductId, Long buyerId) {
+        return changeTradeStatus(sellerId, usedProductId, buyerId,
+                (product, buyer) -> product.reserve(buyer));
+    }
+
+    @Transactional
+    public UsedProductDetailResponseDto cancelReservation(Long sellerId, Long usedProductId) {
+        return changeTradeStatus(sellerId, usedProductId, null,
+                (product, buyer) -> product.cancelReservation());
+    }
+
+    /**
+     * 판매완료 처리. 여기서 확정된 구매자가 후기 작성 자격의 근거가 된다.
+     *
+     * <p>구매자를 생략하면 예약 때 지정해 둔 상대를 그대로 유지한다.
+     * 앱 밖에서 성사된 거래는 구매자 없이 완료할 수 있고, 그 거래에는 후기가 붙지 않는다.
+     */
+    @Transactional
+    public UsedProductDetailResponseDto markSold(Long sellerId, Long usedProductId, Long buyerId) {
+        return changeTradeStatus(sellerId, usedProductId, buyerId,
+                (product, buyer) -> product.markSold(buyer));
+    }
+
+    // 상태 전이 3종의 공통 골격 — 잠금·소유권·구매자 조회가 같고 전이 규칙만 다르다.
+    // 전이 검증 자체는 엔티티가 한다(어느 경로로 불러도 같은 규칙이 적용되도록).
+    private UsedProductDetailResponseDto changeTradeStatus(
+            Long sellerId,
+            Long usedProductId,
+            Long buyerId,
+            BiConsumer<UsedProduct, Account> transition
+    ) {
+        accountWriteGuard.lockActive(sellerId);
+        UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
+
+        Account buyer = buyerId == null ? null : accountRepository.findById(buyerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        transition.accept(product, buyer);
+
+        // 상태·구매자 변경을 먼저 반영해야 응답이 변경 전 값을 담지 않는다.
+        usedProductRepository.flush();
         return UsedProductDetailResponseDto.from(
                 product, usedProductImageService.getImages(usedProductId));
     }

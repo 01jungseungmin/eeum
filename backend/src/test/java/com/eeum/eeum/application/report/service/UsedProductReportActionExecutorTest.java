@@ -61,7 +61,7 @@ class UsedProductReportActionExecutorTest {
     void 숨김_조치는_노출만_막고_거래_상태는_건드리지_않는다() {
         // given — 숨김은 노출 정책이고 예약·판매완료는 거래 사실이다
         UsedProduct product = product();
-        product.reserve();
+        product.reserve(null);
         givenProductForUpdate(product);
 
         // when

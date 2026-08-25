@@ -136,7 +136,7 @@ class FavoriteUsedProductServiceTest {
     void 판매완료된_게시글도_찜할_수_있다() {
         // given — 거래가 끝난 뒤에도 기록으로 남길 수 있어야 한다
         UsedProduct sold = product();
-        sold.markSold();
+        sold.markSold(null);
         givenLockedProduct(sold);
         when(favoriteRepository.findByAccount_AccountIdAndRefTypeAndRefId(
                 ACCOUNT_ID, FavoriteRefType.USED_PRODUCT, PRODUCT_ID)).thenReturn(Optional.empty());

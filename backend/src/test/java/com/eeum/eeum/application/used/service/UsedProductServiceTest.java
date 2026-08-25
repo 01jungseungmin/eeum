@@ -710,7 +710,7 @@ class UsedProductServiceTest {
     void 예약_중인_게시글은_삭제할_수_없다() {
         // given — 상대가 거래를 기다리는 중이다. 말없이 사라지면 이유를 알 수 없다.
         UsedProduct product = product();
-        product.reserve();
+        product.reserve(null);
         when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
@@ -726,7 +726,7 @@ class UsedProductServiceTest {
     @Test
     void 판매완료된_게시글은_삭제할_수_있다() {
         UsedProduct product = product();
-        product.markSold();
+        product.markSold(null);
         when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 

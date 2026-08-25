@@ -77,6 +77,19 @@ public class UsedProduct extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private UsedProductStatus status;
 
+    /**
+     * 거래 상대(구매자). 예약·판매완료 시 판매자가 지정한다.
+     *
+     * <p><b>nullable이다.</b> 앱 밖에서 성사된 거래를 판매완료로 정리하거나 상대 없이
+     * "예약중"만 표시하는 경우가 있어, 구매자 지정을 강제하면 그런 글을 SOLD로 만들 수 없다.
+     * 대신 후기는 이 값이 있는 거래에서만 쓸 수 있다.
+     *
+     * <p>판매자와 같은 계정은 지정할 수 없다 — 자기 거래에 후기를 남기는 경로가 생긴다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "buyer_account_id")
+    private Account buyer;
+
     @Column(name = "is_hidden", nullable = false)
     private boolean hidden;
 
@@ -139,18 +152,21 @@ public class UsedProduct extends BaseEntity {
 
     // ===================== 거래 상태 =====================
 
-    // 판매중인 글만 예약 가능
-    public void reserve() {
+    // 판매중인 글만 예약 가능. buyer는 생략할 수 있다(상대 없이 "예약중"만 표시하는 경우).
+    public void reserve(Account buyer) {
         if (this.status == UsedProductStatus.SOLD) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_ALREADY_SOLD);
         }
         if (this.status == UsedProductStatus.RESERVED) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_ALREADY_RESERVED);
         }
+        assertNotSeller(buyer);
         this.status = UsedProductStatus.RESERVED;
+        this.buyer = buyer;
     }
 
-    // 예약을 취소해 다시 판매중으로 롤백
+    // 예약을 취소해 다시 판매중으로 롤백. 지정했던 구매자도 함께 비운다 —
+    // 남겨두면 취소된 거래의 상대가 후기 자격을 갖는다.
     public void cancelReservation() {
         if (this.status == UsedProductStatus.SOLD) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_ALREADY_SOLD);
@@ -159,14 +175,38 @@ public class UsedProduct extends BaseEntity {
             throw new BusinessException(ErrorCode.USED_PRODUCT_NOT_ON_SALE);
         }
         this.status = UsedProductStatus.SELLING;
+        this.buyer = null;
     }
 
-    // 거래 완료 처리
-    public void markSold() {
+    /**
+     * 거래 완료 처리. 후기 자격의 근거는 이 시점에 확정된 구매자다.
+     *
+     * <p>예약을 거치지 않은 즉시 거래(SELLING → SOLD)도 허용하므로 여기서도 구매자를 받는다.
+     * 예약 때 지정해 둔 구매자가 있고 이번에 생략하면 그 값을 유지한다 —
+     * 예약 상대와 그대로 거래한 흐름에서 구매자가 사라지면 후기를 쓸 수 없다.
+     */
+    public void markSold(Account buyer) {
         if (this.status == UsedProductStatus.SOLD) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_ALREADY_SOLD);
         }
+        assertNotSeller(buyer);
         this.status = UsedProductStatus.SOLD;
+        if (buyer != null) {
+            this.buyer = buyer;
+        }
+    }
+
+    // 구매자로 지정된 계정인지 — 후기 작성 자격 판정에 쓴다.
+    public boolean isPurchasedBy(Long accountId) {
+        return this.status == UsedProductStatus.SOLD
+                && this.buyer != null
+                && this.buyer.getAccountId().equals(accountId);
+    }
+
+    private void assertNotSeller(Account buyer) {
+        if (buyer != null && buyer.getAccountId().equals(this.seller.getAccountId())) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+        }
     }
 
     // ===================== 노출 / 삭제 =====================

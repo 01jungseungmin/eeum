@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.used;
 
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductTradePartnerRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
@@ -151,6 +152,58 @@ public class UsedProductController {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         usedProductService.delete(sellerId, usedProductId);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // ===================== 거래 상태 =====================
+
+    @PostMapping("/{usedProductId}/reservation")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "예약 처리",
+            description = "판매중인 게시글을 예약중으로 바꿉니다. 작성자 본인만 가능합니다. " +
+                    "거래 상대(buyerId)는 선택이며, 지정하면 예약 취소 시 함께 해제됩니다."
+    )
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> reserve(
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @RequestBody(required = false) @Valid UsedProductTradePartnerRequestDto request
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(usedProductService.reserve(
+                sellerId, usedProductId, request == null ? null : request.getBuyerId())));
+    }
+
+    @DeleteMapping("/{usedProductId}/reservation")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "예약 취소",
+            description = "예약중인 게시글을 다시 판매중으로 되돌리고 지정했던 거래 상대를 해제합니다."
+    )
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> cancelReservation(
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                usedProductService.cancelReservation(sellerId, usedProductId)));
+    }
+
+    @PostMapping("/{usedProductId}/sold")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "판매완료 처리",
+            description = "게시글을 판매완료로 바꿉니다. 예약을 거치지 않고 바로 완료할 수도 있습니다. " +
+                    "여기서 확정된 거래 상대만 후기를 남길 수 있습니다. " +
+                    "buyerId를 생략하면 예약 때 지정한 상대를 그대로 유지합니다."
+    )
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> markSold(
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @RequestBody(required = false) @Valid UsedProductTradePartnerRequestDto request
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(usedProductService.markSold(
+                sellerId, usedProductId, request == null ? null : request.getBuyerId())));
     }
 
     // ===================== 사진 =====================
