@@ -62,8 +62,9 @@ public class ChatRoom extends BaseEntity {
     // 중고거래 1:1 방의 구매자. USED_PRODUCT 방에서만 채워지고 그 외 방에서는 항상 null이다.
     // 판매자는 UsedProduct.seller로 결정되므로 따로 두지 않는다.
     //
-    // FK로 걸지 않는다 — refId와 같은 정책이다. 계정 물리 삭제(AccountCleanupScheduler)가
-    // chat_room의 기존 FK에 막히는 문제가 이미 있어, 같은 테이블에 계정 FK를 하나 더 늘리지 않는다.
+    // FK로 걸지 않는다 — 같은 테이블의 refId와 같은 정책이다. 이 값은 생성 경로에서 조회·검증한
+    // 계정 ID만 들어오고, 참조 무결성보다 active_ref_key 생성식의 입력이라는 성격이 강하다.
+    // (계정은 물리 삭제되지 않으므로 FK를 걸어도 무방하다. 필요해지면 전환할 수 있다.)
     // 아래 active_ref_key 생성식이 이 컬럼을 참조하므로 컬럼명을 바꾸면 DDL도 함께 바꿔야 한다.
     @Column(name = "buyer_account_id")
     private Long buyerAccountId;

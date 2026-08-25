@@ -151,7 +151,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 
 ### 스케줄러 목록
 새 스케줄러 추가 전 반드시 기존 목록 확인 (위치: `application/{domain}/scheduler/`):
-- `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 물리 삭제
+- `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 **개인정보 파기(익명화)**. 계정 행은 남긴다 — 주문·결제·신고·후기 등 다수 테이블이 참조하고 일부는 보존 의무가 있어 물리 삭제할 수 없다. `Account.anonymize()`가 email·nickname·name·phone·password·FCM 토큰을 지우고 `anonymizedAt`을 남기며, 참조가 끊겨도 되는 자식(찜·활동지역·사업자정보·정산계좌)만 함께 삭제한다
 - `OrderExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 주문 만료 처리
 - `NotificationCleanupScheduler` — 매일 03:00 6개월 이전 알림 삭제 / 5분 주기 Redis unread 카운트 ↔ DB 정합성 보정
 - `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
