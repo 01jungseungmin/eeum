@@ -20,7 +20,10 @@ import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.application.account.service.AccountWriteGuard;
+import com.eeum.eeum.application.chat.dto.response.UsedProductChatSummaryDto;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.entity.UsedProductImage;
+import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
@@ -53,6 +56,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,6 +81,7 @@ public class ChatRoomService {
     private final TransactionTemplate transactionTemplate;
     private final StoreRepository storeRepository;
     private final UsedProductRepository usedProductRepository;
+    private final UsedProductImageRepository usedProductImageRepository;
     private final AccountWriteGuard accountWriteGuard;
 
     // ===================== 채팅방 생성 =====================
@@ -244,13 +249,18 @@ public class ChatRoomService {
                         (a, b) -> a.getSentAt().isAfter(b.getSentAt()) ? a : b
                 ));
 
+        // 중고 문의방은 이름이 없어 상품 요약이 없으면 목록에서 방을 구분할 수 없다.
+        // 방마다 조회하면 페이지 크기만큼 쿼리가 나가므로 배치로 한 번에 읽는다(상품 1 + 대표사진 1).
+        Map<Long, UsedProductChatSummaryDto> usedProducts = resolveUsedProductSummaries(rooms.getContent());
+
         return rooms.map(room -> {
             long participantCount = participantCounts.getOrDefault(room.getChatroomId(), 0L);
             long unread = resolveRoomUnread(room, accountId);
             String preview = Optional.ofNullable(latestMessages.get(room.getChatroomId()))
                     .map(ChatMessagePreview::of)
                     .orElse(null);
-            return ChatRoomResponseDto.of(room, preview, unread, participantCount);
+            return ChatRoomResponseDto.of(room, preview, unread, participantCount,
+                    usedProducts.get(room.getChatroomId()));
         });
     }
 
@@ -266,7 +276,7 @@ public class ChatRoomService {
                 .map(ChatParticipantResponseDto::from)
                 .toList();
 
-        return ChatRoomDetailResponseDto.of(room, participants);
+        return ChatRoomDetailResponseDto.of(room, participants, resolveUsedProductSummary(room));
     }
 
     // ===================== 참여자 관리 =====================
@@ -747,7 +757,55 @@ public class ChatRoomService {
                 .countByChatRoom_ChatroomIdAndStatus(room.getChatroomId(), ParticipantStatus.ACTIVE);
         long unread = resolveRoomUnread(room, accountId);
         String preview = buildPreview(room.getChatroomId());
-        return ChatRoomResponseDto.of(room, preview, unread, participantCount);
+        return ChatRoomResponseDto.of(room, preview, unread, participantCount,
+                resolveUsedProductSummary(room));
+    }
+
+    /**
+     * 중고 문의방들의 상품 요약을 한 번에 읽는다. 반환 키는 roomId다.
+     *
+     * <p>삭제된 게시글도 그대로 담는다 — 기존 대화는 유지하는 정책이라 프론트가
+     * {@code deleted}로 "삭제된 게시글입니다"를 표시해야 하고, 여기서 빼면 그 표시가 불가능해진다.
+     */
+    private Map<Long, UsedProductChatSummaryDto> resolveUsedProductSummaries(List<ChatRoom> rooms) {
+        List<ChatRoom> inquiryRooms = rooms.stream()
+                .filter(ChatRoom::isUsedProductRoom)
+                .toList();
+        if (inquiryRooms.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> productIds = inquiryRooms.stream().map(ChatRoom::getRefId).distinct().toList();
+        Map<Long, UsedProduct> products = usedProductRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(UsedProduct::getUsedProductId, product -> product));
+        Map<Long, String> thumbnails = usedProductImageRepository
+                .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
+                .collect(Collectors.toMap(
+                        image -> image.getUsedProduct().getUsedProductId(),
+                        UsedProductImage::getImageUrl,
+                        (first, second) -> first));
+
+        Map<Long, UsedProductChatSummaryDto> byRoomId = new HashMap<>();
+        for (ChatRoom room : inquiryRooms) {
+            UsedProduct product = products.get(room.getRefId());
+            if (product == null) {
+                // 물리 삭제된 상품(정상 경로에서는 soft delete만 쓴다). 방은 남기고 요약만 비운다.
+                continue;
+            }
+            byRoomId.put(room.getChatroomId(),
+                    UsedProductChatSummaryDto.of(product, thumbnails.get(product.getUsedProductId())));
+        }
+        return byRoomId;
+    }
+
+    private UsedProductChatSummaryDto resolveUsedProductSummary(ChatRoom room) {
+        // 중고 방이 아니면 조회할 것도 없다. 먼저 걸러야 하는 이유가 하나 더 있다 —
+        // 빈 결과는 Map.of()이고 불변 맵은 get(null)에 NPE를 던지므로,
+        // ID가 아직 없는 방(저장 전)이 들어오면 조회 자체가 터진다.
+        if (!room.isUsedProductRoom()) {
+            return null;
+        }
+        return resolveUsedProductSummaries(List.of(room)).get(room.getChatroomId());
     }
 
     // 종료된 방은 항상 0 — 읽어서 회수할 수단이 없으므로 배지를 남기지 않는다
