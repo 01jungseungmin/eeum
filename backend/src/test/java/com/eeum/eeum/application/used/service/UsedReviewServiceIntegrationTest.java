@@ -91,8 +91,6 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        // 판매완료가 AFTER_COMMIT + @Async로 후기 요청 알림을 남긴다.
-        deleteAccountsAbsorbingAsyncNotifications(notificationRepository, accountRepository);
     }
 
     // ─────────────────── 작성 자격 ───────────────────

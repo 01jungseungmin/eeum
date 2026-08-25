@@ -74,7 +74,6 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
                 redisUtil.delete("refresh:" + id);
             }
         }
-        accountRepository.deleteAll();
     }
 
     // ─────────────────────────────────────────────────────────────────

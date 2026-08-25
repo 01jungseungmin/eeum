@@ -76,7 +76,6 @@ class AccountTokenCleanupAfterCommitIntegrationTest extends IntegrationTestSuppo
         redisUtil.delete("reauth:" + id);
         redisUtil.delete("password-reset:" + id);
 
-        accountRepository.deleteAll();
     }
 
     // ─────────────────────────────────────────────────────────────────

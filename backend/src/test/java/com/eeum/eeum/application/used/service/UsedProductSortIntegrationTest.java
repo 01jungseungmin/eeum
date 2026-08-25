@@ -70,7 +70,6 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

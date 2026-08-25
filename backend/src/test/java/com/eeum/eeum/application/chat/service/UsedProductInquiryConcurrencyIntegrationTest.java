@@ -113,7 +113,6 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
         categoryRepository.deleteAll();
         accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

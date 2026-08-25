@@ -57,7 +57,6 @@ class NotificationConcurrencyIntegrationTest extends IntegrationTestSupport {
         Long accountId = account != null ? account.getAccountId() : null;
         notificationRepository.deleteAll();
         settingsRepository.deleteAll();
-        accountRepository.deleteAll();
         if (accountId != null) {
             redisTemplate.delete("unread:account:" + accountId);
             redisTemplate.delete("unread:category:" + accountId);

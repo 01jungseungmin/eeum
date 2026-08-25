@@ -139,8 +139,6 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
         // 두 삭제가 모두 막히고, 공유 DB라 다음 클래스까지 잔여 데이터로 무너진다.
         accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
-        // 다른 클래스의 AFTER_COMMIT + @Async 알림이 늦게 도착해도 계정을 정리한다.
-        deleteAccountsAbsorbingAsyncNotifications(notificationRepository, accountRepository);
     }
 
     @Test

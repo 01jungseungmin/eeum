@@ -53,7 +53,6 @@ class FavoriteAllListIntegrationTest extends IntegrationTestSupport {
     @AfterEach
     void tearDown() {
         favoriteRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

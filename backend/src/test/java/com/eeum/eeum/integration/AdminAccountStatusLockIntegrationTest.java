@@ -65,7 +65,6 @@ class AdminAccountStatusLockIntegrationTest extends IntegrationTestSupport {
         if (targetAccount != null) {
             redisUtil.delete("refresh:" + targetAccount.getAccountId());
         }
-        accountRepository.deleteAll();
     }
 
     // ─────────────────────────────────────────────────────────────────

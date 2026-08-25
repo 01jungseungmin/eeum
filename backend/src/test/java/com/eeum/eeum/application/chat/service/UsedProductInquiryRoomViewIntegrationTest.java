@@ -97,7 +97,6 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
         categoryRepository.deleteAll();
         accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

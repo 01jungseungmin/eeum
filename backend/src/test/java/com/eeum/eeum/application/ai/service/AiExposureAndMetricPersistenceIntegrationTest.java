@@ -102,7 +102,6 @@ class AiExposureAndMetricPersistenceIntegrationTest extends IntegrationTestSuppo
         favoriteRepository.deleteAll();
         orderRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     // ──────────────────── AiExposureCommandExecutor ────────────────────

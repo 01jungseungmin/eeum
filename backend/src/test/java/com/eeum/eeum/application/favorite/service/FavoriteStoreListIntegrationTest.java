@@ -69,7 +69,6 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
         favoriteRepository.deleteAll();
         storeRepository.deleteAll();
         ownerInfoRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

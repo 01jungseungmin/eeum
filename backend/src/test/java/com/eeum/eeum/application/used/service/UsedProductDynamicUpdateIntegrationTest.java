@@ -73,8 +73,6 @@ class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        // 다른 클래스의 AFTER_COMMIT + @Async 알림이 늦게 도착해도 계정을 정리한다.
-        deleteAccountsAbsorbingAsyncNotifications(notificationRepository, accountRepository);
     }
 
     @Test

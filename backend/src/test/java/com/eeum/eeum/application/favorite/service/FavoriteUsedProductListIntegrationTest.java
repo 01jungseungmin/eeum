@@ -90,7 +90,6 @@ class FavoriteUsedProductListIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
         productIds.clear();
     }
 

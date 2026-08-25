@@ -105,23 +105,6 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        deleteAccountsAbsorbingLateNotifications();
-    }
-
-    // 조치 알림은 @TransactionalEventListener(AFTER_COMMIT) + @Async라 테스트 본문이 끝난 뒤에
-    // 들어올 수 있다. notification은 account를 FK로 참조하므로, 늦게 도착한 알림이 하나라도
-    // 남아 있으면 계정 삭제가 막히고 다음 테스트가 엉뚱한 오류로 죽는다.
-    private void deleteAccountsAbsorbingLateNotifications() {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            notificationRepository.deleteAllInBatch();
-            try {
-                accountRepository.deleteAll();
-                return;
-            } catch (DataIntegrityViolationException retryable) {
-                sleepQuietly(100);
-            }
-        }
-        throw new IllegalStateException("비동기 알림이 계속 도착해 테스트 계정을 정리하지 못했다");
     }
 
     // 신고 조치 실행은 호출자의 트랜잭션을 전제한다(@Transactional 없음).

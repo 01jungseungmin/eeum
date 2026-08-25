@@ -109,7 +109,6 @@ class ChatRoomLifecycleIntegrationTest extends IntegrationTestSupport {
         chatRoomRepository.deleteAll();
         storeRepository.deleteAll();
         notificationRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     // ──────────────── 픽스처 ────────────────
