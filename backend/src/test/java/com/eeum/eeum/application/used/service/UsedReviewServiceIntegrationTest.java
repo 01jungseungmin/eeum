@@ -6,6 +6,7 @@ import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -50,6 +51,7 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
     private final UsedReviewRepository usedReviewRepository;
     private final UsedProductRepository usedProductRepository;
     private final AccountRepository accountRepository;
+    private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
 
@@ -86,7 +88,8 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
+        // 판매완료가 AFTER_COMMIT + @Async로 후기 요청 알림을 남긴다.
+        deleteAccountsAbsorbingAsyncNotifications(notificationRepository, accountRepository);
     }
 
     // ─────────────────── 작성 자격 ───────────────────

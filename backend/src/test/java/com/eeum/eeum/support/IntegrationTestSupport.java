@@ -125,6 +125,30 @@ public abstract class IntegrationTestSupport {
         return false;
     }
 
+    /**
+     * 비동기 알림이 남긴 행까지 정리한 뒤 계정을 지운다.
+     *
+     * <p>여러 도메인이 {@code @TransactionalEventListener(AFTER_COMMIT)} + {@code @Async}로
+     * 알림을 만든다. 그 INSERT는 테스트 본문이 끝난 뒤에 도착할 수 있고, notification이
+     * account를 FK로 참조하므로 한 건이라도 남아 있으면 계정 삭제가 막힌다.
+     * 그러면 공유 DB를 쓰는 다음 테스트가 Duplicate entry 같은 엉뚱한 오류로 죽는다.
+     */
+    protected static void deleteAccountsAbsorbingAsyncNotifications(
+            org.springframework.data.jpa.repository.JpaRepository<?, ?> notificationRepository,
+            org.springframework.data.jpa.repository.JpaRepository<?, ?> accountRepository
+    ) {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            notificationRepository.deleteAllInBatch();
+            try {
+                accountRepository.deleteAll();
+                return;
+            } catch (org.springframework.dao.DataIntegrityViolationException retryable) {
+                sleepQuietly(100);
+            }
+        }
+        throw new IllegalStateException("비동기 알림이 계속 도착해 테스트 계정을 정리하지 못했다");
+    }
+
     protected static void sleepQuietly(long millis) {
         try {
             Thread.sleep(millis);

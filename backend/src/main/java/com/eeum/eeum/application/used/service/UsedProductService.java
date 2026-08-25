@@ -20,6 +20,7 @@ import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.event.UsedProductSoldEvent;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
@@ -32,6 +33,7 @@ import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +56,7 @@ public class UsedProductService {
     private final EntityManager entityManager;
     private final AccountRepository accountRepository;
     private final AccountWriteGuard accountWriteGuard;
+    private final ApplicationEventPublisher eventPublisher;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
@@ -228,7 +231,17 @@ public class UsedProductService {
     @Transactional
     public UsedProductDetailResponseDto markSold(Long sellerId, Long usedProductId, Long buyerId) {
         return changeTradeStatus(sellerId, usedProductId, buyerId,
-                (product, buyer) -> product.markSold(buyer));
+                (product, buyer) -> {
+                    product.markSold(buyer);
+
+                    // 후기를 쓸 상대가 있을 때만 알린다. 확정된 구매자를 전이 후에 읽는 이유는
+                    // buyerId를 생략하면 예약 때 지정한 상대가 유지되기 때문이다.
+                    Account confirmed = product.getBuyer();
+                    if (confirmed != null) {
+                        eventPublisher.publishEvent(new UsedProductSoldEvent(
+                                usedProductId, confirmed.getAccountId(), product.getTitle()));
+                    }
+                });
     }
 
     // 상태 전이 3종의 공통 골격 — 잠금·소유권·구매자 조회가 같고 전이 규칙만 다르다.
