@@ -229,6 +229,9 @@ public class Account extends BaseEntity {
     public void withdraw() {
         this.status = AccountStatus.WITHDRAWN;
         this.deletedAt = LocalDateTime.now();
+        // 기기 토큰을 여기서 지운다. 익명화(30일 후)까지 미루면 그동안 탈퇴자 휴대폰으로
+        // 푸시가 계속 나간다 — 상대가 아직 활성인 채팅방에 메시지를 보내는 것만으로도 발생한다.
+        this.fcmToken = null;
     }
 
     public void updateInfo(String nickname, String profileImageUrl) {

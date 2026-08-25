@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.application.used.service.UsedProductWithdrawalService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -32,6 +33,7 @@ public class AccountWithdrawalProcessor {
     private final StoreRepository storeRepository;
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     private final FavoriteService favoriteService;
+    private final UsedProductWithdrawalService usedProductWithdrawalService;
 
     public void process(Account account) {
         Long accountId = account.getAccountId();
@@ -47,10 +49,15 @@ public class AccountWithdrawalProcessor {
             ownerStoreWithdrawalService.deactivateForWithdrawal(accountId);
         }
 
-        // 3. 탈퇴 처리
+        // 3. 예약 중인 중고 거래 정리 — 상대가 기다리는 거래를 말없이 증발시키지 않는다.
+        // 사용자 삭제 경로가 RESERVED 삭제를 막는 것과 같은 이유다(UsedProductService.delete).
+        // 탈퇴 처리 앞에 둔다: 뒤에 두면 seller가 이미 비활성이라 게시글이 조회에서 걸러진다.
+        usedProductWithdrawalService.cancelReservationsForWithdrawal(accountId);
+
+        // 4. 탈퇴 처리
         account.withdraw();
 
-        // 4. 찜 정리 — 탈퇴자가 남긴 찜이 상점·게시글의 favoriteCount에 계속 잡히면 안 된다.
+        // 5. 찜 정리 — 탈퇴자가 남긴 찜이 상점·게시글의 favoriteCount에 계속 잡히면 안 된다.
         // 찜 카운트 감소는 영속성 컨텍스트를 비우는 bulk UPDATE(@Modifying(clearAutomatically))라
         // 앞 단계의 변경(탈퇴 상태, 사장 상점 비활성화)을 먼저 flush하지 않으면 그대로 유실된다.
         accountRepository.flush();

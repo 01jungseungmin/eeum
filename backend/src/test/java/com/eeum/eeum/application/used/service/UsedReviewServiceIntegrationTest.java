@@ -165,16 +165,34 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 삭제된_게시글에는_새_후기를_쓸_수_없다() {
+    void 삭제된_게시글에도_거래_당사자는_후기를_쓸_수_있다() {
+        // 후기 자격은 "그 거래를 실제로 했는가"이지 "게시글이 아직 살아 있는가"가 아니다.
+        // 막으면 판매자가 구매자보다 먼저 글을 지워 나쁜 후기를 원천 봉쇄할 수 있다 —
+        // 기존 후기를 남기는 평판 세탁 방지가 반쪽이 된다.
         usedProductService.markSold(sellerId, productId, buyerId);
         UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
         product.softDelete();
         usedProductRepository.saveAndFlush(product);
 
-        assertThatThrownBy(() -> usedReviewService.create(buyerId, productId, createRequest(5, "내용")))
+        UsedReviewResponseDto created =
+                usedReviewService.create(buyerId, productId, createRequest(2, "약속을 안 지켰어요"));
+
+        assertThat(created.getRating()).isEqualTo(2);
+        assertThat(created.getReviewerAccountId()).isEqualTo(buyerId);
+    }
+
+    @Test
+    void 삭제된_게시글이라도_거래_상대가_아니면_여전히_쓸_수_없다() {
+        // 자격 기준을 거래 사실로 옮긴 것이지 자격 자체를 푼 것이 아니다.
+        usedProductService.markSold(sellerId, productId, buyerId);
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        product.softDelete();
+        usedProductRepository.saveAndFlush(product);
+
+        assertThatThrownBy(() -> usedReviewService.create(strangerId, productId, createRequest(5, "내용")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+                .isEqualTo(ErrorCode.USED_REVIEW_NOT_COMPLETED);
     }
 
     @Test

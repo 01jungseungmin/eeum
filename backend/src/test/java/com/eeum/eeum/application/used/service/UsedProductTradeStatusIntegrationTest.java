@@ -154,6 +154,21 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void 탈퇴한_계정은_구매자로_지정할_수_없다() {
+        // 존재만 보면 탈퇴 계정이 buyer로 확정되고 후기 요청 알림·푸시가 그 계정으로 나간다.
+        Account buyer = accountRepository.findById(buyerId).orElseThrow();
+        buyer.withdraw();
+        accountRepository.saveAndFlush(buyer);
+
+        assertThatThrownBy(() -> usedProductService.markSold(sellerId, productId, buyerId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+
+        assertThat(product().getStatus()).isEqualTo(UsedProductStatus.SELLING);
+    }
+
+    @Test
     void 없는_계정을_구매자로_지정할_수_없다() {
         assertThatThrownBy(() -> usedProductService.markSold(sellerId, productId, 999999L))
                 .isInstanceOf(BusinessException.class)

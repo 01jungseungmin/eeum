@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.application.used.service.UsedProductWithdrawalService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -39,6 +40,7 @@ class AccountWithdrawalProcessorTest {
     @Mock private StoreRepository storeRepository;
     @Mock private OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     @Mock private FavoriteService favoriteService;
+    @Mock UsedProductWithdrawalService usedProductWithdrawalService;
 
     @InjectMocks
     private AccountWithdrawalProcessor accountWithdrawalProcessor;

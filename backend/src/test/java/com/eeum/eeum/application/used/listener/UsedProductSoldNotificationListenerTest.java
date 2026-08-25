@@ -50,7 +50,9 @@ class UsedProductSoldNotificationListenerTest {
         NotificationCreateRequestDto sent = captured();
         assertThat(sent.getRefType()).isEqualTo(NotificationRefType.USED_PRODUCT);
         assertThat(sent.getRefId()).isEqualTo(PRODUCT_ID);
-        assertThat(sent.getLinkUrl()).isEqualTo("/used/" + PRODUCT_ID);
+        // 게시글 상세가 아니라 후기 작성 화면으로 보낸다 — 삭제된 글에도 후기를 쓸 수 있는데
+        // 상세는 404를 주기 때문이다.
+        assertThat(sent.getLinkUrl()).isEqualTo("/used/" + PRODUCT_ID + "/reviews");
     }
 
     @Test

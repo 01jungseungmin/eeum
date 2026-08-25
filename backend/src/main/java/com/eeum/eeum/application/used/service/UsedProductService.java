@@ -255,8 +255,7 @@ public class UsedProductService {
         accountWriteGuard.lockActive(sellerId);
         UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
 
-        Account buyer = buyerId == null ? null : accountRepository.findById(buyerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+        Account buyer = buyerId == null ? null : getAssignableBuyerOrThrow(buyerId);
 
         transition.accept(product, buyer);
 
@@ -284,6 +283,29 @@ public class UsedProductService {
         // 찜을 함께 정리한다. 남겨두면 다른 사용자의 찜 목록에 사라진 글이 계속 남는다.
         // 같은 트랜잭션에서 처리해야 잠깐이라도 죽은 찜이 보이는 구간이 생기지 않는다.
         favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, usedProductId);
+
+        // 이 게시글을 가리키는 알림은 지우지 않는다. 후기 자격이 거래 사실 기준이라
+        // 후기 요청 알림은 글이 사라진 뒤에도 구매자가 후기를 쓰는 유일한 진입점이다.
+        // (NotificationService.deleteAllByRefTypeAndRefId를 여기에 배선하면 그 경로가 끊긴다.)
+    }
+
+    /**
+     * 거래 상대로 지정할 수 있는 계정인지 확인한다.
+     *
+     * <p>존재만 보면 탈퇴·정지·익명화된 계정도 구매자로 확정되고, 그 계정으로 후기 요청 알림과
+     * 푸시가 발송된다. 다른 쓰기 경로가 모두 actor에게 {@code AccountWriteGuard}를 적용하는데
+     * 이 참조만 예외였다.
+     *
+     * <p>구매자 행을 잠그지는 않는다. 여기서 바꾸는 값이 아니고, 판매자 계정에 이어 두 번째
+     * 계정 행을 잠그면 서로를 구매자로 지정하는 두 거래가 순환 대기할 수 있다.
+     */
+    private Account getAssignableBuyerOrThrow(Long buyerId) {
+        Account buyer = accountRepository.findById(buyerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+        if (!buyer.isActive()) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+        }
+        return buyer;
     }
 
     // ===================== 내부 헬퍼 =====================

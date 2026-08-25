@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -45,6 +46,11 @@ public interface UsedProductRepository
           AND p.favoriteCount > 0
         """)
     int decrementFavoriteCount(@Param("usedProductId") Long usedProductId);
+
+    // 판매자 탈퇴 시 정리할 예약 건. 상대가 지정된 것만 대상이다 — 상대 없는 "예약중" 표시는
+    // 통보할 사람이 없다. ID 오름차순으로 읽어 잠금 순서를 하나로 고정한다.
+    List<UsedProduct> findBySeller_AccountIdAndStatusAndDeletedAtIsNullOrderByUsedProductIdAsc(
+            Long sellerAccountId, UsedProductStatus status);
 
     // 신고 조치 폴백용 판매자 ID 조회 — 잠금 없이 읽는다.
     // 여기서 상품 행을 잠그면 뒤이어 계정을 잠그게 되어 used_product → account 순서가 되는데,

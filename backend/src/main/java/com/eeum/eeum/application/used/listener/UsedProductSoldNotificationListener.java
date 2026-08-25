@@ -39,7 +39,10 @@ public class UsedProductSoldNotificationListener {
                 .content(String.format("'%s' 거래 후기를 남겨주세요.", event.productTitle()))
                 .refType(NotificationRefType.USED_PRODUCT)
                 .refId(event.usedProductId())
-                .linkUrl("/used/" + event.usedProductId())
+                // 게시글 상세가 아니라 후기 작성 화면으로 보낸다. 후기 자격은 거래 사실 기준이라
+                // 판매자가 글을 지운 뒤에도 후기를 쓸 수 있는데, 상세는 삭제 글에 404를 준다.
+                // 이 알림은 게시글이 사라져도 유효하므로 삭제 경로에서 함께 지우지 않는다.
+                .linkUrl("/used/" + event.usedProductId() + "/reviews")
                 .build());
     }
 }

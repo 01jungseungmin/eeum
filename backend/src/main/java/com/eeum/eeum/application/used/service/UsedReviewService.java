@@ -141,11 +141,18 @@ public class UsedReviewService {
 
     // ===================== 내부 헬퍼 =====================
 
-    // 삭제된 게시글에는 새 후기를 쓸 수 없다. 이미 쓴 후기는 게시글이 지워져도 남는다 —
-    // 판매완료 글에 후기가 매달려 있다는 것이 UsedProduct를 Soft Delete로 둔 이유다.
+    /**
+     * 후기 대상 게시글을 잠그고 읽는다.
+     *
+     * <p><b>게시글의 공개 여부로 거르지 않는다.</b> 후기를 쓸 자격은 "그 거래를 실제로 했는가"
+     * (SOLD + 지정 구매자)이지 "게시글이 아직 살아 있는가"가 아니다.
+     *
+     * <p>삭제된 글을 막으면 판매자가 구매자보다 먼저 글을 지워 나쁜 후기를 원천 봉쇄할 수 있다.
+     * 기존 후기를 남기는 이유가 평판 세탁 방지인데, 세탁은 후기가 <b>쓰이기 전</b> 삭제로도 되므로
+     * 그 방어가 반쪽이 된다. 숨김·판매자 탈퇴 글에는 작성이 되는데 삭제 글만 막히던 비대칭도 없앤다.
+     */
     private UsedProduct getForUpdateOrThrow(Long usedProductId) {
         return usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
-                .filter(product -> !product.isDeleted())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
     }
 

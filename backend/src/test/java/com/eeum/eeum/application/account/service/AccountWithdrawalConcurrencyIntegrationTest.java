@@ -12,6 +12,7 @@ import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -20,6 +21,8 @@ import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
+import com.eeum.eeum.domain.used.event.UsedProductReservationCancelledEvent;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -31,6 +34,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
@@ -56,6 +61,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>단위 테스트는 행 잠금과 커밋 순서를 재현하지 못해 이 경쟁을 잡을 수 없다.
  */
 @EnabledIfDockerAvailable
+@RecordApplicationEvents
 @RequiredArgsConstructor
 class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport {
 
@@ -67,6 +73,7 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
     private final UsedProductRepository usedProductRepository;
     private final UsedProductImageRepository usedProductImageRepository;
     private final AccountRepository accountRepository;
+    private final NotificationRepository notificationRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
@@ -74,6 +81,7 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
 
     private Long adminId;
     private Long memberId;
+    private Long counterpartId;
     private Long categoryId;
     private Long regionId;
     private Long favoritedProductId;
@@ -94,6 +102,7 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
                 "seller-" + tag + "@test.com", "encoded_pw", "판매자", "판매자" + tag, "010-2222-2222"));
         adminId = admin.getAccountId();
         memberId = member.getAccountId();
+        counterpartId = seller.getAccountId();
 
         Region region = regionRepository.save(
                 Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
@@ -130,7 +139,8 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
         // 두 삭제가 모두 막히고, 공유 DB라 다음 클래스까지 잔여 데이터로 무너진다.
         accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
+        // 다른 클래스의 AFTER_COMMIT + @Async 알림이 늦게 도착해도 계정을 정리한다.
+        deleteAccountsAbsorbingAsyncNotifications(notificationRepository, accountRepository);
     }
 
     @Test
@@ -222,6 +232,52 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
     private boolean hasFavorite(Long productId) {
         return favoriteRepository.existsByAccount_AccountIdAndRefTypeAndRefId(
                 memberId, FavoriteRefType.USED_PRODUCT, productId);
+    }
+
+    // ─────────────────── 탈퇴 뒷정리 ───────────────────
+
+    @Test
+    void 탈퇴하면_예약_중인_거래가_취소되고_구매자에게_통보된다(ApplicationEvents events) {
+        // 사용자 삭제 경로는 "상대가 기다리고 있다"는 이유로 RESERVED 삭제를 막는데,
+        // 탈퇴는 게시글을 건드리지 않아 예약이 잡힌 채 글만 사라지고 구매자는 통보를 못 받았다.
+        // 탈퇴 대상(member)이 판매자이고, 상대는 다른 계정이다.
+        usedProductService.reserve(memberId, ownProductId, counterpartId);
+
+        adminAccountService.forceDeleteAccount(adminId, memberId);
+
+        UsedProduct product = usedProductRepository.findById(ownProductId).orElseThrow();
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SELLING);
+        assertThat(product.getBuyer()).isNull();
+        assertThat(events.stream(UsedProductReservationCancelledEvent.class))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.buyerAccountId()).isEqualTo(counterpartId);
+                    assertThat(event.productTitle()).isEqualTo("내가 올린 글");
+                });
+    }
+
+    @Test
+    void 상대가_지정되지_않은_예약은_통보하지_않는다(ApplicationEvents events) {
+        // 상대 없이 "예약중" 표시만 해둔 글은 통보할 사람이 없다.
+        usedProductService.reserve(memberId, ownProductId, null);
+
+        adminAccountService.forceDeleteAccount(adminId, memberId);
+
+        assertThat(usedProductRepository.findById(ownProductId).orElseThrow().getStatus())
+                .isEqualTo(UsedProductStatus.SELLING);
+        assertThat(events.stream(UsedProductReservationCancelledEvent.class)).isEmpty();
+    }
+
+    @Test
+    void 탈퇴하면_기기_토큰이_즉시_지워진다() {
+        // 익명화(30일 후)까지 미루면 그동안 탈퇴자 휴대폰으로 푸시가 계속 나간다.
+        Account member = accountRepository.findById(memberId).orElseThrow();
+        member.updateFcmToken("test-device-token");
+        accountRepository.saveAndFlush(member);
+
+        adminAccountService.forceDeleteAccount(adminId, memberId);
+
+        assertThat(accountRepository.findById(memberId).orElseThrow().getFcmToken()).isNull();
     }
 
     private int favoriteCountOf(Long productId) {
