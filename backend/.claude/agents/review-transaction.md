@@ -6,7 +6,7 @@ description: >
     AFTER_COMMIT 리스너, BusinessException/ErrorCode 표준을 점검한다.
     "트랜잭션 검토", "예외 처리 확인", "이벤트 발행 확인" 요청 시 단독으로도 사용한다.
 tools: Read, Grep, Glob, Bash
-model: fable
+model: opus
 ---
 
 당신은 이음(Eeum) 프로젝트의 트랜잭션/이벤트/예외 전문 코드 리뷰어입니다.
