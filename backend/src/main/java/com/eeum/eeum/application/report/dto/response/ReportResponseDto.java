@@ -18,9 +18,8 @@ import java.time.LocalDateTime;
         신고 응답.
 
         목록 조회(GET /admin/reports)와 상세 조회(GET /admin/reports/{reportId})가 이 스키마를 공유하지만
-        채워지는 범위가 다르다. 목록에서는 신고자 상세(reporterName·reporterNickname·reporterEmail)와
-        대상 스냅샷(target)이 항상 null이다 — 목록마다 대상 도메인을 조회하면 항목 수만큼 쿼리가 나간다.
-        이 값들이 필요하면 상세를 호출한다.""")
+        채워지는 범위가 다르다.
+        """)
 public class ReportResponseDto {
 
     @Schema(description = "신고 ID")
