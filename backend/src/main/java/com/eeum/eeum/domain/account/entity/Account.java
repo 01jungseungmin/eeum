@@ -268,15 +268,10 @@ public class Account extends BaseEntity {
         this.primaryRegionId = null;
     }
 
-    // 쓰기 경로 공통 가드 — 상태별로 구분해서 던진다.
-    // !isActive()를 한 덩어리로 묶으면 가입 미완료(PENDING) 계정까지 "정지된 계정"으로 응답한다.
+    // 쓰기 경로 공통 가드 — 판정은 AccountStatus.assertWritable()에 있다.
+    // 엔티티를 로딩하지 않는 경로(WebSocket 인증)와 같은 분기를 써야 해서 상태 enum에 뒀다.
     public void assertWritable() {
-        switch (this.status) {
-            case ACTIVE -> { }
-            case WITHDRAWN -> throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-            case SUSPENDED -> throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-            case PENDING -> throw new BusinessException(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
-        }
+        this.status.assertWritable();
     }
 
     public boolean isActive() {

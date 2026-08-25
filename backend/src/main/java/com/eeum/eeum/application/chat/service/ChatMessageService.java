@@ -65,6 +65,9 @@ public class ChatMessageService {
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
         Account sender = participant.getAccount();
+        // 인터셉터를 거치지 않는 호출(테스트·향후 REST 경로)에서도 정지·탈퇴 계정의 발행을 막는다.
+        // 이 시점의 sender는 이미 로딩돼 있어 추가 조회가 없다.
+        sender.assertWritable();
         ChatMessage message = ChatMessage.text(room, sender, request.getContent());
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
@@ -92,6 +95,9 @@ public class ChatMessageService {
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
         Account sender = participant.getAccount();
+        // 인터셉터를 거치지 않는 호출(테스트·향후 REST 경로)에서도 정지·탈퇴 계정의 발행을 막는다.
+        // 이 시점의 sender는 이미 로딩돼 있어 추가 조회가 없다.
+        sender.assertWritable();
         ChatMessage message = ChatMessage.image(room, sender, request.getImageUrl());
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());

@@ -74,6 +74,11 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
     @Query("SELECT a.accountId FROM Account a WHERE a.role = 'ROLE_ADMIN' AND a.status = 'ACTIVE'")
     List<Long> findAdminAccountIds();
 
+    // 상태 컬럼만 읽는 projection — 트랜잭션 밖 인가 게이트(WebSocket CONNECT)용.
+    // 엔티티를 로딩하면 영속성 컨텍스트도 트랜잭션도 없는 자리에서 불필요한 컬럼까지 끌고 온다.
+    @Query("SELECT a.status FROM Account a WHERE a.accountId = :accountId")
+    Optional<AccountStatus> findStatusByAccountId(@Param("accountId") Long accountId);
+
     // 관리자 상태 변경용 비관적 쓰기 잠금 (동시 suspend/forceDelete 경쟁 방지)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Account a WHERE a.accountId = :accountId")

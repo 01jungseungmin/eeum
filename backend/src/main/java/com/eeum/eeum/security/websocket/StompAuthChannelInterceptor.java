@@ -1,5 +1,6 @@
 package com.eeum.eeum.security.websocket;
 
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.exception.BusinessException;
@@ -27,6 +28,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private final JwtProvider jwtProvider;
     private final TokenService tokenService;
     private final ChatAccessHelper chatAccessHelper;
+    private final AccountWriteGuard accountWriteGuard;
 
     // 사용자 검증
     @Override
@@ -51,10 +53,20 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         return message;
     }
 
-    // CONNECT: JWT 검증 후 Principal 설정
+    // CONNECT: JWT 검증 + 계정 상태 확인 후 Principal 설정
     private void handleConnect(StompHeaderAccessor accessor) {
         String token = resolveToken(accessor.getFirstNativeHeader("Authorization"));
         Long accountId = jwtProvider.getAccountId(token);
+
+        // 토큰이 유효하다고 계정이 쓸 수 있는 상태인 것은 아니다.
+        // 정지·탈퇴는 발급된 Access Token을 무효화하지 않으므로 남은 수명(30분) 동안 연결이 열린다.
+        // REST는 JwtAuthenticationFilter가 요청마다 계정을 다시 읽지만, /ws는 그 필터를 건너뛴다.
+        try {
+            accountWriteGuard.assertUsableWithoutLock(accountId);
+        } catch (BusinessException e) {
+            log.warn("WebSocket 연결 거부: accountId={}, reason={}", accountId, e.getMessage());
+            throw new MessageDeliveryException("WebSocket 인증 실패: " + e.getMessage());
+        }
 
         accessor.setUser(new StompPrincipal(accountId));
         log.debug("WebSocket 인증 성공: accountId={}", accountId);
