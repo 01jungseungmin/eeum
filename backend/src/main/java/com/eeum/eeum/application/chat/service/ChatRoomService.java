@@ -19,6 +19,9 @@ import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
@@ -73,8 +76,81 @@ public class ChatRoomService {
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final StoreRepository storeRepository;
+    private final UsedProductRepository usedProductRepository;
+    private final AccountWriteGuard accountWriteGuard;
 
     // ===================== 채팅방 생성 =====================
+
+    /**
+     * 중고거래 1:1 문의방 생성 (구매자가 시작).
+     *
+     * <p><b>멱등하다.</b> 같은 상품에 이미 활성 문의방이 있으면 새로 만들지 않고 그 방을 돌려준다.
+     * 구매자가 "채팅하기"를 여러 번 눌러도 방이 늘어나지 않는다. 가게 단톡방(createGroupRoom)이
+     * 중복을 409로 막는 것과 의도적으로 다르다 — 그쪽은 사장이 명시적으로 개설하는 행위라
+     * 이미 있다는 사실을 알려야 하지만, 여기서는 대화 진입이 목적이라 기존 방으로 들여보내는 것이 맞다.
+     *
+     * <p>잠금 순서는 프로젝트 전역 규약을 따른다: <b>account → used_product → chat_room</b>.
+     * 직렬화는 상품 행 잠금이 담당하고, uk_chat_room_active_ref가 최종 방어선이다.
+     *
+     * <p>가게 단톡방과 달리 <b>Redis 락을 쓰지 않는다.</b> RedisLockService는 대기 없이 즉시
+     * 실패하므로, 구매자가 "채팅하기"를 연타하면 두 번째 요청이 기존 방을 받는 대신
+     * LOCK_ACQUIRE_FAILED로 떨어져 멱등 계약이 깨진다. 상품 행 잠금은 대기하므로
+     * 두 번째 요청은 첫 트랜잭션 커밋을 기다렸다가 기존 방을 그대로 돌려받는다.
+     */
+    public ChatRoomResponseDto createUsedProductInquiry(Long buyerId, Long usedProductId) {
+        try {
+            return createInquiryRoom(buyerId, usedProductId);
+        } catch (InquiryRoomRaceException race) {
+            // 위 트랜잭션은 유니크 위반으로 이미 롤백됐다. 같은 트랜잭션에서 재조회하면
+            // rollback-only 상태라 읽을 수 없으므로, 새 트랜잭션에서 먼저 커밋된 방을 읽는다.
+            return withTx(() -> findActiveInquiryRoom(usedProductId, buyerId)
+                    .map(room -> toResponseDto(room, buyerId))
+                    .orElseThrow(() -> new ConflictException(ErrorCode.CHAT_ROOM_ALREADY_EXISTS)));
+        }
+    }
+
+    private ChatRoomResponseDto createInquiryRoom(Long buyerId, Long usedProductId) {
+        return withTx(() -> {
+            // 1) 구매자 계정 잠금 + 사용 가능 상태 확인. 탈퇴 정리가 지나간 뒤 방이 생기는 것을 막는다.
+            Account buyer = accountWriteGuard.lockActive(buyerId);
+
+            // 2) 상품 잠금 후 상태 재검증. 잠그지 않으면 삭제·숨김 조치와 겹쳐 사라진 글에 방이 붙는다.
+            UsedProduct product = usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+
+            if (product.isOwnedBy(buyerId)) {
+                throw new BadRequestException(ErrorCode.CHAT_SELF_INQUIRY_NOT_ALLOWED);
+            }
+
+            // 삭제·숨김·판매자 탈퇴 글에는 새 방을 만들지 않는다. 비공개 사유는 드러내지 않는다.
+            if (!product.isPubliclyVisible()) {
+                throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+            }
+
+            // 3) 조회는 지역 인증 없이 열어두지만, 실제 거래 행동인 문의 시작은 인증을 요구한다.
+            verifyInquiryRegion(buyerId);
+
+            // 4) 기존 활성 방이 있으면 그대로 돌려준다.
+            Optional<ChatRoom> existing = findActiveInquiryRoom(usedProductId, buyerId);
+            if (existing.isPresent()) {
+                log.info("중고 문의방 이미 존재 → 기존 방 반환: roomId={}, usedProductId={}, buyerId={}",
+                        existing.get().getChatroomId(), usedProductId, buyerId);
+                return toResponseDto(existing.get(), buyerId);
+            }
+
+            ChatRoom room = ChatRoom.createPrivateInquiry(buyer, usedProductId);
+            saveInquiryRoomOrSignalRace(room, usedProductId, buyerId);
+
+            // 5) 참여자는 구매자와 판매자 둘뿐이다. 이후 입장·초대는 verifyGroupRoom이 막는다.
+            saveParticipantOrThrowOnDuplicate(room, buyer);
+            saveParticipantOrThrowOnDuplicate(room, product.getSeller());
+
+            log.info("중고 문의방 생성: roomId={}, usedProductId={}, buyerId={}, sellerId={}",
+                    room.getChatroomId(), usedProductId, buyerId,
+                    product.getSeller().getAccountId());
+            return toResponseDto(room, buyerId);
+        });
+    }
 
     // GROUP(단톡방) 채팅방 생성 + 참여자 일괄 초대
     // 락 획득 후 트랜잭션 시작 → 커밋 완료 후 락 해제 (가게 단톡방 중복 생성 방지)
@@ -368,6 +444,8 @@ public class ChatRoomService {
 
     // 방 상태 변경 락 키 — 생성/입장/초대/퇴장/종료가 모두 이 키 하나로 직렬화된다.
     // 가게 단톡방은 생성(chatRoomStore)과 같은 키여야 "종료 ↔ 재생성" 레이스를 막을 수 있다.
+    // 중고 문의방은 별도 키를 두지 않는다 — 생성과 상태 변경이 모두 상품 행을 잠그므로
+    // DB 레벨에서 이미 직렬화된다(lockRoomState 참고).
     private String roomStateLockKey(ChatRoom room) {
         return room.isStoreRoom()
                 ? LockKeys.chatRoomStore(room.getRefId())
@@ -466,12 +544,58 @@ public class ChatRoomService {
                         ChatRoomRefType.STORE, storeId);
     }
 
+    private Optional<ChatRoom> findActiveInquiryRoom(Long usedProductId, Long buyerId) {
+        return chatRoomRepository
+                .findFirstByRefTypeAndRefIdAndBuyerAccountIdAndIsActiveTrueOrderByChatroomIdDesc(
+                        ChatRoomRefType.USED_PRODUCT, usedProductId, buyerId);
+    }
+
+    /**
+     * 문의방 저장. 유니크 위반은 실패가 아니라 "누군가 방금 같은 방을 만들었다"는 뜻이다.
+     *
+     * <p>Redis lease(5초)가 만료된 상태에서는 동시 요청 둘이 모두 기존 방 조회를 지나칠 수 있다.
+     * 그때 409를 돌려주면 구매자는 채팅에 들어가지 못하고 재시도해야 한다. 대신 신호만 올려
+     * 트랜잭션을 롤백시키고, 호출부가 새 트랜잭션에서 먼저 커밋된 방을 읽어 그 방으로 들여보낸다.
+     * 유니크 충돌 경로에서도 멱등 계약이 유지된다.
+     */
+    private void saveInquiryRoomOrSignalRace(ChatRoom room, Long usedProductId, Long buyerId) {
+        try {
+            chatRoomRepository.saveAndFlush(room);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("중고 문의방 동시 생성 감지 — 기존 방으로 합류: usedProductId={}, buyerId={}",
+                    usedProductId, buyerId);
+            throw new InquiryRoomRaceException();
+        }
+    }
+
+    // 문의방 동시 생성 신호 — 트랜잭션 롤백과 재조회를 위한 내부 전용 예외다.
+    // GlobalExceptionHandler까지 올라가지 않는다(createUsedProductInquiry가 잡는다).
+    private static class InquiryRoomRaceException extends RuntimeException {
+        InquiryRoomRaceException() {
+            super(null, null, false, false);
+        }
+    }
+
+    // 문의 시작은 GPS 인증된 활동 지역을 요구한다. 상품 조회는 인증 없이 열어둔다 —
+    // 둘러보기는 막지 않고 실제 거래 행동에서만 지역을 확인한다는 정책이다.
+    private void verifyInquiryRegion(Long buyerId) {
+        boolean verified = accountRegionRepository.findByAccount_AccountId(buyerId).stream()
+                .anyMatch(AccountRegion::isVerified);
+        if (!verified) {
+            throw new ForbiddenException(ErrorCode.REGION_ACCESS_REQUIRED);
+        }
+    }
+
     // 잠금 순서는 항상 Store → ChatRoom으로 고정한다.
     // 가게행은 종료/재생성 사이의 안정적인 mutex이고, 방행은 메시지 쓰기와 상태 변경을 직렬화한다.
     private ChatRoom lockRoomState(ChatRoom target) {
         if (target.isStoreRoom()) {
             storeRepository.findByIdWithPessimisticLock(target.getRefId())
                     .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
+        } else if (target.isUsedProductRoom()) {
+            // 문의방 생성이 상품을 잠그므로 상태 변경도 같은 행을 잠가야 순서가 맞는다.
+            // 삭제된 상품의 방도 종료·퇴장은 가능해야 하므로 여기서 상태는 검증하지 않는다.
+            usedProductRepository.findByUsedProductIdForUpdate(target.getRefId());
         }
         return chatAccessHelper.getRoomWithPessimisticLockOrThrow(target.getChatroomId());
     }

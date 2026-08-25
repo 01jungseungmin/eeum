@@ -13,16 +13,19 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "15. Chat Room", description = "채팅방 API (그룹/단톡방)")
 @SecurityRequirement(name = "bearerAuth")
+@Validated
 @RestController
 @RequestMapping("/chat/rooms")
 @RequiredArgsConstructor
@@ -39,6 +42,22 @@ public class ChatRoomController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 chatRoomService.createGroupRoom(accountId, request)));
+    }
+
+    @Operation(
+            summary = "중고거래 문의 채팅방 시작",
+            description = "중고 게시글의 판매자와 1:1 문의방을 엽니다. " +
+                    "같은 게시글에 이미 활성 문의방이 있으면 새로 만들지 않고 그 방을 반환합니다(멱등). " +
+                    "본인 게시글에는 문의할 수 없고, 삭제·숨김된 게시글에는 새 방을 만들 수 없습니다. " +
+                    "문의 시작에는 GPS 인증된 활동 지역이 필요합니다(게시글 조회에는 필요 없습니다)."
+    )
+    @PostMapping("/used-products/{usedProductId}")
+    public ResponseEntity<ApiResponse<ChatRoomResponseDto>> createUsedProductInquiry(
+            @PathVariable @Positive Long usedProductId
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                chatRoomService.createUsedProductInquiry(accountId, usedProductId)));
     }
 
     @Operation(

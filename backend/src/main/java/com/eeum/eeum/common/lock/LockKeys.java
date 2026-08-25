@@ -34,6 +34,10 @@ public final class LockKeys {
         return "lock:chat-room:store:" + storeId;
     }
 
+    // 중고 문의방에는 Redis 락 키를 두지 않는다 — 생성·상태 변경이 모두 used_product 행을
+    // 잠가 DB 레벨에서 직렬화된다. 대기 없는 Redis 락을 얹으면 구매자의 연타가
+    // LOCK_ACQUIRE_FAILED로 떨어져 "기존 방 반환" 멱등 계약만 깨진다.
+
     // 방 상태 변경(생성/입장/초대/퇴장/종료) 공용 키.
     // 초대 전용 키(chatRoomInvite)는 제거했다 — 종료와 다른 키를 쓰면 종료 직전 활성 검증을
     // 통과한 입장/초대가 종료 커밋 이후에 참여자를 남긴다. 경로별로 키를 나누지 말 것.

@@ -211,6 +211,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CHAT_ROOM_CLOSE_DENIED("CHAT_013", "채팅방 종료 권한이 없습니다", HttpStatus.FORBIDDEN),
     CHAT_PARTICIPANT_DUPLICATE("CHAT_014", "이미 처리된 채팅방 참여 요청입니다", HttpStatus.CONFLICT),
     CHAT_INVALID_REF_ID("CHAT_015", "채팅방 참조 ID가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    CHAT_SELF_INQUIRY_NOT_ALLOWED("CHAT_016", "본인 게시글에는 문의할 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 리뷰 (REVIEW) =====================
     STORE_REVIEW_NOT_FOUND("REVIEW_001", "존재하지 않는 상점 리뷰입니다", HttpStatus.NOT_FOUND),
