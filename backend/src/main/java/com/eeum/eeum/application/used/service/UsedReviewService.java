@@ -16,6 +16,9 @@ import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -104,6 +107,31 @@ public class UsedReviewService {
         usedReviewRepository.delete(review);
 
         log.info("중고거래 후기 삭제: usedReviewId={}, reviewerId={}", usedReviewId, reviewerId);
+    }
+
+    // ===================== 조회 =====================
+
+    /**
+     * 판매자가 받은 후기 목록. 비회원도 볼 수 있는 판매자 평판이다.
+     *
+     * <p>정렬은 리포지토리 쿼리에 고정돼 있어 요청 sort를 받지 않는다.
+     * 페이지 번호·크기만 쓰도록 Pageable을 다시 만든다 — 그대로 넘기면 Spring이 요청 sort를
+     * 쿼리의 ORDER BY 뒤에 덧붙여 실제 순서가 달라진다.
+     */
+    @Transactional(readOnly = true)
+    public Slice<UsedReviewResponseDto> getSellerReviews(Long sellerId, Pageable pageable) {
+        return usedReviewRepository.findSellerReviews(sellerId, unsorted(pageable))
+                .map(UsedReviewResponseDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Slice<UsedReviewResponseDto> getMyReviews(Long reviewerId, Pageable pageable) {
+        return usedReviewRepository.findMyReviews(reviewerId, unsorted(pageable))
+                .map(UsedReviewResponseDto::from);
+    }
+
+    private Pageable unsorted(Pageable pageable) {
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
     }
 
     // ===================== 내부 헬퍼 =====================

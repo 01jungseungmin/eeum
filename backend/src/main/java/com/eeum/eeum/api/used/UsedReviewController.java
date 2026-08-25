@@ -13,6 +13,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -42,6 +45,36 @@ public class UsedReviewController {
         Long reviewerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 usedReviewService.create(reviewerId, usedProductId, request)));
+    }
+
+    @GetMapping("/sellers/{sellerId}/reviews")
+    @Operation(
+            summary = "판매자가 받은 후기 목록",
+            description = "판매자 평판이므로 로그인 없이 볼 수 있습니다. 작성 최신순 무한 스크롤(Slice)입니다. " +
+                    "게시글이 삭제·숨김된 후기도 그대로 보이며, 그 경우 게시글 제목은 비어 있고 " +
+                    "usedProductVisible이 false입니다."
+    )
+    public ResponseEntity<ApiResponse<Slice<UsedReviewResponseDto>>> getSellerReviews(
+            @Parameter(description = "판매자 계정 ID") @PathVariable @Positive Long sellerId,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                usedReviewService.getSellerReviews(sellerId, pageable)));
+    }
+
+    @GetMapping("/reviews/me")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "내가 쓴 후기 목록",
+            description = "작성 최신순 무한 스크롤(Slice)입니다."
+    )
+    public ResponseEntity<ApiResponse<Slice<UsedReviewResponseDto>>> getMyReviews(
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Long reviewerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                usedReviewService.getMyReviews(reviewerId, pageable)));
     }
 
     @PatchMapping("/reviews/{usedReviewId}")

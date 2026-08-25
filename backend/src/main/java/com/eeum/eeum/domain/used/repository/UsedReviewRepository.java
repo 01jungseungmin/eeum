@@ -1,7 +1,11 @@
 package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.UsedReview;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
@@ -15,4 +19,40 @@ public interface UsedReviewRepository extends JpaRepository<UsedReview, Long> {
     // 수정·삭제 대상 조회. 소유권까지 한 번에 좁혀 남의 후기 ID로 접근하는 경로를 없앤다.
     Optional<UsedReview> findByUsedReviewIdAndReviewer_AccountId(
             Long usedReviewId, Long reviewerAccountId);
+
+    /**
+     * 판매자가 받은 후기.
+     *
+     * <p>후기는 게시글을 거쳐 판매자에 매달리므로 조인이 필요하다.
+     * 응답이 게시글 제목·작성자 닉네임을 담고, 공개 여부 판정({@code isPubliclyVisible})이
+     * 판매자 상태까지 본다. 셋 다 fetch join해야 한다 — 하나라도 빠지면 페이지 크기만큼
+     * 추가 select가 나간다(N+1).
+     *
+     * <p>정렬은 쿼리에 고정한다. 요청 sort를 그대로 쓰면 실제 순서와 응답 메타데이터가 갈리고,
+     * created_at 동률에서 페이지 경계 항목이 중복·유실된다(그래서 PK tie-break를 붙인다).
+     *
+     * <p>게시글의 삭제·숨김 여부로 거르지 않는다 — 거르면 판매자가 나쁜 후기가 달린 글을 지워
+     * 평판을 세탁할 수 있다. 비공개 게시글의 제목 노출은 응답 단계에서 가린다.
+     */
+    @Query("""
+        SELECT r FROM UsedReview r
+        JOIN FETCH r.usedProduct p
+        JOIN FETCH p.seller s
+        JOIN FETCH r.reviewer
+        WHERE s.accountId = :sellerId
+        ORDER BY r.createdAt DESC, r.usedReviewId DESC
+        """)
+    Slice<UsedReview> findSellerReviews(@Param("sellerId") Long sellerId, Pageable pageable);
+
+    // 내가 쓴 후기. 같은 이유로 fetch join과 고정 정렬을 쓴다.
+    // 여기는 게시글마다 판매자가 다르므로 판매자 fetch join이 특히 중요하다.
+    @Query("""
+        SELECT r FROM UsedReview r
+        JOIN FETCH r.usedProduct p
+        JOIN FETCH p.seller
+        JOIN FETCH r.reviewer
+        WHERE r.reviewer.accountId = :reviewerId
+        ORDER BY r.createdAt DESC, r.usedReviewId DESC
+        """)
+    Slice<UsedReview> findMyReviews(@Param("reviewerId") Long reviewerId, Pageable pageable);
 }
