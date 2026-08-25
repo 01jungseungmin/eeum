@@ -1,13 +1,29 @@
 package com.eeum.eeum.domain.favorite.repository;
 
+import com.eeum.eeum.domain.account.entity.QAccount;
+import com.eeum.eeum.domain.account.entity.QRegion;
 import com.eeum.eeum.domain.favorite.entity.QFavorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import com.eeum.eeum.domain.store.entity.QStore;
+import com.eeum.eeum.domain.store.repository.StoreVisibilityPredicate;
+import com.eeum.eeum.domain.used.entity.QUsedProduct;
+import com.eeum.eeum.domain.used.repository.UsedProductVisibilityPredicate;
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.Projections;
+import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -18,6 +34,11 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
     private final QFavorite favorite = QFavorite.favorite;
+    private final QUsedProduct usedProduct = QUsedProduct.usedProduct;
+    private final QRegion region = QRegion.region;
+    private final QStore store = QStore.store;
+    private final QAccount account = QAccount.account;
+    private final QAccount seller = new QAccount("seller");
 
     // 목록 화면 배치 조회 — 사용자가 찜한 refId Set 반환 IN절 한 번으로 N+1을 방지
 
@@ -57,7 +78,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                         to   != null ? favorite.createdAt.loe(to)   : null
                 )
                 .groupBy(favorite.refId)
-                .orderBy(favorite.refId.count().desc())
+                // 동률이면 limit 경계에서 어떤 항목이 잘릴지 매번 달라진다. refId로 순서를 고정한다.
+                .orderBy(favorite.refId.count().desc(), favorite.refId.asc())
                 .limit(limit)
                 .fetch();
 
@@ -67,5 +89,116 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                     @Override public Long getFavoriteCount()  { return tuple.get(favorite.refId.count()); }
                 })
                 .collect(Collectors.toList());
+    }
+
+    // 실제 적용한 정렬(찜 등록 최신순 + PK tie-break)을 담은 Pageable
+    private Pageable withAppliedSort(Pageable pageable) {
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("favoriteId")));
+    }
+
+    // 중고 게시글 찜 목록 — 숨김·삭제 필터를 페이징 전에 적용한다.
+    // 조회 후 메모리에서 거르면 요청한 size보다 적은 항목이 내려가고 hasNext 판정도 어긋난다.
+    // region까지 조인해 목록 조립 중 LAZY 초기화(항목 수만큼 추가 SELECT)가 없다.
+    @Override
+    public Slice<FavoriteUsedProductRow> findFavoriteUsedProducts(Long accountId, Pageable pageable) {
+        List<FavoriteUsedProductRow> rows = new ArrayList<>(queryFactory
+                .select(Projections.constructor(
+                        FavoriteUsedProductRow.class,
+                        favorite.favoriteId,
+                        favorite.createdAt,
+                        usedProduct.usedProductId,
+                        usedProduct.title,
+                        usedProduct.priceType,
+                        usedProduct.price,
+                        usedProduct.status,
+                        region.dong))
+                .from(favorite)
+                .join(usedProduct).on(usedProduct.usedProductId.eq(favorite.refId))
+                .join(usedProduct.region, region)
+                .join(usedProduct.seller, seller)
+                .where(
+                        favorite.account.accountId.eq(accountId),
+                        favorite.refType.eq(FavoriteRefType.USED_PRODUCT),
+                        UsedProductVisibilityPredicate.publiclyVisible(usedProduct, seller)
+                )
+                // createdAt 동률 시 순서가 흔들려 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
+                .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc())
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize() + 1L)   // +1건으로 다음 페이지 존재 여부 판정 (count 쿼리 불필요)
+                .fetch());
+
+        boolean hasNext = rows.size() > pageable.getPageSize();
+        if (hasNext) {
+            rows.remove(rows.size() - 1);
+        }
+        // 요청 sort는 무시하고 최신순으로 고정한다. 요청받은 Pageable을 그대로 돌려주면
+        // 응답의 sort가 실제 적용된 정렬과 달라 클라이언트가 잘못된 순서를 전제하게 된다.
+        return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
+    }
+
+    // 상점 찜 목록(무한 스크롤) — 중고 게시글 목록과 같은 limit + 1 방식이라 count 쿼리가 없다.
+    // 전체 건수를 쓰지 않는 화면에서 count는 순수 비용이다.
+    @Override
+    public Slice<FavoriteStoreRow> findFavoriteStoresSlice(Long accountId, Pageable pageable) {
+        List<FavoriteStoreRow> rows = new ArrayList<>(favoriteStoreQuery(accountId)
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize() + 1L)   // +1건으로 다음 페이지 존재 여부 판정
+                .fetch());
+
+        boolean hasNext = rows.size() > pageable.getPageSize();
+        if (hasNext) {
+            rows.remove(rows.size() - 1);
+        }
+        return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
+    }
+
+    // 상점 찜 목록 — 공개 조건을 조인·where로 걸어 페이징과 count 이전에 적용한다.
+    // Favorite은 FK 없는 polymorphic 참조지만 refId ↔ storeId theta join으로 묶을 수 있다.
+    //
+    // 번호 페이징 응답을 쓰는 레거시 경로(/favorites/me/STORE) 전용이다.
+    // 신규 경로는 count 쿼리가 없는 findFavoriteStoresSlice를 쓴다.
+    @Override
+    public Page<FavoriteStoreRow> findFavoriteStores(Long accountId, Pageable pageable) {
+        List<FavoriteStoreRow> rows = favoriteStoreQuery(accountId)
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .fetch();
+
+        JPAQuery<Long> countQuery = queryFactory
+                .select(favorite.count())
+                .from(favorite)
+                .join(store).on(store.storeId.eq(favorite.refId))
+                .join(store.account, account)
+                .where(
+                        favorite.account.accountId.eq(accountId),
+                        favorite.refType.eq(FavoriteRefType.STORE),
+                        StoreVisibilityPredicate.publiclyVisible(store, account));
+
+        // fetchOne()을 삼항 연산자 양쪽에서 호출하면 같은 count 쿼리가 두 번 실행된다.
+        Long total = countQuery.fetchOne();
+        return new PageImpl<>(rows, withAppliedSort(pageable), total == null ? 0L : total);
+    }
+
+    // 상점 찜 조회 본문 — Page/Slice 두 경로가 공개 조건과 정렬을 공유해야 한다.
+    // 한쪽만 조건이 바뀌면 같은 화면인데 목록이 달라진다.
+    private JPAQuery<FavoriteStoreRow> favoriteStoreQuery(Long accountId) {
+        return queryFactory
+                .select(Projections.constructor(
+                        FavoriteStoreRow.class,
+                        favorite.favoriteId,
+                        favorite.createdAt,
+                        store))
+                .from(favorite)
+                .join(store).on(store.storeId.eq(favorite.refId))
+                .join(store.account, account)
+                .where(
+                        favorite.account.accountId.eq(accountId),
+                        favorite.refType.eq(FavoriteRefType.STORE),
+                        StoreVisibilityPredicate.publiclyVisible(store, account))
+                // createdAt 동률 시 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
+                .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc());
     }
 }

@@ -15,7 +15,9 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,10 +33,22 @@ public class AdminReportService {
 
     @Transactional(readOnly = true)
     public Page<ReportResponseDto> getReports(ReportStatus status, Pageable pageable) {
+        // 정렬은 접수 최신순으로 고정한다. 요청 sort를 그대로 쓰면 허용하지 않는 필드가
+        // 넘어왔을 때 실제 순서와 응답 메타데이터가 어긋난다.
+        Pageable fixed = latestFirst(pageable);
+
         if (status != null) {
-            return reportRepository.findByStatus(status, pageable).map(ReportResponseDto::from);
+            return reportRepository.findByStatus(status, fixed).map(ReportResponseDto::from);
         }
-        return reportRepository.findAll(pageable).map(ReportResponseDto::from);
+        return reportRepository.findAll(fixed).map(ReportResponseDto::from);
+    }
+
+    // 접수 최신순 + PK tie-break. createdAt 동률 시 페이지 경계에서 항목이 중복·유실된다.
+    private Pageable latestFirst(Pageable pageable) {
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("reportId")));
     }
 
     // 신고 상세 — 신고자 정보 + 대상 콘텐츠 스냅샷 + 관리자 처리 내역

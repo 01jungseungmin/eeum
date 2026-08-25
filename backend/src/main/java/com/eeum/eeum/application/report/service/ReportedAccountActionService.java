@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.report.service;
 
+import com.eeum.eeum.application.account.service.AccountSanctionPolicy;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReportedAccountActionService {
 
     private final AccountRepository accountRepository;
+    private final AccountSanctionPolicy accountSanctionPolicy;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -29,28 +31,23 @@ public class ReportedAccountActionService {
     }
 
     private Long warn(Long accountId) {
-        Account account = accountRepository.findById(accountId)
+        // suspend와 같은 잠금을 쓴다. 잠그지 않으면 대상 상태 확인과 조치 사이에
+        // 탈퇴·정지가 끼어들어 이미 사라진 계정에 경고가 기록된다.
+        Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
-        validateActionTarget(account);
+        accountSanctionPolicy.validateWarnable(account);
         return accountId;
     }
 
     private Long suspend(Long accountId) {
         Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_TARGET_NOT_AVAILABLE));
-        validateActionTarget(account);
+        // 잠금 후 정지 여부까지 확인한다. 이 검사가 없으면 이미 정지된 계정에 조치를 반복할 때마다
+        // 토큰 정리 이벤트가 다시 발행되고, 직접 정지 API와 오류 계약도 갈린다.
+        accountSanctionPolicy.validateSuspendable(account);
 
         account.suspend();
         eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
         return accountId;
-    }
-
-    private void validateActionTarget(Account account) {
-        if (account.isAdmin()) {
-            throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED);
-        }
-        if (account.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
     }
 }

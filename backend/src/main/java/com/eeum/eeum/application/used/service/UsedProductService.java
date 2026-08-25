@@ -4,27 +4,33 @@ import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import com.eeum.eeum.domain.category.enums.CategoryType;
+import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
+import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
+import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +39,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 
 import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,17 +50,20 @@ import java.util.stream.Collectors;
 public class UsedProductService {
 
     private final UsedProductRepository usedProductRepository;
+    private final EntityManager entityManager;
     private final AccountRepository accountRepository;
+    private final AccountWriteGuard accountWriteGuard;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final UsedProductImageService usedProductImageService;
     private final UsedProductImageRepository usedProductImageRepository;
+    private final FavoriteService favoriteService;
 
     @Transactional
     public UsedProductDetailResponseDto create(Long sellerId, UsedProductCreateRequestDto request) {
-        Account seller = accountRepository.findById(sellerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+        // 잠금 순서는 account → product다. 규약은 AccountWriteGuard 참고.
+        Account seller = accountWriteGuard.lockActive(sellerId);
 
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
         // 등록은 조회와 달리 GPS 인증된 지역을 요구한다 — 아무 동네에나 매물을 뿌리는 것을 막는다.
@@ -83,6 +93,8 @@ public class UsedProductService {
             UsedProductSearchRequestDto request,
             Pageable pageable
     ) {
+        validatePriceRange(request.getMinPrice(), request.getMaxPrice());
+
         Long targetRegionId = resolveViewRegionId(viewerId, request.getRegionId());
 
         // 지역만 서버가 정하고 나머지 필터는 요청한 그대로 넘긴다.
@@ -106,13 +118,7 @@ public class UsedProductService {
 
     @Transactional(readOnly = true)
     public UsedProductDetailResponseDto getDetail(Long viewerId, Long usedProductId) {
-        UsedProduct product = getActiveOrThrow(usedProductId);
-
-        // 숨김 처리된 글은 작성자에게만 보인다. 남에게 403을 주면 "숨겨진 글이 있다"는 사실이 새어 나가므로
-        // 존재하지 않는 것과 같은 응답을 준다.
-        if (product.isHidden() && !product.isOwnedBy(viewerId)) {
-            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
-        }
+        UsedProduct product = getVisibleOrThrow(viewerId, usedProductId);
 
         return UsedProductDetailResponseDto.from(
                 product, usedProductImageService.getImages(usedProductId));
@@ -121,13 +127,48 @@ public class UsedProductService {
     // 상세 조회 + 조회수 증가.
     @Transactional
     public UsedProductDetailResponseDto getDetailAndCountView(Long viewerId, Long usedProductId) {
-        UsedProductDetailResponseDto detail = getDetail(viewerId, usedProductId);
+        UsedProduct product = getVisibleOrThrow(viewerId, usedProductId);
+        List<UsedProductImageResponseDto> images = usedProductImageService.getImages(usedProductId);
 
         // 비회원 조회도 센다. 판매자 본인 조회만 제외한다.
-        if (!detail.getSellerId().equals(viewerId)) {
-            usedProductRepository.increaseViewCount(usedProductId);
+        if (!product.isOwnedBy(viewerId)) {
+            // 갱신 행이 0이면 공개 확인 이후 숨김·삭제가 커밋된 것이다.
+            // 그 상태의 글을 응답으로 내보내면 상세 조회의 노출 정책이 무의미해진다.
+            if (usedProductRepository.increaseViewCount(usedProductId) == 0) {
+                throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+            }
+            // 조회수는 QueryDSL bulk UPDATE라 영속성 컨텍스트를 거치지 않는다.
+            // 다시 조회해도 1차 캐시의 기존 인스턴스가 그대로 나오므로 refresh로 DB 값을 다시 읽는다.
+            // 이걸 빼면 방금 센 이번 조회가 빠진 값이 응답에 담겨 항상 실제보다 1 작다.
+            entityManager.refresh(product);
         }
-        return detail;
+
+        return UsedProductDetailResponseDto.from(product, images);
+    }
+
+    // 최소 가격이 최대 가격보다 크면 결과가 반드시 빈다.
+    // 빈 목록으로 응답하면 클라이언트는 "그 조건에 매물이 없다"로 읽어 잘못된 조건을 계속 보낸다.
+    // 두 값을 함께 봐야 하는 검증이라 파라미터 애노테이션으로는 표현할 수 없다.
+    private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new BadRequestException(ErrorCode.USED_PRODUCT_INVALID_PRICE_RANGE);
+        }
+    }
+
+    // 숨김 처리된 글은 작성자에게만 보인다. 남에게 403을 주면 "숨겨진 글이 있다"는 사실이 새어 나가므로
+    // 존재하지 않는 것과 같은 응답을 준다.
+    // 판매자가 탈퇴한 글은 작성자에게도 보이지 않는다 — 탈퇴 계정은 로그인 자체가 막힌다.
+    private UsedProduct getVisibleOrThrow(Long viewerId, Long usedProductId) {
+        UsedProduct product = getActiveOrThrow(usedProductId);
+
+        if (!product.getSeller().isActive()) {
+            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        }
+
+        if (product.isHidden() && !product.isOwnedBy(viewerId)) {
+            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        }
+        return product;
     }
 
     @Transactional
@@ -136,7 +177,10 @@ public class UsedProductService {
             Long usedProductId,
             UsedProductUpdateRequestDto request
     ) {
-        UsedProduct product = getOwnedOrThrow(sellerId, usedProductId);
+        accountWriteGuard.lockActive(sellerId);
+        // 관리자 숨김·삭제와 같은 행을 다투므로 같은 비관적 잠금을 쓴다.
+        // 잠그지 않으면 수정과 조치가 서로의 변경을 덮어쓴다.
+        UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
         Category category = getUsedCategoryOrThrow(request.getCategoryId());
 
         product.updateInfo(
@@ -147,13 +191,19 @@ public class UsedProductService {
                 request.getPrice()
         );
 
+        // modifiedAt은 flush 시점에 채워진다. 먼저 반영하지 않으면 응답에 수정 전 값이 담긴다.
+        usedProductRepository.flush();
+
         return UsedProductDetailResponseDto.from(
                 product, usedProductImageService.getImages(usedProductId));
     }
 
     @Transactional
     public void delete(Long sellerId, Long usedProductId) {
-        UsedProduct product = getOwnedOrThrow(sellerId, usedProductId);
+        // 찜 정리까지 하는 경로라 신고 조치와 같은 비관적 잠금을 쓴다.
+        // 잠그지 않으면 삭제 직후 들어온 찜이 정리를 지나쳐 죽은 찜으로 남는다.
+        accountWriteGuard.lockActive(sellerId);
+        UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
 
         // 예약 중이라는 건 상대가 거래를 기다리고 있다는 뜻이다. 말없이 사라지면
         // 상대는 이유를 알 수 없다. 예약을 먼저 취소하게 한다.
@@ -162,6 +212,10 @@ public class UsedProductService {
         }
 
         product.softDelete();
+
+        // 찜을 함께 정리한다. 남겨두면 다른 사용자의 찜 목록에 사라진 글이 계속 남는다.
+        // 같은 트랜잭션에서 처리해야 잠깐이라도 죽은 찜이 보이는 구간이 생기지 않는다.
+        favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, usedProductId);
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -278,10 +332,32 @@ public class UsedProductService {
 
     private UsedProduct getOwnedOrThrow(Long sellerId, Long usedProductId) {
         UsedProduct product = getActiveOrThrow(usedProductId);
+        assertOwned(product, sellerId);
+        return product;
+    }
+
+    // 잠금 조회 버전 — 찜·신고 조치와 경쟁하는 쓰기 경로에서 사용한다.
+    // 잠금 조회에는 삭제 필터가 없으므로 여기서 거른다.
+    private UsedProduct getOwnedForUpdateOrThrow(Long sellerId, Long usedProductId) {
+        UsedProduct product = usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
+                .filter(found -> !found.isDeleted())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+        assertOwned(product, sellerId);
+        return product;
+    }
+
+    private void assertOwned(UsedProduct product, Long sellerId) {
+        // 비공개 글(숨김·판매자 탈퇴)은 비소유자에게 없는 것으로 응답한다.
+        // 상세 조회는 404인데 수정·삭제만 403이면 그 차이로 존재가 드러난다.
+        // 숨김만 막고 판매자 탈퇴를 빠뜨리면 그쪽으로 같은 구멍이 남는다.
+        // 공개 글의 403은 유지한다 — 존재가 이미 공개라 404로 바꾸면 정상적인 권한 오류를 가린다.
+        if (!product.isPubliclyVisible() && !product.isOwnedBy(sellerId)) {
+            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        }
+
         if (!product.isOwnedBy(sellerId)) {
             throw new ForbiddenException(ErrorCode.USED_PRODUCT_ACCESS_DENIED);
         }
-        return product;
     }
 
     // 비활성 카테고리와 가게용 카테고리를 모두 걸러낸다.

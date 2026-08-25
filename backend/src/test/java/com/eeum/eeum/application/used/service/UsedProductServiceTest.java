@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -27,6 +28,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -44,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -61,11 +64,14 @@ class UsedProductServiceTest {
 
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private AccountRepository accountRepository;
+    @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private CategoryRepository categoryRepository;
     @Mock private AccountRegionRepository accountRegionRepository;
     @Mock private UsedProductImageService usedProductImageService;
     @Mock private UsedProductImageRepository usedProductImageRepository;
     @Mock private RegionRepository regionRepository;
+    @Mock private com.eeum.eeum.application.favorite.service.FavoriteService favoriteService;
+    @Mock private jakarta.persistence.EntityManager entityManager;
 
     @InjectMocks
     private UsedProductService usedProductService;
@@ -75,7 +81,7 @@ class UsedProductServiceTest {
     @Test
     void 인증된_활동_지역이면_게시글이_등록된다() {
         // given
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountWriteGuard.lockActive(SELLER_ID)).thenReturn(seller());
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
@@ -96,7 +102,7 @@ class UsedProductServiceTest {
     @Test
     void 내_활동_지역이_아니면_등록할_수_없다() {
         // given — 검증이 없으면 아무 regionId나 실어 남의 동네에 글을 올릴 수 있다
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountWriteGuard.lockActive(SELLER_ID)).thenReturn(seller());
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
@@ -114,7 +120,7 @@ class UsedProductServiceTest {
 
     @Test
     void GPS_인증이_안_된_지역에는_등록할_수_없다() {
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountWriteGuard.lockActive(SELLER_ID)).thenReturn(seller());
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
         when(accountRegionRepository.findByAccount_AccountIdAndRegion_RegionId(SELLER_ID, REGION_ID))
@@ -130,7 +136,7 @@ class UsedProductServiceTest {
     @Test
     void 가게_카테고리로는_중고_게시글을_등록할_수_없다() {
         // given — 조회 자체를 CategoryType.USED로 걸어 가게·비활성 카테고리를 함께 막는다
-        when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller()));
+        when(accountWriteGuard.lockActive(SELLER_ID)).thenReturn(seller());
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.empty());
 
@@ -269,6 +275,8 @@ class UsedProductServiceTest {
     @Test
     void 지역을_지정하지_않으면_선택한_동네에_게시글이_등록된다() {
         // given — 앱에서 동네를 고른 뒤 글을 쓰는 흐름과 맞춘다
+        // 등록은 계정 행을 잠그고, 선택한 동네 조회는 잠금 없이 다시 읽는다
+        when(accountWriteGuard.lockActive(SELLER_ID)).thenReturn(sellerWithPrimary());
         when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(sellerWithPrimary()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
@@ -320,6 +328,41 @@ class UsedProductServiceTest {
                 usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), PageRequest.of(0, 20));
 
         assertThat(result.getContent().get(0).getThumbnailUrl()).isNull();
+    }
+
+    @Test
+    void 최소_가격이_최대_가격보다_크면_거절한다() {
+        // given — 결과가 반드시 비는 조건이다. 빈 목록으로 응답하면 클라이언트는
+        // "매물이 없다"로 읽어 잘못된 조건을 계속 보낸다.
+        UsedProductSearchRequestDto request = new UsedProductSearchRequestDto(
+                REGION_ID, null, null, null,
+                new BigDecimal("50000"), new BigDecimal("1000"), null);
+
+        // when & then
+        assertThatThrownBy(() ->
+                usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_PRICE_RANGE);
+
+        verify(usedProductRepository, never()).search(any(), any());
+    }
+
+    @Test
+    void 최소와_최대_가격이_같으면_허용한다() {
+        // given — 경계값은 유효한 조건이다
+        UsedProductSearchRequestDto request = new UsedProductSearchRequestDto(
+                REGION_ID, null, null, null,
+                new BigDecimal("1000"), new BigDecimal("1000"), null);
+        when(regionRepository.existsById(REGION_ID)).thenReturn(true);
+        when(usedProductRepository.search(any(), any()))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        // when
+        usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20));
+
+        // then
+        verify(usedProductRepository).search(any(), any());
     }
 
     @Test
@@ -417,6 +460,22 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
     }
 
+    @Test
+    void 판매자가_탈퇴하면_게시글_상세도_볼_수_없다() {
+        // given — 탈퇴자에게 거래 문의가 계속 가는 것을 막는다.
+        // 탈퇴 계정은 로그인 자체가 막히므로 "작성자에게만 보인다" 예외도 성립하지 않는다.
+        UsedProduct product = product();
+        product.getSeller().withdraw();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+
+        // when & then
+        assertThatThrownBy(() -> usedProductService.getDetail(SELLER_ID, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
     // ─────────────────── 조회수 ───────────────────
 
     @Test
@@ -425,12 +484,63 @@ class UsedProductServiceTest {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(1L);
 
         // when
         usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
 
         // then
         verify(usedProductRepository).increaseViewCount(PRODUCT_ID);
+    }
+
+    @Test
+    void 조회수_증가_후_엔티티를_refresh해_응답에_반영한다() {
+        // given — 조회수는 QueryDSL bulk UPDATE라 영속성 컨텍스트를 거치지 않는다.
+        // 다시 조회해도 1차 캐시의 기존 인스턴스가 나오므로 refresh가 없으면 응답이 항상 1 작다.
+        // 실제 값이 반영되는지는 Mock으로 확인할 수 없어 UsedProductDynamicUpdateIntegrationTest에서 검증한다.
+        UsedProduct product = product();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(1L);
+
+        // when
+        usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID);
+
+        // then
+        InOrder inOrder = inOrder(usedProductRepository, entityManager);
+        inOrder.verify(usedProductRepository).increaseViewCount(PRODUCT_ID);
+        inOrder.verify(entityManager).refresh(product);
+    }
+
+    @Test
+    void 판매자_본인_조회는_refresh도_하지_않는다() {
+        UsedProduct product = product();
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+
+        usedProductService.getDetailAndCountView(SELLER_ID, PRODUCT_ID);
+
+        verify(entityManager, never()).refresh(any());
+    }
+
+    @Test
+    void 조회_직전에_숨겨진_글은_조회수를_올리지_않고_거부한다() {
+        // given — 공개 확인과 조회수 UPDATE 사이에 숨김이 커밋되면 갱신 행이 0이 된다.
+        // 그대로 응답하면 방금 비공개가 된 글을 보여주게 된다.
+        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(0L);
+
+        // when & then
+        assertThatThrownBy(() -> usedProductService.getDetailAndCountView(OTHER_ID, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+
+        verify(entityManager, never()).refresh(any());
     }
 
     @Test
@@ -453,6 +563,7 @@ class UsedProductServiceTest {
         when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(usedProductImageService.getImages(PRODUCT_ID)).thenReturn(List.of());
+        when(usedProductRepository.increaseViewCount(PRODUCT_ID)).thenReturn(1L);
 
         // when
         usedProductService.getDetailAndCountView(null, PRODUCT_ID);
@@ -465,7 +576,7 @@ class UsedProductServiceTest {
 
     @Test
     void 작성자는_게시글을_수정할_수_있다() {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
@@ -482,7 +593,7 @@ class UsedProductServiceTest {
     @Test
     void 수정_경로로도_가격_규칙을_우회할_수_없다() {
         // given — NEGOTIABLE인데 금액이 실려 오면 거부한다
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
                 .thenReturn(Optional.of(usedCategory()));
@@ -496,7 +607,7 @@ class UsedProductServiceTest {
 
     @Test
     void 남의_게시글은_수정할_수_없다() {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
 
         assertThatThrownBy(() -> usedProductService.update(
@@ -506,13 +617,80 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_ACCESS_DENIED);
     }
 
+    @Test
+    void 숨김_게시글은_비소유자에게_수정_요청에도_없는_것으로_응답한다() {
+        // given — 상세 조회는 404인데 수정만 403이면 그 차이로 숨김 글의 존재가 드러난다
+        UsedProduct hidden = product();
+        hidden.hide();
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> usedProductService.update(
+                OTHER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글도_작성자_본인은_수정할_수_있다() {
+        // given — 숨김은 노출 정책이지 작성자의 편집권 박탈이 아니다
+        UsedProduct hidden = product();
+        hidden.hide();
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(hidden));
+        when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
+                .thenReturn(Optional.of(usedCategory()));
+
+        usedProductService.update(
+                SELLER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100")));
+
+        assertThat(hidden.getPrice()).isEqualByComparingTo(new BigDecimal("100"));
+    }
+
+    @Test
+    void 판매자가_탈퇴한_게시글은_비소유자에게_수정_요청에도_없는_것으로_응답한다() {
+        // given — 상세는 404인데 수정만 403이면 그 차이로 ID 존재가 드러난다.
+        // 숨김만 막고 판매자 탈퇴를 빠뜨리면 그쪽으로 같은 구멍이 남는다.
+        UsedProduct product = product();
+        product.getSeller().withdraw();
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> usedProductService.update(
+                OTHER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 수정은_관리자_조치와_같은_비관적_잠금으로_읽고_flush_후_응답한다() {
+        // given — 잠그지 않으면 수정과 숨김·삭제가 서로의 변경을 덮어쓴다.
+        // modifiedAt은 flush 시점에 채워지므로 DTO 생성 전에 반영해야 한다.
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+        when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(CATEGORY_ID, CategoryType.USED))
+                .thenReturn(Optional.of(usedCategory()));
+
+        // when
+        usedProductService.update(
+                SELLER_ID, PRODUCT_ID, updateRequest(UsedProductPriceType.FIXED, new BigDecimal("100")));
+
+        // then
+        InOrder inOrder = inOrder(usedProductRepository, usedProductImageService);
+        inOrder.verify(usedProductRepository).flush();
+        inOrder.verify(usedProductImageService).getImages(PRODUCT_ID);
+        verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID);
+    }
+
     // ─────────────────── 삭제 ───────────────────
 
     @Test
     void 삭제하면_물리_삭제_대신_deletedAt이_찍힌다() {
         // given — 후기·채팅·신고 이력이 가리킬 대상을 남겨야 한다
         UsedProduct product = product();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
         // when
@@ -522,6 +700,10 @@ class UsedProductServiceTest {
         assertThat(product.isDeleted()).isTrue();
         verify(usedProductRepository, never()).delete(any());
         verify(usedProductRepository, never()).deleteById(eq(PRODUCT_ID));
+
+        // 남겨두면 다른 사용자의 찜 목록에 사라진 글이 계속 남는다
+        verify(favoriteService).deleteAllByRefTypeAndRefId(
+                com.eeum.eeum.domain.favorite.enums.FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
     }
 
     @Test
@@ -529,7 +711,7 @@ class UsedProductServiceTest {
         // given — 상대가 거래를 기다리는 중이다. 말없이 사라지면 이유를 알 수 없다.
         UsedProduct product = product();
         product.reserve();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
         assertThatThrownBy(() -> usedProductService.delete(SELLER_ID, PRODUCT_ID))
@@ -538,13 +720,14 @@ class UsedProductServiceTest {
                 .isEqualTo(ErrorCode.USED_PRODUCT_DELETE_NOT_ALLOWED);
 
         assertThat(product.isDeleted()).isFalse();
+        verify(favoriteService, never()).deleteAllByRefTypeAndRefId(any(), any());
     }
 
     @Test
     void 판매완료된_게시글은_삭제할_수_있다() {
         UsedProduct product = product();
         product.markSold();
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
 
         usedProductService.delete(SELLER_ID, PRODUCT_ID);
@@ -553,8 +736,23 @@ class UsedProductServiceTest {
     }
 
     @Test
+    void 삭제는_신고_조치와_같은_비관적_잠금으로_게시글을_읽는다() {
+        // given — 잠그지 않으면 삭제 직후 들어온 찜이 정리를 지나쳐 죽은 찜으로 남는다
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(product()));
+
+        // when
+        usedProductService.delete(SELLER_ID, PRODUCT_ID);
+
+        // then
+        verify(usedProductRepository, never()).findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID);
+        verify(favoriteService).deleteAllByRefTypeAndRefId(
+                com.eeum.eeum.domain.favorite.enums.FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
+    }
+
+    @Test
     void 남의_게시글은_삭제할_수_없다() {
-        when(usedProductRepository.findByUsedProductIdAndDeletedAtIsNull(PRODUCT_ID))
+        when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product()));
 
         assertThatThrownBy(() -> usedProductService.delete(OTHER_ID, PRODUCT_ID))

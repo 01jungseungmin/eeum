@@ -58,12 +58,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_PRIMARY_REGION_NOT_FOUND("ACCOUNT_013","대표 지역이 없습니다.",HttpStatus.NOT_FOUND),
     ACCOUNT_ALREADY_SUSPENDED("ACCOUNT_014", "이미 정지된 회원입니다", HttpStatus.CONFLICT),
     ACCOUNT_NOT_SUSPENDED("ACCOUNT_015", "정지 상태가 아닌 회원입니다", HttpStatus.CONFLICT),
+    ACCOUNT_SIGNUP_INCOMPLETE("ACCOUNT_016", "회원가입이 완료되지 않은 계정입니다", HttpStatus.FORBIDDEN),
+    ACCOUNT_ALREADY_ANONYMIZED("ACCOUNT_017", "개인정보가 파기된 계정은 복구할 수 없습니다", HttpStatus.CONFLICT),
+    ACCOUNT_ADMIN_SANCTION_NOT_ALLOWED("ACCOUNT_018", "관리자 계정에는 제재를 적용할 수 없습니다", HttpStatus.FORBIDDEN),
 
     // ===================== 사장 추가정보 기입 =====================
     OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),
     OWNER_REVIEW_ALREADY_REQUESTED("OWNER_002","이미 입점 심사 요청이 접수되었습니다.",HttpStatus.CONFLICT),
     OWNER_CHECKLIST_NOT_COMPLETED( "OWNER_003","입점 심사 필수 항목을 모두 완료해야 합니다.",HttpStatus.BAD_REQUEST),
     OWNER_INFO_NOT_FOUND( "OWNER_004","사장 신청 정보를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
+    OWNER_REVIEW_NOT_PENDING("OWNER_005","심사 대기 중인 신청이 아닙니다.",HttpStatus.CONFLICT),
 
     // ===================== 사업자 인증 (BUSINESST) =====================
     BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
@@ -175,6 +179,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_PRODUCT_INVALID_PRICE("USED_010", "거래 유형과 가격이 맞지 않습니다", HttpStatus.BAD_REQUEST),
     USED_PRODUCT_DELETE_NOT_ALLOWED("USED_011", "예약 중인 게시글은 삭제할 수 없습니다", HttpStatus.CONFLICT),
     USED_PRODUCT_REGION_REQUIRED("USED_012", "조회할 지역을 지정해 주세요", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_NOT_HIDDEN("USED_013", "숨김 처리된 게시글이 아닙니다", HttpStatus.CONFLICT),
+    USED_PRODUCT_INVALID_PRICE_RANGE("USED_014", "최소 가격이 최대 가격보다 클 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
@@ -226,6 +232,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     FAVORITE_NOT_FOUND("FAVORITE_001", "존재하지 않는 찜 정보입니다", HttpStatus.NOT_FOUND),
     FAVORITE_ACCESS_DENIED("FAVORITE_002", "찜 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     FAVORITE_ALREADY_EXISTS("FAVORITE_003", "이미 찜한 대상입니다", HttpStatus.CONFLICT),
+    FAVORITE_INVALID_PERIOD("FAVORITE_004", "조회 시작일이 종료일보다 늦을 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 알림 (NOTIFICATION) =====================
     NOTIFICATION_NOT_FOUND("NOTIFICATION_001", "존재하지 않는 알림입니다", HttpStatus.NOT_FOUND),

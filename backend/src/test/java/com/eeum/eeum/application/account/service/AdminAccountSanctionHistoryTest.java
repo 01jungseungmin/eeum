@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -47,6 +48,8 @@ class AdminAccountSanctionHistoryTest {
     @Mock private OwnerApplicationMapper ownerApplicationMapper;
     @Mock private StoreApprovalMapper storeApprovalMapper;
     @Mock private OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    // 제재 자격 판정은 Mock으로 두면 관리자 대상 차단·중복 정지 차단이 무력화된 채 통과한다.
+    @Spy private AccountSanctionPolicy accountSanctionPolicy = new AccountSanctionPolicy();
     @Mock private SanctionHistoryService sanctionHistoryService;
     @Mock private ApplicationEventPublisher eventPublisher;
 

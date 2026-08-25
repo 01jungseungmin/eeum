@@ -63,7 +63,7 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 - 읽기 전용 메서드는 `@Transactional(readOnly = true)` 필수
 - 가격 필드는 `BigDecimal` 사용
 - API 응답은 반드시 `ApiResponse<T>`로 래핑 (`common/dto/response/ApiResponse`)
-- URL은 kebab-case: `/used-products`, `/store-reviews`
+- URL은 kebab-case: `/used`, `/store-reviews`
 - FCM 직접 호출 금지 — 항상 도메인 이벤트 경유
 - 로깅은 SLF4J 사용 — `System.out.println` 금지
 - Soft Delete 대상 외 엔티티에 `deletedAt` 추가 금지
@@ -108,6 +108,12 @@ Soft Delete (deletedAt 필드) 적용 대상:
 redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 ```
 
+중고거래·찜·회원 탈퇴 연계 쓰기는 기본적으로
+`Account → Store/UsedProduct → Favorite/UsedProductImage` 순서로 잠근다.
+여러 대상 행을 잠그면 ID 오름차순처럼 하나의 전역 순서를 사용한다. 상세 공개 정책,
+카운터, 페이징, 운영 DDL과 필수 경쟁 시나리오는
+`.claude/skills/references/used-favorite-review.md`를 따른다.
+
 ### 멱등성 처리
 - PortOne Webhook: Redis + DB Unique 제약으로 중복 처리 방지
 - ChatRoom 생성: 동일 참여자 조합으로 중복 생성 방지
@@ -123,6 +129,14 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 ### 페이징 선택 기준
 - 무한 스크롤 (모바일 앱): `Slice<T>`
 - 관리자 페이지 (번호 페이징): `Page<T>`
+
+### 신규 도메인 단계별 개발
+- 신규 도메인이나 큰 기능 확장은 `.claude/skills/references/domain-development-workflow.md`의
+  Gate 1~7을 순서대로 적용한다.
+- 정책 결정 → Domain/Persistence → Application/Transaction → API/DTO → 교차 도메인·운영 →
+  테스트 → 최종 전체 리뷰 순서를 지키고, 이전 Gate의 위반을 다음 단계로 넘기지 않는다.
+- 완성 구현에서 공개 범위, 권한, 상태 전이, 삭제, 외부 계약처럼 결과를 바꾸는 정책이 미정이면
+  TODO나 임의 값으로 진행하지 않고 사용자 결정을 받는다.
 
 ### 테스트 작성 규칙
 - JUnit5 + Mockito + AssertJ 조합 (Spring Boot test starter에 포함)

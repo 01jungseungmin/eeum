@@ -13,18 +13,28 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Getter
+// 변경된 컬럼만 UPDATE한다. 전체 컬럼을 쓰면 favoriteCount·viewCount처럼 별도 원자 UPDATE로
+// 증감되는 값이, 이전에 읽어둔 엔티티의 오래된 값으로 덮어써져 조용히 유실된다.
+@DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
         name = "used_product",
         indexes = {
                 // 동네 목록 기본 조회: 지역 + 상태 + 최신순
                 @Index(name = "idx_used_product_region_status", columnList = "region_id, status, created_at"),
+                // 공개 목록 기본 조회: region + (삭제·숨김 제외) + 최신순.
+                // 상태 필터는 선택값이라 위 인덱스는 status가 없으면 created_at까지 닿지 못한다.
+                // 모든 공개 조회가 반드시 거는 조건만 순서대로 담았다.
+                // TODO: 운영 데이터로 EXPLAIN 확인 후 컬럼 순서 재검토
+                @Index(name = "idx_used_product_public_list",
+                        columnList = "region_id, deleted_at, is_hidden, created_at"),
                 // 내가 쓴 글 목록
                 @Index(name = "idx_used_product_seller", columnList = "account_id")
         }
@@ -172,6 +182,12 @@ public class UsedProduct extends BaseEntity {
 
     public void softDelete() {
         this.deletedAt = LocalDateTime.now();
+    }
+
+    // 공개 노출 가능 여부 — 조건은 UsedProductVisibilityPredicate와 같아야 한다.
+    // 판매자가 탈퇴하면 글도 함께 내린다. 탈퇴자에게 거래 문의가 계속 가는 것을 막는다.
+    public boolean isPubliclyVisible() {
+        return !isDeleted() && !hidden && seller.isActive();
     }
 
     public boolean isDeleted() {

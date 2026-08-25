@@ -27,7 +27,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByStore_StoreIdAndStatusNot(Long storeId, ProductStatus productStatus);
 
-    void deleteByStore_StoreId(Long storeId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.productId = :productId")

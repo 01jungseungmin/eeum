@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.ai.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.domain.ai.repository.AiChatMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class AiCleanupScheduler {
     private final AiChatMessageRepository aiChatMessageRepository;
 
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(name = "cleanupOldAiChatMessages", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     @Transactional
     public void cleanupOldAiChatMessages() {
         LocalDateTime threshold = LocalDateTime.now().minusDays(CHAT_MESSAGE_RETENTION_DAYS);

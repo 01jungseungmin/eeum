@@ -35,7 +35,8 @@ public class SecurityConfig {
     // ===================== 인증 없이 허용할 GET 경로 =====================
     private static final String[] PUBLIC_GET = {
             "/stores/**",
-            "/used-products/**",
+            "/used/**",
+            "/favorites/count",   // 찜 수는 상세 화면에 비회원에게도 보인다
             "/products/**",
             "/regions/search",
             "/regions/nearby",

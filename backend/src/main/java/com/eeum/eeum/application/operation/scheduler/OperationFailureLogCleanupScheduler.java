@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.operation.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.domain.operation.repository.OperationFailureLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class OperationFailureLogCleanupScheduler {
     private final OperationFailureLogRepository operationFailureLogRepository;
 
     @Scheduled(cron = "0 0 4 * * *")
+    @SchedulerLock(name = "cleanupOldFailureLogs", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     @Transactional
     public void cleanupOldFailureLogs() {
         LocalDateTime threshold = LocalDateTime.now().minusMonths(RETENTION_MONTHS);

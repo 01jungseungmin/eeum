@@ -3,6 +3,9 @@ package com.eeum.eeum.application.report.service;
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
@@ -12,6 +15,7 @@ import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
+import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -19,10 +23,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * 신고 대상(Polymorphic 참조)을 targetType에 맞는 도메인에서 조회해 스냅샷으로 변환한다.
- * <p>
  * 대상 조회는 타입별 전용 fetch join 메서드를 사용해 소유자/상위 컨텍스트를 한 번에 로드하므로
  * 신고 1건당 대상 조회 쿼리는 1회다 (LAZY 연관 접근으로 인한 N+1 없음).
- * <p>
  * 신고 접수 이후 대상이 삭제될 수 있으므로 미존재는 예외가 아닌 exists=false 스냅샷으로 처리한다 —
  * 관리자는 삭제된 콘텐츠에 대한 신고도 열람/처리할 수 있어야 한다.
  */
@@ -35,21 +37,46 @@ public class ReportTargetResolver {
     private final CommunityPostRepository communityPostRepository;
     private final CommunityCommentRepository communityCommentRepository;
     private final AccountRepository accountRepository;
+    private final UsedProductRepository usedProductRepository;
+    private final PrimaryRegionResolver primaryRegionResolver;
 
+    // 관리자 열람용 — 숨김 게시글도 그대로 반환한다. 관리자는 숨긴 콘텐츠의 신고도 처리해야 한다.
     public ReportTargetSnapshotDto resolve(ReportTargetType targetType, Long targetId) {
+        return resolveInternal(targetType, targetId, false, null);
+    }
+
+    private ReportTargetSnapshotDto resolveInternal(
+            ReportTargetType targetType, Long targetId, boolean forCreation, Account reporter) {
+        // 신고 접수(forCreation)에서는 "그 화면에서 볼 수 있는 대상"만 허용한다.
+        // 상세 조회는 404인데 신고만 성공하면, ID를 넣어보는 것만으로 비공개 대상의 존재가 드러난다.
+        // 관리자 열람(forCreation=false)은 숨긴 콘텐츠의 신고도 처리해야 하므로 거르지 않는다.
         return switch (targetType) {
             case STORE -> storeRepository.findWithAccountByStoreId(targetId)
+                    .filter(store -> !forCreation || storeRepository.isPubliclyVisible(targetId))
                     .map(this::fromStore)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
+            // 후기 자체에는 숨김 상태가 없지만, 비공개 상점의 후기는 그 상점을 볼 수 없으므로 함께 가린다.
             case STORE_REVIEW -> storeReviewRepository.findWithAccountAndStoreByStorereviewId(targetId)
+                    .filter(review -> !forCreation
+                            || storeRepository.isPubliclyVisible(review.getStore().getStoreId()))
                     .map(this::fromStoreReview)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
+            // 커뮤니티는 대표 지역 단위로 공개된다. 상세 조회가 타 지역 글에 404를 주는데
+            // 신고만 성공하면 ID를 넣어보는 것으로 타 지역 글의 존재가 드러난다.
             case COMMUNITY_POST -> communityPostRepository.findWithAccountByPostId(targetId)
+                    .filter(post -> !forCreation || (!post.isHidden() && isSameRegion(post, reporter)))
                     .map(this::fromCommunityPost)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case COMMUNITY_COMMENT -> communityCommentRepository.findWithAccountAndPostByCommentId(targetId)
                     .filter(comment -> !comment.isDeleted())
+                    // 숨겨진 글·타 지역 글의 댓글도 화면에서 볼 수 없다
+                    .filter(comment -> !forCreation
+                            || (!comment.getPost().isHidden() && isSameRegion(comment.getPost(), reporter)))
                     .map(this::fromCommunityComment)
+                    .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
+            case USED_PRODUCT -> usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(targetId)
+                    .filter(product -> !forCreation || product.isPubliclyVisible())
+                    .map(this::fromUsedProduct)
                     .orElseGet(() -> ReportTargetSnapshotDto.deleted(targetType, targetId));
             case ACCOUNT -> accountRepository.findById(targetId)
                     .filter(account -> account.getDeletedAt() == null)
@@ -59,8 +86,9 @@ public class ReportTargetResolver {
     }
 
     // 신고 접수 시에는 대상이 반드시 존재해야 하므로 타입별 표준 NotFound 예외로 변환한다.
-    public ReportTargetSnapshotDto resolveForCreation(ReportTargetType targetType, Long targetId) {
-        ReportTargetSnapshotDto target = resolve(targetType, targetId);
+    public ReportTargetSnapshotDto resolveForCreation(
+            ReportTargetType targetType, Long targetId, Account reporter) {
+        ReportTargetSnapshotDto target = resolveInternal(targetType, targetId, true, reporter);
         if (target.isExists()) {
             return target;
         }
@@ -70,7 +98,24 @@ public class ReportTargetResolver {
             case COMMUNITY_POST -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND);
             case COMMUNITY_COMMENT -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
             case ACCOUNT -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND);
+            case USED_PRODUCT -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
         };
+    }
+
+    // 신고자의 대표 지역과 글의 지역이 같은지 — 커뮤니티 공개 조회와 같은 조건.
+    // 대표 지역이 없거나 미인증이면 그 글을 볼 수 없는 상태이므로 "없는 대상"으로 취급한다.
+    // 여기서 지역 관련 예외를 그대로 내보내면, 대상이 있는지 없는지에 따라 응답이 갈려
+    // 지역 조건을 건 의미가 사라진다.
+    private boolean isSameRegion(CommunityPost post, Account reporter) {
+        if (reporter == null || post.getRegion() == null) {
+            return false;
+        }
+        try {
+            return post.getRegion().getRegionId()
+                    .equals(primaryRegionResolver.resolve(reporter).getRegionId());
+        } catch (BusinessException e) {
+            return false;
+        }
     }
 
     // ===================== 타입별 매핑 =====================
@@ -117,6 +162,20 @@ public class ReportTargetResolver {
                 .ownerName(author.getName())
                 .ownerNickname(author.getNickname())
                 .targetCreatedAt(post.getCreatedAt())
+                .build();
+    }
+
+    private ReportTargetSnapshotDto fromUsedProduct(UsedProduct product) {
+        Account seller = product.getSeller();
+        String content = product.getContent();
+        return base(ReportTargetType.USED_PRODUCT, product.getUsedProductId())
+                .title(product.getTitle())
+                .content(content)
+                .contentPreview(ReportTargetSnapshotDto.preview(content))
+                .ownerAccountId(seller.getAccountId())
+                .ownerName(seller.getName())
+                .ownerNickname(seller.getNickname())
+                .targetCreatedAt(product.getCreatedAt())
                 .build();
     }
 

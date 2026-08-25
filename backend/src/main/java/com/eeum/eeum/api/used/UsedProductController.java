@@ -8,14 +8,19 @@ import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedProductImageService;
 import com.eeum.eeum.application.used.service.UsedProductService;
-import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Positive;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,13 +31,15 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+@Validated
 @RestController
-@RequestMapping("/used-products")
+@RequestMapping("/used")
 @RequiredArgsConstructor
 @Tag(name = "31. Used Product", description = "중고거래 게시글 API")
 public class UsedProductController {
@@ -41,6 +48,7 @@ public class UsedProductController {
     private final UsedProductImageService usedProductImageService;
 
     @GetMapping
+    @SecurityRequirements   // 전역 bearer 설정 해제 — 비회원도 조회할 수 있다
     @Operation(
             summary = "동네 중고 게시글 목록",
             description = "로그인 없이 조회할 수 있습니다. regionId를 지정하면 해당 동네를, " +
@@ -50,19 +58,27 @@ public class UsedProductController {
     )
     public ResponseEntity<ApiResponse<Slice<UsedProductSummaryResponseDto>>> getRegionProducts(
             @Parameter(description = "거래 지역 ID. 생략 시 내가 선택한 동네")
-            @RequestParam(required = false) Long regionId,
+            @RequestParam(required = false) @Positive Long regionId,
             @Parameter(description = "제목·본문 검색어")
             @RequestParam(required = false) String keyword,
-            @Parameter(description = "카테고리 ID (하위 카테고리는 포함하지 않음)")
-            @RequestParam(required = false) Long categoryId,
+            @Parameter(description = "카테고리 ID. 상위 카테고리를 지정하면 하위 카테고리 글도 함께 조회된다")
+            @RequestParam(required = false) @Positive Long categoryId,
             @Parameter(description = "거래 유형 (FIXED·FREE·NEGOTIABLE)")
             @RequestParam(required = false) UsedProductPriceType priceType,
             @Parameter(description = "최소 가격. 지정하면 가격제안 글은 제외된다")
-            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false)
+            @DecimalMin(value = "0.00", message = "가격은 0 이상이어야 합니다")
+            @Digits(integer = 8, fraction = 2, message = "가격은 정수 8자리, 소수 2자리까지 입력할 수 있습니다")
+            BigDecimal minPrice,
             @Parameter(description = "최대 가격. 지정하면 가격제안 글은 제외된다")
-            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false)
+            @DecimalMin(value = "0.00", message = "가격은 0 이상이어야 합니다")
+            @Digits(integer = 8, fraction = 2, message = "가격은 정수 8자리, 소수 2자리까지 입력할 수 있습니다")
+            BigDecimal maxPrice,
             @Parameter(description = "거래 상태. 여러 번 보낼 수 있다. 거래완료를 숨기려면 SELLING·RESERVED")
-            @RequestParam(required = false) List<UsedProductStatus> status,
+            // 요소에 @NotNull이 없으면 ?status= 같은 빈 값이 null 원소로 변환돼
+            // status IN (null)로 나가고, 잘못된 요청이 400 대신 조용히 0건으로 끝난다.
+            @RequestParam(required = false) List<@NotNull UsedProductStatus> status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.
@@ -92,13 +108,14 @@ public class UsedProductController {
     }
 
     @GetMapping("/{usedProductId}")
+    @SecurityRequirements   // 전역 bearer 설정 해제 — 비회원도 조회할 수 있다
     @Operation(
             summary = "중고 게시글 상세 조회",
             description = "로그인 없이 조회할 수 있습니다. 삭제된 게시글은 조회되지 않고, " +
                     "관리자가 숨긴 게시글은 작성자 본인에게만 보입니다. 본인 글이 아니면 조회수가 1 증가합니다."
     )
     public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> getUsedProduct(
-            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId
     ) {
         Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(
@@ -113,7 +130,7 @@ public class UsedProductController {
             description = "작성자 본인만 수정할 수 있습니다. 거래 희망 지역은 변경할 수 없습니다."
     )
     public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> updateUsedProduct(
-            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
             @Valid @RequestBody UsedProductUpdateRequestDto request
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
@@ -129,7 +146,7 @@ public class UsedProductController {
             description = "작성자 본인만 삭제할 수 있습니다. 예약 중인 게시글은 예약을 먼저 취소해야 합니다."
     )
     public ResponseEntity<ApiResponse<Void>> deleteUsedProduct(
-            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         usedProductService.delete(sellerId, usedProductId);
@@ -146,8 +163,8 @@ public class UsedProductController {
             description = "게시글당 최대 10장입니다. 사진이 없던 게시글의 첫 장은 자동으로 대표 사진이 됩니다."
     )
     public ResponseEntity<ApiResponse<List<UsedProductImageResponseDto>>> addImages(
-            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
-            @Valid @RequestBody ImageUploadListRequestDto request
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @Valid @RequestBody UsedProductImageUploadListRequestDto request
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -163,8 +180,8 @@ public class UsedProductController {
             description = "삭제 후 노출 순서가 1부터 다시 매겨집니다. 대표 사진을 삭제하면 남은 첫 사진이 대표가 됩니다."
     )
     public ResponseEntity<ApiResponse<Void>> deleteImage(
-            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
-            @Parameter(description = "이미지 ID") @PathVariable Long imageId
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @Parameter(description = "이미지 ID") @PathVariable @Positive Long imageId
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         usedProductImageService.deleteImage(sellerId, usedProductId, imageId);
@@ -176,8 +193,8 @@ public class UsedProductController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "대표 사진 변경", description = "지정한 사진을 대표로 바꿉니다. 대표는 항상 한 장입니다.")
     public ResponseEntity<ApiResponse<Void>> changeThumbnail(
-            @Parameter(description = "게시글 ID") @PathVariable Long usedProductId,
-            @Parameter(description = "이미지 ID") @PathVariable Long imageId
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @Parameter(description = "이미지 ID") @PathVariable @Positive Long imageId
     ) {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         usedProductImageService.changeThumbnail(sellerId, usedProductId, imageId);

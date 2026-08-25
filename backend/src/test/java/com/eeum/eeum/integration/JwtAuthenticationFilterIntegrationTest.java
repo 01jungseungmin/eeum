@@ -1,5 +1,7 @@
 package com.eeum.eeum.integration;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.common.util.RedisUtil;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -9,26 +11,15 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
-import org.springframework.web.client.RestClient;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 /**
  * JWT 인증 필터 체인 통합 테스트.
@@ -45,37 +36,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>토큰 없음 → 401</li>
  * </ol>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class JwtAuthenticationFilterIntegrationTest {
+class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
-
-    @LocalServerPort
-    private int port;
-
+    private final MockMvc mockMvc;
     private final AccountRepository accountRepository;
     private final JwtProvider jwtProvider;
     private final TokenService tokenService;
@@ -207,31 +172,25 @@ class JwtAuthenticationFilterIntegrationTest {
 
     /**
      * Bearer 토큰을 포함한 GET /accounts/me 요청을 보내고 HTTP 상태 코드를 반환한다.
-     * RestClient는 4xx/5xx 응답에서 기본적으로 예외를 던지므로,
-     * exchange()로 직접 응답 객체를 받아 상태 코드를 추출한다.
+     *
+     * <p>MockMvc를 쓴다 — 검증 대상은 Security 필터 체인(JwtAuthenticationFilter)이고
+     * MockMvc도 그 체인을 그대로 통과시킨다. RANDOM_PORT로 실제 서블릿 컨테이너를 띄우면
+     * 이 클래스만 별도 Spring 컨텍스트를 쓰게 되어 컨텍스트 로딩이 한 번 더 일어난다.
      */
     private HttpStatusCode getMyPageStatus(String accessToken) {
-        AtomicReference<HttpStatusCode> statusRef = new AtomicReference<>();
-        RestClient.create("http://localhost:" + port)
-                .get()
-                .uri("/accounts/me")
-                .header("Authorization", "Bearer " + accessToken)
-                .exchange((request, response) -> {
-                    statusRef.set(response.getStatusCode());
-                    return response.bodyTo(String.class);
-                });
-        return statusRef.get();
+        return request(get("/accounts/me").header("Authorization", "Bearer " + accessToken));
+    }
+
+    private HttpStatusCode request(MockHttpServletRequestBuilder builder) {
+        try {
+            return HttpStatusCode.valueOf(
+                    mockMvc.perform(builder).andReturn().getResponse().getStatus());
+        } catch (Exception e) {
+            throw new IllegalStateException("요청 실행 실패", e);
+        }
     }
 
     private HttpStatusCode getMyPageStatusWithoutToken() {
-        AtomicReference<HttpStatusCode> statusRef = new AtomicReference<>();
-        RestClient.create("http://localhost:" + port)
-                .get()
-                .uri("/accounts/me")
-                .exchange((request, response) -> {
-                    statusRef.set(response.getStatusCode());
-                    return response.bodyTo(String.class);
-                });
-        return statusRef.get();
+        return request(get("/accounts/me"));
     }
 }

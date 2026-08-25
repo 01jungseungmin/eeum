@@ -8,7 +8,6 @@ import java.util.Optional;
 public interface ProductImageRepository extends JpaRepository<ProductImage, Long> {
     List<ProductImage> findByProduct_ProductIdOrderByDisplayOrderAsc(Long productId);
     int countByProduct_ProductId(Long productId);
-    void deleteByProduct_ProductId(Long productId);
     boolean existsByProduct_ProductIdAndIsThumbnailTrue(Long productId);
 
     Optional<ProductImage> findFirstByProduct_ProductIdAndIsThumbnailTrueOrderByDisplayOrderAsc(Long productId);

@@ -7,7 +7,7 @@ import com.eeum.eeum.application.community.dto.response.CommunityPostSummaryResp
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
-import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -56,7 +56,7 @@ class CommunityPostServiceTest {
 
     @Mock private AccountRepository accountRepository;
     @Mock private CategoryRepository categoryRepository;
-    @Mock private AccountRegionRepository accountRegionRepository;
+    @Mock private PrimaryRegionResolver primaryRegionResolver;
 
     // ──────────────────── Helpers ────────────────────
 
@@ -98,11 +98,14 @@ class CommunityPostServiceTest {
         return accountRegion;
     }
 
+    // 대표 지역 판정은 PrimaryRegionResolver에 있다(PrimaryRegionResolverTest에서 검증).
+    // 여기서는 그 결과에 따른 커뮤니티 동작만 본다.
     private void stubVerifiedPrimaryRegion(Long accountId, Long accountRegionId, Account account, Long regionId) {
-        Region region = createRegion(regionId);
-        AccountRegion accountRegion = createAccountRegion(accountRegionId, account, region, true);
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        when(primaryRegionResolver.resolve(any())).thenReturn(createRegion(regionId));
+    }
+
+    private void stubPrimaryRegionFailure(ErrorCode errorCode) {
+        when(primaryRegionResolver.resolve(any())).thenThrow(new BusinessException(errorCode));
     }
 
     // ──────────────────── getPosts ────────────────────
@@ -177,6 +180,7 @@ class CommunityPostServiceTest {
         Long accountId = 1L;
         Account account = createAccount(accountId, null);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
 
         // when & then
         assertThatThrownBy(() -> postService.getPosts(accountId, PageRequest.of(0, 10)))
@@ -195,8 +199,7 @@ class CommunityPostServiceTest {
         Account account = createAccount(accountId, accountRegionId);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.empty());
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
 
         // when & then
         assertThatThrownBy(() -> postService.getPosts(accountId, PageRequest.of(0, 10)))
@@ -213,12 +216,8 @@ class CommunityPostServiceTest {
         Long accountId = 1L;
         Long accountRegionId = 100L;
         Account account = createAccount(accountId, accountRegionId);
-        Region region = createRegion(200L);
-        AccountRegion accountRegion = createAccountRegion(accountRegionId, account, region, false);
-
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        stubPrimaryRegionFailure(ErrorCode.REGION_NOT_VERIFIED);
 
         // when & then
         assertThatThrownBy(() -> postService.getPosts(accountId, PageRequest.of(0, 10)))
@@ -305,7 +304,7 @@ class CommunityPostServiceTest {
     }
 
     @Test
-    void 게시글_상세_조회_다른_지역이면_COMMUNITY_POST_ACCESS_DENIED() {
+    void 게시글_상세_조회_다른_지역이면_없는_글로_응답한다() {
         // given
         Long accountId = 1L;
         Long postId = 10L;
@@ -321,7 +320,7 @@ class CommunityPostServiceTest {
         assertThatThrownBy(() -> postService.getPost(accountId, postId))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
     }
 
     @Test
@@ -333,6 +332,7 @@ class CommunityPostServiceTest {
         CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
 
         // when & then
@@ -355,8 +355,7 @@ class CommunityPostServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        stubPrimaryRegionFailure(ErrorCode.REGION_NOT_VERIFIED);
 
         // when & then
         assertThatThrownBy(() -> postService.getPost(accountId, postId))
@@ -445,6 +444,7 @@ class CommunityPostServiceTest {
         ReflectionTestUtils.setField(request, "categoryId", 1L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(1L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
 
@@ -469,8 +469,7 @@ class CommunityPostServiceTest {
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(1L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(regionId, accountId))
-                .thenReturn(Optional.empty());
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
 
         // when & then
         assertThatThrownBy(() -> postService.createPost(accountId, request))
@@ -495,8 +494,7 @@ class CommunityPostServiceTest {
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(1L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(regionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        stubPrimaryRegionFailure(ErrorCode.REGION_NOT_VERIFIED);
 
         // when & then
         assertThatThrownBy(() -> postService.createPost(accountId, request))
