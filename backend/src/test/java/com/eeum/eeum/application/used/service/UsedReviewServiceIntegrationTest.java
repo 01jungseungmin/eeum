@@ -6,6 +6,8 @@ import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -56,6 +58,7 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
     private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final PlatformTransactionManager transactionManager;
 
     private Long sellerId;
@@ -83,11 +86,15 @@ class UsedReviewServiceIntegrationTest extends IntegrationTestSupport {
         productId = usedProductRepository.saveAndFlush(UsedProduct.create(
                 seller, category, region, "자전거 팝니다", "설명",
                 UsedProductPriceType.FIXED, new BigDecimal("10000"))).getUsedProductId();
+
+        // 구매자로 지정하려면 이 상품으로 문의한 이력이 있어야 한다
+        chatRoomRepository.save(ChatRoom.createPrivateInquiry(buyer, productId));
     }
 
     @AfterEach
     void tearDown() {
         usedReviewRepository.deleteAll();
+        chatRoomRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();

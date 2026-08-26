@@ -7,6 +7,8 @@ import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.application.account.service.AccountWriteGuard;
@@ -56,6 +58,7 @@ public class UsedProductService {
     private final EntityManager entityManager;
     private final AccountRepository accountRepository;
     private final AccountWriteGuard accountWriteGuard;
+    private final ChatRoomRepository chatRoomRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
@@ -252,10 +255,24 @@ public class UsedProductService {
             Long buyerId,
             BiConsumer<UsedProduct, Account> transition
     ) {
-        accountWriteGuard.lockActive(sellerId);
+        // account → used_product 순서. 두 계정은 ID 오름차순으로 잠가
+        // 반대 방향 요청과 교착되지 않게 한다(문의방 생성과 같은 규약).
+        Account buyer = null;
+        if (buyerId == null) {
+            accountWriteGuard.lockActive(sellerId);
+        } else if (sellerId <= buyerId) {
+            accountWriteGuard.lockActive(sellerId);
+            buyer = lockAssignableBuyerOrThrow(buyerId);
+        } else {
+            buyer = lockAssignableBuyerOrThrow(buyerId);
+            accountWriteGuard.lockActive(sellerId);
+        }
+
         UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
 
-        Account buyer = buyerId == null ? null : getAssignableBuyerOrThrow(buyerId);
+        if (buyer != null) {
+            assertInquiredThisProduct(usedProductId, buyerId);
+        }
 
         transition.accept(product, buyer);
 
@@ -299,13 +316,37 @@ public class UsedProductService {
      * <p>구매자 행을 잠그지는 않는다. 여기서 바꾸는 값이 아니고, 판매자 계정에 이어 두 번째
      * 계정 행을 잠그면 서로를 구매자로 지정하는 두 거래가 순환 대기할 수 있다.
      */
-    private Account getAssignableBuyerOrThrow(Long buyerId) {
-        Account buyer = accountRepository.findById(buyerId)
+    /**
+     * 구매자로 지정할 계정을 잠그고 사용 가능 상태를 확인한다.
+     *
+     * <p>잠그는 이유는 상태를 판정하기 때문이다. 잠그지 않으면 확인 직후 탈퇴가 커밋돼
+     * 탈퇴한 계정이 구매자로 확정될 수 있다(문의방 생성의 판매자 잠금과 같은 이유).
+     */
+    private Account lockAssignableBuyerOrThrow(Long buyerId) {
+        Account buyer = accountRepository.findByIdWithLock(buyerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
         if (!buyer.isActive()) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_BUYER);
         }
         return buyer;
+    }
+
+    /**
+     * 이 상품으로 문의한 적이 있는 상대만 구매자로 지정할 수 있다.
+     *
+     * <p>존재하는 계정이기만 하면 지정할 수 있으면, 판매자가 아무 계정이나 구매자로 세워
+     * 후기 작성 권한과 판매완료 알림을 줄 수 있다. 지목당한 사람은 하지도 않은 거래의
+     * 후기 요청을 받는다.
+     *
+     * <p>실패 사유를 계정 상태와 구분하지 않는다 — 구분하면 판매자가 임의의 계정 ID로
+     * 다른 사용자의 상태를 떠볼 수 있다.
+     */
+    private void assertInquiredThisProduct(Long usedProductId, Long buyerId) {
+        boolean inquired = chatRoomRepository.existsByRefTypeAndRefIdAndBuyerAccountId(
+                ChatRoomRefType.USED_PRODUCT, usedProductId, buyerId);
+        if (!inquired) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+        }
     }
 
     // ===================== 내부 헬퍼 =====================

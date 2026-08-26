@@ -4,6 +4,9 @@ import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -50,6 +53,7 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
     private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final ChatRoomRepository chatRoomRepository;
 
     private Long sellerId;
     private Long buyerId;
@@ -76,10 +80,14 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
         productId = usedProductRepository.saveAndFlush(UsedProduct.create(
                 seller, category, region, "자전거 팝니다", "설명",
                 UsedProductPriceType.FIXED, new BigDecimal("10000"))).getUsedProductId();
+
+        // 구매자로 지정하려면 이 상품으로 문의한 이력이 있어야 한다
+        chatRoomRepository.save(ChatRoom.createPrivateInquiry(buyer, productId));
     }
 
     @AfterEach
     void tearDown() {
+        chatRoomRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
@@ -242,5 +250,50 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
 
     private UsedProduct product() {
         return usedProductRepository.findById(productId).orElseThrow();
+    }
+
+    // ===================== 구매자 지정 자격 =====================
+
+    @Test
+    void 문의한_적_없는_계정은_구매자로_지정할_수_없다() {
+        // Given: strangerId는 이 상품으로 문의한 이력이 없다.
+        //        존재 여부만 봤을 때는 판매자가 아무 계정이나 세워 후기 권한과 알림을 줄 수 있었다.
+
+        // When & Then
+        assertThatThrownBy(() -> usedProductService.markSold(sellerId, productId, strangerId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getStatus())
+                .isEqualTo(UsedProductStatus.SELLING);
+    }
+
+    @Test
+    void 문의한_적_없는_계정은_예약_상대로도_지정할_수_없다() {
+        // When & Then
+        assertThatThrownBy(() -> usedProductService.reserve(sellerId, productId, strangerId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+    }
+
+    @Test
+    void 문의_후_방을_나가도_구매자로_지정할_수_있다() {
+        // Given: PRIVATE 문의방은 한쪽이 나가면 종료된다.
+        //        활성 방만 세면 거래를 마치고 방을 나간 상대를 지정할 수 없게 된다.
+        ChatRoom room = chatRoomRepository
+                .findFirstByRefTypeAndRefIdAndBuyerAccountIdAndIsActiveTrueOrderByChatroomIdDesc(
+                        ChatRoomRefType.USED_PRODUCT, productId, buyerId)
+                .orElseThrow();
+        room.deactivate();
+        chatRoomRepository.saveAndFlush(room);
+
+        // When
+        usedProductService.markSold(sellerId, productId, buyerId);
+
+        // Then
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getStatus())
+                .isEqualTo(UsedProductStatus.SOLD);
     }
 }

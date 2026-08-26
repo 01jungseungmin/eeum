@@ -5,6 +5,8 @@ import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -53,6 +55,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
     private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final ChatRoomRepository chatRoomRepository;
 
     private Long sellerId;
     private Long buyerId;
@@ -82,6 +85,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
     @AfterEach
     void tearDown() {
         usedReviewRepository.deleteAll();
+        chatRoomRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
@@ -281,10 +285,17 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
 
     // 판매완료 + 구매자 지정까지 끝난 게시글
     private Long soldProduct(String title) {
+        return soldProductFor(buyerId, title);
+    }
+
+    // 구매자 지정은 이 상품으로 문의한 적이 있는 상대만 가능하다 — 문의 이력을 함께 만든다.
+    private Long soldProductFor(Long designatedBuyerId, String title) {
         Long productId = usedProductRepository.saveAndFlush(UsedProduct.create(
                 seller, category, region, title, "설명",
                 UsedProductPriceType.FIXED, new BigDecimal("10000"))).getUsedProductId();
-        usedProductService.markSold(sellerId, productId, buyerId);
+        Account designatedBuyer = accountRepository.findById(designatedBuyerId).orElseThrow();
+        chatRoomRepository.save(ChatRoom.createPrivateInquiry(designatedBuyer, productId));
+        usedProductService.markSold(sellerId, productId, designatedBuyerId);
         return productId;
     }
 
@@ -293,10 +304,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
     }
 
     private Long writeReviewBy(Long reviewerId, String title, int rating, String content) {
-        Long productId = usedProductRepository.saveAndFlush(UsedProduct.create(
-                seller, category, region, title, "설명",
-                UsedProductPriceType.FIXED, new BigDecimal("10000"))).getUsedProductId();
-        usedProductService.markSold(sellerId, productId, reviewerId);
+        Long productId = soldProductFor(reviewerId, title);
         return usedReviewService.create(reviewerId, productId, request(rating, content))
                 .getUsedReviewId();
     }
