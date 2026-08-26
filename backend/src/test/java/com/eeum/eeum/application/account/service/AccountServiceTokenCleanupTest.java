@@ -77,8 +77,8 @@ class AccountServiceTokenCleanupTest {
 
         // then: tokenService 직접 호출 없이 이벤트만 발행
         verify(account).changePassword("encodedNew");
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
+        verify(tokenService, never()).deleteReAuthToken(any());
         verify(tokenService, never()).deleteRefreshToken(any());
     }
 
@@ -127,7 +127,7 @@ class AccountServiceTokenCleanupTest {
     // ─────────────────── withdraw ───────────────────
 
     @Test
-    void withdraw_성공_시_이벤트로_reAuth_refresh_토큰_정리() {
+    void withdraw_성공_시_이벤트로_refresh_토큰_정리() {
         // given
         Long accountId = 1L;
         Account account = givenActiveAccount(accountId);
@@ -136,8 +136,8 @@ class AccountServiceTokenCleanupTest {
         accountService.withdraw(accountId, withdrawRequest());
 
         // then
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
+        verify(tokenService, never()).deleteReAuthToken(any());
         verify(tokenService, never()).deleteRefreshToken(any());
     }
 
@@ -154,7 +154,7 @@ class AccountServiceTokenCleanupTest {
         // then — 토큰 정리 이벤트는 뒷정리가 끝난 뒤에 발행돼야 롤백 시 토큰이 살아남는다
         InOrder inOrder = inOrder(accountWithdrawalProcessor, eventPublisher);
         inOrder.verify(accountWithdrawalProcessor).process(account);
-        inOrder.verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
+        inOrder.verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
     }
 
     @Test
@@ -211,7 +211,7 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("invalid-reauth");
 
         doThrow(new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN))
-                .when(tokenService).validateReAuthToken(accountId, "invalid-reauth");
+                .when(tokenService).consumeReAuthToken(accountId, "invalid-reauth");
 
         // when & then
         assertThatThrownBy(() -> accountService.changePassword(accountId, request))
@@ -253,7 +253,7 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("invalid-reauth");
 
         doThrow(new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN))
-                .when(tokenService).validateReAuthToken(accountId, "invalid-reauth");
+                .when(tokenService).consumeReAuthToken(accountId, "invalid-reauth");
 
         // when & then
         assertThatThrownBy(() -> accountService.withdraw(accountId, request))

@@ -91,7 +91,7 @@ public class AccountService {
     public void changePassword(Long accountId, ChangePasswordRequestDto request) {
         // 1. ReAuth 토큰 검증
         // TokenService 내부에서 현재 accountId와 토큰 accountId 일치 여부까지 확인
-        tokenService.validateReAuthToken(accountId, request.getReAuthToken());
+        tokenService.consumeReAuthToken(accountId, request.getReAuthToken());
 
         Account account = getActiveAccount(accountId);
 
@@ -110,7 +110,7 @@ public class AccountService {
 
         // 5. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 reauth/refresh 토큰이 유지되어 사용자가 재시도 가능
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
 
         log.info("비밀번호 변경 완료: accountId={}", accountId);
     }
@@ -120,7 +120,7 @@ public class AccountService {
     @Transactional
     public void withdraw(Long accountId, WithdrawRequestDto request) {
         // 1. ReAuth 토큰 검증
-        tokenService.validateReAuthToken(accountId, request.getReAuthToken());
+        tokenService.consumeReAuthToken(accountId, request.getReAuthToken());
 
         // 2. 활성 회원 조회 — 탈퇴는 계정 행을 잠근다.
         // 잠그지 않으면 탈퇴 정리(찜 삭제·카운트 감소)와 같은 사용자의 다른 쓰기 요청이 겹쳐
@@ -133,7 +133,7 @@ public class AccountService {
 
         // 4. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 계정은 ACTIVE 상태이고 토큰도 유지
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
 
         log.info("회원 탈퇴 처리 완료: accountId={}", accountId);
     }

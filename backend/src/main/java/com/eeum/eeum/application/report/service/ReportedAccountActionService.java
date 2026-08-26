@@ -47,7 +47,8 @@ public class ReportedAccountActionService {
         accountSanctionPolicy.validateSuspendable(account);
 
         account.suspend();
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
+        // 직접 정지 API와 같은 범위로 회수한다 — 한쪽만 Refresh만 지우면 경로에 따라 구멍이 생긴다
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.allTokens(accountId));
         return accountId;
     }
 }

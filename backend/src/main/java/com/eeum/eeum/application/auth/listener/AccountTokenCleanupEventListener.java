@@ -26,7 +26,7 @@ public class AccountTokenCleanupEventListener {
                 tokenService.deleteRefreshToken(event.accountId());
             }
             if (event.consumeReAuthToken() && event.accountId() != null) {
-                tokenService.consumeReAuthToken(event.accountId());
+                tokenService.deleteReAuthToken(event.accountId());
             }
             if (event.deletePasswordResetToken() && event.accountId() != null) {
                 tokenService.deletePasswordResetToken(event.accountId());

@@ -72,7 +72,8 @@ class ReportedAccountActionServiceTest {
         assertThat(result).isEqualTo(ACCOUNT_ID);
         assertThat(account.getStatus()).isEqualTo(AccountStatus.SUSPENDED);
         verify(accountRepository, never()).findById(ACCOUNT_ID);
-        verify(eventPublisher).publishEvent(isA(AccountTokenCleanupEvent.class));
+        // 직접 정지 API와 같은 범위로 회수해야 한다 — 한쪽만 Refresh만 지우면 경로에 따라 구멍이 생긴다
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.allTokens(ACCOUNT_ID));
     }
 
     @Test
