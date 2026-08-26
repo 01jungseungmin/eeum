@@ -19,12 +19,16 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,9 +63,21 @@ class StompAuthChannelInterceptorTest {
     }
 
     private StompHeaderAccessor sendAccessor(Long roomId) {
+        return sendTo("/pub/chat/rooms/" + roomId + "/messages");
+    }
+
+    private StompHeaderAccessor sendTo(String destination) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         accessor.setLeaveMutable(true);
-        accessor.setDestination("/pub/chat/rooms/" + roomId + "/messages");
+        accessor.setDestination(destination);
+        accessor.setUser(new StompPrincipal(ACCOUNT_ID));
+        return accessor;
+    }
+
+    private StompHeaderAccessor subscribeTo(String destination) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        accessor.setLeaveMutable(true);
+        accessor.setDestination(destination);
         accessor.setUser(new StompPrincipal(ACCOUNT_ID));
         return accessor;
     }
@@ -135,6 +151,80 @@ class StompAuthChannelInterceptorTest {
         verify(accountWriteGuard, never()).assertUsableWithoutLock(anyLong());
     }
 
+    // ===================== SUBSCRIBE destination 화이트리스트 =====================
+    // 브로커가 SimpleBroker(/sub) + AntPathMatcher라, 형식이 안 맞는 destination을 "검증 대상 아님"으로
+    // 통과시키면 와일드카드 구독이 모든 방의 메시지를 받는다.
+
+    @Test
+    void 와일드카드_구독은_참여자_검증_없이_거부된다() {
+        // Given: /sub/chat/rooms/** 는 브로커가 모든 방 메시지에 매칭시킨다
+        StompHeaderAccessor accessor = subscribeTo("/sub/chat/rooms/**");
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verifyNoInteractions(chatAccessHelper);
+    }
+
+    @Test
+    void 상위_와일드카드_구독도_거부된다() {
+        // Given
+        StompHeaderAccessor accessor = subscribeTo("/sub/**");
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verifyNoInteractions(chatAccessHelper);
+    }
+
+    @Test
+    void 단일_레벨_와일드카드_구독도_거부된다() {
+        // Given: AntPathMatcher는 *도 한 세그먼트에 매칭한다
+        StompHeaderAccessor accessor = subscribeTo("/sub/chat/rooms/*");
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verifyNoInteractions(chatAccessHelper);
+    }
+
+    @Test
+    void 채팅방_구독과_하위_경로는_모두_참여자_검증을_거친다() {
+        // Given & When & Then
+        for (String destination : List.of(
+                "/sub/chat/rooms/10",
+                "/sub/chat/rooms/10/read",
+                "/sub/chat/rooms/10/typing",
+                "/sub/chat/rooms/10/closed")) {
+            assertThatCode(() -> interceptor.preSend(toMessage(subscribeTo(destination)), channel))
+                    .as(destination)
+                    .doesNotThrowAnyException();
+        }
+        verify(chatAccessHelper, times(4)).verifyActiveRoomParticipant(ACCOUNT_ID, 10L);
+    }
+
+    @Test
+    void 개인_오류_채널_구독은_방_검증_없이_허용된다() {
+        // Given: @SendToUser("/sub/errors") 수신용 — UserDestination이 세션별로 분리한다
+        StompHeaderAccessor accessor = subscribeTo("/user/sub/errors");
+
+        // When & Then
+        assertThatCode(() -> interceptor.preSend(toMessage(accessor), channel))
+                .doesNotThrowAnyException();
+        verifyNoInteractions(chatAccessHelper);
+    }
+
+    @Test
+    void 참여하지_않은_방은_구독할_수_없다() {
+        // Given
+        doThrow(new ForbiddenException(ErrorCode.CHAT_NOT_PARTICIPANT))
+                .when(chatAccessHelper).verifyActiveRoomParticipant(ACCOUNT_ID, 10L);
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(subscribeTo("/sub/chat/rooms/10")), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+    }
+
     // ===================== SEND =====================
 
     @Test
@@ -159,6 +249,44 @@ class StompAuthChannelInterceptorTest {
         assertThatCode(() -> interceptor.preSend(toMessage(sendAccessor(roomId)), channel))
                 .doesNotThrowAnyException();
         verify(chatAccessHelper).verifyActiveRoomParticipant(ACCOUNT_ID, roomId);
+    }
+
+    @Test
+    void 브로커_destination으로_직접_발행할_수_없다() {
+        // Given: /sub은 브로커 destination이라 SEND하면 구독자에게 그대로 중계된다.
+        //        /pub 접두사만 검사하고 나머지를 통과시키면 임의의 방에 위조 메시지를 넣을 수 있다.
+        StompHeaderAccessor accessor = sendTo("/sub/chat/rooms/10");
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verifyNoInteractions(chatAccessHelper);
+    }
+
+    @Test
+    void 알_수_없는_발행_경로는_거부된다() {
+        // Given
+        StompHeaderAccessor accessor = sendTo("/pub/chat/rooms/10/unknown");
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verifyNoInteractions(chatAccessHelper);
+    }
+
+    @Test
+    void 허용된_발행_경로는_모두_참여자_검증을_거친다() {
+        // Given & When & Then
+        for (String destination : List.of(
+                "/pub/chat/rooms/10/messages",
+                "/pub/chat/rooms/10/messages/image",
+                "/pub/chat/rooms/10/read",
+                "/pub/chat/rooms/10/typing")) {
+            assertThatCode(() -> interceptor.preSend(toMessage(sendTo(destination)), channel))
+                    .as(destination)
+                    .doesNotThrowAnyException();
+        }
+        verify(chatAccessHelper, times(4)).verifyActiveRoomParticipant(ACCOUNT_ID, 10L);
     }
 
     @Test

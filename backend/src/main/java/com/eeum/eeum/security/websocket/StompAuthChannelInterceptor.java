@@ -16,14 +16,38 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String CHAT_ROOM_SUBSCRIBE_PREFIX = "/sub/chat/rooms/";
-    private static final String CHAT_ROOM_SEND_PREFIX = "/pub/chat/rooms/";
+
+    /**
+     * 허용 destination 화이트리스트.
+     *
+     * <p>브로커가 {@code enableSimpleBroker("/sub")}이고 Spring의 구독 매칭은 AntPathMatcher다.
+     * 그래서 {@code /sub/chat/rooms/**}를 구독하면 <b>모든 방의 메시지를 받는다</b>.
+     * 접두사만 보고 형식이 안 맞으면 통과시키는 방식은 이 구독을 검증 없이 흘려보낸다 —
+     * 반드시 전체 일치로 판정하고, 목록에 없는 destination은 거부해야 한다.
+     *
+     * <p>SEND도 같은 이유로 {@code /pub}만 허용한다. {@code /sub}는 브로커 destination이라
+     * 클라이언트가 직접 SEND하면 브로커가 그대로 구독자에게 중계한다(위조 메시지 주입).
+     *
+     * <p>새 destination을 추가하면 이 패턴도 함께 넓혀야 한다. 넓히지 않으면 조용히 실패하는 대신
+     * 거부되므로 누락을 바로 알 수 있다.
+     */
+    private static final Pattern CHAT_ROOM_SUBSCRIBE_DESTINATION =
+            Pattern.compile("/sub/chat/rooms/(\\d{1,18})(?:/(?:read|typing|closed))?");
+
+    private static final Pattern CHAT_ROOM_SEND_DESTINATION =
+            Pattern.compile("/pub/chat/rooms/(\\d{1,18})/(?:messages|messages/image|read|typing)");
+
+    // @SendToUser("/sub/errors") 수신용. UserDestination이 세션별로 분리하므로 방 검증 대상이 아니다.
+    private static final String USER_ERROR_DESTINATION = "/user/sub/errors";
 
     private final JwtProvider jwtProvider;
     private final TokenService tokenService;
@@ -72,11 +96,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         log.debug("WebSocket 인증 성공: accountId={}", accountId);
     }
 
-    // SUBSCRIBE: /sub/chat/rooms/{roomId} 구독 시 참여자 검증
+    // SUBSCRIBE: 허용 destination인지 먼저 판정하고, 채팅방 구독이면 참여자를 검증한다
     private void handleSubscribe(StompHeaderAccessor accessor) {
-        Long roomId = extractSubscribeRoomId(accessor.getDestination());
+        String destination = accessor.getDestination();
+
+        if (USER_ERROR_DESTINATION.equals(destination)) {
+            return; // 본인 세션 전용 오류 채널
+        }
+
+        Long roomId = matchRoomId(CHAT_ROOM_SUBSCRIBE_DESTINATION, destination);
         if (roomId == null) {
-            return; // 채팅방 외 destination은 검증 대상 아님
+            // 와일드카드(/sub/chat/rooms/**)나 알 수 없는 경로. 통과시키면 브로커가 매칭해버린다.
+            log.warn("허용되지 않은 구독 destination 거부: {}", destination);
+            throw new MessageDeliveryException("허용되지 않은 구독 destination입니다.");
         }
 
         Long accountId = resolveAccountId(accessor);
@@ -91,11 +123,15 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
     }
 
-    // SEND: /pub/chat/rooms/{roomId}/... 발행 시 참여자 검증 (서비스 레이어 검증의 앞단 방어)
+    // SEND: 허용 destination인지 먼저 판정한다.
+    // /sub으로 직접 SEND하면 브로커가 구독자에게 그대로 중계하므로 /pub 외에는 전부 거부한다.
     private void handleSend(StompHeaderAccessor accessor) {
-        Long roomId = extractSendRoomId(accessor.getDestination());
+        String destination = accessor.getDestination();
+
+        Long roomId = matchRoomId(CHAT_ROOM_SEND_DESTINATION, destination);
         if (roomId == null) {
-            return;
+            log.warn("허용되지 않은 발행 destination 거부: {}", destination);
+            throw new MessageDeliveryException("허용되지 않은 발행 destination입니다.");
         }
 
         Long accountId = resolveAccountId(accessor);
@@ -135,34 +171,20 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         return Long.parseLong(accessor.getUser().getName());
     }
 
-    // /sub/chat/rooms/{roomId} — suffix 없는 정확한 형식만 허용 (읽기/타이핑 sub-path 제외)
-    private Long extractSubscribeRoomId(String destination) {
-        if (destination == null || !destination.startsWith(CHAT_ROOM_SUBSCRIBE_PREFIX)) {
+    /**
+     * destination이 패턴과 <b>전체 일치</b>할 때만 roomId를 돌려준다. 아니면 null.
+     *
+     * <p>부분 일치나 접두사 검사로 바꾸면 안 된다 — 뒤에 무엇이 붙든 통과하게 되고,
+     * 그게 이 클래스가 막으려는 와일드카드 구독이다.
+     */
+    private Long matchRoomId(Pattern pattern, String destination) {
+        if (destination == null) {
             return null;
         }
-        String suffix = destination.substring(CHAT_ROOM_SUBSCRIBE_PREFIX.length());
-        // /sub/chat/rooms/{roomId}/typing 등 서브 경로는 상위 roomId 구독으로 허용
-        int slashIdx = suffix.indexOf('/');
-        String roomIdStr = slashIdx >= 0 ? suffix.substring(0, slashIdx) : suffix;
-        try {
-            return Long.parseLong(roomIdStr);
-        } catch (NumberFormatException e) {
+        Matcher matcher = pattern.matcher(destination);
+        if (!matcher.matches()) {
             return null;
         }
-    }
-
-    // /pub/chat/rooms/{roomId}/... — roomId 뒤에 action suffix가 붙는 SEND 경로
-    private Long extractSendRoomId(String destination) {
-        if (destination == null || !destination.startsWith(CHAT_ROOM_SEND_PREFIX)) {
-            return null;
-        }
-        String suffix = destination.substring(CHAT_ROOM_SEND_PREFIX.length());
-        int slashIdx = suffix.indexOf('/');
-        String roomIdStr = slashIdx >= 0 ? suffix.substring(0, slashIdx) : suffix;
-        try {
-            return Long.parseLong(roomIdStr);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        return Long.parseLong(matcher.group(1));
     }
 }
