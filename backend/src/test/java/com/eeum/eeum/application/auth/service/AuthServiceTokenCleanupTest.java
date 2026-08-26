@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.auth.service;
 
 import com.eeum.eeum.application.auth.dto.request.PasswordNewRequestDto;
+import com.eeum.eeum.application.auth.dto.request.PasswordResetRequestDto;
 import com.eeum.eeum.application.auth.dto.request.ReissueRequestDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -17,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.eeum.eeum.application.auth.dto.request.ReAuthRequestDto;
 
@@ -72,7 +74,7 @@ class AuthServiceTokenCleanupTest {
         when(request.getNewPasswordConfirm()).thenReturn(newPassword);
         when(request.getPasswordResetToken()).thenReturn(resetToken);
 
-        when(tokenService.validatePasswordResetToken(resetToken)).thenReturn(accountId);
+        when(tokenService.consumePasswordResetToken(resetToken)).thenReturn(accountId);
 
         Account account = mock(Account.class);
         when(account.isOAuthAccount()).thenReturn(false);
@@ -84,7 +86,7 @@ class AuthServiceTokenCleanupTest {
 
         // then: tokenService 직접 호출 없이 이벤트만 발행
         verify(account).changePassword("encoded");
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.passwordResetAndRefresh(accountId));
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
         verify(tokenService, never()).deleteRefreshToken(any());
         verify(tokenService, never()).deletePasswordResetToken(any());
     }
@@ -96,7 +98,7 @@ class AuthServiceTokenCleanupTest {
         when(request.getNewPassword()).thenReturn("pass");
         when(request.getNewPasswordConfirm()).thenReturn("pass");
         when(request.getPasswordResetToken()).thenReturn("token");
-        when(tokenService.validatePasswordResetToken("token")).thenReturn(99L);
+        when(tokenService.consumePasswordResetToken("token")).thenReturn(99L);
         when(accountRepository.findById(99L)).thenReturn(Optional.empty());
 
         // when & then
@@ -117,7 +119,7 @@ class AuthServiceTokenCleanupTest {
         when(request.getNewPassword()).thenReturn("pass");
         when(request.getNewPasswordConfirm()).thenReturn("pass");
         when(request.getPasswordResetToken()).thenReturn("token");
-        when(tokenService.validatePasswordResetToken("token")).thenReturn(accountId);
+        when(tokenService.consumePasswordResetToken("token")).thenReturn(accountId);
 
         Account account = mock(Account.class);
         when(account.isOAuthAccount()).thenReturn(true);
@@ -127,6 +129,98 @@ class AuthServiceTokenCleanupTest {
         assertThatThrownBy(() -> authService.resetPassword(request))
                 .isInstanceOf(BusinessException.class);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // ─────────────────── 비밀번호 재설정 계정 상태 ───────────────────
+    // 정지·탈퇴 계정은 재설정해도 로그인할 수 없고, 탈퇴 취소는 관리자만 할 수 있어
+    // 비밀번호를 되찾아야 할 이유가 없다. 상태를 보지 않으면 익명화 전(30일) 탈퇴자 수신함으로
+    // 재설정 메일이 실제로 도착한다.
+
+    private Account realAccount() {
+        Account account = Account.createUser(
+                "user@test.com", "encoded-pw", "홍길동", "nick", "010-0000-0000");
+        ReflectionTestUtils.setField(account, "accountId", 1L);
+        return account;
+    }
+
+    private PasswordNewRequestDto resetRequest() {
+        PasswordNewRequestDto request = mock(PasswordNewRequestDto.class);
+        when(request.getNewPassword()).thenReturn("NewPass123!");
+        when(request.getNewPasswordConfirm()).thenReturn("NewPass123!");
+        when(request.getPasswordResetToken()).thenReturn("token");
+        return request;
+    }
+
+    @Test
+    void resetPassword_정지된_계정은_비밀번호가_변경되지_않는다() {
+        // given
+        Account account = realAccount();
+        account.suspend();
+        when(tokenService.consumePasswordResetToken("token")).thenReturn(1L);
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+
+        // when & then
+        assertThatThrownBy(() -> authService.resetPassword(resetRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_SUSPENDED);
+
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void resetPassword_탈퇴한_계정은_비밀번호가_변경되지_않는다() {
+        // given: 발송 시점에 활성이었어도 토큰 유효 시간 안에 탈퇴할 수 있어 여기서 다시 본다
+        Account account = realAccount();
+        account.withdraw();
+        when(tokenService.consumePasswordResetToken("token")).thenReturn(1L);
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+
+        // when & then
+        assertThatThrownBy(() -> authService.resetPassword(resetRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
+
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void sendPasswordResetEmail_정지된_계정에는_메일을_보내지_않는다() {
+        // given
+        Account account = realAccount();
+        account.suspend();
+        PasswordResetRequestDto request = mock(PasswordResetRequestDto.class);
+        when(request.getEmail()).thenReturn("user@test.com");
+        when(accountRepository.findByEmail("user@test.com")).thenReturn(Optional.of(account));
+
+        // when & then
+        assertThatThrownBy(() -> authService.sendPasswordResetEmail(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_SUSPENDED);
+
+        verify(emailService, never()).sendPasswordResetEmail(anyString());
+    }
+
+    @Test
+    void sendPasswordResetEmail_탈퇴한_계정에는_메일을_보내지_않는다() {
+        // given: 익명화(30일) 전이면 email이 그대로 남아 있어 실제 수신함으로 발송된다
+        Account account = realAccount();
+        account.withdraw();
+        PasswordResetRequestDto request = mock(PasswordResetRequestDto.class);
+        when(request.getEmail()).thenReturn("user@test.com");
+        when(accountRepository.findByEmail("user@test.com")).thenReturn(Optional.of(account));
+
+        // when & then
+        assertThatThrownBy(() -> authService.sendPasswordResetEmail(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
+
+        verify(emailService, never()).sendPasswordResetEmail(anyString());
     }
 
     // ─────────────────── reissue (Redis Lock) ───────────────────
@@ -360,8 +454,8 @@ class AuthServiceTokenCleanupTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_INVALID_PASSWORD);
 
-        // 비밀번호 검증 실패 → validatePasswordResetToken 미호출 → 이벤트 미발행
-        verify(tokenService, never()).validatePasswordResetToken(any());
+        // 비밀번호 검증 실패 → consumePasswordResetToken 미호출 → 이벤트 미발행
+        verify(tokenService, never()).consumePasswordResetToken(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 }

@@ -386,6 +386,11 @@ public class AuthService {
         Account account = accountRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
+        // 정지·탈퇴 계정은 재설정해도 로그인할 수 없다. 탈퇴 취소는 관리자만 할 수 있어
+        // 비밀번호를 되찾아야 할 이유도 없다. 익명화 전(30일)이면 메일이 실제 수신함에 도착하므로
+        // 발송 단계에서 막는다.
+        account.assertWritable();
+
         // OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
         if (account.isOAuthAccount()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
@@ -414,23 +419,28 @@ public class AuthService {
         // - type == PASSWORD_RESET
         // - Redis 저장값과 일치 여부 확인
         // - 검증 성공 시 Redis에서 삭제
-        Long accountId = tokenService.validatePasswordResetToken(request.getPasswordResetToken());
+        Long accountId = tokenService.consumePasswordResetToken(request.getPasswordResetToken());
 
         // 3. 회원 조회
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        // 4. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
+        // 4. 정지·탈퇴 계정은 비밀번호를 바꿔주지 않는다.
+        //    발송 시점에는 활성이었어도 토큰 유효 시간 안에 정지될 수 있어 여기서 다시 본다.
+        account.assertWritable();
+
+        // 5. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
         if (account.isOAuthAccount()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
 
-        // 5. 비밀번호 변경
+        // 6. 비밀번호 변경
         account.changePassword(passwordEncoder.encode(request.getNewPassword()));
 
-        // 6. DB 커밋 성공 후 Refresh Token + Password Reset Token 삭제
-        // DB 롤백 시 password-reset token이 유지되어 재시도 가능
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.passwordResetAndRefresh(accountId));
+        // 7. DB 커밋 성공 후 Refresh Token 삭제 — 기존 세션을 끊어 새 비밀번호로 다시 로그인하게 한다.
+        // Password Reset Token은 2번에서 이미 소비됐다. 롤백돼도 되살아나지 않으므로
+        // 재설정이 실패하면 메일을 다시 받아야 한다 — 일회용 보장을 위해 감수한 대가다.
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
 
         log.info("비밀번호 재설정 완료: accountId={}", accountId);
     }
