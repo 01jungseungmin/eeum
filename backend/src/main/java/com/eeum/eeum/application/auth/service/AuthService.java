@@ -409,7 +409,9 @@ public class AuthService {
     @Transactional
     public void resetPassword(PasswordNewRequestDto request) {
 
-        // 1. 비밀번호가 다른지 검증
+        // 1. 비밀번호가 다른지 검증 — 반드시 토큰 소비(2번)보다 앞에 있어야 한다.
+        //    뒤로 옮기면 확인란 오타 한 번에 재설정 토큰이 소비돼 사용자가 메일부터 다시 받아야 한다.
+        //    형식 위반(8자·영문·숫자·특수문자)은 컨트롤러 @Valid가 서비스 진입 전에 거른다.
         if (!request.getNewPassword().equals(request.getNewPasswordConfirm())) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }

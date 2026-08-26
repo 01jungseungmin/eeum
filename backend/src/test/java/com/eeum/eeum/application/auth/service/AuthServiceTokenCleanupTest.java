@@ -454,7 +454,8 @@ class AuthServiceTokenCleanupTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_INVALID_PASSWORD);
 
-        // 비밀번호 검증 실패 → consumePasswordResetToken 미호출 → 이벤트 미발행
+        // 확인란 오타로 토큰이 소비되면 사용자가 재설정 메일부터 다시 받아야 한다.
+        // 토큰은 검증과 동시에 소비되므로(일회용 보장) 이 검사가 그 앞에 있어야만 성립한다.
         verify(tokenService, never()).consumePasswordResetToken(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
