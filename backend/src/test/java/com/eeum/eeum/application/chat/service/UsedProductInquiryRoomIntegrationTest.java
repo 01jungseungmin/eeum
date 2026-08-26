@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.chat.dto.response.ChatParticipantResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatRoomDetailResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
@@ -304,6 +306,26 @@ class UsedProductInquiryRoomIntegrationTest extends IntegrationTestSupport {
                 .isInstanceOf(BadRequestException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CHAT_ROOM_INACTIVE);
+    }
+
+    // ===================== 표시명 =====================
+
+    @Test
+    void 문의방_참여자_응답에_실명이_들어가지_않는다() {
+        // Given: Account.name은 실명이다. 중고 문의는 모르는 사람과 연결되는 첫 경로라
+        //        여기서 실명이 나가면 게시글에 문의 한 번 거는 것만으로 상대 실명을 알 수 있다.
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+        Account sellerAccount = accountRepository.findById(sellerId).orElseThrow();
+
+        // When
+        ChatRoomDetailResponseDto detail = chatRoomService.getRoomDetail(buyerId, roomId);
+
+        // Then
+        assertThat(detail.getParticipants())
+                .extracting(ChatParticipantResponseDto::getName)
+                .doesNotContain(sellerAccount.getName())
+                .contains(sellerAccount.getNickname());
+        assertThat(sellerAccount.getName()).isNotEqualTo(sellerAccount.getNickname());
     }
 
     private List<Long> roomIds(Long accountId, boolean includeClosed) {

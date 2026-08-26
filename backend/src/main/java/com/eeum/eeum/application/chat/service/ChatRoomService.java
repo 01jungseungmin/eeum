@@ -241,7 +241,7 @@ public class ChatRoomService {
             }
 
             saveAndBroadcastSystemMessage(room, creator,
-                    String.format("%s님이 채팅방을 개설했습니다.", creator.getName()));
+                    String.format("%s님이 채팅방을 개설했습니다.", creator.getDisplayName()));
             log.info("그룹 채팅방 생성: roomId={}, creator={}, 초대={}명",
                     room.getChatroomId(), accountId, invitees.size());
             return toResponseDto(room, accountId);
@@ -351,7 +351,7 @@ public class ChatRoomService {
             }
 
             saveAndBroadcastSystemMessage(room, account,
-                    String.format("%s님이 입장했습니다.", account.getName()));
+                    String.format("%s님이 입장했습니다.", account.getDisplayName()));
             eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
             log.info("채팅방 직접 입장: roomId={}, accountId={}", roomId, accountId);
         });
@@ -386,10 +386,10 @@ public class ChatRoomService {
                         .orElse(null);
                 if (existing == null) {
                     saveParticipantOrThrowOnDuplicate(room, invitee);
-                    joinedNames.add(invitee.getName());
+                    joinedNames.add(invitee.getDisplayName());
                 } else if (!existing.isActive()) {
                     existing.rejoin();
-                    joinedNames.add(invitee.getName());
+                    joinedNames.add(invitee.getDisplayName());
                 }
             }
 
@@ -426,7 +426,7 @@ public class ChatRoomService {
             if (room.getType() == ChatRoomType.PRIVATE) {
                 chatAccessHelper.verifyRoomActive(room);
                 eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
-                String actorName = participant.getAccount().getName();
+                String actorName = participant.getAccount().getDisplayName();
                 closeRoomInternal(roomId, () -> getAccount(accountId), accountId,
                         String.format("%s님이 나갔습니다.", actorName));
                 log.info("PRIVATE 문의방 퇴장 → 방 종료: roomId={}, accountId={}", roomId, accountId);
@@ -438,7 +438,7 @@ public class ChatRoomService {
 
             Account actor = participant.getAccount();
             saveAndBroadcastSystemMessage(room, actor,
-                    String.format("%s님이 나갔습니다.", actor.getName()));
+                    String.format("%s님이 나갔습니다.", actor.getDisplayName()));
 
             long activeCount = chatParticipantRepository
                     .countByChatRoom_ChatroomIdAndStatus(roomId, ParticipantStatus.ACTIVE);
@@ -577,7 +577,8 @@ public class ChatRoomService {
     @Transactional(readOnly = true)
     public String verifyParticipantAndGetNickname(Long accountId, Long roomId) {
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
-        return participant.getAccount().getNickname();
+        // 표시명 경로를 한 곳으로 모은다 — nickname이 비어도 null이 나가지 않는다
+        return participant.getAccount().getDisplayName();
     }
 
     // ===================== 내부 헬퍼 =====================

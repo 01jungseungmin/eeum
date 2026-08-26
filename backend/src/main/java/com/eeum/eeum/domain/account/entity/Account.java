@@ -274,6 +274,19 @@ public class Account extends BaseEntity {
         this.status.assertWritable();
     }
 
+    /**
+     * 화면 표시용 이름.
+     *
+     * <p>{@code name}은 실명이다. <b>상대에게 보이는 자리에는 반드시 이 값을 쓴다.</b>
+     * 중고거래 1:1 문의처럼 모르는 사람과 연결되는 경로에서 실명이 그대로 노출된다.
+     *
+     * <p>{@code nickname}은 UNIQUE이고 익명화({@link #anonymize()}) 시에도 채워지므로
+     * 식별자로 충분하다. 컬럼이 nullable이라 안전망만 둔다.
+     */
+    public String getDisplayName() {
+        return this.nickname != null ? this.nickname : "사용자" + this.accountId;
+    }
+
     public boolean isActive() {
         return this.status == AccountStatus.ACTIVE;
     }

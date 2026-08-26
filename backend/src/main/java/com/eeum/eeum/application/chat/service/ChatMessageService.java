@@ -190,7 +190,8 @@ public class ChatMessageService {
                 room.getChatroomId(),
                 room.getName(),
                 sender.getAccountId(),
-                sender.getName(),
+                // 푸시 알림 제목·본문에 실린다 — 실명이 잠금화면에 뜨면 안 된다
+                sender.getDisplayName(),
                 truncate(rawPreview),
                 message.getChatmessageId(),
                 firstMessage
