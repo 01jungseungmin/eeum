@@ -14,6 +14,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -24,6 +26,17 @@ import java.util.List;
 public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
+
+    /**
+     * 채팅방 목록 정렬 — 최근 대화순, 대화 없는 방은 뒤로, 동률은 PK로 끊는다.
+     *
+     * <p>실제 SQL과 응답 메타데이터가 같은 값에서 나오도록 여기 한 곳에서만 정한다.
+     * 요청 Pageable을 그대로 SliceImpl에 넘기면 sort가 UNSORTED로 나가,
+     * 클라이언트가 응답만 보고는 어떤 순서인지 알 수 없다.
+     */
+    private static final Sort ROOM_LIST_SORT = Sort.by(
+            Sort.Order.desc("lastMessageAt").nullsLast(),
+            Sort.Order.desc("chatroomId"));
 
     private final QChatRoom room = QChatRoom.chatRoom;
     private final QChatParticipant participant = QChatParticipant.chatParticipant;
@@ -49,7 +62,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
         if (hasNext) {
             content = content.subList(0, size);
         }
-        return new SliceImpl<>(content, pageable, hasNext);
+        return new SliceImpl<>(content, appliedPageable(pageable), hasNext);
     }
 
     @Override
@@ -71,7 +84,11 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
         if (hasNext) {
             content = content.subList(0, size);
         }
-        return new SliceImpl<>(content, pageable, hasNext);
+        return new SliceImpl<>(content, appliedPageable(pageable), hasNext);
+    }
+
+    private Pageable appliedPageable(Pageable pageable) {
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), ROOM_LIST_SORT);
     }
 
     @Override

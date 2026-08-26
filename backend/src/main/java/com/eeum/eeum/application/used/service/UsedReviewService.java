@@ -19,6 +19,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -114,9 +115,9 @@ public class UsedReviewService {
     /**
      * 판매자가 받은 후기 목록. 비회원도 볼 수 있는 판매자 평판이다.
      *
-     * <p>정렬은 리포지토리 쿼리에 고정돼 있어 요청 sort를 받지 않는다.
-     * 페이지 번호·크기만 쓰도록 Pageable을 다시 만든다 — 그대로 넘기면 Spring이 요청 sort를
-     * 쿼리의 ORDER BY 뒤에 덧붙여 실제 순서가 달라진다.
+     * <p>정렬은 요청과 무관하게 {@link #REVIEW_SORT}로 고정한다.
+     * 요청 sort를 그대로 넘기면 사용자가 순서를 바꿀 수 있어 페이지 경계가 흔들리고,
+     * sort를 비우면 응답 메타데이터가 UNSORTED로 나가 실제 순서와 다르게 보인다.
      */
     /**
      * @param viewerId 조회 주체. 비회원 조회에서는 null이다 — 자기 후기의 제목을 가리지 않기 위해 받는다.
@@ -124,19 +125,30 @@ public class UsedReviewService {
     @Transactional(readOnly = true)
     public Slice<UsedReviewResponseDto> getSellerReviews(
             Long sellerId, Long viewerId, Pageable pageable) {
-        return usedReviewRepository.findSellerReviews(sellerId, unsorted(pageable))
+        return usedReviewRepository.findSellerReviews(sellerId, fixedSort(pageable))
                 .map(review -> UsedReviewResponseDto.from(review, viewerId));
     }
 
     @Transactional(readOnly = true)
     public Slice<UsedReviewResponseDto> getMyReviews(Long reviewerId, Pageable pageable) {
         // 조회 조건이 작성자로 좁혀져 있어 모든 행의 작성자가 곧 뷰어다.
-        return usedReviewRepository.findMyReviews(reviewerId, unsorted(pageable))
+        return usedReviewRepository.findMyReviews(reviewerId, fixedSort(pageable))
                 .map(review -> UsedReviewResponseDto.from(review, reviewerId));
     }
 
-    private Pageable unsorted(Pageable pageable) {
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    /**
+     * 후기 목록 정렬 — 작성 최신순, 동률은 PK로 끊는다.
+     *
+     * <p>tie-break가 없으면 createdAt 동률에서 페이지 경계 항목이 중복되거나 유실된다.
+     *
+     * <p>이 Sort 하나가 실제 SQL과 응답 메타데이터 양쪽의 근거가 된다.
+     * 쿼리 쪽에 ORDER BY를 따로 두면 둘이 갈린다.
+     */
+    private static final Sort REVIEW_SORT =
+            Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("usedReviewId"));
+
+    private Pageable fixedSort(Pageable pageable) {
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), REVIEW_SORT);
     }
 
     // ===================== 내부 헬퍼 =====================

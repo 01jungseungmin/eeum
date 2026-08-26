@@ -104,6 +104,13 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         // 마지막에 쓴 후기가 먼저 온다.
         assertThat(result.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
                 .containsExactly(reviewIds.get(2), reviewIds.get(1), reviewIds.get(0));
+
+        // 응답 메타데이터도 실제 순서를 말해야 한다.
+        // UNSORTED로 나가면 클라이언트는 응답만 보고 어떤 순서인지 알 수 없다.
+        assertThat(result.getPageable().getSort())
+                .containsExactly(
+                        Sort.Order.desc("createdAt"),
+                        Sort.Order.desc("usedReviewId"));
     }
 
     @Test

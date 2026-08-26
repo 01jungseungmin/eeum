@@ -34,6 +34,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Slice;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
@@ -326,6 +328,23 @@ class UsedProductInquiryRoomIntegrationTest extends IntegrationTestSupport {
                 .doesNotContain(sellerAccount.getName())
                 .contains(sellerAccount.getNickname());
         assertThat(sellerAccount.getName()).isNotEqualTo(sellerAccount.getNickname());
+    }
+
+    @Test
+    void 채팅방_목록_응답은_실제_정렬을_그대로_알려준다() {
+        // Given: 실제 SQL은 lastMessageAt DESC NULLS LAST, chatroomId DESC로 고정돼 있다.
+        //        요청 Pageable을 그대로 돌려주면 sort가 UNSORTED로 나가 실제 순서와 갈린다.
+        chatRoomService.createUsedProductInquiry(buyerId, productId);
+
+        // When
+        Slice<ChatRoomResponseDto> rooms =
+                chatRoomService.getMyRooms(buyerId, PageRequest.of(0, 20), true);
+
+        // Then
+        assertThat(rooms.getPageable().getSort())
+                .containsExactly(
+                        Sort.Order.desc("lastMessageAt").nullsLast(),
+                        Sort.Order.desc("chatroomId"));
     }
 
     private List<Long> roomIds(Long accountId, boolean includeClosed) {
