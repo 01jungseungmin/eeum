@@ -411,6 +411,28 @@ public class ChatRoomService {
         withLockAndTx(roomStateLockKey(target), () -> {
             ChatRoom room = lockRoomState(target);
             ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
+
+            // PRIVATE 문의방은 참여자가 둘뿐이라 한 명이 나가면 대화가 성립하지 않는다.
+            // 나간 사람만 LEFT로 바꾸면 방은 ACTIVE로 남아, 다시 문의해도 들어갈 수 없는
+            // 그 방의 roomId를 돌려받는다. 방 자체를 종료한다.
+            //
+            // 참여자는 건드리지 않는다. 내 채팅방 목록이 참여자 ACTIVE를 조건으로 걸기 때문에,
+            // 나간 쪽을 LEFT로 바꾸면 includeClosed=true로도 지난 대화를 볼 수 없고
+            // 메시지 조회도 막힌다. 종료된 방은 발행이 막히므로(verifyActiveRoomParticipant)
+            // 참여자를 남겨둬도 다시 말을 걸 수는 없다.
+            //
+            // 방이 종료되면 active_ref_key가 NULL이 되어 UNIQUE가 풀리므로
+            // 같은 상품에 다시 문의하면 새 방이 만들어진다.
+            if (room.getType() == ChatRoomType.PRIVATE) {
+                chatAccessHelper.verifyRoomActive(room);
+                eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
+                String actorName = participant.getAccount().getName();
+                closeRoomInternal(roomId, () -> getAccount(accountId), accountId,
+                        String.format("%s님이 나갔습니다.", actorName));
+                log.info("PRIVATE 문의방 퇴장 → 방 종료: roomId={}, accountId={}", roomId, accountId);
+                return;
+            }
+
             participant.leave();
             eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
 

@@ -46,10 +46,12 @@ public class ChatRoomController {
 
     @Operation(
             summary = "중고거래 문의 채팅방 시작",
-            description = "중고 게시글의 판매자와 1:1 문의방을 엽니다. " +
-                    "같은 게시글에 이미 활성 문의방이 있으면 새로 만들지 않고 그 방을 반환합니다(멱등). " +
-                    "본인 게시글에는 문의할 수 없고, 삭제·숨김된 게시글에는 새 방을 만들 수 없습니다. " +
-                    "문의 시작에는 GPS 인증된 활동 지역이 필요합니다(게시글 조회에는 필요 없습니다)."
+            description = """
+                    중고 게시글의 판매자와 1:1 문의 채팅방을 생성하거나 기존 활성 문의방을 반환합니다.
+                    동일 게시글에 대한 활성 문의방이 이미 존재하는 경우 새로 생성하지 않습니다.
+                    본인 게시글 및 삭제·숨김 처리된 게시글에는 문의할 수 없습니다.
+                    문의 시작을 위해 GPS 인증된 활동 지역이 필요합니다.
+                    """
     )
     @PostMapping("/used-products/{usedProductId}")
     public ResponseEntity<ApiResponse<ChatRoomResponseDto>> createUsedProductInquiry(

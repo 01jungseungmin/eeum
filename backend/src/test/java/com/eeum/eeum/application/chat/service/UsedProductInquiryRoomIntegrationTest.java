@@ -11,6 +11,7 @@ import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
@@ -20,6 +21,9 @@ import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.exception.BadRequestException;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.support.IntegrationTestSupport;
@@ -27,11 +31,13 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -224,6 +230,87 @@ class UsedProductInquiryRoomIntegrationTest extends IntegrationTestSupport {
                 ChatRoom.createPrivateInquiry(buyer, productId));
 
         assertThat(reopened.getChatroomId()).isNotEqualTo(closed.getChatroomId());
+    }
+
+    // ===================== 퇴장 정책 =====================
+    // PRIVATE 문의방은 둘뿐이라 한 명이 나가면 대화가 성립하지 않는다.
+    // 나간 사람만 LEFT로 바꾸면 방은 ACTIVE로 남아, 다시 문의해도 들어갈 수 없는
+    // 그 방의 roomId를 돌려받는다 — 재문의가 영영 막힌다.
+
+    @Test
+    void 문의방은_한_명만_나가도_방_전체가_종료된다() {
+        // Given
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+
+        // When
+        chatRoomService.leaveRoom(buyerId, roomId);
+
+        // Then
+        assertThat(chatRoomRepository.findById(roomId).orElseThrow().isActive()).isFalse();
+    }
+
+    @Test
+    void 문의방_퇴장은_참여자를_LEFT로_바꾸지_않는다() {
+        // Given: 내 채팅방 목록이 참여자 ACTIVE를 조건으로 걸기 때문에,
+        //        LEFT로 바꾸면 나간 쪽은 includeClosed=true로도 지난 대화를 볼 수 없다.
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+
+        // When
+        chatRoomService.leaveRoom(buyerId, roomId);
+
+        // Then: 양쪽 모두 ACTIVE로 남는다
+        assertThat(chatParticipantRepository.findAllByChatRoom_ChatroomId(roomId))
+                .hasSize(2)
+                .allMatch(ChatParticipant::isActive);
+    }
+
+    @Test
+    void 나간_뒤_같은_상품에_다시_문의하면_새_방이_생긴다() {
+        // Given
+        Long first = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+        chatRoomService.leaveRoom(buyerId, first);
+
+        // When
+        Long second = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+
+        // Then
+        assertThat(second).isNotEqualTo(first);
+        assertThat(activeInquiryCount(productId)).isEqualTo(1);
+    }
+
+    @Test
+    void 종료된_문의방은_양쪽_모두_지난_대화로_볼_수_있다() {
+        // Given
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+        chatRoomService.leaveRoom(buyerId, roomId);
+
+        // When & Then: 기본 목록에서는 빠지고, includeClosed=true에서는 양쪽 다 보인다
+        for (Long accountId : List.of(buyerId, sellerId)) {
+            assertThat(roomIds(accountId, false)).as("기본 목록: " + accountId)
+                    .doesNotContain(roomId);
+            assertThat(roomIds(accountId, true)).as("지난 대화: " + accountId)
+                    .contains(roomId);
+        }
+    }
+
+    @Test
+    void 이미_종료된_문의방에서는_다시_나갈_수_없다() {
+        // Given: 참여자를 LEFT로 바꾸지 않으므로 중복 호출을 방 상태로 막아야 한다
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+        chatRoomService.leaveRoom(buyerId, roomId);
+
+        // When & Then
+        assertThatThrownBy(() -> chatRoomService.leaveRoom(sellerId, roomId))
+                .isInstanceOf(BadRequestException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CHAT_ROOM_INACTIVE);
+    }
+
+    private List<Long> roomIds(Long accountId, boolean includeClosed) {
+        return chatRoomService.getMyRooms(accountId, PageRequest.of(0, 20), includeClosed)
+                .getContent().stream()
+                .map(ChatRoomResponseDto::getRoomId)
+                .toList();
     }
 
     private long activeInquiryCount(Long usedProductId) {
