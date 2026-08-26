@@ -116,15 +116,42 @@ public class ChatRoomService {
 
     private ChatRoomResponseDto createInquiryRoom(Long buyerId, Long usedProductId) {
         return withTx(() -> {
-            // 1) 구매자 계정 잠금 + 사용 가능 상태 확인. 탈퇴 정리가 지나간 뒤 방이 생기는 것을 막는다.
-            Account buyer = accountWriteGuard.lockActive(buyerId);
+            // 1) 잠금 순서를 정하기 위해 판매자 ID를 먼저 읽는다(잠금 없음).
+            //    낡은 값이어도 안전하다 — 잠근 뒤 상품과 판매자 상태를 다시 확인한다.
+            Long sellerId = usedProductRepository.findSellerIdByUsedProductId(usedProductId)
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
 
-            // 2) 상품 잠금 후 상태 재검증. 잠그지 않으면 삭제·숨김 조치와 겹쳐 사라진 글에 방이 붙는다.
+            // 2) account → used_product 순서로 잠근다(CLAUDE.md 전역 순서).
+            //    두 계정은 ID 오름차순으로 잠가 반대 방향 요청과 교착되지 않게 한다.
+            //
+            //    판매자까지 잠그는 이유: isPubliclyVisible()이 seller.isActive()를 본다.
+            //    판매자 행을 잠그지 않으면 "공개 상태" 판정 직후 탈퇴가 커밋돼,
+            //    탈퇴 정리가 끝난 뒤에 그 판매자가 참여자인 ACTIVE 방이 생긴다.
+            //    탈퇴 처리는 RESERVED 상품만 잠그므로 SELLING 상품으로는 두 경로가 겹치지 않는다.
+            Account buyer;
+            Account seller;
+            if (buyerId <= sellerId) {
+                buyer = accountWriteGuard.lockActive(buyerId);
+                seller = lockSeller(sellerId);
+            } else {
+                seller = lockSeller(sellerId);
+                buyer = accountWriteGuard.lockActive(buyerId);
+            }
+
+            // 3) 상품 잠금 후 상태 재검증. 잠그지 않으면 삭제·숨김 조치와 겹쳐 사라진 글에 방이 붙는다.
+            //    판매자를 먼저 잠갔으므로 아래 product.getSeller()는 같은 영속성 컨텍스트의
+            //    잠긴 인스턴스로 해석된다 — isPubliclyVisible()이 낡은 상태를 보지 않는다.
             UsedProduct product = usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
                     .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
 
             if (product.isOwnedBy(buyerId)) {
                 throw new BadRequestException(ErrorCode.CHAT_SELF_INQUIRY_NOT_ALLOWED);
+            }
+
+            // 판매자 상태는 잠근 엔티티로 직접 본다. isPubliclyVisible()에 맡기면
+            // 영속성 컨텍스트 동일성에 기대는 셈이라, 의도를 코드로 드러낸다.
+            if (!seller.isActive()) {
+                throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
             }
 
             // 삭제·숨김·판매자 탈퇴 글에는 새 방을 만들지 않는다. 비공개 사유는 드러내지 않는다.
@@ -155,6 +182,18 @@ public class ChatRoomService {
                     product.getSeller().getAccountId());
             return toResponseDto(room, buyerId);
         });
+    }
+
+    /**
+     * 판매자 계정 잠금 — 상태 판정은 호출부가 한다.
+     *
+     * <p>{@code accountWriteGuard.lockActive}를 쓰지 않는 이유는 오류 계약이 다르기 때문이다.
+     * 판매자가 탈퇴·정지라는 사실을 구매자에게 알리면 안 된다(비공개 사유 비노출 정책).
+     * 여기서는 잠그기만 하고, 호출부가 USED_PRODUCT_NOT_FOUND로 바꿔 던진다.
+     */
+    private Account lockSeller(Long sellerId) {
+        return accountRepository.findByIdWithLock(sellerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
     }
 
     // GROUP(단톡방) 채팅방 생성 + 참여자 일괄 초대

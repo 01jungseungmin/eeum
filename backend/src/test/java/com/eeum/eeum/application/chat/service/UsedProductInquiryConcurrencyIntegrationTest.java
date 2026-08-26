@@ -17,11 +17,15 @@ import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.NotFoundException;
 import com.eeum.eeum.support.IntegrationTestSupport;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
@@ -70,9 +74,11 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final PlatformTransactionManager transactionManager;
 
     private Long buyerId;
     private Long secondBuyerId;
+    private Long sellerId;
     private Long productId;
 
     @BeforeEach
@@ -87,6 +93,7 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
                 "c-buyer2-" + tag + "@test.com", "pw", "구매자2", "구매자2" + tag, "010-3333-3333"));
         buyerId = buyer.getAccountId();
         secondBuyerId = secondBuyer.getAccountId();
+        sellerId = seller.getAccountId();
 
         Region region = regionRepository.save(
                 Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
@@ -167,6 +174,44 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
     }
 
     // 같은 요청을 동시에 쏘고 결과를 모은다. 하나라도 실패하면 그 예외가 그대로 올라온다.
+    /**
+     * 판매자 탈퇴와 문의 시작의 경쟁.
+     *
+     * <p>문의 생성은 구매자 계정과 상품만 잠갔고, 탈퇴는 판매자 계정과 RESERVED 상품만 잠근다.
+     * SELLING 상품에서는 두 경로가 한 행도 공유하지 않아, 공개 상태를 확인한 직후 탈퇴가 커밋되면
+     * <b>탈퇴 정리가 끝난 뒤에</b> 그 판매자가 참여자인 ACTIVE 방이 생긴다.
+     *
+     * <p>이 테스트는 문의가 판매자 계정 행 잠금을 <b>기다리는지</b>까지 단언한다
+     * ({@code raceOnLock}). 판매자를 잠그지 않으면 기다림 자체가 없어 "경쟁이 재현되지 않음"으로
+     * 실패한다 — 통과했는데 아무것도 지키지 않는 상태가 되지 않는다.
+     */
+    @Test
+    void 판매자_탈퇴와_겹치면_탈퇴한_판매자의_문의방이_생기지_않는다() throws Exception {
+        // Given
+        AtomicReference<Throwable> inquiryFailure = new AtomicReference<>();
+
+        // When: 탈퇴가 판매자 계정 행을 잡고 있는 동안 문의가 들어온다
+        raceOnLock(
+                transactionManager,
+                "account",
+                () -> {
+                    // 탈퇴 경로에서 결과를 가르는 부분만 재현한다 — 판매자 행 잠금과 상태 전이
+                    Account seller = accountRepository.findByIdWithLock(sellerId).orElseThrow();
+                    seller.withdraw();
+                    accountRepository.saveAndFlush(seller);
+                },
+                () -> chatRoomService.createUsedProductInquiry(buyerId, productId),
+                inquiryFailure
+        );
+
+        // Then: 비공개 사유는 드러내지 않으므로 탈퇴가 아니라 게시글 없음으로 끝난다
+        assertThat(inquiryFailure.get())
+                .isInstanceOf(NotFoundException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        assertThat(activeRooms()).isEmpty();
+    }
+
     private List<ChatRoomResponseDto> raceInquiries(Long buyer, int count) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(count);
         CountDownLatch start = new CountDownLatch(1);

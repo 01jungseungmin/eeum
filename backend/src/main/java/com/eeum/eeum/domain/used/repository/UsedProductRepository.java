@@ -27,6 +27,12 @@ public interface UsedProductRepository
     // 다건 조회 — Soft Delete 대상이므로 삭제된 글을 함께 받으면 안 되는 곳에서 사용한다.
     List<UsedProduct> findByUsedProductIdInAndDeletedAtIsNull(Collection<Long> usedProductIds);
 
+    // 잠금 순서를 정하려면 판매자 ID가 먼저 필요하다 — 잠그기 전에 스칼라 하나만 읽는다.
+    // (p.seller.accountId는 FK 컬럼이라 조인이 없다.) 이 값이 낡아도 안전하다.
+    // 잠근 뒤 상품과 판매자 상태를 모두 다시 확인하기 때문이다.
+    @Query("SELECT p.seller.accountId FROM UsedProduct p WHERE p.usedProductId = :usedProductId")
+    Optional<Long> findSellerIdByUsedProductId(@Param("usedProductId") Long usedProductId);
+
     // 관리자 조치용 비관적 쓰기 잠금 — 조치와 작성자의 수정·삭제가 동시에 들어오는 경쟁을 막는다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM UsedProduct p WHERE p.usedProductId = :usedProductId")
