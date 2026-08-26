@@ -4,7 +4,6 @@ import com.eeum.eeum.application.chat.service.ChatUnreadService;
 import com.eeum.eeum.application.notification.dto.request.NotificationCreateRequestDto;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
-import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationRefType;
@@ -28,7 +27,6 @@ public class ChatNotificationProcessor {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
-    private final ChatMessageRepository chatMessageRepository;
     private final ChatUnreadService chatUnreadService;
     private final NotificationService notificationService;
 
@@ -77,7 +75,7 @@ public class ChatNotificationProcessor {
      * <p>중복 억제는 하지 않는다 — 기존 채팅 알림이 메시지마다 알림을 만드는 정책이고,
      * 중고만 다르게 하면 같은 채팅인데 알림 동작이 갈린다. 억제가 필요하면 채팅 전체 정책으로 다룬다.
      *
-     * <p>count 쿼리는 중고 문의방에서만 실행된다 — 일반 채팅에는 부담을 주지 않는다.
+     * <p>첫 메시지 여부는 이벤트가 싣고 온다 — 추가 조회가 없다.
      */
     private NotificationType resolveType(ChatRoom room, ChatMessageSentEvent event) {
         if (!room.isUsedProductRoom()) {
@@ -88,8 +86,9 @@ public class ChatNotificationProcessor {
         if (!sentByBuyer) {
             return NotificationType.CHAT_MESSAGE;
         }
-        // 방 생성 시 시스템 메시지를 남기지 않으므로, 방금 저장된 메시지가 유일하면 첫 문의다.
-        boolean firstMessage = chatMessageRepository.countByChatRoom_ChatroomId(event.roomId()) == 1;
-        return firstMessage ? NotificationType.USED_PRODUCT_INQUIRY : NotificationType.CHAT_MESSAGE;
+        // 여기서 세지 않는다. AFTER_COMMIT + @Async라 첫 메시지의 리스너가 돌기 전에
+        // 두 번째 메시지가 커밋되면 둘 다 2를 세어 문의 알림이 사라진다.
+        // 방 행을 잠근 발송 트랜잭션에서 확정한 값을 그대로 쓴다.
+        return event.firstMessage() ? NotificationType.USED_PRODUCT_INQUIRY : NotificationType.CHAT_MESSAGE;
     }
 }

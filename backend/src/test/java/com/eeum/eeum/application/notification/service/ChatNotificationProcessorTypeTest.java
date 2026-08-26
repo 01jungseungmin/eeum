@@ -7,7 +7,6 @@ import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
-import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
@@ -48,7 +47,6 @@ class ChatNotificationProcessorTypeTest {
 
     @Mock ChatRoomRepository chatRoomRepository;
     @Mock ChatParticipantRepository chatParticipantRepository;
-    @Mock ChatMessageRepository chatMessageRepository;
     @Mock ChatUnreadService chatUnreadService;
     @Mock NotificationService notificationService;
 
@@ -57,9 +55,8 @@ class ChatNotificationProcessorTypeTest {
     @Test
     void 중고_문의방의_첫_구매자_메시지는_문의_알림으로_보낸다() {
         givenRoom(inquiryRoom());
-        when(chatMessageRepository.countByChatRoom_ChatroomId(ROOM_ID)).thenReturn(1L);
 
-        processor.process(event(BUYER_ID));
+        processor.process(event(BUYER_ID, true));
 
         assertThat(capturedType()).isEqualTo(NotificationType.USED_PRODUCT_INQUIRY);
     }
@@ -68,9 +65,8 @@ class ChatNotificationProcessorTypeTest {
     void 첫_메시지_이후_대화는_일반_채팅_알림이다() {
         // 문의 유입 알림은 방당 한 번이어야 알림 목록에서 의미를 갖는다.
         givenRoom(inquiryRoom());
-        when(chatMessageRepository.countByChatRoom_ChatroomId(ROOM_ID)).thenReturn(2L);
 
-        processor.process(event(BUYER_ID));
+        processor.process(event(BUYER_ID, false));
 
         assertThat(capturedType()).isEqualTo(NotificationType.CHAT_MESSAGE);
     }
@@ -83,19 +79,16 @@ class ChatNotificationProcessorTypeTest {
         processor.process(event(SELLER_ID));
 
         assertThat(capturedType()).isEqualTo(NotificationType.CHAT_MESSAGE);
-        // 중고 방이어도 발신자가 판매자면 첫 메시지 판정 쿼리를 돌릴 이유가 없다.
-        verify(chatMessageRepository, never()).countByChatRoom_ChatroomId(any());
     }
 
     @Test
-    void 일반_채팅방은_첫_메시지_판정_쿼리를_돌리지_않는다() {
+    void 일반_채팅방은_첫_메시지_여부와_무관하게_일반_알림이다() {
         // count 쿼리가 모든 채팅 알림에 붙으면 중고와 무관한 경로에 비용만 는다.
         givenRoom(groupRoom());
 
         processor.process(event(BUYER_ID));
 
         assertThat(capturedType()).isEqualTo(NotificationType.CHAT_MESSAGE);
-        verify(chatMessageRepository, never()).countByChatRoom_ChatroomId(any());
     }
 
     private NotificationType capturedType() {
@@ -126,7 +119,12 @@ class ChatNotificationProcessorTypeTest {
     }
 
     private ChatMessageSentEvent event(Long senderId) {
-        return new ChatMessageSentEvent(ROOM_ID, null, senderId, "보낸사람", "안녕하세요", 100L);
+        return event(senderId, true);
+    }
+
+    private ChatMessageSentEvent event(Long senderId, boolean firstMessage) {
+        return new ChatMessageSentEvent(
+                ROOM_ID, null, senderId, "보낸사람", "안녕하세요", 100L, firstMessage);
     }
 
     private Account account(Long accountId) {

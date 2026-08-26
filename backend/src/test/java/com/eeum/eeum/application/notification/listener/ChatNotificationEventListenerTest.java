@@ -34,7 +34,7 @@ class ChatNotificationEventListenerTest {
     @Test
     void 커밋_후_이벤트를_잠금_프로세서에_위임한다() {
         ChatMessageSentEvent event = new ChatMessageSentEvent(
-                7L, "단골 모임방", 1L, "홍길동", "안녕하세요", 500L);
+                7L, "단골 모임방", 1L, "홍길동", "안녕하세요", 500L, true);
 
         listener.onMessageSent(event);
 
@@ -72,7 +72,7 @@ class ChatNotificationProcessorTest {
         when(chatParticipantRepository.findActiveAccountIds(roomId))
                 .thenReturn(List.of(senderId, recipientA, recipientB));
         ChatMessageSentEvent event = new ChatMessageSentEvent(
-                roomId, "단골 모임방", senderId, "홍길동", "안녕하세요", 500L);
+                roomId, "단골 모임방", senderId, "홍길동", "안녕하세요", 500L, true);
         ArgumentCaptor<NotificationCreateRequestDto> captor =
                 ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
 
@@ -102,7 +102,7 @@ class ChatNotificationProcessorTest {
         when(room.isActive()).thenReturn(false);
         when(chatRoomRepository.findByIdWithPessimisticLock(roomId)).thenReturn(Optional.of(room));
         ChatMessageSentEvent event = new ChatMessageSentEvent(
-                roomId, "종료된 방", 1L, "홍길동", "늦은 메시지", 500L);
+                roomId, "종료된 방", 1L, "홍길동", "늦은 메시지", 500L, true);
 
         // when
         processor.process(event);

@@ -68,6 +68,11 @@ public class ChatMessageService {
         // 인터셉터를 거치지 않는 호출(테스트·향후 REST 경로)에서도 정지·탈퇴 계정의 발행을 막는다.
         // 이 시점의 sender는 이미 로딩돼 있어 추가 조회가 없다.
         sender.assertWritable();
+        // 첫 메시지 여부는 lastMessageAt을 갱신하기 전에 확정한다.
+        // 이 방 행은 위에서 비관적 잠금으로 읽었으므로 스냅샷이 아니라 최신 커밋 값이고,
+        // 같은 방으로 동시에 들어온 발송은 이 잠금에서 직렬화된다.
+        boolean firstMessage = room.getLastMessageAt() == null;
+
         ChatMessage message = ChatMessage.text(room, sender, request.getContent());
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
@@ -78,7 +83,7 @@ public class ChatMessageService {
                 new ChatMessageBroadcastEvent(room.getChatroomId(), dto)
         );
 
-        publishSentEvent(room, sender, message, request.getContent());
+        publishSentEvent(room, sender, message, request.getContent(), firstMessage);
 
         return dto;
     }
@@ -98,13 +103,15 @@ public class ChatMessageService {
         // 인터셉터를 거치지 않는 호출(테스트·향후 REST 경로)에서도 정지·탈퇴 계정의 발행을 막는다.
         // 이 시점의 sender는 이미 로딩돼 있어 추가 조회가 없다.
         sender.assertWritable();
+        boolean firstMessage = room.getLastMessageAt() == null;
+
         ChatMessage message = ChatMessage.image(room, sender, request.getImageUrl());
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
         ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
         eventPublisher.publishEvent(new ChatMessageBroadcastEvent(room.getChatroomId(), dto));
-        publishSentEvent(room, sender, message, "사진을 보냈습니다");
+        publishSentEvent(room, sender, message, "사진을 보냈습니다", firstMessage);
         return dto;
     }
 
@@ -176,14 +183,17 @@ public class ChatMessageService {
         }
     }
 
-    private void publishSentEvent(ChatRoom room, Account sender, ChatMessage message, String rawPreview) {
+    private void publishSentEvent(
+            ChatRoom room, Account sender, ChatMessage message,
+            String rawPreview, boolean firstMessage) {
         eventPublisher.publishEvent(new ChatMessageSentEvent(
                 room.getChatroomId(),
                 room.getName(),
                 sender.getAccountId(),
                 sender.getName(),
                 truncate(rawPreview),
-                message.getChatmessageId()
+                message.getChatmessageId(),
+                firstMessage
         ));
     }
 

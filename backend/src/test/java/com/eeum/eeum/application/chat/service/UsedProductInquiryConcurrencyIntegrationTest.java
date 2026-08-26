@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
@@ -16,6 +17,9 @@ import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.domain.notification.entity.Notification;
+import com.eeum.eeum.domain.notification.enums.NotificationType;
+import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -25,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
@@ -75,6 +80,8 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
     private final PlatformTransactionManager transactionManager;
+    private final ChatMessageService chatMessageService;
+    private final NotificationRepository notificationRepository;
 
     private Long buyerId;
     private Long secondBuyerId;
@@ -210,6 +217,72 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
         assertThat(activeRooms()).isEmpty();
+    }
+
+    /**
+     * 첫 문의 알림 판정의 경쟁.
+     *
+     * <p>"문의가 들어왔다" 알림은 방당 한 번이어야 알림 목록에서 의미를 갖는다. 예전에는 알림 처리
+     * 쪽에서 메시지 개수를 세어 판정했는데, 그 처리는 AFTER_COMMIT + {@code @Async}라
+     * 첫 메시지의 리스너가 돌기 전에 두 번째 메시지가 커밋되면 <b>둘 다 2를 세어</b>
+     * 문의 알림이 통째로 사라졌다.
+     *
+     * <p>지금은 방 행을 잠근 발송 트랜잭션에서 확정해 이벤트에 실어보낸다. 같은 방으로 동시에
+     * 들어온 발송은 그 잠금에서 직렬화되므로 정확히 하나만 첫 메시지가 된다.
+     */
+    @Test
+    void 동시에_보낸_두_메시지_중_정확히_하나만_문의_알림이_된다() throws Exception {
+        // Given
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+
+        // When: 구매자가 같은 방으로 두 메시지를 동시에 보낸다
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                String content = "문의드립니다 " + i;
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    return chatMessageService.sendMessage(buyerId, roomId, textMessage(content));
+                }));
+            }
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        // Then: 판매자에게 알림 2건이 도착하고 그중 문의 알림은 한 건뿐이다
+        List<Notification> sellerNotifications = awaitNotifications(sellerId, 2);
+        assertThat(sellerNotifications)
+                .filteredOn(n -> n.getType() == NotificationType.USED_PRODUCT_INQUIRY)
+                .hasSize(1);
+        assertThat(sellerNotifications)
+                .filteredOn(n -> n.getType() == NotificationType.CHAT_MESSAGE)
+                .hasSize(1);
+    }
+
+    private ChatMessageSendRequestDto textMessage(String content) {
+        ChatMessageSendRequestDto dto = new ChatMessageSendRequestDto();
+        ReflectionTestUtils.setField(dto, "content", content);
+        return dto;
+    }
+
+    // 알림은 AFTER_COMMIT @Async로 만들어진다 — 개수가 찰 때까지 기다린다.
+    private List<Notification> awaitNotifications(Long accountId, int expected) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            List<Notification> found = notificationRepository.findAll().stream()
+                    .filter(n -> n.getAccount().getAccountId().equals(accountId))
+                    .toList();
+            if (found.size() >= expected) {
+                return found;
+            }
+            sleepQuietly(100);
+        }
+        throw new AssertionError("알림 " + expected + "건이 도착하지 않았다");
     }
 
     private List<ChatRoomResponseDto> raceInquiries(Long buyer, int count) throws Exception {
