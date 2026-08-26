@@ -111,12 +111,13 @@ class NotificationConcurrencyIntegrationTest extends IntegrationTestSupport {
 
         List<Runnable> callbacks = new ArrayList<>();
         for (int i = 0; i < 12; i++) {
-            callbacks.add(switch (i % 4) {
+            Runnable callback = switch (i % 4)  {
                 case 0 -> () -> unreadCountService.increment(accountId);
                 case 1 -> () -> unreadCountService.decrement(accountId);
                 case 2 -> () -> unreadCountService.clear(accountId);
                 default -> () -> unreadCountService.refreshFromDb(accountId);
-            });
+            };
+            callbacks.add(callback);
         }
 
         ConcurrentLinkedQueue<Throwable> failures = runConcurrently(callbacks);
