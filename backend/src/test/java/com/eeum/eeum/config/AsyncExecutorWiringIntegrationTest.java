@@ -82,14 +82,16 @@ class AsyncExecutorWiringIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 일반_풀은_포화_시_작업을_버리지_않는다() {
-        // Given: 이 풀의 작업은 알림 레코드를 만든다. 버리면 알림이 영영 생기지 않는다.
+    void 일반_풀은_포화_시_제출_스레드에서_실행하지_않는다() {
+        // Given: 이 풀의 작업 상당수는 AFTER_COMMIT 콜백에서 제출된다.
+        //        CallerRuns로 그 스레드에서 실행하면 @Transactional이 이미 커밋된 트랜잭션에
+        //        참여해 알림 INSERT가 커밋되지 못한다 — 작업은 버려지지 않았는데 결과는 유실이다.
         ThreadPoolExecutor pool =
                 ((ThreadPoolTaskExecutor) defaultAsyncExecutor).getThreadPoolExecutor();
 
         // When & Then
         assertThat(pool.getRejectedExecutionHandler())
-                .isInstanceOf(ThreadPoolExecutor.CallerRunsPolicy.class);
+                .isInstanceOf(WaitForQueueSpacePolicy.class);
     }
 
     @Test

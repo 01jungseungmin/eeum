@@ -23,7 +23,7 @@
 | Tomcat 워커 스레드 | 200 (기본값) | 설정 없음 | 요청이 큐에 쌓이다 타임아웃 — 서버가 꺼진 것처럼 보임 |
 | Tomcat 최대 커넥션 | 8192 (기본값) | 설정 없음 | 신규 연결 거부, FD 고갈 |
 | HikariCP 커넥션 풀 | **10 (기본값)** | 설정 없음 | `Connection is not available, request timed out after 30000ms` |
-| `asyncTaskExecutor` (`@Async` 기본) | core 4 / max 16 / queue 100 / CallerRunsPolicy / `@Primary` | `config/AsyncConfig.java` | 큐 포화 시 백프레셔가 **요청 스레드로 전이** — 단, 외부 I/O는 아래 풀로 분리됨 |
+| `asyncTaskExecutor` (`@Async` 기본) | core 4 / max 16 / queue 100 / `WaitForQueueSpacePolicy(2s)` / `@Primary` | `config/AsyncConfig.java` | 큐 포화 시 제출 스레드가 최대 2초 대기, 그래도 자리가 없으면 작업 폐기(ERROR 로그) |
 | `applicationTaskExecutor` (MVC async 전용) | core 2 / max 8 / queue 100 / AbortPolicy | `config/AsyncConfig.java` | `Callable` 반환 엔드포인트가 거부됨 (현재 사용처 없음) |
 | `notificationPushTaskExecutor` | core 4 / max 8 / queue 200 / **포화 시 폐기(로그)** | `config/AsyncConfig.java` | FCM 발송 누락 (알림 레코드는 이미 커밋돼 앱에는 보임) |
 | `@Scheduled` 스레드 | **1 (기본값)** | 설정 없음 | 느린 스케줄러 하나가 나머지 전부를 지연시킴 |
@@ -38,6 +38,7 @@
 - **Executor 빈이 둘 이상이면 한정자 없는 `@Async`가 조용히 깨진다.** 유일 빈 해석에 실패하고 이름이 `taskExecutor`인 빈도 없으면 `SimpleAsyncTaskExecutor`(작업마다 새 스레드)로 폴백한다. 예외가 나지 않으므로 `applicationTaskExecutor`에 `@Primary`가 필요하다. `config/AsyncExecutorWiringIntegrationTest`가 이 배선을 고정한다.
 - **버려도 되는 작업과 아닌 작업을 같은 풀에 두지 않는다.** 알림 생성(DB 저장)은 버리면 알림이 영영 생기지 않아 CallerRuns로 흡수해야 하고, FCM 발송은 이미 커밋된 알림의 전달일 뿐이라 버리는 편이 낫다. 한 풀에 두면 후자를 위해 전자를 버리거나, 전자를 위해 요청 스레드가 외부 HTTP를 기다린다.
 - **`REQUIRES_NEW`는 커넥션을 2개 점유한다.** 바깥 트랜잭션은 suspend 되어도 커넥션을 반납하지 않는다. 풀 크기가 10이면 이런 요청은 **동시 5개**가 상한이고, 10개가 동시에 들어오면 전원이 두 번째 커넥션을 기다리는 데드락이 된다.
+- **`CallerRunsPolicy`를 `@Async` 풀에 쓰면 안 된다.** 이 풀의 작업 상당수는 `AFTER_COMMIT` 콜백에서 제출된다. 그 스레드에서 실행되면 `@Transactional`(REQUIRED)이 **이미 커밋된 트랜잭션에 참여**해 DB 쓰기가 커밋되지 못하고 조용히 사라진다. 작업을 버리지 않았는데 결과는 유실이다. `REQUIRES_NEW`로 피하는 방법은 금지 패턴 3번에 걸린다(커넥션 2배 점유). 그래서 `WaitForQueueSpacePolicy`로 **제출 스레드 실행 자체를 없앴다** — 유실이 불가능해지는 것은 아니고 드물어지고 로그로 드러난다. 완전한 보장이 필요하면 durable outbox가 답이다.
 - **`afterCommit`은 별도 스레드가 아니다.** `TransactionSynchronization.afterCommit()`은 커밋을 수행한 그 스레드(대개 Tomcat 요청 스레드)에서 실행되며, 이 시점에 바깥 트랜잭션의 커넥션은 **아직 반납되지 않았다**(반납은 `afterCompletion` 이후).
 - **`SseEmitter.send()`는 블로킹 소켓 write다.** 클라이언트가 TCP FIN 없이 사라지면(모바일 네트워크 단절, 앱 백그라운드, 프록시 idle cut) 송신 버퍼가 찬 뒤 TCP 재전송 타임아웃(리눅스 기본 수 분~15분)까지 스레드가 묶인다. `ResponseBodyEmitter.send()`는 `synchronized`이므로 같은 emitter를 만지는 다른 스레드도 함께 묶인다.
 
@@ -52,6 +53,7 @@
 | R3 | 비동기 풀 포화 → 백프레셔 전이 | `CallerRunsPolicy` + 느린 작업 + 작은 core 크기. **외부 I/O 작업이 같은 풀에 있으면 요청 스레드가 소켓·HTTP를 기다린다** |
 | R4 | 연결/emitter 누수 | 정리 콜백 미등록, 예외 경로에서 맵에 고아 객체 잔존, 하트비트 부재 |
 | R5 | 예외 전파로 인한 요청 실패 | 콜백에서 좁은 타입만 catch, `afterCommit` 예외가 커밋 밖으로 전파 |
+| R7 | `afterCommit` 스레드의 DB 쓰기 미커밋 | `CallerRunsPolicy` + `AFTER_COMMIT` + `@Transactional`(REQUIRED) — 이미 커밋된 트랜잭션에 참여 |
 | R6 | 단일 스레드 스케줄러 정체 | 블로킹 Redis 명령(`KEYS`), 전 계정 순회 + 행 락 |
 
 ## 정적으로 금지할 패턴 (arch-rules 대상)

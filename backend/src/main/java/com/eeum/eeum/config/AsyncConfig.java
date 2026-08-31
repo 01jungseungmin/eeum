@@ -7,8 +7,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.time.Duration;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 비동기 실행 풀.
@@ -61,10 +61,10 @@ public class AsyncConfig {
         executor.setMaxPoolSize(16);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("async-");
-        // 이 풀의 작업은 알림 레코드를 만든다. 버리면 사용자에게 알림이 영영 가지 않으므로
-        // 유실 대신 백프레셔로 흡수한다. 외부 I/O는 아래 푸시 풀로 분리해 뒀으므로,
-        // 여기서 제출 스레드가 직접 실행하더라도 소켓·HTTP를 기다리지는 않는다.
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // CallerRuns를 쓰지 않는다. 이 풀의 작업은 AFTER_COMMIT 콜백에서 제출되는 경우가 많은데,
+        // 그 스레드에서 실행하면 @Transactional이 이미 커밋된 트랜잭션에 참여해
+        // 알림 INSERT가 커밋되지 못한다(WaitForQueueSpacePolicy 주석 참고).
+        executor.setRejectedExecutionHandler(new WaitForQueueSpacePolicy(Duration.ofSeconds(2)));
         // 배포 재기동 시 큐에 남은 알림 작업을 폐기하지 않고 완료를 기다린다.
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
