@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Date;
 
 // 토큰 생성/검증/파싱 담당(토큰 문자열을 만들고 해석하는 클래스)
@@ -124,6 +125,11 @@ public class JwtProvider {
 
     public Date getExpiration(String token) { //토큰의 만료 시간을 꺼내는 메서드
         return getClaims(token).getExpiration();
+    }
+
+    // 토큰의 발급 시각. 계정에 남긴 무효화 시각과 대조해 "그 이전에 발급된 토큰"을 걸러낸다.
+    public Instant getIssuedAt(String token) {
+        return getClaims(token).getIssuedAt().toInstant();
     }
 
     public long getRemainingSeconds(String token) { //토큰이 앞으로 몇 초 남았는지 계산하는 메서드

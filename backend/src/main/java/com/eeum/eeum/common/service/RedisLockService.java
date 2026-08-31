@@ -32,8 +32,6 @@ public class RedisLockService {
                     Long.class
             );
 
-    private static final long RETRY_INTERVAL_MILLIS = 50;
-
     private final StringRedisTemplate redisTemplate;
 
     public <T> T executeWithLock(
@@ -102,49 +100,6 @@ public class RedisLockService {
                     return null;
                 }
         );
-    }
-
-    /**
-     * 락을 얻을 때까지 기다렸다가 실행한다 — 건너뛰면 안 되는 뒷정리용.
-     *
-     * <p>위의 {@code executeWithLock}은 빠른 실패다. 사용자 요청 경로에서는 그게 맞다 —
-     * 기다리게 하느니 바로 알려주는 편이 낫다. 반면 제재 후 토큰 회수처럼
-     * <b>건너뛰는 것 자체가 구멍이 되는</b> 작업은 기다려야 한다.
-     *
-     * <p>대기 동안 스레드가 묶이므로 비동기 스레드에서만 쓴다.
-     *
-     * @throws BusinessException 제한 시간 안에 락을 얻지 못한 경우.
-     *         호출부가 이 실패를 어떻게 다룰지(포기할지, 락 없이 진행할지) 정한다.
-     */
-    public void executeWithLockWaiting(
-            String key,
-            Duration leaseTime,
-            Duration maxWait,
-            Runnable runnable
-    ) {
-        String lockValue = UUID.randomUUID().toString();
-        long deadline = System.nanoTime() + maxWait.toNanos();
-
-        while (true) {
-            if (Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, lockValue, leaseTime))) {
-                break;
-            }
-            if (System.nanoTime() >= deadline) {
-                throw new BusinessException(ErrorCode.LOCK_ACQUIRE_FAILED);
-            }
-            try {
-                Thread.sleep(RETRY_INTERVAL_MILLIS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new BusinessException(ErrorCode.LOCK_ACQUIRE_FAILED);
-            }
-        }
-
-        try {
-            runnable.run();
-        } finally {
-            releaseLock(key, lockValue);
-        }
     }
 
     private void releaseLock(String key, String lockValue) {

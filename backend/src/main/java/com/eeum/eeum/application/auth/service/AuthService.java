@@ -324,7 +324,19 @@ public class AuthService {
 
     // ===================== 토큰 재발급 =====================
 
-    // DB 쓰기 없음. Redis lock으로 logout과의 경쟁 조건(validate → save 사이 logout 개입) 방지
+    /**
+     * Refresh Token 재발급.
+     *
+     * <p>Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
+     *
+     * <p>계정 행을 <b>잠그고</b> 읽는 이유는 제재와 직렬화하기 위해서다. 잠그지 않으면
+     * 상태를 ACTIVE로 확인한 뒤 정지가 커밋되고, 그 뒤 새 Refresh Token이 저장돼
+     * 제재가 무력화된다. 정지·탈퇴 경로도 같은 행을 잠그므로 둘 중 하나가 먼저 끝난다.
+     *
+     * <p>그래도 남는 창은 계정에 기록된 무효화 시각이 덮는다 — 제재보다 먼저 발급된 토큰은
+     * Redis에 남아 있어도 무효다.
+     */
+    @Transactional
     public TokenResponseDto reissue(ReissueRequestDto request) {
         // JWT 기본 형식/타입만 lock 밖에서 먼저 검증 (빠른 실패)
         if (!jwtProvider.isValid(request.getRefreshToken()) || !jwtProvider.isRefreshToken(request.getRefreshToken())) {
@@ -339,9 +351,16 @@ public class AuthService {
                 Duration.ofSeconds(5),
                 () -> {
                     Long validatedId = tokenService.validateRefreshToken(request.getRefreshToken());
-                    Account account = accountRepository.findById(validatedId)
+                    Account account = accountRepository.findByIdWithLock(validatedId)
                             .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
                     validateAccountStatus(account);
+
+                    // 회수된 토큰이면 Redis에 남아 있어도 재발급하지 않는다.
+                    if (account.isTokenInvalidated(
+                            jwtProvider.getIssuedAt(request.getRefreshToken()))) {
+                        throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+                    }
+
                     return issueTokens(account);
                 }
         );

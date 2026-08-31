@@ -11,7 +11,10 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(
@@ -91,6 +94,19 @@ public class Account extends BaseEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    /**
+     * 이 시각 이전에 발급된 토큰은 모두 무효다.
+     *
+     * <p>Redis에서 토큰을 지우는 것만으로는 회수가 보장되지 않는다. 삭제는 비동기 풀을 타므로
+     * 포화 시 버려질 수 있고, 진행 중인 재발급이 삭제 직후 새 토큰을 저장할 수도 있으며,
+     * 인스턴스 간 신호는 유실될 수 있다. 이 값은 제재와 <b>같은 트랜잭션</b>에서 커밋되므로
+     * 그 모든 경로와 무관하게 남는다 — 회수의 최종 근거다.
+     *
+     * <p>Redis 삭제는 이제 보장이 아니라 즉시성을 위한 최적화다.
+     */
+    @Column(name = "token_invalidated_at")
+    private LocalDateTime tokenInvalidatedAt;
 
     @Version
     @Column(name = "version", nullable = false, columnDefinition = "BIGINT NOT NULL DEFAULT 0")
@@ -220,6 +236,26 @@ public class Account extends BaseEntity {
         this.fcmToken = null;
         this.primaryRegionId = null;
         this.anonymizedAt = LocalDateTime.now();
+    }
+
+    /** 지금 이후로 기존 토큰을 전부 무효화한다. 제재·탈퇴·비밀번호 재설정·권한 변경에서 호출한다. */
+    public void invalidateTokensBefore(LocalDateTime at) {
+        this.tokenInvalidatedAt = at;
+    }
+
+    /**
+     * 이 토큰이 무효화 시각 이전에 발급됐는지.
+     *
+     * <p>JWT의 {@code iat}는 초 단위라 같은 초에 발급·무효화가 겹치면 구분할 수 없다.
+     * 그 경우 무효로 본다 — 살려두는 쪽보다 최대 1초 과하게 막는 쪽이 안전하다.
+     */
+    public boolean isTokenInvalidated(Instant issuedAt) {
+        if (this.tokenInvalidatedAt == null || issuedAt == null) {
+            return false;
+        }
+        Instant invalidatedAt = this.tokenInvalidatedAt.atZone(ZoneId.systemDefault()).toInstant();
+        return !issuedAt.truncatedTo(ChronoUnit.SECONDS)
+                .isAfter(invalidatedAt.truncatedTo(ChronoUnit.SECONDS));
     }
 
     public boolean isAnonymized() {

@@ -1,10 +1,7 @@
 package com.eeum.eeum.application.auth.listener;
 
 import com.eeum.eeum.application.auth.service.TokenService;
-import com.eeum.eeum.common.lock.LockKeys;
-import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
-import com.eeum.eeum.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -13,19 +10,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.Duration;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AccountTokenCleanupEventListener {
 
-    // reissue의 lease(5초)보다 넉넉히 잡는다 — 진행 중인 재발급이 끝나기를 기다리기 위함이다.
-    private static final Duration LOCK_LEASE = Duration.ofSeconds(5);
-    private static final Duration LOCK_MAX_WAIT = Duration.ofSeconds(10);
-
     private final TokenService tokenService;
-    private final RedisLockService redisLockService;
     private final StringRedisTemplate redisTemplate;
 
     @Async
@@ -33,7 +24,7 @@ public class AccountTokenCleanupEventListener {
     public void onAccountTokenCleanup(AccountTokenCleanupEvent event) {
         try {
             if (event.accountId() != null) {
-                cleanupAccountTokens(event);
+                deleteTokens(event);
             }
             if (event.oauthTempToken() != null) {
                 // 계정 범위가 아니라 재발급과 겹치지 않는다 — 잠글 이유가 없다.
@@ -47,31 +38,19 @@ public class AccountTokenCleanupEventListener {
     }
 
     /**
-     * 재발급과 같은 락으로 직렬화한다.
+     * Redis에 남은 토큰을 지운다 — <b>즉시성을 위한 최적화이지 회수의 보장이 아니다.</b>
      *
-     * <p>직렬화하지 않으면 이런 순서가 가능하다 — 재발급이 계정 상태를 ACTIVE로 확인 →
-     * 관리자가 정지시키고 이 리스너가 토큰 삭제 → 재발급이 <b>새 Refresh Token을 저장</b>.
-     * 제재했는데 토큰이 되살아나고, 나중에 계정을 재활성화하면 그 세션이 그대로 살아난다.
+     * <p>보장은 두 곳이 맡는다. 재발급이 계정 행을 잠그고 읽으므로 제재와 직렬화되고
+     * ({@code AuthService.reissue}), 제재와 같은 트랜잭션에서 기록한 무효화 시각이
+     * 그보다 먼저 발급된 토큰을 전부 무효로 만든다({@code Account#tokenInvalidatedAt}).
      *
-     * <p>{@code executeWithLock}(빠른 실패)을 쓰지 않는다. 진행 중인 재발급 때문에 정리를
-     * 건너뛰면 그것이 곧 구멍이다. 기다렸다가 재발급 뒤에 지워야 한다.
+     * <p>그래서 여기서 락을 잡지 않는다. 예전에는 재발급 락을 기다렸다가 지웠는데,
+     * 그 대기는 비동기 풀 스레드를 최대 10초 묶으면서도 lease 만료·lockless fallback에서
+     * 경쟁이 다시 성립했다 — 보장은 못 하면서 비용만 냈다.
+     *
+     * <p>이 작업이 풀 포화로 버려져도 회수는 유효하다. Redis에 낡은 토큰이 남을 뿐이고
+     * 그 토큰은 무효화 시각에 걸린다.
      */
-    private void cleanupAccountTokens(AccountTokenCleanupEvent event) {
-        Long accountId = event.accountId();
-        try {
-            redisLockService.executeWithLockWaiting(
-                    LockKeys.reissue(accountId), LOCK_LEASE, LOCK_MAX_WAIT,
-                    () -> deleteTokens(event));
-        } catch (BusinessException lockFailure) {
-            // 락을 못 얻었다고 정리를 포기하면 제재된 계정의 토큰이 살아남는다.
-            // 지우지 않는 쪽이 더 위험하므로 락 없이 진행한다 — 수정 전과 같은 수준이고,
-            // 여기까지 오는 것 자체가 비정상이라 크게 남긴다.
-            log.error("토큰 정리 락 획득 실패({}초) — 락 없이 정리한다: accountId={}",
-                    LOCK_MAX_WAIT.toSeconds(), accountId, lockFailure);
-            deleteTokens(event);
-        }
-    }
-
     private void deleteTokens(AccountTokenCleanupEvent event) {
         Long accountId = event.accountId();
         if (event.deleteRefreshToken()) {

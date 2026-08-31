@@ -1,9 +1,7 @@
 package com.eeum.eeum.application.auth.listener;
 
 import com.eeum.eeum.application.auth.service.TokenService;
-import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,18 +18,6 @@ class AccountTokenCleanupEventListenerTest {
 
     @Mock TokenService tokenService;
     @Mock StringRedisTemplate redisTemplate;
-    @Mock RedisLockService redisLockService;
-
-    // 락 획득은 이 테스트의 관심사가 아니다 — 잠근 뒤 실행된다고 보고 본문만 검증한다.
-    // 실제 직렬화는 AccountTokenCleanupLockIntegrationTest가 실제 Redis로 확인한다.
-    @BeforeEach
-    void runInsideLock() {
-        lenient().doAnswer(invocation -> {
-            invocation.getArgument(3, Runnable.class).run();
-            return null;
-        }).when(redisLockService).executeWithLockWaiting(any(), any(), any(), any());
-    }
-
     // ─────────────────── refreshOnly 이벤트 ───────────────────
 
     @Test
