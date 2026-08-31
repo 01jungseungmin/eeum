@@ -27,6 +27,18 @@ public interface UsedProductRepository
     // 다건 조회 — Soft Delete 대상이므로 삭제된 글을 함께 받으면 안 되는 곳에서 사용한다.
     List<UsedProduct> findByUsedProductIdInAndDeletedAtIsNull(Collection<Long> usedProductIds);
 
+    /**
+     * 채팅방 목록의 게시글 요약용 다건 조회 — 판매자를 함께 읽는다.
+     *
+     * <p>fetch join이 없으면 요약을 만들 때 {@code isPubliclyVisible()}이 판매자 상태를 보면서
+     * 게시글 수만큼 select가 더 나간다(N+1).
+     *
+     * <p>삭제된 글을 걸러내지 않는다. 기존 문의방은 게시글이 사라져도 유지하는 정책이라,
+     * 여기서 빼면 "사라진 게시글입니다" 표시 자체가 불가능해진다.
+     */
+    @Query("SELECT p FROM UsedProduct p JOIN FETCH p.seller WHERE p.usedProductId IN :usedProductIds")
+    List<UsedProduct> findAllWithSellerByIdIn(@Param("usedProductIds") Collection<Long> usedProductIds);
+
     // 잠금 순서를 정하려면 판매자 ID가 먼저 필요하다 — 잠그기 전에 스칼라 하나만 읽는다.
     // (p.seller.accountId는 FK 컬럼이라 조인이 없다.) 이 값이 낡아도 안전하다.
     // 잠근 뒤 상품과 판매자 상태를 모두 다시 확인하기 때문이다.

@@ -838,7 +838,10 @@ public class ChatRoomService {
         }
 
         List<Long> productIds = inquiryRooms.stream().map(ChatRoom::getRefId).distinct().toList();
-        Map<Long, UsedProduct> products = usedProductRepository.findAllById(productIds).stream()
+        // 판매자를 함께 읽는다 — 요약의 visible 판정이 판매자 상태를 보므로
+        // 그냥 findAllById로 읽으면 게시글 수만큼 select가 더 나간다.
+        Map<Long, UsedProduct> products = usedProductRepository.findAllWithSellerByIdIn(productIds)
+                .stream()
                 .collect(Collectors.toMap(UsedProduct::getUsedProductId, product -> product));
         Map<Long, String> thumbnails = usedProductImageRepository
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()

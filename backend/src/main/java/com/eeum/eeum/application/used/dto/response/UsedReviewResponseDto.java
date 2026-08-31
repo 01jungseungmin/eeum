@@ -19,7 +19,9 @@ public class UsedReviewResponseDto {
     @Schema(description = "대상 게시글 ID", example = "25")
     private final Long usedProductId;
 
-    @Schema(description = "게시글 제목. 삭제·숨김된 게시글이면 null", example = "자전거 팝니다")
+    @Schema(description = "게시글 제목. 비공개(삭제·숨김·판매자 탈퇴) 게시글이면 null이지만, "
+            + "거래 당사자(후기 작성자·게시글 판매자)에게는 비공개여도 제목을 내려준다",
+            example = "자전거 팝니다")
     private final String usedProductTitle;
 
     @Schema(description = "대상 게시글이 아직 공개 상태인지. false면 게시글로 이동할 수 없다", example = "true")

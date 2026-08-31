@@ -129,7 +129,11 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.success());
     }
 
-    @Operation(summary = "채팅방 나가기", description = "참여 상태를 LEFT로 변경합니다. GROUP 전체 퇴장 시 채팅방이 비활성화됩니다.")
+    @Operation(summary = "채팅방 나가기",
+            description = "GROUP은 참여 상태를 LEFT로 바꾸고, 마지막 참여자가 나가면 채팅방이 종료됩니다. "
+                    + "PRIVATE 문의방은 참여자가 둘뿐이라 한 명만 나가도 채팅방 전체가 종료되며, "
+                    + "참여 상태는 유지되어 양쪽 모두 지난 대화를 계속 열람할 수 있습니다(목록 조회 시 includeClosed=true). "
+                    + "이미 종료된 문의방에서는 다시 나갈 수 없습니다.")
     @PatchMapping("/{roomId}/leave")
     public ResponseEntity<ApiResponse<Void>> leaveRoom(@PathVariable Long roomId) {
         Long accountId = SecurityUtil.getCurrentAccountId();

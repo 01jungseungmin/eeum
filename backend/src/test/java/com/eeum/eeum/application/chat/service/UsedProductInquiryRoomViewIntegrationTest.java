@@ -196,6 +196,11 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
         assertThat(selectsFrom("used_product "))
                 .as("게시글 조회: %s", selectsFrom("used_product "))
                 .hasSize(1);
+        // 요약의 visible 판정이 판매자 상태를 본다. fetch join이 빠지면
+        // 게시글 수만큼 판매자 조회가 더 나간다.
+        assertThat(selectsFrom("account"))
+                .as("판매자 조회: %s", selectsFrom("account"))
+                .isEmpty();
     }
 
     private List<String> selectsFrom(String table) {
