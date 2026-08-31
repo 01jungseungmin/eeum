@@ -12,6 +12,8 @@ import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
+import com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher;
+import com.eeum.eeum.application.notification.service.NotificationOutboxRecorder;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
@@ -48,6 +50,7 @@ public class ChatMessageService {
     private final ChatAccessHelper chatAccessHelper;
     private final ChatUnreadService chatUnreadService;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationOutboxRecorder outboxRecorder;
     private final StringRedisTemplate redisTemplate;
 
     // ===================== 메시지 발송 =====================
@@ -183,19 +186,30 @@ public class ChatMessageService {
         }
     }
 
+    /**
+     * 알림 요청을 outbox에 남긴다 — 메시지 저장과 같은 트랜잭션에서 커밋된다.
+     *
+     * <p>예전에는 여기서 Spring 이벤트를 발행하고 {@code AFTER_COMMIT} + {@code @Async}가
+     * 알림을 만들었다. 비동기 풀이 포화되면 그 작업이 버려져 알림이 아예 생기지 않았고,
+     * 메시지 전송은 성공으로 끝나 아무도 알아채지 못했다.
+     *
+     * <p>브로드캐스트({@code ChatMessageBroadcastEvent})는 그대로 이벤트로 둔다.
+     * 실시간 전달은 놓쳐도 다음 조회에서 복구되지만, 알림 레코드는 놓치면 복구되지 않는다.
+     */
     private void publishSentEvent(
             ChatRoom room, Account sender, ChatMessage message,
             String rawPreview, boolean firstMessage) {
-        eventPublisher.publishEvent(new ChatMessageSentEvent(
-                room.getChatroomId(),
-                room.getName(),
-                sender.getAccountId(),
-                // 푸시 알림 제목·본문에 실린다 — 실명이 잠금화면에 뜨면 안 된다
-                sender.getDisplayName(),
-                truncate(rawPreview),
-                message.getChatmessageId(),
-                firstMessage
-        ));
+        outboxRecorder.record(
+                NotificationOutboxDispatcher.CHAT_MESSAGE_SENT,
+                new ChatMessageSentEvent(
+                        room.getChatroomId(),
+                        room.getName(),
+                        sender.getAccountId(),
+                        // 푸시 알림 제목·본문에 실린다 — 실명이 잠금화면에 뜨면 안 된다
+                        sender.getDisplayName(),
+                        truncate(rawPreview),
+                        message.getChatmessageId(),
+                        firstMessage));
     }
 
     // 채팅 unread의 DB 기준값 — Redis 캐시 미스 복구와 정합성 보정 스케줄러가 공유한다.

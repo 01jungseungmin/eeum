@@ -92,7 +92,8 @@ public class UsedProductService {
         );
 
         // 등록 직후에는 사진이 없다 — 사진은 별도 엔드포인트로 올린다.
-        return UsedProductDetailResponseDto.from(usedProductRepository.save(product), List.of());
+        return UsedProductDetailResponseDto.from(
+                usedProductRepository.save(product), List.of(), sellerId);
     }
 
     // 내 동네 중고 목록
@@ -130,7 +131,7 @@ public class UsedProductService {
         UsedProduct product = getVisibleOrThrow(viewerId, usedProductId);
 
         return UsedProductDetailResponseDto.from(
-                product, usedProductImageService.getImages(usedProductId));
+                product, usedProductImageService.getImages(usedProductId), viewerId);
     }
 
     // 상세 조회 + 조회수 증가.
@@ -152,7 +153,7 @@ public class UsedProductService {
             entityManager.refresh(product);
         }
 
-        return UsedProductDetailResponseDto.from(product, images);
+        return UsedProductDetailResponseDto.from(product, images, viewerId);
     }
 
     // 최소 가격이 최대 가격보다 크면 결과가 반드시 빈다.
@@ -204,7 +205,7 @@ public class UsedProductService {
         usedProductRepository.flush();
 
         return UsedProductDetailResponseDto.from(
-                product, usedProductImageService.getImages(usedProductId));
+                product, usedProductImageService.getImages(usedProductId), sellerId);
     }
 
     // ===================== 거래 상태 =====================
@@ -309,7 +310,7 @@ public class UsedProductService {
         // 상태·구매자 변경을 먼저 반영해야 응답이 변경 전 값을 담지 않는다.
         usedProductRepository.flush();
         return UsedProductDetailResponseDto.from(
-                product, usedProductImageService.getImages(usedProductId));
+                product, usedProductImageService.getImages(usedProductId), sellerId);
     }
 
     @Transactional

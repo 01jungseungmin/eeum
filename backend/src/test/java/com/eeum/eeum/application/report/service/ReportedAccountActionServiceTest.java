@@ -34,6 +34,7 @@ class ReportedAccountActionServiceTest {
 
     @Mock private AccountRepository accountRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
 
     // 제재 자격 판정은 이 서비스가 지켜야 하는 계약 그 자체다.
     // Mock으로 두면 관리자·탈퇴·중복 정지 차단이 전부 무력화된 채 통과한다.

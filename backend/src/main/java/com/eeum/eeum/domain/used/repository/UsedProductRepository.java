@@ -70,8 +70,28 @@ public interface UsedProductRepository
         """)
     int decrementFavoriteCount(@Param("usedProductId") Long usedProductId);
 
-    // 판매자 탈퇴 시 정리할 예약 건. 상대가 지정된 것만 대상이다 — 상대 없는 "예약중" 표시는
-    // 통보할 사람이 없다. ID 오름차순으로 읽어 잠금 순서를 하나로 고정한다.
+    /**
+     * 판매자 제재·탈퇴 시 정리할 예약 건의 ID.
+     *
+     * <p><b>엔티티가 아니라 ID만 읽는다.</b> 엔티티로 읽으면 영속성 컨텍스트에 올라가고,
+     * 뒤이은 {@code findByUsedProductIdForUpdate}가 FOR UPDATE 락은 잡아도
+     * 1차 캐시의 낡은 인스턴스를 돌려준다 — 잠근 뒤 상태를 다시 확인한다는 보증이 깨진다.
+     *
+     * <p>상대(buyer) 지정 여부로 거르지 않는다. 상대 없는 "예약중"도 SELLING으로 되돌려야
+     * 판매자 복귀 시 정상 상태가 된다 — 통보만 상대가 있을 때 한다(호출부에서 거른다).
+     *
+     * <p>ID 오름차순으로 읽어 잠금 순서를 하나로 고정한다.
+     */
+    @Query("""
+        SELECT p.usedProductId FROM UsedProduct p
+        WHERE p.seller.accountId = :sellerId
+          AND p.status = :status
+          AND p.deletedAt IS NULL
+        ORDER BY p.usedProductId ASC
+        """)
+    List<Long> findReservedProductIdsBySeller(
+            @Param("sellerId") Long sellerId, @Param("status") UsedProductStatus status);
+
     List<UsedProduct> findBySeller_AccountIdAndStatusAndDeletedAtIsNullOrderByUsedProductIdAsc(
             Long sellerAccountId, UsedProductStatus status);
 

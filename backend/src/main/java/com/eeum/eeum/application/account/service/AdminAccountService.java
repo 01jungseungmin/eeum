@@ -58,6 +58,7 @@ public class AdminAccountService {
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
     private final AccountWithdrawalProcessor accountWithdrawalProcessor;
+    private final com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
     private final AccountSanctionPolicy accountSanctionPolicy;
     private final SanctionHistoryService sanctionHistoryService;
     private final ApplicationEventPublisher eventPublisher;
@@ -109,6 +110,11 @@ public class AdminAccountService {
         accountSanctionPolicy.validateSuspendable(target);
 
         target.suspend();
+
+        // 정지되면 isPubliclyVisible()이 거짓이 되어 게시글이 전 화면에서 사라진다.
+        // 예약을 그대로 두면 구매자는 볼 수도 없는 글을 기다리게 된다 — 탈퇴와 같게 정리한다.
+        usedProductWithdrawalService.cancelReservationsForSellerInactivation(targetAccountId);
+
         sanctionHistoryService.recordDirectAccountAction(
                 targetAccountId,
                 SanctionAction.SUSPEND,

@@ -64,6 +64,7 @@ class ChatMessageServiceTest {
     @Mock private ChatAccessHelper chatAccessHelper;
     @Mock private ChatUnreadService chatUnreadService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.notification.service.NotificationOutboxRecorder outboxRecorder;
     @Mock private StringRedisTemplate redisTemplate;
     @SuppressWarnings("unchecked")
     @Mock private ValueOperations<String, String> valueOps;
@@ -127,7 +128,10 @@ class ChatMessageServiceTest {
         verify(chatMessageRepository).save(any(ChatMessage.class));
         // room.updateLastMessageAt()는 엔티티 직접 호출 — repository 검증 없음
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
-        verify(eventPublisher).publishEvent(any(ChatMessageSentEvent.class));
+        // 알림은 이벤트가 아니라 outbox로 남긴다 — 비동기 풀이 포화돼도 유실되지 않는다
+        verify(outboxRecorder).record(
+                eq(com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher.CHAT_MESSAGE_SENT),
+                any(ChatMessageSentEvent.class));
     }
 
     @Test
@@ -237,7 +241,10 @@ class ChatMessageServiceTest {
         verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
         verify(chatMessageRepository).save(any(ChatMessage.class));
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
-        verify(eventPublisher).publishEvent(any(ChatMessageSentEvent.class));
+        // 알림은 이벤트가 아니라 outbox로 남긴다 — 비동기 풀이 포화돼도 유실되지 않는다
+        verify(outboxRecorder).record(
+                eq(com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher.CHAT_MESSAGE_SENT),
+                any(ChatMessageSentEvent.class));
     }
 
     @Test

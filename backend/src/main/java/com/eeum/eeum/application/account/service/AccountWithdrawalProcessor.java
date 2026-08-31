@@ -52,7 +52,7 @@ public class AccountWithdrawalProcessor {
         // 3. 예약 중인 중고 거래 정리 — 상대가 기다리는 거래를 말없이 증발시키지 않는다.
         // 사용자 삭제 경로가 RESERVED 삭제를 막는 것과 같은 이유다(UsedProductService.delete).
         // 탈퇴 처리 앞에 둔다: 뒤에 두면 seller가 이미 비활성이라 게시글이 조회에서 걸러진다.
-        usedProductWithdrawalService.cancelReservationsForWithdrawal(accountId);
+        usedProductWithdrawalService.cancelReservationsForSellerInactivation(accountId);
 
         // 4. 탈퇴 처리
         account.withdraw();

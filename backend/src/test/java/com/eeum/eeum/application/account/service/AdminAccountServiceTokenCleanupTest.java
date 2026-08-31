@@ -59,6 +59,7 @@ class AdminAccountServiceTokenCleanupTest {
     // 제재 자격 판정은 Mock으로 두면 관리자 대상 차단·중복 정지 차단이 무력화된다.
     @Spy AccountSanctionPolicy accountSanctionPolicy = new AccountSanctionPolicy();
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
 
     // ─────────────────── suspendAccount ───────────────────
 

@@ -20,6 +20,7 @@ public class ReportedAccountActionService {
     private final AccountRepository accountRepository;
     private final AccountSanctionPolicy accountSanctionPolicy;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public Long apply(ReportAction action, Long accountId) {
@@ -47,6 +48,10 @@ public class ReportedAccountActionService {
         accountSanctionPolicy.validateSuspendable(account);
 
         account.suspend();
+
+        // 직접 정지 API와 같은 정리를 한다 — 한쪽만 예약을 남기면 경로에 따라 결과가 갈린다.
+        usedProductWithdrawalService.cancelReservationsForSellerInactivation(accountId);
+
         // 직접 정지 API와 같은 범위로 회수한다 — 한쪽만 Refresh만 지우면 경로에 따라 구멍이 생긴다
         eventPublisher.publishEvent(AccountTokenCleanupEvent.allTokens(accountId));
         return accountId;

@@ -19,6 +19,8 @@ import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.notification.entity.Notification;
 import com.eeum.eeum.domain.notification.enums.NotificationType;
+import com.eeum.eeum.domain.notification.enums.OutboxStatus;
+import com.eeum.eeum.domain.notification.repository.NotificationOutboxRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -82,6 +84,7 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
     private final PlatformTransactionManager transactionManager;
     private final ChatMessageService chatMessageService;
     private final NotificationRepository notificationRepository;
+    private final NotificationOutboxRepository notificationOutboxRepository;
 
     private Long buyerId;
     private Long secondBuyerId;
@@ -120,6 +123,7 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
 
     @AfterEach
     void tearDown() {
+        notificationOutboxRepository.deleteAll();
         chatMessageRepository.deleteAll();
         chatParticipantRepository.deleteAll();
         chatRoomRepository.deleteAll();
@@ -263,6 +267,44 @@ class UsedProductInquiryConcurrencyIntegrationTest extends IntegrationTestSuppor
         assertThat(sellerNotifications)
                 .filteredOn(n -> n.getType() == NotificationType.CHAT_MESSAGE)
                 .hasSize(1);
+    }
+
+    /**
+     * 알림 요청이 메시지 저장과 <b>같은 트랜잭션</b>에 기록되는지.
+     *
+     * <p>예전에는 AFTER_COMMIT + @Async가 알림을 만들었다. 비동기 풀이 포화되면 그 작업이
+     * 버려져 알림이 아예 생기지 않았고, 메시지 전송은 성공으로 끝나 아무도 알아채지 못했다.
+     * 지금은 커밋된 outbox 행이 남으므로 풀 상태와 무관하다.
+     */
+    @Test
+    void 메시지를_보내면_알림_요청이_outbox에_남는다() {
+        // Given
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+        long before = notificationOutboxRepository.count();
+
+        // When
+        chatMessageService.sendMessage(buyerId, roomId, textMessage("문의드립니다"));
+
+        // Then: 스케줄러가 이미 처리했더라도 행 자체는 남아 있어야 한다
+        assertThat(notificationOutboxRepository.count())
+                .as("알림 요청이 기록되지 않았다 — 비동기 풀이 포화되면 알림이 사라진다")
+                .isEqualTo(before + 1);
+    }
+
+    @Test
+    void outbox_처리는_알림_생성과_상태_전이를_함께_끝낸다() {
+        // Given: 둘을 나누면 알림만 만들어지고 DONE을 못 남기는 창이 생기고,
+        //        그 행이 다음 주기에 다시 처리돼 같은 알림이 두 번 간다.
+        Long roomId = chatRoomService.createUsedProductInquiry(buyerId, productId).getRoomId();
+        chatMessageService.sendMessage(buyerId, roomId, textMessage("문의드립니다"));
+
+        // When: 스케줄러(1초 주기)가 처리할 때까지 기다린다
+        List<Notification> notifications = awaitNotifications(sellerId, 1);
+
+        // Then
+        assertThat(notifications).hasSize(1);
+        assertThat(notificationOutboxRepository.findAll())
+                .allMatch(outbox -> outbox.getStatus() == OutboxStatus.DONE);
     }
 
     private ChatMessageSendRequestDto textMessage(String content) {

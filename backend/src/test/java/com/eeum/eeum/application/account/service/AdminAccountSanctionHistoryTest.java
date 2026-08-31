@@ -52,6 +52,7 @@ class AdminAccountSanctionHistoryTest {
     @Spy private AccountSanctionPolicy accountSanctionPolicy = new AccountSanctionPolicy();
     @Mock private SanctionHistoryService sanctionHistoryService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
 
     @Test
     void 회원_정지_성공_시_같은_흐름에서_제재_이력을_기록한다() {

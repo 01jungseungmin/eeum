@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -43,7 +44,7 @@ public class UsedReviewController {
             @RequestBody @Valid UsedReviewCreateRequestDto request
     ) {
         Long reviewerId = SecurityUtil.getCurrentAccountId();
-        return ResponseEntity.ok(ApiResponse.success(
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
                 usedReviewService.create(reviewerId, usedProductId, request)));
     }
 

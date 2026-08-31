@@ -2,6 +2,7 @@ package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.application.account.service.AdminAccountService;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
@@ -13,6 +14,7 @@ import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.event.UsedProductReservationCancelledEvent;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.event.UsedProductSoldEvent;
@@ -23,12 +25,14 @@ import com.eeum.eeum.support.IntegrationTestSupport;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,11 +57,14 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
     private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final AdminAccountService adminAccountService;
+    private final PlatformTransactionManager transactionManager;
     private final ChatRoomRepository chatRoomRepository;
 
     private Long sellerId;
     private Long buyerId;
     private Long strangerId;
+    private Long adminId;
     private Long productId;
 
     @BeforeEach
@@ -70,9 +77,14 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
                 "t-buyer-" + tag + "@test.com", "pw", "구매자", "구매자" + tag, "010-1111-1111"));
         Account stranger = accountRepository.save(Account.createUser(
                 "t-other-" + tag + "@test.com", "pw", "제3자", "제3자" + tag, "010-3333-3333"));
+        Account admin = accountRepository.save(Account.createUser(
+                "t-admin-" + tag + "@test.com", "pw", "관리자", "관리자" + tag, "010-4444-4444"));
+        admin.approveOwner();
+
         sellerId = seller.getAccountId();
         buyerId = buyer.getAccountId();
         strangerId = stranger.getAccountId();
+        adminId = admin.getAccountId();
 
         Region region = regionRepository.save(Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
         Category category = categoryRepository.save(Category.createRoot(CategoryType.USED, "디지털기기" + tag, 1));
@@ -362,5 +374,101 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
         UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
         assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SELLING);
         assertThat(product.getBuyer()).isNull();
+    }
+
+    // ===================== 판매자 비활성화 시 예약 정리 =====================
+
+    @Test
+    void 판매자가_정지되면_예약이_취소되고_구매자에게_통보된다(ApplicationEvents events) {
+        // Given: 정지되면 isPubliclyVisible()이 거짓이 되어 게시글이 전 화면에서 사라진다.
+        //        예약을 그대로 두면 구매자는 볼 수도 없는 글을 기다리게 된다.
+        usedProductService.reserve(sellerId, productId, buyerId);
+
+        // When
+        adminAccountService.suspendAccount(adminId, sellerId);
+
+        // Then
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SELLING);
+        assertThat(product.getBuyer()).isNull();
+        assertThat(events.stream(UsedProductReservationCancelledEvent.class))
+                .singleElement()
+                .satisfies(event -> assertThat(event.buyerAccountId()).isEqualTo(buyerId));
+    }
+
+    @Test
+    void 상대가_없는_예약도_판매중으로_되돌린다(ApplicationEvents events) {
+        // Given: 상대 없는 "예약중" 표시. 되돌리지 않으면 판매자 복귀 시 예약 상태가 남는다.
+        usedProductService.reserve(sellerId, productId, null);
+
+        // When
+        adminAccountService.suspendAccount(adminId, sellerId);
+
+        // Then: 통보할 상대가 없으므로 이벤트는 없다
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getStatus())
+                .isEqualTo(UsedProductStatus.SELLING);
+        assertThat(events.stream(UsedProductReservationCancelledEvent.class)).isEmpty();
+    }
+
+    @Test
+    void 삭제된_게시글의_예약에는_취소_알림을_보내지_않는다(ApplicationEvents events) {
+        // Given: 잠그는 사이 신고 조치가 글을 지울 수 있다.
+        //        목록을 엔티티로 읽으면 1차 캐시 때문에 이 재확인이 동작하지 않는다.
+        usedProductService.reserve(sellerId, productId, buyerId);
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        product.softDelete();
+        usedProductRepository.saveAndFlush(product);
+
+        // When
+        adminAccountService.suspendAccount(adminId, sellerId);
+
+        // Then
+        assertThat(events.stream(UsedProductReservationCancelledEvent.class)).isEmpty();
+    }
+
+    /**
+     * 사전 읽기와 상품 잠금 사이에 예약 상대가 바뀌는 경쟁.
+     *
+     * <p>잠금 순서(account → used_product) 때문에 구매자 ID를 상품보다 먼저 읽어야 한다.
+     * 그 사이 다른 전이가 상대를 바꾸면 <b>잠그지도 검증하지도 않은 계정</b>이 구매자로
+     * 확정된다. 막고 재시도하게 하는 것이 의도임을 고정한다.
+     */
+    @Test
+    void 사전_읽기_후_예약_상대가_바뀌면_판매완료가_막힌다() throws Exception {
+        // Given: buyerId로 예약된 상태에서, 판매자 계정 잠금을 쥔 채 상대를 바꾼다
+        usedProductService.reserve(sellerId, productId, buyerId);
+
+        Account second = accountRepository.save(Account.createUser(
+                "t-buyer2-" + java.util.UUID.randomUUID().toString().substring(0, 8) + "@test.com",
+                "pw", "구매자2", "구매자2" + java.util.UUID.randomUUID().toString().substring(0, 8),
+                "010-5555-5555"));
+        chatRoomRepository.save(ChatRoom.createPrivateInquiry(second, productId));
+        Long secondBuyerId = second.getAccountId();
+
+        AtomicReference<Throwable> soldFailure = new AtomicReference<>();
+
+        // When
+        raceOnLock(
+                transactionManager,
+                "account",
+                () -> {
+                    accountRepository.findByIdWithLock(sellerId).orElseThrow();
+                    UsedProduct product = usedProductRepository
+                            .findByUsedProductIdForUpdate(productId).orElseThrow();
+                    product.cancelReservation();
+                    product.reserve(accountRepository.findById(secondBuyerId).orElseThrow());
+                    usedProductRepository.saveAndFlush(product);
+                },
+                () -> usedProductService.markSold(sellerId, productId, null),
+                soldFailure
+        );
+
+        // Then: 검증하지 않은 계정을 확정하지 않고 재시도하게 한다
+        assertThat(soldFailure.get())
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_BUYER_CHANGED);
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getStatus())
+                .isEqualTo(UsedProductStatus.RESERVED);
     }
 }

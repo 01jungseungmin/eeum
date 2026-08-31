@@ -75,7 +75,8 @@ public class UsedReviewResponseDto {
                 .usedProductVisible(product.isPubliclyVisible())
                 .usedProductTitle(visible ? product.getTitle() : null)
                 .reviewerAccountId(review.getReviewer().getAccountId())
-                .reviewerNickname(review.getReviewer().getNickname())
+                // getNickname()이 아니라 표시명이다 — nickname은 nullable이라 null이 나갈 수 있다
+                .reviewerNickname(review.getReviewer().getDisplayName())
                 .rating(review.getRating())
                 .content(review.getContent())
                 .createdAt(review.getCreatedAt())
