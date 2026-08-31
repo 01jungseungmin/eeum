@@ -2,6 +2,7 @@ package com.eeum.eeum.infrastructure.realtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.eeum.eeum.infrastructure.sse.SseEmitterManager;
+import com.eeum.eeum.security.websocket.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -33,6 +34,7 @@ public class RealtimeRelaySubscriber {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final SseEmitterManager sseEmitterManager;
+    private final WebSocketSessionRegistry sessionRegistry;
     private final ObjectMapper objectMapper;
 
     @org.springframework.context.annotation.Bean
@@ -43,6 +45,9 @@ public class RealtimeRelaySubscriber {
         container.setConnectionFactory(connectionFactory);
         container.addMessageListener(stompListener(), new ChannelTopic(RealtimeRelayChannels.STOMP));
         container.addMessageListener(unreadListener(), new ChannelTopic(RealtimeRelayChannels.SSE_UNREAD));
+        container.addMessageListener(
+                sessionTerminationListener(),
+                new ChannelTopic(RealtimeRelayChannels.SESSION_TERMINATION));
         return container;
     }
 
@@ -63,6 +68,20 @@ public class RealtimeRelaySubscriber {
             }
             Object payload = objectMapper.readValue(relayed.payloadJson(), Map.class);
             sseEmitterManager.sendUnreadCount(relayed.accountId(), payload);
+        });
+    }
+
+    // 이 인스턴스에 붙어 있지 않은 계정이면 closeAll이 0을 돌려주고 끝난다.
+    private MessageListener sessionTerminationListener() {
+        return (Message message, byte[] pattern) -> handle(message, body -> {
+            SessionTerminationRelayMessage relayed =
+                    objectMapper.readValue(body, SessionTerminationRelayMessage.class);
+            int closed = sessionRegistry.closeAll(
+                    relayed.accountId(), WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
+            if (closed > 0) {
+                log.info("계정 상태 변경으로 WebSocket 연결 종료: accountId={}, 세션={}개",
+                        relayed.accountId(), closed);
+            }
         });
     }
 
