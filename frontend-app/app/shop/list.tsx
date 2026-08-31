@@ -67,22 +67,31 @@ export default function ShopListScreen() {
             // 데이터 방어 코드 적용
             let shops = shopRes.data?.content || shopRes.data || [];
 
+            // 찜 여부는 상점마다 부르지 않고 배치로 한 번에 받는다.
+            const storeIds = shops.map((shop: any) => shop.storeId).filter(Boolean);
+            const favoritedIds = new Set(
+              (await favoriteApi
+                .checkFavoritesBatch('STORE', storeIds)
+                .catch(() => []))
+                .filter(c => c.favorited)
+                .map(c => c.refId)
+            );
+
             const updatedShops = await Promise.all(
               shops.map(async (shop: any) => {
                 try {
-                  const [favCountRes, checkRes, reviewRes] = await Promise.all([
+                  const [favCount, reviewRes] = await Promise.all([
                     favoriteApi.getFavoriteCount('STORE', shop.storeId).catch(() => null),
-                    favoriteApi.checkFavorite('STORE', shop.storeId).catch(() => null),
                     reviewApi.getReviews(shop.storeId).catch(() => null)
                   ]);
 
                   return {
                     ...shop,
-                    favoriteCount: favCountRes?.data?.data ?? shop.favoriteCount ?? 0,
-                    isFavorited: checkRes?.data?.data?.favorited ?? false,
+                    favoriteCount: favCount ?? shop.favoriteCount ?? 0,
+                    isFavorited: favoritedIds.has(shop.storeId),
                     reviewCount: reviewRes?.content?.length ?? shop.reviewCount ?? 0,
-                    rating: reviewRes?.content?.length 
-                      ? reviewRes.content.reduce((acc: number, cur: any) => acc + cur.rating, 0) / reviewRes.content.length 
+                    rating: reviewRes?.content?.length
+                      ? reviewRes.content.reduce((acc: number, cur: any) => acc + cur.rating, 0) / reviewRes.content.length
                       : shop.rating ?? 0,
                   };
                 } catch (e) {
@@ -114,15 +123,16 @@ export default function ShopListScreen() {
 
   const handleListToggleFavorite = async (storeId: number, currentStatus: boolean) => {
     try {
-      const res = await favoriteApi.toggleFavorite('STORE', storeId);
-      const { favorited, favoriteCount: newCount } = res.data.data;
+      const { favorited, favoriteCount: newCount } = await favoriteApi.toggleFavorite('STORE', storeId);
 
-      setShopList(prevList => 
-        prevList.map(shop => 
-          shop.storeId === storeId 
-            ? { ...shop, isFavorited: favorited, favoriteCount: newCount } 
-            : shop
-        )
+      setShopList(prevList =>
+        prevList.map(shop => {
+          if (shop.storeId !== storeId) return shop;
+
+          // 비공개 대상 해제 시 서버가 favoriteCount를 주지 않는다. 그때는 직접 보정한다.
+          const fallback = Math.max(0, (shop.favoriteCount ?? 0) + (favorited ? 1 : -1));
+          return { ...shop, isFavorited: favorited, favoriteCount: newCount ?? fallback };
+        })
       );
     } catch (error) {
       Alert.alert("알림", "찜 상태 변경에 실패했습니다.");
