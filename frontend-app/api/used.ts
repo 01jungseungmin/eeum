@@ -27,6 +27,15 @@ export interface UsedProductListParams {
   size?: number;
 }
 
+export interface CreateUsedProductReq {
+  categoryId: number;
+  regionId: number;
+  title: string;
+  content: string;
+  priceType: UsedProductPriceType;
+  price: number;
+}
+
 export const usedApi = {
   // 동네 중고 게시글 목록 조회
   getUsedProducts: async (params: UsedProductListParams = {}) => {
@@ -39,4 +48,12 @@ export const usedApi = {
       paramsSerializer: { indexes: null },
     });
   },
+
+  createUsedProduct: async (data: CreateUsedProductReq) => {
+    return await client.post('/used', data);
+  },
+
+  uploadImages: async (usedProductId: number, data: { images: { imageUrl: string }[] }) => {
+    return await client.post(`/used/${usedProductId}/images`, data);
+  }
 };
