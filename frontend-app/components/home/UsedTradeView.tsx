@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, ActivityIndicator, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 import { usedApi, UsedProductStatus } from '../../api/used';
 import { USED_CATEGORIES, USED_SORT_OPTIONS, UsedSortKey } from '../../constants/usedCategories';
+import { useFocusEffect } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -33,41 +34,41 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
     return list;
   }, [includeReserved, includeSold]);
 
-  useEffect(() => {
-    let isActive = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-    const fetchTradeData = async () => {
-      // 동네가 아직 정해지지 않았으면 조회하지 않는다. regionId 없이 부르면 서버가 400을 준다.
-      if (!regionId) {
-        setProducts([]);
-        return;
-      }
+      const fetchTradeData = async () => {
+        if (!regionId) {
+          setProducts([]);
+          return;
+        }
 
-      setIsLoading(true);
+        setIsLoading(true);
 
-      try {
-        const res = await usedApi.getUsedProducts({
-          regionId,
-          categoryId,
-          status: statusFilter,
-          sort: activeSort.sort,
-        });
+        try {
+          const res = await usedApi.getUsedProducts({
+            regionId,
+            categoryId,
+            status: statusFilter,
+            sort: activeSort.sort,
+          });
 
-        // 응답은 ApiResponse<Slice<...>> 라 목록은 data.data.content 에 있다.
-        const fetchedProducts = res.data?.data?.content ?? [];
-        if (isActive) setProducts(fetchedProducts);
-      } catch (error) {
-        console.error('중고거래 목록 로딩 실패:', error);
-      } finally {
-        if (isActive) setIsLoading(false);
-      }
-    };
+          // 응답에서 데이터 추출
+          const fetchedProducts = res.data?.data?.content ?? [];
+          if (isActive) setProducts(fetchedProducts);
+        } catch (error) {
+          console.error('중고거래 목록 로딩 실패:', error);
+        } finally {
+          if (isActive) setIsLoading(false);
+        }
+      };
 
-    fetchTradeData();
+      fetchTradeData();
 
-    // 필터를 빠르게 연타하면 늦게 온 예전 응답이 최신 결과를 덮을 수 있다.
-    return () => { isActive = false; };
-  }, [regionId, categoryId, statusFilter, activeSort.sort]);
+      return () => { isActive = false; };
+    }, [regionId, categoryId, statusFilter, activeSort.sort]) // 필터나 정렬이 바뀌어도 다시 불러옴
+  );
 
   const filteredProducts = products;
 
@@ -203,21 +204,20 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
               <View style={styles.locationRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="location-outline" size={12} color="#999" />
-                  {/* 💡 기존 location -> tradeLocation 으로 변경 */}
+
                   <Text style={styles.metaText}>{item.tradeLocation || item.regionName}</Text>
                 </View>
-                {/* 💡 기존 timeAgo -> createdAt 으로 변경 (날짜 포맷팅은 추후 필요) */}
+
                 <Text style={styles.metaText}>{item.createdAt ? item.createdAt.substring(0,10) : '방금 전'}</Text>
               </View>
 
               <View style={styles.priceRow}>
                 <Text style={styles.priceText}>{item.price?.toLocaleString()} 원</Text>
                 <View style={styles.iconsRow}>
-                  {/* 💡 DB에 채팅 카운트가 없으므로 일단 0 고정 또는 viewCount 사용 */}
+
                   <Ionicons name="chatbubble-ellipses-outline" size={12} color="#999" />
                   <Text style={styles.iconText}>{item.viewCount || 0}</Text>
                   
-                  {/* 💡 기존 likeCount -> favoriteCount 로 변경 */}
                   <Ionicons name="heart" size={12} color="#999" style={{ marginLeft: 6 }} />
                   <Text style={styles.iconText}>{item.favoriteCount || 0}</Text>
                 </View>
@@ -230,7 +230,10 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
 
       <TouchableOpacity 
         style={styles.fab} 
-        onPress={() => router.push('/used-trade/write')}
+        onPress={() => router.push({ 
+          pathname: '/used-trade/write', 
+          params: { regionId: regionId } 
+        })}
       >
         <Ionicons name="add" size={32} color="#fff" />
       </TouchableOpacity>
