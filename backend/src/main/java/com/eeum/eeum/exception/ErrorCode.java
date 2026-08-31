@@ -181,7 +181,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_PRODUCT_REGION_REQUIRED("USED_012", "조회할 지역을 지정해 주세요", HttpStatus.BAD_REQUEST),
     USED_PRODUCT_NOT_HIDDEN("USED_013", "숨김 처리된 게시글이 아닙니다", HttpStatus.CONFLICT),
     USED_PRODUCT_INVALID_PRICE_RANGE("USED_014", "최소 가격이 최대 가격보다 클 수 없습니다", HttpStatus.BAD_REQUEST),
-    USED_PRODUCT_INVALID_BUYER("USED_015", "본인을 거래 상대로 지정할 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 본인 지정, 정지·탈퇴 계정, 문의한 적 없는 상대를 모두 이 코드로 묶는다.
+    // 사유를 나누면 판매자가 임의의 계정 ID로 다른 사용자의 상태를 떠볼 수 있다.
+    USED_PRODUCT_INVALID_BUYER("USED_015", "거래 상대로 지정할 수 없는 계정입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),

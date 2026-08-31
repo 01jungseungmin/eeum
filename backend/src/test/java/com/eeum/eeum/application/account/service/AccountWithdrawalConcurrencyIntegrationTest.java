@@ -12,6 +12,8 @@ import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -77,6 +79,7 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final PlatformTransactionManager transactionManager;
 
     private Long adminId;
@@ -131,6 +134,7 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
 
     @AfterEach
     void tearDown() {
+        chatRoomRepository.deleteAll();
         usedProductImageRepository.deleteAll();
         favoriteRepository.deleteAll();
         usedProductRepository.deleteAll();
@@ -239,6 +243,9 @@ class AccountWithdrawalConcurrencyIntegrationTest extends IntegrationTestSupport
         // 사용자 삭제 경로는 "상대가 기다리고 있다"는 이유로 RESERVED 삭제를 막는데,
         // 탈퇴는 게시글을 건드리지 않아 예약이 잡힌 채 글만 사라지고 구매자는 통보를 못 받았다.
         // 탈퇴 대상(member)이 판매자이고, 상대는 다른 계정이다.
+        // 구매자로 지정하려면 이 상품으로 문의한 이력이 있어야 한다
+        chatRoomRepository.save(ChatRoom.createPrivateInquiry(
+                accountRepository.findById(counterpartId).orElseThrow(), ownProductId));
         usedProductService.reserve(memberId, ownProductId, counterpartId);
 
         adminAccountService.forceDeleteAccount(adminId, memberId);
