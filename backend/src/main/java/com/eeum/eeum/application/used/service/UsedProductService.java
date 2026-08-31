@@ -30,6 +30,7 @@ import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
@@ -44,6 +45,7 @@ import org.springframework.data.domain.Slice;
 
 import java.util.ArrayList;
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.Map;
@@ -230,21 +232,49 @@ public class UsedProductService {
      *
      * <p>구매자를 생략하면 예약 때 지정해 둔 상대를 그대로 유지한다.
      * 앱 밖에서 성사된 거래는 구매자 없이 완료할 수 있고, 그 거래에는 후기가 붙지 않는다.
+     *
+     * <p><b>생략한 경우에도 그 상대를 검증한다.</b> 예약 이후 탈퇴·정지했을 수 있는데,
+     * 그대로 확정하면 비활성 계정이 거래 구매자이자 후기 자격자로 남고 판매완료 알림까지 간다.
+     * 검증 대상을 맞추기 위해 예약 상대를 미리 읽어 명시적으로 넘긴다.
      */
     @Transactional
     public UsedProductDetailResponseDto markSold(Long sellerId, Long usedProductId, Long buyerId) {
-        return changeTradeStatus(sellerId, usedProductId, buyerId,
+        // 잠금 없는 사전 읽기. 낡은 값은 상품을 잠근 뒤 아래에서 대조해 걸러낸다.
+        Long effectiveBuyerId = buyerId != null
+                ? buyerId
+                : usedProductRepository.findBuyerIdByUsedProductId(usedProductId).orElse(null);
+
+        return changeTradeStatus(sellerId, usedProductId, effectiveBuyerId,
                 (product, buyer) -> {
+                    if (buyerId == null) {
+                        assertReservedBuyerUnchanged(product, effectiveBuyerId);
+                    }
+
                     product.markSold(buyer);
 
-                    // 후기를 쓸 상대가 있을 때만 알린다. 확정된 구매자를 전이 후에 읽는 이유는
-                    // buyerId를 생략하면 예약 때 지정한 상대가 유지되기 때문이다.
+                    // 후기를 쓸 상대가 있을 때만 알린다.
                     Account confirmed = product.getBuyer();
                     if (confirmed != null) {
                         eventPublisher.publishEvent(new UsedProductSoldEvent(
                                 usedProductId, confirmed.getAccountId(), product.getTitle()));
                     }
                 });
+    }
+
+    /**
+     * 사전 읽기 이후 예약 상대가 바뀌지 않았는지 확인한다.
+     *
+     * <p>잠금 순서(account → used_product) 때문에 구매자 ID를 상품보다 먼저 읽어야 하는데,
+     * 그 사이 다른 상태 전이가 예약 상대를 바꿀 수 있다. 그대로 진행하면
+     * <b>잠그지도 검증하지도 않은 계정</b>이 구매자로 확정된다. 막고 재시도하게 한다.
+     */
+    private void assertReservedBuyerUnchanged(UsedProduct product, Long expectedBuyerId) {
+        Long currentBuyerId = product.getBuyer() == null
+                ? null
+                : product.getBuyer().getAccountId();
+        if (!Objects.equals(currentBuyerId, expectedBuyerId)) {
+            throw new ConflictException(ErrorCode.USED_PRODUCT_BUYER_CHANGED);
+        }
     }
 
     // 상태 전이 3종의 공통 골격 — 잠금·소유권·구매자 조회가 같고 전이 규칙만 다르다.

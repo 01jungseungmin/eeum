@@ -39,6 +39,11 @@ public interface UsedProductRepository
     @Query("SELECT p FROM UsedProduct p JOIN FETCH p.seller WHERE p.usedProductId IN :usedProductIds")
     List<UsedProduct> findAllWithSellerByIdIn(@Param("usedProductIds") Collection<Long> usedProductIds);
 
+    // 판매완료 때 구매자를 생략하면 예약 상대가 그대로 확정된다. 그 상대도 잠그고 검증해야 하므로
+    // 잠금 순서를 정하기 위해 미리 읽는다(잠금 없음). 낡은 값은 상품을 잠근 뒤 다시 대조한다.
+    @Query("SELECT p.buyer.accountId FROM UsedProduct p WHERE p.usedProductId = :usedProductId")
+    Optional<Long> findBuyerIdByUsedProductId(@Param("usedProductId") Long usedProductId);
+
     // 잠금 순서를 정하려면 판매자 ID가 먼저 필요하다 — 잠그기 전에 스칼라 하나만 읽는다.
     // (p.seller.accountId는 FK 컬럼이라 조인이 없다.) 이 값이 낡아도 안전하다.
     // 잠근 뒤 상품과 판매자 상태를 모두 다시 확인하기 때문이다.

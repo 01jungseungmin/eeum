@@ -296,4 +296,71 @@ class UsedProductTradeStatusIntegrationTest extends IntegrationTestSupport {
         assertThat(usedProductRepository.findById(productId).orElseThrow().getStatus())
                 .isEqualTo(UsedProductStatus.SOLD);
     }
+
+    // ===================== 생략한 구매자도 검증한다 =====================
+
+    @Test
+    void 예약_후_구매자가_탈퇴하면_구매자를_생략한_판매완료가_막힌다() {
+        // Given: 예약 시점에는 유효했지만 그 뒤 탈퇴했다.
+        //        생략한 구매자를 검증 없이 확정하면 비활성 계정이 거래 구매자이자
+        //        후기 자격자로 남고 판매완료 알림까지 나간다.
+        usedProductService.reserve(sellerId, productId, buyerId);
+        Account buyer = accountRepository.findById(buyerId).orElseThrow();
+        buyer.withdraw();
+        accountRepository.saveAndFlush(buyer);
+
+        // When & Then
+        assertThatThrownBy(() -> usedProductService.markSold(sellerId, productId, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+
+        assertThat(usedProductRepository.findById(productId).orElseThrow().getStatus())
+                .isEqualTo(UsedProductStatus.RESERVED);
+    }
+
+    @Test
+    void 예약_상대가_유효하면_구매자를_생략해도_그대로_확정된다() {
+        // Given
+        usedProductService.reserve(sellerId, productId, buyerId);
+
+        // When
+        usedProductService.markSold(sellerId, productId, null);
+
+        // Then
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
+        assertThat(product.getBuyer().getAccountId()).isEqualTo(buyerId);
+    }
+
+    @Test
+    void 예약_상대가_없으면_구매자_없이_판매완료할_수_있다() {
+        // Given: 앱 밖에서 성사된 거래. 후기는 붙지 않는다.
+
+        // When
+        usedProductService.markSold(sellerId, productId, null);
+
+        // Then
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
+        assertThat(product.getBuyer()).isNull();
+    }
+
+    @Test
+    void 예약_취소는_구매자가_탈퇴했어도_가능하다() {
+        // Given: 취소는 구매자를 비우는 전이라 확정할 상대가 없다.
+        //        여기까지 구매자 검증을 걸면 탈퇴한 상대로 예약된 글을 영영 못 푼다.
+        usedProductService.reserve(sellerId, productId, buyerId);
+        Account buyer = accountRepository.findById(buyerId).orElseThrow();
+        buyer.withdraw();
+        accountRepository.saveAndFlush(buyer);
+
+        // When
+        usedProductService.cancelReservation(sellerId, productId);
+
+        // Then
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SELLING);
+        assertThat(product.getBuyer()).isNull();
+    }
 }
