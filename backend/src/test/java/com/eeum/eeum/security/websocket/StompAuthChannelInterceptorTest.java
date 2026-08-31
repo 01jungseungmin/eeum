@@ -24,6 +24,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -51,6 +52,7 @@ class StompAuthChannelInterceptorTest {
     @Mock private TokenService tokenService;
     @Mock private ChatAccessHelper chatAccessHelper;
     @Mock private AccountWriteGuard accountWriteGuard;
+    @Mock private WebSocketSessionRegistry sessionRegistry;
     @Mock private MessageChannel channel;
 
     // ===================== 픽스처 헬퍼 =====================
@@ -108,6 +110,8 @@ class StompAuthChannelInterceptorTest {
         assertThat(accessor.getUser()).isNotNull();
         assertThat(accessor.getUser().getName()).isEqualTo(String.valueOf(ACCOUNT_ID));
         verify(accountWriteGuard).assertUsableWithoutLock(ACCOUNT_ID);
+        // 제재·탈퇴 시 이 연결을 찾아 끊으려면 계정에 묶여 있어야 한다
+        verify(sessionRegistry).bindAccount(accessor.getSessionId(), ACCOUNT_ID);
     }
 
     @Test
@@ -123,6 +127,19 @@ class StompAuthChannelInterceptorTest {
         assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
                 .isInstanceOf(MessageDeliveryException.class);
         assertThat(accessor.getUser()).isNull();
+    }
+
+    @Test
+    void 거부된_연결은_계정에_묶이지_않는다() {
+        // Given: 묶이면 끊을 대상 목록에 유령 세션이 남는다
+        givenValidToken();
+        doThrow(new BusinessException(ErrorCode.ACCOUNT_SUSPENDED))
+                .when(accountWriteGuard).assertUsableWithoutLock(ACCOUNT_ID);
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(connectAccessor()), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        verify(sessionRegistry, never()).bindAccount(any(), anyLong());
     }
 
     @Test

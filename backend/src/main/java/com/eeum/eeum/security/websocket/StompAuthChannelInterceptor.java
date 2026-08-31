@@ -53,6 +53,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private final TokenService tokenService;
     private final ChatAccessHelper chatAccessHelper;
     private final AccountWriteGuard accountWriteGuard;
+    private final WebSocketSessionRegistry sessionRegistry;
 
     // 사용자 검증
     @Override
@@ -93,6 +94,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
 
         accessor.setUser(new StompPrincipal(accountId));
+        // 제재·탈퇴 시 이 연결을 찾아 끊을 수 있도록 계정에 묶는다.
+        // 세션 자체는 HTTP 업그레이드 때 이미 등록돼 있고, 여기서 주인만 붙인다.
+        sessionRegistry.bindAccount(accessor.getSessionId(), accountId);
         log.debug("WebSocket 인증 성공: accountId={}", accountId);
     }
 
