@@ -1,110 +1,170 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, ActivityIndicator, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '../CustomText'; // 경로에 맞게 수정해주세요
+import { Text } from '../CustomText';
+import { usedApi, UsedProductStatus } from '../../api/used';
+import { USED_CATEGORIES, USED_SORT_OPTIONS, UsedSortKey } from '../../constants/usedCategories';
 
 const { width } = Dimensions.get('window');
 
-// 💡 1. 임시 목(Mock) 데이터 구성
-const MOCK_USED_PRODUCTS = [
-  { id: '1', title: '정승민을 찾습니다', price: 6160, location: '인천 부평구', timeAgo: '1시간전', chatCount: 120, likeCount: 120, status: 'RESERVED', img: 'https://via.placeholder.com/150/F5F5F5/999999?text=Egg', regionId: 1 },
-  { id: '2', title: '정승민을 찾습니다', price: 6160, location: '인천 부평구', timeAgo: '1시간전', chatCount: 120, likeCount: 120, status: 'ON_SALE', img: 'https://via.placeholder.com/150/F5F5F5/999999?text=Egg', regionId: 1 },
-  { id: '3', title: '포켓몬 카드', price: 6500, location: '인천 부평구', timeAgo: '1시간전', chatCount: 120, likeCount: 120, status: 'SOLD_OUT', img: 'https://via.placeholder.com/150/FFD700/FFFFFF?text=Card', regionId: 1 },
-  { id: '4', title: '정승민을 찾습니다', price: 6160, location: '인천 부평구', timeAgo: '1시간전', chatCount: 120, likeCount: 120, status: 'ON_SALE', img: 'https://via.placeholder.com/150/F5F5F5/999999?text=Egg', regionId: 1 },
-];
-
 interface UsedTradeViewProps {
   router: any;
-  regionId?: number | null; // 부모로부터 동네 ID를 받음
+  regionId?: number | null;
 }
 
 export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [hasNoRegion, setHasNoRegion] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
-  
+
   // 필터 상태
   const [includeSold, setIncludeSold] = useState(false);
   const [includeReserved, setIncludeReserved] = useState(false);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<UsedSortKey>('LATEST');
+  const [isSortOpen, setIsSortOpen] = useState(false);
 
-  // 💡 2. 데이터 패칭 로직 (무조건 데이터가 보이도록 수정)
+  const activeSort = USED_SORT_OPTIONS.find(o => o.key === sortKey) ?? USED_SORT_OPTIONS[0];
+
+  // 상태 필터는 서버로 넘긴다. 화면에서 걸러내면 한 페이지에 담기는 건수가 들쭉날쭉해진다.
+  const statusFilter = useMemo<UsedProductStatus[]>(() => {
+    const list: UsedProductStatus[] = ['SELLING'];
+    if (includeReserved) list.push('RESERVED');
+    if (includeSold) list.push('SOLD');
+    return list;
+  }, [includeReserved, includeSold]);
+
   useEffect(() => {
+    let isActive = true;
+
     const fetchTradeData = async () => {
+      // 동네가 아직 정해지지 않았으면 조회하지 않는다. regionId 없이 부르면 서버가 400을 준다.
+      if (!regionId) {
+        setProducts([]);
+        return;
+      }
+
       setIsLoading(true);
-      setHasNoRegion(false); // 🚨 강제로 안내 문구를 끕니다!
 
       try {
-        // [나중에 추가할 API 연동 자리]
-        // const res = await usedTradeApi.getProducts({ regionId });
-        
-        // 부모가 regionId를 안 줘도 에러가 나지 않도록 임시로 '1'을 기본값으로 줍니다.
-        const currentRegionId = regionId || 1; 
-        const fetchedProducts = MOCK_USED_PRODUCTS.filter(p => p.regionId === currentRegionId);
-        
-        setProducts(fetchedProducts);
+        const res = await usedApi.getUsedProducts({
+          regionId,
+          categoryId,
+          status: statusFilter,
+          sort: activeSort.sort,
+        });
+
+        // 응답은 ApiResponse<Slice<...>> 라 목록은 data.data.content 에 있다.
+        const fetchedProducts = res.data?.data?.content ?? [];
+        if (isActive) setProducts(fetchedProducts);
       } catch (error) {
         console.error('중고거래 목록 로딩 실패:', error);
       } finally {
-        setIsLoading(false);
+        if (isActive) setIsLoading(false);
       }
     };
 
     fetchTradeData();
-  }, [regionId]);
 
-  // 💡 3. 상태(판매완료, 예약중) 필터링 로직
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      if (!includeSold && p.status === 'SOLD_OUT') return false;
-      if (!includeReserved && p.status === 'RESERVED') return false;
-      return true;
-    });
-  }, [products, includeSold, includeReserved]);
+    // 필터를 빠르게 연타하면 늦게 온 예전 응답이 최신 결과를 덮을 수 있다.
+    return () => { isActive = false; };
+  }, [regionId, categoryId, statusFilter, activeSort.sort]);
 
-  // 💡 4. 예외 화면 처리 (로딩 중일 때만 처리하고 hasNoRegion은 지웠습니다!)
-  if (isLoading) {
-    return (
-      <View style={[styles.center, { paddingTop: 50 }]}>
-        <ActivityIndicator size="large" color="#00A859" />
-      </View>
-    );
-  }
-
-  if (hasNoRegion) {
-    return (
-      <View style={[styles.center, { paddingTop: 50 }]}>
-        <Text style={styles.emptyText}>먼저 상단에서 동네를 설정해주세요!</Text>
-      </View>
-    );
-  }
+  const filteredProducts = products;
 
   return (
     <View style={styles.container}>
-      {/* 1. 필터 및 정렬 옵션 (중복되던 위치/검색창은 깔끔하게 삭제) */}
+      {/* 카테고리 필터 */}
+      <View style={styles.categoryWrapper}>
+        <FlatList
+          data={USED_CATEGORIES}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => String(item.id ?? 'all')}
+          ListHeaderComponent={<View style={{ width: 15 }} />}
+          ListFooterComponent={<View style={{ width: 15 }} />}
+          renderItem={({ item }) => {
+            const active = categoryId === item.id;
+            return (
+              <TouchableOpacity
+                style={[styles.categoryPill, active && styles.categoryPillActive]}
+                onPress={() => setCategoryId(item.id)}
+              >
+                <Text style={[styles.categoryPillText, active && styles.categoryPillTextActive]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+
       <View style={styles.filterHeader}>
         <View style={styles.filterPills}>
-          <TouchableOpacity 
-            style={[styles.filterPill, includeSold && styles.filterPillActive]} 
+          <TouchableOpacity
+            style={[styles.filterPill, includeSold && styles.filterPillActive]}
             onPress={() => setIncludeSold(!includeSold)}
           >
             <Text style={[styles.filterPillText, includeSold && styles.filterPillTextActive]}>판매 완료 포함</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterPill, includeReserved && styles.filterPillActive]} 
+          <TouchableOpacity
+            style={[styles.filterPill, includeReserved && styles.filterPillActive]}
             onPress={() => setIncludeReserved(!includeReserved)}
           >
             <Text style={[styles.filterPillText, includeReserved && styles.filterPillTextActive]}>예약중 포함</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.sortButton}>
-          <Text style={styles.sortText}>최신순</Text>
+        <TouchableOpacity style={styles.sortButton} onPress={() => setIsSortOpen(true)}>
+          <Text style={styles.sortText}>{activeSort.label}</Text>
+          <Ionicons name="chevron-down" size={14} color="#666" style={{ marginLeft: 2 }} />
         </TouchableOpacity>
       </View>
 
-      {/* 2. 상품 그리드 목록 */}
+      {/* 정렬 선택 */}
+      <Modal
+        visible={isSortOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsSortOpen(false)}
+      >
+        <Pressable style={styles.sortBackdrop} onPress={() => setIsSortOpen(false)}>
+          <Pressable style={styles.sortSheet}>
+            {USED_SORT_OPTIONS.map(option => {
+              const active = option.key === sortKey;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  style={styles.sortOption}
+                  onPress={() => {
+                    setSortKey(option.key);
+                    setIsSortOpen(false);
+                  }}
+                >
+                  <Text style={[styles.sortOptionText, active && styles.sortOptionTextActive]}>
+                    {option.label}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={18} color="#00A859" />}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {isLoading ? (
+        <View style={[styles.center, { flex: 1 }]}>
+          <ActivityIndicator size="large" color="#00A859" />
+        </View>
+      ) : filteredProducts.length === 0 ? (
+        <View style={[styles.center, { flex: 1 }]}>
+          <Ionicons name="cube-outline" size={48} color="#DDD" style={{ marginBottom: 12 }} />
+          <Text style={styles.emptyText}>
+            {regionId ? '해당 조건에 맞는 물품이 없어요.' : '동네를 먼저 설정해 주세요!'}
+          </Text>
+        </View>
+      ) : (
       <FlatList
         data={filteredProducts}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.usedProductId?.toString() || item.id?.toString()}
         numColumns={2}
         columnWrapperStyle={styles.rowWrapper}
         showsVerticalScrollIndicator={false}
@@ -112,24 +172,23 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
         renderItem={({ item }) => (
           <TouchableOpacity 
             style={styles.productCard} 
-            onPress={() => router.push({ pathname: '/used-trade/[id]', params: { id: item.id } })}
+            onPress={() => router.push({ pathname: '/used-trade/[id]', params: { id: item.usedProductId || item.id } })}
           >
             <View style={styles.imageContainer}>
-              <Image source={{ uri: item.img }} style={styles.productImage} />
+              {/* 대표 사진 렌더링 (Swagger 명세 필드명에 맞게 조정 필요) */}
+              <Image source={{ uri: item.thumbnailUrl || item.img || 'https://via.placeholder.com/150' }} style={styles.productImage} />
               
-              {/* 예약중 / 거래완료 뱃지 */}
               {item.status === 'RESERVED' && (
                 <View style={[styles.statusBadge, { backgroundColor: '#1B854A' }]}>
                   <Text style={styles.statusBadgeText}>예약중</Text>
                 </View>
               )}
-              {item.status === 'SOLD_OUT' && (
+              {item.status === 'SOLD' && (
                 <View style={[styles.statusBadge, { backgroundColor: '#555' }]}>
                   <Text style={styles.statusBadgeText}>거래완료</Text>
                 </View>
               )}
 
-              {/* 하얀색 원형 찜 버튼 */}
               <TouchableOpacity style={styles.heartButton}>
                 <Ionicons name="heart" size={18} color="#CCC" />
               </TouchableOpacity>
@@ -144,26 +203,31 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
               <View style={styles.locationRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="location-outline" size={12} color="#999" />
-                  <Text style={styles.metaText}>{item.location}</Text>
+                  {/* 💡 기존 location -> tradeLocation 으로 변경 */}
+                  <Text style={styles.metaText}>{item.tradeLocation || item.regionName}</Text>
                 </View>
-                <Text style={styles.metaText}>{item.timeAgo}</Text>
+                {/* 💡 기존 timeAgo -> createdAt 으로 변경 (날짜 포맷팅은 추후 필요) */}
+                <Text style={styles.metaText}>{item.createdAt ? item.createdAt.substring(0,10) : '방금 전'}</Text>
               </View>
 
               <View style={styles.priceRow}>
-                <Text style={styles.priceText}>{item.price.toLocaleString()} 원</Text>
+                <Text style={styles.priceText}>{item.price?.toLocaleString()} 원</Text>
                 <View style={styles.iconsRow}>
+                  {/* 💡 DB에 채팅 카운트가 없으므로 일단 0 고정 또는 viewCount 사용 */}
                   <Ionicons name="chatbubble-ellipses-outline" size={12} color="#999" />
-                  <Text style={styles.iconText}>{item.chatCount}</Text>
+                  <Text style={styles.iconText}>{item.viewCount || 0}</Text>
+                  
+                  {/* 💡 기존 likeCount -> favoriteCount 로 변경 */}
                   <Ionicons name="heart" size={12} color="#999" style={{ marginLeft: 6 }} />
-                  <Text style={styles.iconText}>{item.likeCount}</Text>
+                  <Text style={styles.iconText}>{item.favoriteCount || 0}</Text>
                 </View>
               </View>
             </View>
           </TouchableOpacity>
         )}
       />
+      )}
 
-      {/* 3. 글쓰기 플로팅 액션 버튼 */}
       <TouchableOpacity 
         style={styles.fab} 
         onPress={() => router.push('/used-trade/write')}
@@ -177,9 +241,21 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  emptyText: { color: '#888', fontSize: 14 },
   
-  // 필터 및 정렬
+  emptyText: { fontSize: 15, color: '#888' },
+
+  categoryWrapper: { paddingTop: 10 },
+  categoryPill: { backgroundColor: '#F5F5F5', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, marginRight: 8 },
+  categoryPillActive: { backgroundColor: '#00A859' },
+  categoryPillText: { fontSize: 13, color: '#666' },
+  categoryPillTextActive: { color: '#FFF', fontWeight: 'bold' },
+
+  sortBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  sortSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingVertical: 8, paddingBottom: 28 },
+  sortOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
+  sortOptionText: { fontSize: 15, color: '#333' },
+  sortOptionTextActive: { color: '#00A859', fontWeight: 'bold' },
+
   filterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingTop: 10, paddingBottom: 15 },
   filterPills: { flexDirection: 'row' },
   filterPill: { backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 8 },
@@ -189,18 +265,15 @@ const styles = StyleSheet.create({
   sortButton: { padding: 4 },
   sortText: { fontSize: 13, color: '#666' },
   
-  // 리스트 그리드
   rowWrapper: { justifyContent: 'space-between', paddingHorizontal: 15 },
   productCard: { width: (width - 45) / 2, marginBottom: 20 },
   
-  // 이미지 및 오버레이
   imageContainer: { width: '100%', height: (width - 45) / 2, borderRadius: 8, overflow: 'hidden', backgroundColor: '#F9F9F9', position: 'relative' },
   productImage: { width: '100%', height: '100%' },
   statusBadge: { position: 'absolute', top: 0, left: 0, paddingHorizontal: 8, paddingVertical: 4, borderBottomRightRadius: 8 },
   statusBadgeText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
   heartButton: { position: 'absolute', bottom: 8, right: 8, backgroundColor: '#FFF', width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
   
-  // 상품 하단 정보
   cardInfo: { paddingTop: 10 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   productTitle: { fontSize: 15, fontWeight: 'bold', color: '#333', flex: 1, paddingRight: 10 },
@@ -211,6 +284,5 @@ const styles = StyleSheet.create({
   iconsRow: { flexDirection: 'row', alignItems: 'center' },
   iconText: { fontSize: 11, color: '#999', marginLeft: 3 },
   
-  // 플로팅 버튼
   fab: { position: 'absolute', bottom: 20, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#00A859', justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
 });
