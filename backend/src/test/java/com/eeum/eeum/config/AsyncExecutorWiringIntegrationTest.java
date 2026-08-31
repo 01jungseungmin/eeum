@@ -43,6 +43,10 @@ class AsyncExecutorWiringIntegrationTest extends IntegrationTestSupport {
         return applicationContext.getBean("notificationPushTaskExecutor", ThreadPoolTaskExecutor.class);
     }
 
+    private ThreadPoolTaskExecutor mvcAsyncExecutor() {
+        return applicationContext.getBean("applicationTaskExecutor", ThreadPoolTaskExecutor.class);
+    }
+
     @Test
     void 한정자_없는_비동기는_일반_풀로_해석된다() {
         // Given & When: Executor 빈이 둘이므로 @Primary가 없으면 유일 빈 해석이 깨진다.
@@ -53,6 +57,8 @@ class AsyncExecutorWiringIntegrationTest extends IntegrationTestSupport {
                 .isInstanceOf(ThreadPoolTaskExecutor.class);
         assertThat(((ThreadPoolTaskExecutor) defaultAsyncExecutor).getThreadNamePrefix())
                 .isEqualTo("async-");
+        // MVC용 빈이 기본으로 잡히면 알림 작업이 MVC async 풀로 흘러간다
+        assertThat(defaultAsyncExecutor).isNotSameAs(mvcAsyncExecutor());
     }
 
     @Test
@@ -97,6 +103,28 @@ class AsyncExecutorWiringIntegrationTest extends IntegrationTestSupport {
         int queueCapacity = pool.getQueue().remainingCapacity() + pool.getQueue().size();
         assertThat(pool.getMaximumPoolSize()).isGreaterThan(pool.getCorePoolSize());
         assertThat(queueCapacity).isLessThanOrEqualTo(100);
+    }
+
+    @Test
+    void MVC_async_풀은_비동기_작업_풀과_분리돼_있다() {
+        // Given: applicationTaskExecutor는 Spring MVC가 async executor를 "이름으로 찾는" 자리다.
+        //        @Async 작업을 그 이름에 태우면 알림이 밀릴 때 MVC async도 함께 밀린다.
+
+        // When & Then
+        assertThat(mvcAsyncExecutor()).isNotSameAs(defaultAsyncExecutor);
+        assertThat(mvcAsyncExecutor().getThreadNamePrefix()).isEqualTo("mvc-async-");
+    }
+
+    @Test
+    void MVC_async_풀이_비어_있지_않다() {
+        // Given: Boot의 자동 설정은 @ConditionalOnMissingBean(Executor.class)라
+        //        우리가 Executor 빈을 하나라도 정의하면 꺼진다. 이름만 바꾸고 두면
+        //        MVC async가 SimpleAsyncTaskExecutor(요청마다 새 스레드)로 떨어진다.
+
+        // When & Then
+        assertThat(applicationContext.containsBean("applicationTaskExecutor")).isTrue();
+        assertThat(mvcAsyncExecutor().getThreadPoolExecutor().getMaximumPoolSize())
+                .isPositive();
     }
 
     @Test

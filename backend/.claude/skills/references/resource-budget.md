@@ -23,7 +23,8 @@
 | Tomcat 워커 스레드 | 200 (기본값) | 설정 없음 | 요청이 큐에 쌓이다 타임아웃 — 서버가 꺼진 것처럼 보임 |
 | Tomcat 최대 커넥션 | 8192 (기본값) | 설정 없음 | 신규 연결 거부, FD 고갈 |
 | HikariCP 커넥션 풀 | **10 (기본값)** | 설정 없음 | `Connection is not available, request timed out after 30000ms` |
-| `applicationTaskExecutor` | core 4 / max 16 / queue 100 / CallerRunsPolicy / `@Primary` | `config/AsyncConfig.java` | 큐 포화 시 백프레셔가 **요청 스레드로 전이** — 단, 외부 I/O는 아래 풀로 분리됨 |
+| `asyncTaskExecutor` (`@Async` 기본) | core 4 / max 16 / queue 100 / CallerRunsPolicy / `@Primary` | `config/AsyncConfig.java` | 큐 포화 시 백프레셔가 **요청 스레드로 전이** — 단, 외부 I/O는 아래 풀로 분리됨 |
+| `applicationTaskExecutor` (MVC async 전용) | core 2 / max 8 / queue 100 / AbortPolicy | `config/AsyncConfig.java` | `Callable` 반환 엔드포인트가 거부됨 (현재 사용처 없음) |
 | `notificationPushTaskExecutor` | core 4 / max 8 / queue 200 / **포화 시 폐기(로그)** | `config/AsyncConfig.java` | FCM 발송 누락 (알림 레코드는 이미 커밋돼 앱에는 보임) |
 | `@Scheduled` 스레드 | **1 (기본값)** | 설정 없음 | 느린 스케줄러 하나가 나머지 전부를 지연시킴 |
 | SSE emitter | 계정당 1개 / 타임아웃 30분 / **하트비트 없음** | `infrastructure/sse/SseEmitterManager.java` | 죽은 연결이 최대 30분 생존, 그 사이 write가 블로킹 |
@@ -31,7 +32,8 @@
 
 ### 예산 계산 시 반드시 고려할 것
 
-- **`applicationTaskExecutor`는 Spring Boot 기본 빈 이름을 덮어쓴다.** Boot 3.2+/4에서는 이 빈이 Spring MVC async 처리에도 사용되므로 영향 범위가 `@Async`에 국한되지 않는다.
+- **`applicationTaskExecutor`는 Spring MVC가 async executor를 이름으로 찾는 자리다.** 여기에 `@Async` 작업을 태우면 알림이 밀릴 때 MVC async도 함께 밀린다. `@Async`용 풀은 `asyncTaskExecutor`로 분리하고 `@Primary`로 기본 해석을 잡는다.
+- **Boot의 task 자동 설정은 Executor 빈 하나만 있어도 꺼진다.** `@ConditionalOnMissingBean(Executor.class)`이므로(Boot 4.0.6 확인), `applicationTaskExecutor`라는 이름을 비워 두면 Boot가 채워주는 것이 아니라 MVC async가 `SimpleAsyncTaskExecutor`(요청마다 새 스레드)로 떨어진다. 그 이름의 빈은 **직접 정의해야** 한다.
 - **큐 용량이 크면 `maxPoolSize`가 죽는다.** `ThreadPoolExecutor`는 큐가 가득 차기 전까지 core를 넘겨 스레드를 늘리지 않는다. queue를 500에서 100으로 줄여 max 16이 실제로 도달 가능하게 했다.
 - **Executor 빈이 둘 이상이면 한정자 없는 `@Async`가 조용히 깨진다.** 유일 빈 해석에 실패하고 이름이 `taskExecutor`인 빈도 없으면 `SimpleAsyncTaskExecutor`(작업마다 새 스레드)로 폴백한다. 예외가 나지 않으므로 `applicationTaskExecutor`에 `@Primary`가 필요하다. `config/AsyncExecutorWiringIntegrationTest`가 이 배선을 고정한다.
 - **버려도 되는 작업과 아닌 작업을 같은 풀에 두지 않는다.** 알림 생성(DB 저장)은 버리면 알림이 영영 생기지 않아 CallerRuns로 흡수해야 하고, FCM 발송은 이미 커밋된 알림의 전달일 뿐이라 버리는 편이 낫다. 한 풀에 두면 후자를 위해 전자를 버리거나, 전자를 위해 요청 스레드가 외부 HTTP를 기다린다.
@@ -61,7 +63,7 @@ R1·R2·R3·R6을 **코드 작성 시점에** 차단한다.
 3. `@Transactional` 또는 `afterCommit` 실행 경로에서 `Propagation.REQUIRES_NEW` 메서드 호출 금지 (커넥션 2배 점유)
 4. `SseEmitterManager`의 전송 메서드는 요청 스레드에서 직접 호출 금지 — 반드시 `@Async` 경유
 5. `RedisTemplate.keys(...)` 호출 금지 — `scan` 사용
-6. `@Bean` 이름 `applicationTaskExecutor` 금지 — Spring Boot 기본 빈을 덮어써 MVC async에까지 영향
+6. `applicationTaskExecutor` 빈에 `@Async` 작업을 태우지 않는다 — 그 이름은 Spring MVC async 전용 자리다. `@Async` 풀은 별도 이름 + `@Primary`로 둔다. (이름의 빈 자체는 MVC용으로 필요하다 — 위 "고려할 것" 참고)
 7. `@Scheduled` 메서드 안에서 전체 계정 순회 + 비관적 락 조합 금지
 
 ## 동적으로 검증할 항목 (resource-test 대상)
