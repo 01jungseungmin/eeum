@@ -6,5 +6,6 @@ public record CommunityAdminActionEvent(
         Long targetAccountId,
         NotificationRefType refType,
         Long refId,
-        String reason
+        String actionLabel,
+        String adminNote
 ) {}

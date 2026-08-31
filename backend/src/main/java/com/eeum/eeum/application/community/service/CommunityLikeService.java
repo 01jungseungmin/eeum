@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -35,10 +36,13 @@ public class CommunityLikeService {
     private final AccountRegionRepository accountRegionRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void likePost(Long accountId, Long postId) {
         Account account = getAccountOrThrow(accountId);
-        CommunityPost post = getPostOrThrow(postId);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(
+                postId,
+                ErrorCode.COMMUNITY_POST_NOT_FOUND
+        );
 
         validateSameRegion(post, account);
 
@@ -68,31 +72,36 @@ public class CommunityLikeService {
         }
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void unlikePost(Long accountId, Long postId) {
         Account account = getAccountOrThrow(accountId);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(
+                postId,
+                ErrorCode.COMMUNITY_POST_NOT_FOUND
+        );
 
         CommunityPostLike like = postLikeRepository
                 .findByAccount_AccountIdAndPost_PostId(accountId, postId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_LIKE_NOT_FOUND));
 
-        CommunityPost post = like.getPost();
         validateSameRegion(post, account);
 
         postLikeRepository.delete(like);
         postRepository.decreaseLikeCount(postId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void likeComment(Long accountId, Long commentId) {
         Account account = getAccountOrThrow(accountId);
-        CommunityComment comment = getCommentOrThrow(commentId);
+        Long postId = getPostIdByCommentOrThrow(commentId);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(
+                postId,
+                ErrorCode.COMMUNITY_COMMENT_NOT_FOUND
+        );
+        CommunityComment comment = getCommentForUpdateOrThrow(commentId);
+        validateNotDeleted(comment);
 
-        if (comment.isDeleted()) {
-            throw new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
-        }
-
-        validateSameRegion(comment.getPost(), account);
+        validateSameRegion(post, account);
 
         if (commentLikeRepository.existsByAccount_AccountIdAndComment_CommentId(accountId, commentId)) {
             throw new ConflictException(ErrorCode.COMMUNITY_COMMENT_LIKE_ALREADY_EXISTS);
@@ -111,16 +120,22 @@ public class CommunityLikeService {
         commentRepository.increaseLikeCount(comment.getCommentId());
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void unlikeComment(Long accountId, Long commentId) {
         Account account = getAccountOrThrow(accountId);
+        Long postId = getPostIdByCommentOrThrow(commentId);
+        CommunityPost post = getVisiblePostForUpdateOrThrow(
+                postId,
+                ErrorCode.COMMUNITY_COMMENT_NOT_FOUND
+        );
+        CommunityComment comment = getCommentForUpdateOrThrow(commentId);
+        validateNotDeleted(comment);
 
         CommunityCommentLike like = commentLikeRepository
                 .findByAccount_AccountIdAndComment_CommentId(accountId, commentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_LIKE_NOT_FOUND));
 
-        CommunityComment comment = like.getComment();
-        validateSameRegion(comment.getPost(), account);
+        validateSameRegion(post, account);
 
         commentLikeRepository.delete(like);
         commentRepository.decreaseLikeCount(comment.getCommentId());
@@ -131,14 +146,25 @@ public class CommunityLikeService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
     }
 
-    private CommunityPost getPostOrThrow(Long postId) {
-        return postRepository.findById(postId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
+    private CommunityPost getVisiblePostForUpdateOrThrow(Long postId, ErrorCode errorCode) {
+        return postRepository.findVisibleByPostIdForUpdate(postId)
+                .orElseThrow(() -> new NotFoundException(errorCode));
     }
 
-    private CommunityComment getCommentOrThrow(Long commentId) {
-        return commentRepository.findById(commentId)
+    private Long getPostIdByCommentOrThrow(Long commentId) {
+        return commentRepository.findPostIdByCommentId(commentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+    }
+
+    private CommunityComment getCommentForUpdateOrThrow(Long commentId) {
+        return commentRepository.findWithAccountByCommentIdForUpdate(commentId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+    }
+
+    private void validateNotDeleted(CommunityComment comment) {
+        if (comment.isDeleted()) {
+            throw new NotFoundException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+        }
     }
 
     private Region getPrimaryRegion(Account account) {

@@ -76,6 +76,11 @@ public class OwnerInquiryService {
         if (!inquiry.isAnswerable()) {
             throw new ConflictException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
         }
+        // 답변은 문의당 1건이다(uk_inquiry_answer_inquiry_id). 상태 검사만으로는
+        // 답변이 남은 채 PENDING으로 돌아온 문의를 걸러내지 못한다.
+        if (inquiryAnswerRepository.existsByInquiry_InquiryId(inquiryId)) {
+            throw new ConflictException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+        }
 
         Account owner = accountRepository.findById(ownerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
@@ -91,6 +96,57 @@ public class OwnerInquiryService {
         ));
 
         return InquiryAnswerResponseDto.from(saved);
+    }
+
+    /**
+     * 사장이 자기 가게 문의에 단 답변의 본문을 정정한다.
+     *
+     * <p>삭제는 제공하지 않는다 — 관리자 답변과 같은 이유다. 사용자가 알림으로 이미 받아 본
+     * 답변이 통째로 사라지면 문의 스레드의 문맥이 끊긴다.
+     *
+     * <p>관리자 API는 사장 답변을 고칠 수 없으므로(writerType 검사), 이 메서드가 없으면
+     * 상점 문의 답변은 오타 하나도 영영 고칠 수 없다.
+     *
+     * <p>알림은 재발송하지 않는다 — 정정마다 푸시가 나가면 알림 피로를 부른다.
+     */
+    @Transactional
+    public InquiryAnswerResponseDto updateAnswer(
+            Long ownerId,
+            Long inquiryId,
+            Long answerId,
+            InquiryAnswerCreateRequestDto request
+    ) {
+        Long storeId = getOwnerStoreId(ownerId);
+        Inquiry inquiry = inquiryRepository.findByInquiryId(inquiryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.INQUIRY_NOT_FOUND));
+
+        // 남의 가게 문의를 내 가게 답변인 척 고치는 경로를 막는다.
+        if (inquiry.getStore() == null || !inquiry.getStore().getStoreId().equals(storeId)) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_ACCESS_DENIED);
+        }
+        if (inquiry.getTargetType() != InquiryTargetType.STORE) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+
+        InquiryAnswer answer = inquiryAnswerRepository.findById(answerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.INQUIRY_ANSWER_NOT_FOUND));
+
+        // 다른 문의의 답변 ID를 넘겨 남의 답변을 고치는 경로를 막는다.
+        if (!answer.getInquiry().getInquiryId().equals(inquiry.getInquiryId())) {
+            throw new NotFoundException(ErrorCode.INQUIRY_ANSWER_NOT_FOUND);
+        }
+        // 사장 API로 관리자 답변을 고칠 수 없다.
+        if (!answer.isWrittenBy(InquiryAnswerWriterType.OWNER)) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+
+        answer.updateContent(request.getContent());
+
+        // modifiedAt은 @LastModifiedDate라 flush(@PreUpdate) 시점에 채워진다.
+        // flush 없이 DTO를 만들면 edited=false, modifiedAt=이전 값이 그대로 응답에 실린다.
+        inquiryAnswerRepository.flush();
+
+        return InquiryAnswerResponseDto.from(answer);
     }
 
     // ===================== 내부 유틸 =====================

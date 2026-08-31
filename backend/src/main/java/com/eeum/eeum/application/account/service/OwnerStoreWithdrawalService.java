@@ -6,6 +6,7 @@ import com.eeum.eeum.domain.product.enums.EventProductStatus;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,7 @@ public class OwnerStoreWithdrawalService {
 
     @Transactional
     public void deactivateForWithdrawal(Long accountId) {
-        Store store = storeRepository.findByAccount_AccountId(accountId)
+        Store store = storeRepository.findByAccountIdWithPessimisticLock(accountId)
                 .orElse(null);
 
         if (store == null) {
@@ -38,7 +39,9 @@ public class OwnerStoreWithdrawalService {
         Long storeId = store.getStoreId();
 
         // 사장 탈퇴 후 사용자 화면에서 영업 가능 상태로 보이지 않도록 마감 처리
-        store.close();
+        if (store.getStatus() != StoreStatus.SUSPENDED) {
+            store.close();
+        }
 
         // 상점 상품 비활성화
         List<Product> products = productRepository.findByStore_StoreId(storeId);

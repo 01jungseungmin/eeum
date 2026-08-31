@@ -43,8 +43,18 @@ const LeftProfileCard = styled.div`
     font-weight: 700;
     padding: 4px 10px;
     border-radius: 20px;
-    background: #fef7e7;
-    color: #e4a11b;
+    background: ${(props) =>
+      props.$status === 'PENDING'
+        ? '#fef7e7'
+        : props.$status === 'APPROVED'
+          ? '#edf5f1'
+          : '#fff5f5'};
+    color: ${(props) =>
+      props.$status === 'PENDING'
+        ? '#e4a11b'
+        : props.$status === 'APPROVED'
+          ? '#2d5a43'
+          : '#ff4d4f'};
     margin-bottom: 32px;
   }
 
@@ -77,34 +87,48 @@ const LeftProfileCard = styled.div`
 `;
 
 function ApprovalProfileCard({ account }) {
-  const name = account?.name || '이름 없음';
+  // 백엔드 데이터 우선 매핑 (Fallback 보장)
+  const ownerName = account?.ownerName || account?.name || '이름 없음';
   const email = account?.email || '-';
-  const nickname = account?.nickname || '상점명 없음';
+  const storeName = account?.storeName || account?.nickname || '상점명 없음';
+  const status =
+    account?.approvalStatus || account?.ownerInfo?.approvalStatus || 'PENDING';
+  const createdDate =
+    account?.createdAt ||
+    account?.reviewRequestedAt ||
+    account?.ownerInfo?.createdAt;
+
+  const statusTextMap = {
+    PENDING: '승인 대기 중',
+    APPROVED: '승인 완료',
+    REJECTED: '승인 거부',
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '-';
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
   };
 
   return (
-    <LeftProfileCard>
-      <div className="avatar">{name.charAt(0)}</div>
-      <h2>{name}</h2>
+    <LeftProfileCard $status={status}>
+      <div className="avatar">{ownerName.charAt(0)}</div>
+      <h2>{ownerName}</h2>
       <div className="email-sub">{email}</div>
-      <div className="status-badge">승인 대기 중</div>
+      <div className="status-badge">
+        {statusTextMap[status] || '승인 대기 중'}
+      </div>
 
       <div className="info-divider" />
 
       <div className="meta-item">
         <span className="label">신청일</span>
-        <span className="value">
-          {formatDate(account?.ownerInfo?.createdAt)}
-        </span>
+        <span className="value">{formatDate(createdDate)}</span>
       </div>
       <div className="meta-item">
         <span className="label">가게명</span>
-        <span className="value">{nickname}</span>
+        <span className="value">{storeName}</span>
       </div>
     </LeftProfileCard>
   );

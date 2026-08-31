@@ -28,6 +28,12 @@ public class InquiryAnswerResponseDto {
     @Schema(description = "작성일시")
     private LocalDateTime createdAt;
 
+    @Schema(description = "최종 수정일시. 수정된 적이 없으면 작성일시와 같다")
+    private LocalDateTime modifiedAt;
+
+    @Schema(description = "수정 여부. true이면 프론트에서 '수정됨' 표시")
+    private boolean edited;
+
     public static InquiryAnswerResponseDto from(InquiryAnswer answer) {
         return InquiryAnswerResponseDto.builder()
                 .answerId(answer.getAnswerId())
@@ -35,6 +41,16 @@ public class InquiryAnswerResponseDto {
                 .writerName(answer.getWriter().getName())
                 .content(answer.getContent())
                 .createdAt(answer.getCreatedAt())
+                .modifiedAt(answer.getModifiedAt())
+                .edited(isEdited(answer))
                 .build();
+    }
+
+    // JPA 감사 필드는 최초 저장 시 createdAt과 modifiedAt이 같은 값으로 채워진다.
+    // 둘이 달라졌다는 것은 이후 한 번이라도 수정됐다는 뜻이다.
+    private static boolean isEdited(InquiryAnswer answer) {
+        return answer.getModifiedAt() != null
+                && answer.getCreatedAt() != null
+                && answer.getModifiedAt().isAfter(answer.getCreatedAt());
     }
 }

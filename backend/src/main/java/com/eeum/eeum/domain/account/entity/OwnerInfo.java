@@ -62,6 +62,26 @@ public class OwnerInfo extends BaseEntity {
         return ownerInfo;
     }
 
+    /**
+     * 심사 대기 여부 — 상태 전이의 유일한 판별식이다.
+     *
+     * <p>두 축을 모두 봐야 한다. 상태만 보면 안 되는 이유: PENDING은 두 상태를 겸한다.
+     * {@link #create}와 {@link #updateInfo}(사업자번호 변경)는 PENDING + {@code reviewRequestedAt = null}
+     * ("아직 제출 안 함")을, {@link #requestReview}는 PENDING + 접수 시각("심사 대기")을 만든다.
+     *
+     * <p>접수 시각만 보면 안 되는 이유: {@link #reject}는 상태만 REJECTED로 바꾸고 접수 시각을
+     * 남긴다. 시각만 보면 거절된 신청이 재신청 없이 그대로 승인돼 ROLE_OWNER가 부여된다.
+     *
+     * <p>따라서 승인·거절은 이 판별식이 true일 때만, 재신청은 false일 때만 허용한다.
+     */
+    public boolean isAwaitingReview() {
+        return this.approvalStatus == ApprovalStatus.PENDING && this.reviewRequestedAt != null;
+    }
+
+    public boolean isApproved() {
+        return this.approvalStatus == ApprovalStatus.APPROVED;
+    }
+
     public void requestReview() {
         this.approvalStatus = ApprovalStatus.PENDING;
         this.rejectionReason = null;

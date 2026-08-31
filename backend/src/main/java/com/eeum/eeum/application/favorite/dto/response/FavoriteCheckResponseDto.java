@@ -19,7 +19,9 @@ public class FavoriteCheckResponseDto {
     @Schema(description = "찜 여부", example = "true")
     private boolean favorited;
 
-    @Schema(description = "찜 ID (찜한 경우에만 반환)", example = "10")
+    @Schema(description = "찜 ID. 단건 조회에서 찜한 경우에만 채워진다. "
+            + "배치 조회(/favorites/check/batch)는 성능상 조회하지 않으므로 항상 null이다.",
+            example = "10")
     private Long favoriteId;
 
     public static FavoriteCheckResponseDto of(FavoriteRefType refType, Long refId,

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext';
+import { authApi } from '../../../api/authApi';
 
 const LoginWrapper = styled.div`
   min-height: 100vh;
@@ -108,31 +110,32 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  const { login } = useAuth();
+
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('role');
-
     try {
-      const response = await axios.post('http://localhost:8080/auth/login', {
-        email: email,
-        password: password,
-      });
+      const response = await authApi.login(email, password);
 
-      const { success, data, message } = response.data;
+      const responseData = response.data || response;
+      const { success, data, message } = responseData;
 
       if (success) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('role', data.role);
+        // 전역 토큰 및 세션 상태 업데이트
+        login(data.accessToken, data.role, data.refreshToken);
 
         alert(message);
 
-        navigate('/admin/dashboard');
+        // 사장님(ROLE_OWNER)일 경우 라우터의 루트("/") 주소로 보냅니다.
+        const redirectPath =
+          data.role === 'ROLE_ADMIN' ? '/admin/dashboard' : '/';
+
+        navigate(redirectPath);
       } else {
-        alert(response.data.error.message || '로그인에 실패했습니다.');
+        alert(responseData.error?.message || '로그인에 실패했습니다.');
       }
     } catch (error) {
       console.error('로그인 에러:', error);

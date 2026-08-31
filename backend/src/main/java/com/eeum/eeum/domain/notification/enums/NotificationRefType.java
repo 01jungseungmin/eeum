@@ -16,5 +16,6 @@ public enum NotificationRefType {
     SETTLEMENT,          // 정산
     OWNER_APPLICATION,   // 사장 승인 신청
     REPORT,              // 신고
+    OPERATION_FAILURE,   // 운영 실패 이력
     SYSTEM               // refId = null (시스템 공지)
 }

@@ -2,6 +2,7 @@ package com.eeum.eeum.application.report.dto.response;
 
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.report.entity.Report;
+import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
@@ -13,7 +14,12 @@ import java.time.LocalDateTime;
 
 @Getter
 @Builder
-@Schema(description = "신고 응답")
+@Schema(description = """
+        신고 응답.
+
+        목록 조회(GET /admin/reports)와 상세 조회(GET /admin/reports/{reportId})가 이 스키마를 공유하지만
+        채워지는 범위가 다르다.
+        """)
 public class ReportResponseDto {
 
     @Schema(description = "신고 ID")
@@ -34,16 +40,16 @@ public class ReportResponseDto {
     @Schema(description = "신고자 ID")
     private Long reporterId;
 
-    @Schema(description = "신고자 이름")
+    @Schema(description = "신고자 이름. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final String reporterName;
 
-    @Schema(description = "신고자 닉네임")
+    @Schema(description = "신고자 닉네임. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final String reporterNickname;
 
-    @Schema(description = "신고자 이메일")
+    @Schema(description = "신고자 이메일. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final String reporterEmail;
 
-    @Schema(description = "신고 대상 상세 정보")
+    @Schema(description = "신고 대상 상세 정보. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final ReportTargetSnapshotDto target;
 
     @Schema(description = "작성일시")
@@ -61,6 +67,15 @@ public class ReportResponseDto {
     @Schema(description = "관리자 메모")
     private String adminNote;
 
+    @Schema(description = "관리자 처리 조치")
+    private ReportAction action;
+
+    @Schema(description = "처리한 관리자 ID")
+    private Long processedByAdminId;
+
+    @Schema(description = "경고·정지 등 계정 조치 대상 ID")
+    private Long actionTargetAccountId;
+
     @Schema(description = "관리자 처리 시각 (PENDING이면 null)")
     private final LocalDateTime processedAt;
 
@@ -76,10 +91,12 @@ public class ReportResponseDto {
                 .content(report.getContent())
                 .status(report.getStatus())
                 .adminNote(report.getAdminNote())
+                .action(report.getAction())
+                .processedByAdminId(report.getProcessedByAdminId())
+                .actionTargetAccountId(report.getActionTargetAccountId())
                 .createdAt(report.getCreatedAt())
                 .updatedAt(report.getModifiedAt())
                 .reportedAt(report.getCreatedAt())
-                // 처리 시각 전용 컬럼이 없어 상태 전이 시 갱신되는 modifiedAt을 사용 (PENDING이면 미처리)
                 .processedAt(processed ? report.getModifiedAt() : null)
                 .build();
     }
@@ -103,7 +120,9 @@ public class ReportResponseDto {
                 .reportedAt(report.getCreatedAt())
                 .status(report.getStatus())
                 .adminNote(report.getAdminNote())
-                // 처리 시각 전용 컬럼이 없어 상태 전이 시 갱신되는 modifiedAt을 사용 (PENDING이면 미처리)
+                .action(report.getAction())
+                .processedByAdminId(report.getProcessedByAdminId())
+                .actionTargetAccountId(report.getActionTargetAccountId())
                 .processedAt(processed ? report.getModifiedAt() : null)
                 .build();
     }

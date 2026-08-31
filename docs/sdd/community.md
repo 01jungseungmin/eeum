@@ -331,3 +331,14 @@ community_post_id | bigint | FK(community_post), NOT NULL | 좋아요 대상 게
 - 좋아요 토글 멱등성((accountId, postId) UNIQUE + 토글)은 `common.md` 6.5.1, 6.5.4 참조
 - 게시글 삭제 시 CASCADE(이미지/댓글/좋아요)는 `common.md` 6.6.6 참조
 - 이벤트 카탈로그: PostLikedEvent는 `common.md` 6.2.5 참조
+
+## 현재 구현 기준 (2026-08-12)
+
+- 댓글과 대댓글은 별도 `CommunityCommentReply` 엔티티가 아니라
+  `CommunityComment.parentComment` 자기 참조로 통합 관리한다.
+- 개별 댓글·대댓글 삭제는 `is_deleted=true`와 삭제 표시 문구를 남기는 tombstone 방식이다.
+  대댓글 스레드의 문맥과 참조 무결성을 유지하기 위한 예외적 Soft Delete 정책이다.
+- 게시글 자체를 삭제할 때는 댓글 좋아요 → 대댓글 → 최상위 댓글 →
+  게시글 좋아요·이미지 → 게시글 순서로 물리 삭제한다.
+- 댓글 작성·수정·삭제와 게시글 삭제가 경쟁할 때는
+  `CommunityPost` → `CommunityComment` 순서의 DB 비관적 잠금을 공통으로 사용한다.

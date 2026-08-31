@@ -3,10 +3,12 @@ package com.eeum.eeum.domain.store.repository;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.enums.StoreReviewType;
 import com.eeum.eeum.domain.store.repository.CustomerReviewStatProjection;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,18 @@ public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> 
     // 신고 상세의 대상 스냅샷 — 작성자/가게를 함께 조회해 N+1 방지
     @EntityGraph(attributePaths = {"account", "store"})
     Optional<StoreReview> findWithAccountAndStoreByStorereviewId(Long storereviewId);
+
+    // 리뷰 삭제 잠금 순서(Store → StoreReview) 결정용.
+    // Store 엔티티를 미리 적재하지 않아 동시 평점 수정 후 stale version 충돌을 방지한다.
+    @Query("SELECT r.store.storeId FROM StoreReview r WHERE r.storereviewId = :storereviewId")
+    Optional<Long> findStoreIdByStorereviewId(@Param("storereviewId") Long storereviewId);
+
+    // 신고 조치 중 리뷰 수정·삭제와 경쟁하지 않도록 대상 행을 잠금
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM StoreReview r WHERE r.storereviewId = :storereviewId")
+    Optional<StoreReview> findWithAccountAndStoreByStorereviewIdForUpdate(
+            @Param("storereviewId") Long storereviewId
+    );
 
     //주문 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 orderId 집합
     @Query("SELECT r.order.orderId FROM StoreReview r WHERE r.order.orderId IN :orderIds")

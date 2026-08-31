@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.StoreDashboardResponseDto;
 import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -12,6 +13,7 @@ import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
@@ -22,11 +24,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -65,6 +70,37 @@ class StoreServiceTest {
                 ChatRoomRefType.STORE, STORE_ID, null);
         ReflectionTestUtils.setField(room, "chatroomId", CHAT_ROOM_ID);
         return room;
+    }
+
+    @Test
+    void 사장은_관리자에게_정지된_상점을_OPEN으로_변경할_수_없다() {
+        Store store = createStore();
+        store.suspend();
+        StoreStatusUpdateRequestDto request = new StoreStatusUpdateRequestDto();
+        ReflectionTestUtils.setField(request, "status", StoreStatus.OPEN);
+        when(storeRepository.findByAccountIdWithPessimisticLock(OWNER_ACCOUNT_ID))
+                .thenReturn(Optional.of(store));
+
+        assertThatThrownBy(() -> storeService.updateStoreStatus(OWNER_ACCOUNT_ID, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_SUSPENDED);
+        assertThat(store.getStatus()).isEqualTo(StoreStatus.SUSPENDED);
+    }
+
+    @Test
+    void 사장_상태변경은_계정의_상점_행을_쓰기잠금으로_조회한다() {
+        Store store = createStore();
+        StoreStatusUpdateRequestDto request = new StoreStatusUpdateRequestDto();
+        ReflectionTestUtils.setField(request, "status", StoreStatus.OPEN);
+        when(storeRepository.findByAccountIdWithPessimisticLock(OWNER_ACCOUNT_ID))
+                .thenReturn(Optional.of(store));
+
+        storeService.updateStoreStatus(OWNER_ACCOUNT_ID, request);
+
+        assertThat(store.getStatus()).isEqualTo(StoreStatus.OPEN);
+        org.mockito.Mockito.verify(storeRepository)
+                .findByAccountIdWithPessimisticLock(OWNER_ACCOUNT_ID);
     }
 
     // ──────────────────── 대시보드 — 채팅방 개설 여부 ────────────────────

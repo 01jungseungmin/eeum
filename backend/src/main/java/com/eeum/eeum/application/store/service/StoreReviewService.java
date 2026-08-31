@@ -6,7 +6,10 @@ import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.*;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.enums.AccountStatus;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.OrderItem;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
@@ -20,6 +23,7 @@ import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.entity.StoreReviewImage;
 import com.eeum.eeum.domain.store.entity.StoreReviewReply;
 import com.eeum.eeum.domain.store.enums.StoreReviewType;
+import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.event.StoreReviewCreatedEvent;
 import com.eeum.eeum.domain.store.event.StoreReviewReplyCreatedEvent;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -35,6 +39,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
@@ -55,6 +60,7 @@ public class StoreReviewService {
     private final OrderItemRepository orderItemRepository;
     private final VisitReservationRepository visitReservationRepository;
     private final AccountRepository accountRepository;
+    private final OwnerInfoRepository ownerInfoRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 공개 조회 =====================
@@ -62,7 +68,7 @@ public class StoreReviewService {
     //상점 리뷰 목록 조회 (비회원 포함)
     @Transactional(readOnly = true)
     public Page<StoreReviewResponseDto> getReviews(Long storeId, Pageable pageable) {
-        getStoreOrThrow(storeId);
+        getPublicVisibleStoreOrThrow(storeId);
         Page<StoreReview> reviews = storeReviewRepository
                 .findByStore_StoreIdOrderByCreatedAtDesc(storeId, pageable);
         return reviews.map(this::toResponseDto);
@@ -71,6 +77,7 @@ public class StoreReviewService {
     // 상점 리뷰 단건 상세 조회 (비회원 포함)
     @Transactional(readOnly = true)
     public StoreReviewDetailResponseDto getReviewDetail(Long storeId, Long reviewId) {
+        getPublicVisibleStoreOrThrow(storeId);
         StoreReview review = getReviewOrThrow(storeId, reviewId);
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
@@ -104,13 +111,13 @@ public class StoreReviewService {
     // ===================== 리뷰 작성/수정/삭제 (일반 회원) =====================
 
     // 리뷰 작성 — 거래 완료(COMPLETED) 주문만 허용, 1주문 1리뷰
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewResponseDto createReview(
             Long accountId,
             Long storeId,
             StoreReviewCreateRequestDto request
     ) {
-        Store store = getStoreOrThrow(storeId);
+        Store store = getStoreForUpdateOrThrow(storeId);
         Account account = getAccountOrThrow(accountId);
 
         // 주문 검증 — 해당 계정의 완료된 주문이어야 함
@@ -167,7 +174,7 @@ public class StoreReviewService {
 
     // 방문 예약 리뷰 작성 — 방문 완료(COMPLETED) 예약만 허용, 1예약 1리뷰
     // storeId는 클라이언트 입력을 받지 않고 예약 엔티티에서 직접 추적한다.
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewResponseDto createReservationReview(
             Long accountId,
             Long reservationId,
@@ -189,7 +196,7 @@ public class StoreReviewService {
             throw new BusinessException(ErrorCode.STORE_REVIEW_ALREADY_EXISTS);
         }
 
-        Store store = reservation.getStore();
+        Store store = getStoreForUpdateOrThrow(reservation.getStore().getStoreId());
         StoreReview review = StoreReview.createForReservation(store, account, reservation,
                 request.getRating(), request.getContent());
 
@@ -256,14 +263,15 @@ public class StoreReviewService {
     }
 
     // 리뷰 수정 — 본인만 가능
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewResponseDto updateReview(
             Long accountId,
             Long storeId,
             Long reviewId,
             StoreReviewUpdateRequestDto request
     ) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        Store store = getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         int oldRating = review.getRating();
@@ -271,7 +279,8 @@ public class StoreReviewService {
 
         // 평점이 바뀐 경우에만 Store 평점 재계산
         if (oldRating != request.getRating()) {
-            recalculateStoreRating(review.getStore());
+            storeReviewRepository.flush();
+            recalculateStoreRating(store);
         }
 
         log.info("상점 리뷰 수정: reviewId={}, accountId={}", reviewId, accountId);
@@ -284,17 +293,17 @@ public class StoreReviewService {
     }
 
     // 리뷰 삭제 — 본인만 가능
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteReview(Long accountId, Long storeId, Long reviewId) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        Store store = getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
-
-        Store store = review.getStore();
 
         // 연관 이미지 / 답글 먼저 삭제
         storeReviewImageRepository.deleteAllByStoreReview_StorereviewId(reviewId);
         storeReviewReplyRepository.deleteByStoreReview_StorereviewId(reviewId);
         storeReviewRepository.delete(review);
+        storeReviewRepository.flush();
 
         // Store 평점 재계산
         recalculateStoreRating(store);
@@ -305,14 +314,15 @@ public class StoreReviewService {
     // ===================== 리뷰 이미지 관리 =====================
 
     // 리뷰 이미지 추가
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewResponseDto addReviewImages(
             Long accountId,
             Long storeId,
             Long reviewId,
             List<String> imageUrls
     ) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         if (imageUrls == null || imageUrls.isEmpty()) {
@@ -339,9 +349,10 @@ public class StoreReviewService {
     }
 
     // 리뷰 이미지 삭제
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteReviewImage(Long accountId, Long storeId, Long reviewId, Long imageId) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         StoreReviewImage image = storeReviewImageRepository.findById(imageId)
@@ -365,11 +376,12 @@ public class StoreReviewService {
     }
 
     // 리뷰 대표 이미지 지정
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void setReviewImageThumbnail(
             Long accountId, Long storeId, Long reviewId, Long imageId
     ) {
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        getStoreForUpdateOrThrow(storeId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
         StoreReviewImage newThumbnail = storeReviewImageRepository.findById(imageId)
@@ -390,15 +402,16 @@ public class StoreReviewService {
     // ===================== 사장 답글 (ROLE_OWNER) =====================
 
     // 답글 작성 — 해당 상점의 사장만 가능, 1리뷰 1답글
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewReplyResponseDto createReply(
             Long accountId,
             Long storeId,
             Long reviewId,
             StoreReviewReplyRequestDto request
     ) {
-        checkStoreOwnership(storeId, accountId);
-        StoreReview review = getReviewOrThrow(storeId, reviewId);
+        Store lockedStore = getStoreForUpdateOrThrow(storeId);
+        checkStoreOwnership(lockedStore, accountId);
+        StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
 
         if (storeReviewReplyRepository.existsByStoreReview_StorereviewId(reviewId)) {
             throw new BusinessException(ErrorCode.STORE_REVIEW_REPLY_ALREADY_EXISTS);
@@ -425,15 +438,16 @@ public class StoreReviewService {
     }
 
     // 답글 수정 — 해당 상점의 사장만 가능
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StoreReviewReplyResponseDto updateReply(
             Long accountId,
             Long storeId,
             Long reviewId,
             StoreReviewReplyRequestDto request
     ) {
-        checkStoreOwnership(storeId, accountId);
-        getReviewOrThrow(storeId, reviewId); // 리뷰 존재 확인
+        Store lockedStore = getStoreForUpdateOrThrow(storeId);
+        checkStoreOwnership(lockedStore, accountId);
+        getReviewForUpdateOrThrow(storeId, reviewId);
 
         StoreReviewReply reply = storeReviewReplyRepository
                 .findByStoreReview_StorereviewId(reviewId)
@@ -446,10 +460,11 @@ public class StoreReviewService {
     }
 
     // 답글 삭제 — 해당 상점의 사장만 가능
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteReply(Long accountId, Long storeId, Long reviewId) {
-        checkStoreOwnership(storeId, accountId);
-        getReviewOrThrow(storeId, reviewId); // 리뷰 존재 확인
+        Store lockedStore = getStoreForUpdateOrThrow(storeId);
+        checkStoreOwnership(lockedStore, accountId);
+        getReviewForUpdateOrThrow(storeId, reviewId);
 
         StoreReviewReply reply = storeReviewReplyRepository
                 .findByStoreReview_StorereviewId(reviewId)
@@ -541,6 +556,10 @@ public class StoreReviewService {
     private void checkStoreOwnership(Long storeId, Long accountId) {
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        checkStoreOwnership(store, accountId);
+    }
+
+    private void checkStoreOwnership(Store store, Long accountId) {
         if (!store.isOwnedBy(accountId)) {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
         }
@@ -571,10 +590,36 @@ public class StoreReviewService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
     }
 
+    private Store getPublicVisibleStoreOrThrow(Long storeId) {
+        Store store = getStoreOrThrow(storeId);
+        if (store.getAccount().getStatus() != AccountStatus.ACTIVE
+                || store.getStatus() == StoreStatus.SUSPENDED
+                || !ownerInfoRepository.existsByAccount_AccountIdAndApprovalStatus(
+                        store.getAccount().getAccountId(), ApprovalStatus.APPROVED)) {
+            throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
+        }
+        return store;
+    }
+
+    private Store getStoreForUpdateOrThrow(Long storeId) {
+        return storeRepository.findByIdWithPessimisticLock(storeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+    }
+
     private StoreReview getReviewOrThrow(Long storeId, Long reviewId) {
         return storeReviewRepository
                 .findByStorereviewIdAndStore_StoreId(reviewId, storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
+    }
+
+    private StoreReview getReviewForUpdateOrThrow(Long storeId, Long reviewId) {
+        StoreReview review = storeReviewRepository
+                .findWithAccountAndStoreByStorereviewIdForUpdate(reviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND));
+        if (!review.getStore().getStoreId().equals(storeId)) {
+            throw new BusinessException(ErrorCode.STORE_REVIEW_NOT_FOUND);
+        }
+        return review;
     }
 
     private Account getAccountOrThrow(Long accountId) {

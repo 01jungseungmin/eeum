@@ -2,16 +2,25 @@ package com.eeum.eeum.application.report.service;
 
 import com.eeum.eeum.application.report.dto.response.ReportTargetSnapshotDto;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.category.entity.Category;
+import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.community.entity.CommunityComment;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
 import com.eeum.eeum.domain.community.repository.CommunityPostRepository;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
+import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.NotFoundException;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,9 +28,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +47,8 @@ class ReportTargetResolverTest {
     @Mock private CommunityPostRepository communityPostRepository;
     @Mock private CommunityCommentRepository communityCommentRepository;
     @Mock private AccountRepository accountRepository;
+    @Mock private UsedProductRepository usedProductRepository;
+    @Mock private PrimaryRegionResolver primaryRegionResolver;
 
     private static final Long OWNER_ID = 7L;
 
@@ -53,6 +66,20 @@ class ReportTargetResolverTest {
         ReflectionTestUtils.setField(store, "storeId", id);
         ReflectionTestUtils.setField(store, "description", "동네 카페입니다");
         return store;
+    }
+
+    private Account reporter() {
+        return createAccount(99L, "신고자", "신고자닉");
+    }
+
+    private UsedProduct createUsedProduct(Long id, Account seller) {
+        UsedProduct product = UsedProduct.create(
+                seller, Category.createRoot(CategoryType.USED, "디지털기기", 1),
+                Region.create("1168010100", "서울특별시", "강남구", "역삼동", 3),
+                "자전거 팝니다", "거의 새것입니다",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"));
+        ReflectionTestUtils.setField(product, "usedProductId", id);
+        return product;
     }
 
     // ===================== 타입별 대상 조회 =====================
@@ -205,6 +232,130 @@ class ReportTargetResolverTest {
         reportTargetResolver.resolve(ReportTargetType.STORE, 1L);
 
         // Then: 소유자 조회를 위한 AccountRepository 접근이 없어야 한다
+        org.mockito.Mockito.verifyNoInteractions(accountRepository);
+    }
+
+    // ===================== 신고 접수 공개 정책 =====================
+    // 상세 조회는 404인데 신고만 성공하면, ID를 넣어보는 것만으로 비공개 대상의 존재가 드러난다.
+
+    @Test
+    void 비공개_상점은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 미승인·정지·탈퇴 계정의 상점
+        Account owner = createAccount(OWNER_ID, "김사장", "사장님");
+        when(storeRepository.findWithAccountByStoreId(1L))
+                .thenReturn(Optional.of(createStore(1L, owner)));
+        when(storeRepository.isPubliclyVisible(1L)).thenReturn(false);
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.STORE, 1L, reporter()))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_커뮤니티_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 공개 조회 쿼리는 이미 hidden = false를 거는데 신고만 뚫려 있었다
+        Account author = createAccount(20L, "박작성", "작성자");
+        CommunityPost post = CommunityPost.create(author, null, null, "숨겨진 게시글", "본문");
+        ReflectionTestUtils.setField(post, "postId", 40L);
+        post.hide();
+        when(communityPostRepository.findWithAccountByPostId(40L)).thenReturn(Optional.of(post));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_POST, 40L, reporter()))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글의_댓글도_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 부모 글이 숨겨지면 댓글도 화면에서 볼 수 없다
+        Account author = createAccount(20L, "박작성", "작성자");
+        CommunityPost post = CommunityPost.create(author, null, null, "숨겨진 게시글", "본문");
+        ReflectionTestUtils.setField(post, "postId", 40L);
+        post.hide();
+        CommunityComment comment = CommunityComment.createComment(post, author, "댓글");
+        ReflectionTestUtils.setField(comment, "commentId", 50L);
+        when(communityCommentRepository.findWithAccountAndPostByCommentId(50L))
+                .thenReturn(Optional.of(comment));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.COMMUNITY_COMMENT, 50L, reporter()))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND);
+    }
+
+    @Test
+    void 판매자가_탈퇴한_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        UsedProduct product = createUsedProduct(70L, seller);
+        seller.withdraw();
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L, reporter()))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글은_신고_접수에서_존재하지_않는_것으로_처리된다() {
+        // Given: 상세 조회는 숨김 글에 404를 준다. 신고만 성공하면 ID를 넣어보는 것으로 존재가 드러난다.
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        UsedProduct hidden = createUsedProduct(70L, seller);
+        hidden.hide();
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(hidden));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                reportTargetResolver.resolveForCreation(ReportTargetType.USED_PRODUCT, 70L, reporter()))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 숨김_게시글도_관리자_열람용_조회에서는_그대로_반환된다() {
+        // Given: 관리자는 숨긴 콘텐츠에 대한 신고도 열람/처리할 수 있어야 한다
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        UsedProduct hidden = createUsedProduct(70L, seller);
+        hidden.hide();
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(hidden));
+
+        // When
+        ReportTargetSnapshotDto result = reportTargetResolver.resolve(ReportTargetType.USED_PRODUCT, 70L);
+
+        // Then
+        assertThat(result.isExists()).isTrue();
+        assertThat(result.getTitle()).isEqualTo("자전거 팝니다");
+    }
+
+    @Test
+    void USED_PRODUCT_대상_조회도_판매자를_함께_로드하는_전용_조회를_사용한다() {
+        // Given: 판매자를 fetch join하지 않으면 스냅샷 생성 시 대상 1건당 SELECT가 한 번 더 나간다
+        Account seller = createAccount(OWNER_ID, "박판매", "판매자닉");
+        when(usedProductRepository.findWithSellerByUsedProductIdAndDeletedAtIsNull(70L))
+                .thenReturn(Optional.of(createUsedProduct(70L, seller)));
+
+        // When
+        ReportTargetSnapshotDto result = reportTargetResolver.resolve(ReportTargetType.USED_PRODUCT, 70L);
+
+        // Then
+        assertThat(result.isExists()).isTrue();
+        assertThat(result.getTitle()).isEqualTo("자전거 팝니다");
+        assertThat(result.getContent()).isEqualTo("거의 새것입니다");
+        assertThat(result.getOwnerAccountId()).isEqualTo(OWNER_ID);
+        assertThat(result.getOwnerNickname()).isEqualTo("판매자닉");
         org.mockito.Mockito.verifyNoInteractions(accountRepository);
     }
 }

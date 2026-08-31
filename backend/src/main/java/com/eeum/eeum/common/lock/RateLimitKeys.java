@@ -41,6 +41,23 @@ public final class RateLimitKeys {
         return "rate-limit:ai-exposure-click:" + viewerKey;
     }
 
+    // 운영 실패 관리자 알림 스로틀 — 분류 단위.
+    // PortOne 장애처럼 한 원인으로 실패가 연속 발생할 때 관리자 전원에게 건별 알림이 나가면
+    // 알림 폭탄이 되고 정작 다른 분류의 실패가 묻힌다. 분류별로 쿨다운을 둔다.
+    public static String operationFailureAlert(String category) {
+        return "rate-limit:operation-failure-alert:" + (category == null ? "UNKNOWN" : category);
+    }
+
+    // Webhook 서명 검증 실패 누적 카운터 — 인증 없는 엔드포인트라 건별 DB 기록 대신 집계한다.
+    public static String webhookSignatureFailureCount() {
+        return "rate-limit:webhook-signature-fail:count";
+    }
+
+    // Webhook 서명 검증 실패의 DB 이력 기록 쿨다운 — 구간당 1건만 남긴다.
+    public static String webhookSignatureFailureRecord() {
+        return "rate-limit:webhook-signature-fail:record";
+    }
+
     private static String normalize(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }

@@ -37,19 +37,12 @@ function MainLayout() {
   useEffect(() => {
     if (!accessToken) return;
 
-    const role = localStorage.getItem('role');
+    const role = sessionStorage.getItem('role');
 
     // 초기 데이터 로드 함수
     const fetchInitialData = async () => {
       try {
-        if (role === 'ROLE_ADMIN') {
-          const approvalRes = await approvalApi.getOwnerStoreChecklist();
-          if (approvalRes.data && approvalRes.data.success) {
-            setApprovalStatus(approvalRes.data.data.approvalStatus);
-          }
-          setStatusLoading(false);
-          return;
-        }
+        if (role === 'ROLE_ADMIN') return;
 
         // 사장님 권한일 경우, 승인 상태와 대시보드 정보를 동시에 가져오기
         const [approvalRes, dashboardRes] = await Promise.all([
@@ -66,12 +59,12 @@ function MainLayout() {
 
           // 방금 개설되어 로컬에 true 흔적이 있거나 백엔드가 true를 주면 존재(true)로 판정
           const isCreatedInLocal =
-            localStorage.getItem('storeChatRoomCreated') === 'true';
+            sessionStorage.getItem('storeChatRoomCreated') === 'true';
           const chatCreated =
             isCreatedInLocal || serverData.storeChatRoomCreated;
 
           // 개설 여부 상태 동기화
-          localStorage.setItem(
+          sessionStorage.setItem(
             'storeChatRoomCreated',
             String(Boolean(chatCreated)),
           );
@@ -83,12 +76,12 @@ function MainLayout() {
             targetRoomId !== null &&
             String(targetRoomId) !== 'undefined'
           ) {
-            localStorage.setItem('storeChatRoom_id', String(targetRoomId));
+            sessionStorage.setItem('storeChatRoom_id', String(targetRoomId));
           }
 
           // storeId 저장
           if (serverData.storeId) {
-            localStorage.setItem('my_store_id', String(serverData.storeId));
+            sessionStorage.setItem('my_store_id', String(serverData.storeId));
           }
         }
       } catch (error) {
@@ -122,7 +115,12 @@ function MainLayout() {
   }
 
   if (!accessToken) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
   }
 
   return (

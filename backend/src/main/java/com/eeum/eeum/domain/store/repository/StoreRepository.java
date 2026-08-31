@@ -9,11 +9,15 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface StoreRepository extends JpaRepository<Store, Long>,StoreRepositoryCustom {
 
     boolean existsByAccount_AccountId(Long accountId);
+
+    boolean existsByCategory_CategoryId(Long categoryId);
 
     // 가게 단톡방 생성/종료/입장/초대의 DB 공통 mutex.
     // ACTIVE 조건 인덱스를 직접 잠그면 종료 시 생성 컬럼 갱신과 next-key lock 교착이 날 수 있어
@@ -21,6 +25,10 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Store s WHERE s.storeId = :storeId")
     Optional<Store> findByIdWithPessimisticLock(@Param("storeId") Long storeId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Store s WHERE s.account.accountId = :accountId")
+    Optional<Store> findByAccountIdWithPessimisticLock(@Param("accountId") Long accountId);
 
     // 신고 상세의 대상 스냅샷 — 소유자를 함께 조회해 N+1 방지
     @EntityGraph(attributePaths = "account")
@@ -35,18 +43,46 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
 
     //찜 카운트 +1 — DB 원자 UPDATE, 영향받은 행 수 반환
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE Store s SET s.favoriteCount = s.favoriteCount + 1 WHERE s.storeId = :storeId")
+    @Query("""
+        UPDATE Store s
+        SET s.favoriteCount = s.favoriteCount + 1,
+            s.version = s.version + 1
+        WHERE s.storeId = :storeId
+        """)
     int incrementFavoriteCount(@Param("storeId") Long storeId);
 
     // 찜 카운트 -1 — favoriteCount > 0 가드, 영향받은 행 수 반환
     @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE Store s
-        SET s.favoriteCount = s.favoriteCount - 1
+        SET s.favoriteCount = s.favoriteCount - 1,
+            s.version = s.version + 1
         WHERE s.storeId = :storeId
           AND s.favoriteCount > 0
         """)
     int decrementFavoriteCount(@Param("storeId") Long storeId);
+
+    // 찜 카운트 일괄 -1 — 회원 탈퇴처럼 한 사람의 찜을 한꺼번에 정리할 때 사용.
+    // 같은 회원이 같은 상점을 두 번 찜할 수 없어(UNIQUE) ID가 중복되지 않으므로 단건 -1의 반복과 결과가 같다.
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Store s
+        SET s.favoriteCount = s.favoriteCount - 1,
+            s.version = s.version + 1
+        WHERE s.storeId IN :storeIds
+          AND s.favoriteCount > 0
+        """)
+    int decrementFavoriteCounts(@Param("storeIds") Collection<Long> storeIds);
+
+    // 대상 삭제 시 찜 카운트 0으로 전이 — 찜 행을 지우면 카운트도 함께 0이어야 한다.
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE Store s
+        SET s.favoriteCount = 0,
+            s.version = s.version + 1
+        WHERE s.storeId = :storeId
+        """)
+    int resetFavoriteCount(@Param("storeId") Long storeId);
 
     // 정합성 재계산 — favorite 테이블 실제 row 수로 모든 상점의 favoriteCount 일괄 갱신
     // 단일 UPDATE ... SELECT로 처리해 N번 쿼리 없이 처리
@@ -56,7 +92,8 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
         SET s.favorite_count = (
             SELECT COUNT(*) FROM favorite f
             WHERE f.ref_type = 'STORE' AND f.ref_id = s.store_id
-        )
+        ),
+        s.version = s.version + 1
         """, nativeQuery = true)
     int recalculateAllFavoriteCounts();
 }

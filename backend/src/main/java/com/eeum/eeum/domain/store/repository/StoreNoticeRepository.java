@@ -6,5 +6,4 @@ import java.util.List;
 
 public interface StoreNoticeRepository extends JpaRepository<StoreNotice, Long> {
     List<StoreNotice> findByStore_StoreIdAndIsActiveTrueOrderByIsPinnedDescCreatedAtDesc(Long storeId);
-    void deleteByStore_StoreId(Long storeId);
 }

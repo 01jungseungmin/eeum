@@ -57,13 +57,12 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn("123-45-67890");
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        // 잠금 순서 account → owner_info — 사장 승인(approveOwner)과 같은 순서여야 한다.
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getBusinessNumber()).thenReturn("9999999999"); // 기존 값과 다름
-        when(ownerInfoRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(ownerInfo));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(ownerInfoRepository.existsByBusinessNumber("1234567890")).thenReturn(false);
 
         // when
@@ -82,13 +81,12 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn("1234567890");
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        // 잠금 순서 account → owner_info — 사장 승인(approveOwner)과 같은 순서여야 한다.
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getBusinessNumber()).thenReturn("1234567890"); // 기존값과 동일
-        when(ownerInfoRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(ownerInfo));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
 
         // when
         accountService.updateOwnerInfo(accountId, request);
@@ -107,13 +105,12 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn("123-45-67890"); // 정규화 후 "1234567890"
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        // 잠금 순서 account → owner_info — 사장 승인(approveOwner)과 같은 순서여야 한다.
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
         when(ownerInfo.getBusinessNumber()).thenReturn("9999999999"); // 기존값과 다름
-        when(ownerInfoRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(ownerInfo));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(ownerInfoRepository.existsByBusinessNumber("1234567890")).thenReturn(true); // 이미 존재
 
         // when & then
@@ -134,12 +131,11 @@ class AccountServiceBusinessNumberTest {
         when(request.getBusinessNumber()).thenReturn(null); // null 입력
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        // 잠금 순서 account → owner_info — 사장 승인(approveOwner)과 같은 순서여야 한다.
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfoRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(ownerInfo));
+        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
 
         // when
         accountService.updateOwnerInfo(accountId, request);

@@ -63,7 +63,7 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 - 읽기 전용 메서드는 `@Transactional(readOnly = true)` 필수
 - 가격 필드는 `BigDecimal` 사용
 - API 응답은 반드시 `ApiResponse<T>`로 래핑 (`common/dto/response/ApiResponse`)
-- URL은 kebab-case: `/used-products`, `/store-reviews`
+- URL은 kebab-case: `/used`, `/store-reviews`
 - FCM 직접 호출 금지 — 항상 도메인 이벤트 경유
 - 로깅은 SLF4J 사용 — `System.out.println` 금지
 - Soft Delete 대상 외 엔티티에 `deletedAt` 추가 금지
@@ -96,6 +96,8 @@ Soft Delete (deletedAt 필드) 적용 대상:
 - `Account` — 탈퇴 후 30일 유예, `AccountCleanupScheduler`가 처리
 - `ChatMessage`
 - `Category`
+- `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
+- `UsedProduct` — 판매완료 글에 후기·채팅·신고 이력이 매달려 물리 삭제 시 참조가 끊김
 
 그 외 엔티티는 Hard Delete (즉시 물리 삭제)
 
@@ -106,13 +108,35 @@ Soft Delete (deletedAt 필드) 적용 대상:
 redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 ```
 
+중고거래·찜·회원 탈퇴 연계 쓰기는 기본적으로
+`Account → Store/UsedProduct → Favorite/UsedProductImage` 순서로 잠근다.
+여러 대상 행을 잠그면 ID 오름차순처럼 하나의 전역 순서를 사용한다. 상세 공개 정책,
+카운터, 페이징, 운영 DDL과 필수 경쟁 시나리오는
+`.claude/skills/references/used-favorite-review.md`를 따른다.
+
 ### 멱등성 처리
 - PortOne Webhook: Redis + DB Unique 제약으로 중복 처리 방지
 - ChatRoom 생성: 동일 참여자 조합으로 중복 생성 방지
 
+### 결제·정산 검토 게이트
+- 결제, 환불, 취소, 수익 원장, 정산, PortOne 변경 및 전체 리뷰는
+  `.claude/skills/references/payment-settlement.md`를 반드시 읽고 적용한다.
+- 외부 API 요청·응답·Webhook·상태 enum은 리뷰 시점의 공식 문서와 다시 대조한다.
+- PortOne Mock 단위 테스트만으로 계약 검증을 완료했다고 판단하지 않는다.
+- 계약 변경은 실제 PortOne 호출 대신 공식 fixture와 로컬 HTTP Stub을 사용한 계약 테스트를 추가한다.
+- 사용자가 "결제·정산 전체 리뷰"를 요청하면 Git diff로 범위를 축소하지 않는다.
+
 ### 페이징 선택 기준
 - 무한 스크롤 (모바일 앱): `Slice<T>`
 - 관리자 페이지 (번호 페이징): `Page<T>`
+
+### 신규 도메인 단계별 개발
+- 신규 도메인이나 큰 기능 확장은 `.claude/skills/references/domain-development-workflow.md`의
+  Gate 1~7을 순서대로 적용한다.
+- 정책 결정 → Domain/Persistence → Application/Transaction → API/DTO → 교차 도메인·운영 →
+  테스트 → 최종 전체 리뷰 순서를 지키고, 이전 Gate의 위반을 다음 단계로 넘기지 않는다.
+- 완성 구현에서 공개 범위, 권한, 상태 전이, 삭제, 외부 계약처럼 결과를 바꾸는 정책이 미정이면
+  TODO나 임의 값으로 진행하지 않고 사용자 결정을 받는다.
 
 ### 테스트 작성 규칙
 - JUnit5 + Mockito + AssertJ 조합 (Spring Boot test starter에 포함)
@@ -121,6 +145,9 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - 단위 테스트는 외부 의존성(Repository, Redis, FCM, PortOne) 전부 Mocking — `@ExtendWith(MockitoExtension.class)`
 - 검증은 AssertJ `assertThat` 사용 — JUnit `assertEquals` 금지
 - 테스트 위치는 프로덕션 코드와 동일한 패키지 구조: `src/test/java/com/eeum/eeum/application/order/...`
+- 단위 테스트는 외부 의존성을 전부 Mocking하므로 **스레드·DB 커넥션·소켓 같은 런타임 자원 문제를 구조적으로 검증하지 못한다.**
+  서버 무응답, 요청 타임아웃, 커넥션 풀 고갈, 연결 누수를 다룰 때는
+  `.claude/skills/references/resource-budget.md`를 읽고 `/resource-test`를 사용한다.
 
 ### 스케줄러 목록
 새 스케줄러 추가 전 반드시 기존 목록 확인 (위치: `application/{domain}/scheduler/`):
@@ -130,6 +157,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
 - `AiPlanExpirationScheduler` — 매일 03:30, 만료일 지난 AI 플랜 구독 비활성화 (이후 FREE 처리)
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
+- `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:
@@ -141,6 +169,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `rate-limit:email-verification:{email}` — 이메일 인증 코드 발송 쿨다운 (60초)
 - `rate-limit:password-reset:{email}` — 비밀번호 재설정 메일 발송 쿨다운 (5분)
 - `rate-limit:login-fail:{email}` — 로그인 실패 카운터 (5분 내 5회 초과 시 차단)
+- `rate-limit:operation-failure-alert:{category}` — 운영 실패 관리자 알림 스로틀 (분류별 10분 쿨다운)
 - 분산 락 키는 `common/lock/LockKeys`에 상수로 정의 후 사용
 - Rate Limit 키는 `common/lock/RateLimitKeys`에 상수로 정의 후 사용 (`common/service/RateLimitService`로 체크)
 
@@ -170,6 +199,7 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - **notification** — `Notification`, `NotificationSettings`; push via FCM, real-time via SSE
 - **favorite** — Polymorphic `Favorite` keyed by `FavoriteRefType`
 - **region** — `Region` (administrative region lookup), `Location` for GPS coordinate storage
+- **used** — `UsedProduct` (C2C 중고거래 게시글). 거래 상태(`SELLING`/`RESERVED`/`SOLD`)·관리자 숨김(`hidden`)·Soft Delete(`deletedAt`)를 독립된 세 축으로 관리한다. 카테고리는 `CategoryType.USED`를 재사용하고, 거래 희망 지역은 작성 시점 `Region`을 복사해 고정한다.
 
 ### Key design patterns
 
@@ -194,3 +224,8 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - PR 베이스 브랜치는 `develop` (`main` 직접 머지 금지)
 - 브랜치 네이밍: `feature/{기능명}` (예: `feature/chat`, `feature/notification`)
 - 커밋 메시지: `feat:`, `fix:`, `refactor:` prefix + 한글 설명
+
+## 마무리
+
+- 모든 기능이 종료된 후 바뀐 부분에 대한 설명과 이유를 작성해서 정리
+- 테스트면 테스트로 기능이면 기능으로 묶어서 출력

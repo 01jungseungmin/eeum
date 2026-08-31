@@ -1,13 +1,18 @@
 package com.eeum.eeum.application.report.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.community.service.CommunityCommentService;
 import com.eeum.eeum.application.community.service.CommunityPostService;
 import com.eeum.eeum.application.report.dto.request.ReportCreateRequestDto;
 import com.eeum.eeum.application.report.dto.request.ReportReviewRequestDto;
 import com.eeum.eeum.application.report.dto.response.ReportResponseDto;
+import com.eeum.eeum.application.report.dto.response.MyReportResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -25,17 +30,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.temporal.ChronoUnit;
 
@@ -44,30 +39,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 신고 접수 시 저장한 콘텐츠 스냅샷이 실제 MySQL에서도 대상 삭제와 독립적으로 보존되는지 검증한다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class ReportSnapshotPersistenceIntegrationTest {
+class ReportSnapshotPersistenceIntegrationTest extends IntegrationTestSupport {
 
     private static final String POST_TITLE = "신고 접수 당시 게시글 제목";
     private static final String POST_CONTENT = "신고 접수 당시 게시글 전체 본문";
     private static final String COMMENT_CONTENT = "신고 접수 당시 댓글 원문";
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-    }
 
     private final ReportService reportService;
     private final AdminReportService adminReportService;
@@ -78,6 +57,7 @@ class ReportSnapshotPersistenceIntegrationTest {
     private final CommunityPostRepository communityPostRepository;
     private final CategoryRepository categoryRepository;
     private final RegionRepository regionRepository;
+    private final AccountRegionRepository accountRegionRepository;
     private final AccountRepository accountRepository;
 
     private Long reporterId;
@@ -95,6 +75,14 @@ class ReportSnapshotPersistenceIntegrationTest {
 
         Region region = regionRepository.save(
                 Region.create("1168010100", "서울특별시", "강남구", "역삼동", 3));
+
+        // 커뮤니티 글은 대표 지역 단위로 공개된다. 신고도 같은 조건을 따르므로
+        // 신고자에게 글과 같은 인증 지역을 대표로 지정해 둔다.
+        AccountRegion reporterRegion = AccountRegion.create(reporter, region);
+        reporterRegion.verify();
+        accountRegionRepository.save(reporterRegion);
+        reporter.setPrimaryRegion(reporterRegion.getAccountRegionId());
+        accountRepository.saveAndFlush(reporter);
         Category category = categoryRepository.save(
                 Category.createRoot(CategoryType.COMMUNITY, "동네 이야기", 1));
         CommunityPost post = communityPostRepository.saveAndFlush(
@@ -108,6 +96,10 @@ class ReportSnapshotPersistenceIntegrationTest {
         communityCommentRepository.deleteAll();
         communityPostRepository.deleteAll();
         categoryRepository.deleteAll();
+        // account_region은 account를 참조하므로 먼저 지운다.
+        // 남겨두면 accountRepository.deleteAll()이 FK 제약으로 실패하고,
+        // 계정이 남은 채 다음 테스트가 같은 이메일로 다시 만들다 중복으로 죽는다.
+        accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
         accountRepository.deleteAll();
     }
@@ -170,7 +162,7 @@ class ReportSnapshotPersistenceIntegrationTest {
     @Test
     void 신고_검토_응답은_JPA_flush_후_갱신된_처리시각을_반환한다() throws InterruptedException {
         // given: 접수 시각과 처리 시각을 분명히 구분한다.
-        ReportResponseDto created = reportService.createReport(
+        MyReportResponseDto created = reportService.createReport(
                 reporterId,
                 reportRequest(ReportTargetType.COMMUNITY_POST, postId));
         Thread.sleep(10);

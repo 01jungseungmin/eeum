@@ -153,7 +153,7 @@ class CommunityNotificationListenerTest {
         Long targetAccountId = 1L;
         Long refId = 10L;
         CommunityAdminActionEvent event = new CommunityAdminActionEvent(
-                targetAccountId, NotificationRefType.COMMUNITY_POST, refId, "스팸 게시물"
+                targetAccountId, NotificationRefType.COMMUNITY_POST, refId, "게시글 숨김", "스팸 게시물"
         );
         ArgumentCaptor<NotificationCreateRequestDto> captor = ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
 
@@ -178,7 +178,7 @@ class CommunityNotificationListenerTest {
         Long targetAccountId = 1L;
         Long refId = 20L;
         CommunityAdminActionEvent event = new CommunityAdminActionEvent(
-                targetAccountId, NotificationRefType.COMMUNITY_COMMENT, refId, "욕설 댓글"
+                targetAccountId, NotificationRefType.COMMUNITY_COMMENT, refId, "댓글 삭제", "욕설 댓글"
         );
         ArgumentCaptor<NotificationCreateRequestDto> captor = ArgumentCaptor.forClass(NotificationCreateRequestDto.class);
 

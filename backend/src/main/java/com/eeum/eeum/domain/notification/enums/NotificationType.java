@@ -32,6 +32,7 @@ public enum NotificationType {
     // 상점/리뷰
     STORE_REVIEW,            // 새 리뷰 작성 (사장 수신)
     STORE_REVIEW_REPLY,      // 리뷰 답글 (구매자 수신)
+    STORE_REVIEW_ADMIN_ACTION, // 관리자 조치 (리뷰 작성자 수신)
 
     // 상품/재고
     STORE_PRODUCT_RESTOCK,   // 관심 상품 재입고
@@ -56,7 +57,8 @@ public enum NotificationType {
     // 관리자 전용
     OWNER_APPLICATION_SUBMITTED, // 새 사장 승인 신청 접수
     REPORT_SUBMITTED,            // 새 신고 접수
-    INQUIRY_SUBMITTED;           // 새 문의 접수
+    INQUIRY_SUBMITTED,           // 새 문의 접수
+    OPERATION_FAILURE_DETECTED;  // 운영 실패 감지 (결제 Webhook·환불·스케줄러·외부 API)
 
     // UI 필터 카테고리 반환
     // NotificationController의 category 파라미터 필터링에 사용
@@ -72,13 +74,14 @@ public enum NotificationType {
                     -> NotificationCategory.CHAT;
             case COMMUNITY_COMMENT, COMMUNITY_REPLY, COMMUNITY_LIKE, COMMUNITY_ADMIN_ACTION
                     -> NotificationCategory.COMMUNITY;
-            case STORE_REVIEW, STORE_REVIEW_REPLY
+            case STORE_REVIEW, STORE_REVIEW_REPLY, STORE_REVIEW_ADMIN_ACTION
                     -> NotificationCategory.REVIEW;
             case STORE_PRODUCT_RESTOCK, STOCK_WARNING
                     -> NotificationCategory.PRODUCT;
             case SETTLEMENT_COMPLETED, INQUIRY_ANSWERED, SYSTEM_NOTICE,
                  MARKETING_EVENT, USED_PRODUCT_INQUIRY, USED_REVIEW,
-                 OWNER_APPLICATION_SUBMITTED, REPORT_SUBMITTED, INQUIRY_SUBMITTED
+                 OWNER_APPLICATION_SUBMITTED, REPORT_SUBMITTED, INQUIRY_SUBMITTED,
+                 OPERATION_FAILURE_DETECTED
                     -> NotificationCategory.SYSTEM;
         };
     }

@@ -7,7 +7,7 @@ import com.eeum.eeum.application.community.dto.response.CommunityPostSummaryResp
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
-import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -52,9 +52,11 @@ class CommunityPostServiceTest {
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityImageRepository imageRepository;
+    @Mock private CommunityPostDeletionProcessor postDeletionProcessor;
+
     @Mock private AccountRepository accountRepository;
     @Mock private CategoryRepository categoryRepository;
-    @Mock private AccountRegionRepository accountRegionRepository;
+    @Mock private PrimaryRegionResolver primaryRegionResolver;
 
     // ──────────────────── Helpers ────────────────────
 
@@ -96,11 +98,14 @@ class CommunityPostServiceTest {
         return accountRegion;
     }
 
+    // 대표 지역 판정은 PrimaryRegionResolver에 있다(PrimaryRegionResolverTest에서 검증).
+    // 여기서는 그 결과에 따른 커뮤니티 동작만 본다.
     private void stubVerifiedPrimaryRegion(Long accountId, Long accountRegionId, Account account, Long regionId) {
-        Region region = createRegion(regionId);
-        AccountRegion accountRegion = createAccountRegion(accountRegionId, account, region, true);
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        when(primaryRegionResolver.resolve(any())).thenReturn(createRegion(regionId));
+    }
+
+    private void stubPrimaryRegionFailure(ErrorCode errorCode) {
+        when(primaryRegionResolver.resolve(any())).thenThrow(new BusinessException(errorCode));
     }
 
     // ──────────────────── getPosts ────────────────────
@@ -175,6 +180,7 @@ class CommunityPostServiceTest {
         Long accountId = 1L;
         Account account = createAccount(accountId, null);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
 
         // when & then
         assertThatThrownBy(() -> postService.getPosts(accountId, PageRequest.of(0, 10)))
@@ -193,8 +199,7 @@ class CommunityPostServiceTest {
         Account account = createAccount(accountId, accountRegionId);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.empty());
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
 
         // when & then
         assertThatThrownBy(() -> postService.getPosts(accountId, PageRequest.of(0, 10)))
@@ -211,12 +216,8 @@ class CommunityPostServiceTest {
         Long accountId = 1L;
         Long accountRegionId = 100L;
         Account account = createAccount(accountId, accountRegionId);
-        Region region = createRegion(200L);
-        AccountRegion accountRegion = createAccountRegion(accountRegionId, account, region, false);
-
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        stubPrimaryRegionFailure(ErrorCode.REGION_NOT_VERIFIED);
 
         // when & then
         assertThatThrownBy(() -> postService.getPosts(accountId, PageRequest.of(0, 10)))
@@ -240,6 +241,7 @@ class CommunityPostServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.increaseViewCountIfVisible(postId)).thenReturn(1);
         stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
         when(imageRepository.findByPost_PostIdOrderByDisplayOrder(postId)).thenReturn(List.of());
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(true);
@@ -249,7 +251,28 @@ class CommunityPostServiceTest {
 
         // then
         assertThat(result.isLikedByMe()).isTrue();
-        verify(postRepository).increaseViewCount(postId);
+        verify(postRepository).increaseViewCountIfVisible(postId);
+    }
+
+    @Test
+    void 지역_검증_후_게시글이_숨김되면_조회수를_올리지_않고_NOT_FOUND() {
+        Long accountId = 1L;
+        Long postId = 10L;
+        Long regionId = 100L;
+        Account account = createAccount(accountId, regionId);
+        CommunityPost post = createPost(postId, account, regionId);
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.increaseViewCountIfVisible(postId)).thenReturn(0);
+        stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
+
+        assertThatThrownBy(() -> postService.getPost(accountId, postId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
+
+        verify(imageRepository, never()).findByPost_PostIdOrderByDisplayOrder(postId);
     }
 
     @Test
@@ -281,7 +304,7 @@ class CommunityPostServiceTest {
     }
 
     @Test
-    void 게시글_상세_조회_다른_지역이면_COMMUNITY_POST_ACCESS_DENIED() {
+    void 게시글_상세_조회_다른_지역이면_없는_글로_응답한다() {
         // given
         Long accountId = 1L;
         Long postId = 10L;
@@ -297,7 +320,7 @@ class CommunityPostServiceTest {
         assertThatThrownBy(() -> postService.getPost(accountId, postId))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
+                .isEqualTo(ErrorCode.COMMUNITY_POST_NOT_FOUND);
     }
 
     @Test
@@ -309,6 +332,7 @@ class CommunityPostServiceTest {
         CommunityPost post = createPost(postId, account, 100L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
 
         // when & then
@@ -331,8 +355,7 @@ class CommunityPostServiceTest {
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        stubPrimaryRegionFailure(ErrorCode.REGION_NOT_VERIFIED);
 
         // when & then
         assertThatThrownBy(() -> postService.getPost(accountId, postId))
@@ -421,6 +444,7 @@ class CommunityPostServiceTest {
         ReflectionTestUtils.setField(request, "categoryId", 1L);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(1L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
 
@@ -445,8 +469,7 @@ class CommunityPostServiceTest {
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(1L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(regionId, accountId))
-                .thenReturn(Optional.empty());
+        stubPrimaryRegionFailure(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
 
         // when & then
         assertThatThrownBy(() -> postService.createPost(accountId, request))
@@ -471,8 +494,7 @@ class CommunityPostServiceTest {
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(1L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
-        when(accountRegionRepository.findByAccountRegionIdAndAccount_AccountId(regionId, accountId))
-                .thenReturn(Optional.of(accountRegion));
+        stubPrimaryRegionFailure(ErrorCode.REGION_NOT_VERIFIED);
 
         // when & then
         assertThatThrownBy(() -> postService.createPost(accountId, request))
@@ -497,7 +519,7 @@ class CommunityPostServiceTest {
         ReflectionTestUtils.setField(request, "title", "수정 제목");
         ReflectionTestUtils.setField(request, "content", "수정 내용");
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findVisibleByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(2L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.of(category));
         when(postLikeRepository.existsByAccount_AccountIdAndPost_PostId(accountId, postId)).thenReturn(false);
@@ -521,7 +543,7 @@ class CommunityPostServiceTest {
 
         CommunityPostUpdateRequestDto request = new CommunityPostUpdateRequestDto();
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findVisibleByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when & then
         assertThatThrownBy(() -> postService.updatePost(otherId, postId, request))
@@ -533,7 +555,7 @@ class CommunityPostServiceTest {
     @Test
     void 게시글_수정_게시글_없으면_COMMUNITY_POST_NOT_FOUND() {
         // given
-        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+        when(postRepository.findVisibleByPostIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> postService.updatePost(1L, 999L, new CommunityPostUpdateRequestDto()))
@@ -553,7 +575,7 @@ class CommunityPostServiceTest {
         CommunityPostUpdateRequestDto request = new CommunityPostUpdateRequestDto();
         ReflectionTestUtils.setField(request, "categoryId", 999L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findVisibleByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
         when(categoryRepository.findByCategoryIdAndTypeAndIsActiveTrue(999L, CategoryType.COMMUNITY))
                 .thenReturn(Optional.empty());
 
@@ -574,18 +596,14 @@ class CommunityPostServiceTest {
         Account account = createAccount(accountId, 100L);
         CommunityPost post = createPost(postId, account, 100L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when
         postService.deletePost(accountId, postId);
 
         // then
-        verify(imageRepository).deleteByPost_PostId(postId);
-        verify(postLikeRepository).deleteByPost_PostId(postId);
-        verify(commentLikeRepository).deleteByComment_Post_PostId(postId);
-        verify(commentRepository).deleteRepliesByPost_PostId(postId);
-        verify(commentRepository).deleteTopLevelCommentsByPost_PostId(postId);
-        verify(postRepository).delete(post);
+        verify(postRepository).findWithAccountByPostIdForUpdate(postId);
+        verify(postDeletionProcessor).deleteLockedPost(post);
     }
 
     @Test
@@ -597,7 +615,7 @@ class CommunityPostServiceTest {
         Account owner = createAccount(ownerId, 100L);
         CommunityPost post = createPost(postId, owner, 100L);
 
-        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.findWithAccountByPostIdForUpdate(postId)).thenReturn(Optional.of(post));
 
         // when & then
         assertThatThrownBy(() -> postService.deletePost(otherId, postId))
@@ -605,13 +623,13 @@ class CommunityPostServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
 
-        verify(postRepository, never()).delete(any());
+        verify(postDeletionProcessor, never()).deleteLockedPost(any());
     }
 
     @Test
     void 게시글_삭제_없는_게시글_COMMUNITY_POST_NOT_FOUND() {
         // given
-        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+        when(postRepository.findWithAccountByPostIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> postService.deletePost(1L, 999L))

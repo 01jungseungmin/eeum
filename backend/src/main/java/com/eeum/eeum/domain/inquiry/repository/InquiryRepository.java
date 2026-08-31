@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
+public interface InquiryRepository extends JpaRepository<Inquiry, Long>, InquiryRepositoryCustom {
 
     @EntityGraph(attributePaths = {"writer", "store"})
     Page<Inquiry> findByWriter_AccountId(Long accountId, Pageable pageable);
@@ -36,4 +36,7 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
 
     // AI 매니저 — 최근 기간 문의 조회 (안전 키워드 감지용, 상태 무관)
     List<Inquiry> findByStore_StoreIdAndCreatedAtAfter(Long storeId, LocalDateTime after);
+
+    // 대시보드 요약 — 미답변 관리자 문의 건수
+    long countByTargetTypeAndStatus(InquiryTargetType targetType, InquiryStatus status);
 }

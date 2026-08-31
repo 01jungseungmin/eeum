@@ -57,4 +57,18 @@ public class InquiryAnswer extends BaseEntity {
         answer.content = content;
         return answer;
     }
+
+    // ===================== 도메인 메서드 =====================
+
+    /**
+     * 답변 본문을 정정한다. 수정 시각은 BaseEntity의 modifiedAt이 자동으로 갱신하므로
+     * 별도 필드를 두지 않는다 — 응답 DTO가 createdAt과 비교해 수정 여부를 판별한다.
+     */
+    public void updateContent(String content) {
+        this.content = content;
+    }
+
+    public boolean isWrittenBy(InquiryAnswerWriterType writerType) {
+        return this.writerType == writerType;
+    }
 }

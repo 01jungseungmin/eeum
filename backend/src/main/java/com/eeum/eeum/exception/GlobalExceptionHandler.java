@@ -9,7 +9,10 @@ import org.springframework.http.ResponseEntity; //응답 객체 생성
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException; //@Valid 검증 실패를 처리하기 위한 클래스
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler; //특정 예외 타입을 처리하는 메서드 지정
 import org.springframework.web.bind.annotation.RestControllerAdvice; //모든 Controller에서 발생한 예외를 잡는 클래스
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -68,6 +71,49 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(ErrorCode.VALIDATION_INVALID_INPUT.getCode(), errorMessage));
     }
 
+    // 경로변수·쿼리 파라미터의 타입 변환 실패 (숫자 자리에 문자, 정의에 없는 enum 값 등).
+    // 핸들러가 없으면 catch-all로 떨어져 잘못된 요청이 500 "서버 내부 오류"로 나간다.
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<?>> handleTypeMismatchException(
+            MethodArgumentTypeMismatchException e) {
+
+        String errorMessage = e.getName() + ": 허용되지 않는 값입니다 (" + e.getValue() + ")";
+
+        log.warn("[MethodArgumentTypeMismatchException] parameter={}, value={}", e.getName(), e.getValue());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(ErrorCode.VALIDATION_INVALID_INPUT.getCode(), errorMessage));
+    }
+
+    // 필수 쿼리 파라미터 누락
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<?>> handleMissingParameterException(
+            MissingServletRequestParameterException e) {
+
+        String errorMessage = e.getParameterName() + ": 필수 파라미터입니다";
+
+        log.warn("[MissingServletRequestParameterException] parameter={}", e.getParameterName());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(ErrorCode.VALIDATION_INVALID_INPUT.getCode(), errorMessage));
+    }
+
+    // 본문을 읽을 수 없는 경우 (깨진 JSON, 타입이 맞지 않는 필드 등).
+    // 원문 메시지에는 파싱 위치·클래스명 같은 내부 정보가 담기므로 그대로 내보내지 않는다.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<?>> handleMessageNotReadableException(
+            HttpMessageNotReadableException e) {
+
+        log.warn("[HttpMessageNotReadableException] message={}", e.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(
+                        ErrorCode.VALIDATION_INVALID_INPUT.getCode(), "요청 본문을 읽을 수 없습니다"));
+    }
+
     // ===================== DB 제약 위반 =====================
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -82,6 +128,12 @@ public class GlobalExceptionHandler {
         if (rootMsg.contains("uk_reservation_account_store_start")) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail(ErrorCode.VISIT_RESERVATION_ALREADY_EXISTS));
+        }
+        // 답변 작성 요청이 동시에 두 번 들어오면 서비스단 중복 검사를 둘 다 통과한 뒤
+        // 유니크 제약에서 갈린다. 진 쪽에도 "이미 답변됨"이라는 같은 의미를 돌려준다.
+        if (rootMsg.contains("uk_inquiry_answer_inquiry_id")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.INQUIRY_ALREADY_ANSWERED));
         }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));

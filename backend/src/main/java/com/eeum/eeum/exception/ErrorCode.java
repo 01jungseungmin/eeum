@@ -56,12 +56,18 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_INVALID_BUSINESS_NUMBER("ACCOUNT_011", "유효하지 않은 사업자번호입니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_ALREADY_EXISTS("ACCOUNT_012","이미 등록된 회원입니다",HttpStatus.CONFLICT),
     ACCOUNT_PRIMARY_REGION_NOT_FOUND("ACCOUNT_013","대표 지역이 없습니다.",HttpStatus.NOT_FOUND),
+    ACCOUNT_ALREADY_SUSPENDED("ACCOUNT_014", "이미 정지된 회원입니다", HttpStatus.CONFLICT),
+    ACCOUNT_NOT_SUSPENDED("ACCOUNT_015", "정지 상태가 아닌 회원입니다", HttpStatus.CONFLICT),
+    ACCOUNT_SIGNUP_INCOMPLETE("ACCOUNT_016", "회원가입이 완료되지 않은 계정입니다", HttpStatus.FORBIDDEN),
+    ACCOUNT_ALREADY_ANONYMIZED("ACCOUNT_017", "개인정보가 파기된 계정은 복구할 수 없습니다", HttpStatus.CONFLICT),
+    ACCOUNT_ADMIN_SANCTION_NOT_ALLOWED("ACCOUNT_018", "관리자 계정에는 제재를 적용할 수 없습니다", HttpStatus.FORBIDDEN),
 
     // ===================== 사장 추가정보 기입 =====================
     OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),
     OWNER_REVIEW_ALREADY_REQUESTED("OWNER_002","이미 입점 심사 요청이 접수되었습니다.",HttpStatus.CONFLICT),
     OWNER_CHECKLIST_NOT_COMPLETED( "OWNER_003","입점 심사 필수 항목을 모두 완료해야 합니다.",HttpStatus.BAD_REQUEST),
     OWNER_INFO_NOT_FOUND( "OWNER_004","사장 신청 정보를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
+    OWNER_REVIEW_NOT_PENDING("OWNER_005","심사 대기 중인 신청이 아닙니다.",HttpStatus.CONFLICT),
 
     // ===================== 사업자 인증 (BUSINESST) =====================
     BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
@@ -136,6 +142,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_REFUND_ALREADY("PAYMENT_010", "이미 환불 처리 되었습니다.", HttpStatus.CONFLICT),
     PAYMENT_NOT_COMPLETED("PAYMENT_011", "결제가 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
     PAYMENT_REFUND_NOT_REQUESTED("PAYMENT_012", "환불 요청 상태가 아닙니다.", HttpStatus.BAD_REQUEST),
+    // 서명 검증 이전 단계에서 걸러지는 형식 오류 — 인증 실패(401)와 구분해 400으로 응답한다
+    PAYMENT_WEBHOOK_MALFORMED("PAYMENT_013", "형식이 올바르지 않은 Webhook 요청입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
@@ -167,6 +175,12 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_REVIEW_NOT_FOUND("USED_006", "존재하지 않는 중고거래 리뷰입니다", HttpStatus.NOT_FOUND),
     USED_REVIEW_ALREADY_EXISTS("USED_007", "이미 리뷰를 작성했습니다", HttpStatus.CONFLICT),
     USED_REVIEW_NOT_COMPLETED("USED_008", "거래가 완료된 후 리뷰를 작성할 수 있습니다", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_INVALID_CATEGORY("USED_009", "중고거래 카테고리가 아닙니다", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_INVALID_PRICE("USED_010", "거래 유형과 가격이 맞지 않습니다", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_DELETE_NOT_ALLOWED("USED_011", "예약 중인 게시글은 삭제할 수 없습니다", HttpStatus.CONFLICT),
+    USED_PRODUCT_REGION_REQUIRED("USED_012", "조회할 지역을 지정해 주세요", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_NOT_HIDDEN("USED_013", "숨김 처리된 게시글이 아닙니다", HttpStatus.CONFLICT),
+    USED_PRODUCT_INVALID_PRICE_RANGE("USED_014", "최소 가격이 최대 가격보다 클 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
@@ -210,11 +224,15 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CATEGORY_NOT_FOUND("CATEGORY_001", "존재하지 않는 카테고리입니다", HttpStatus.NOT_FOUND),
     CATEGORY_IN_USE("CATEGORY_002", "사용 중인 카테고리는 삭제할 수 없습니다", HttpStatus.BAD_REQUEST),
     CATEGORY_DUPLICATE("CATEGORY_003", "이미 존재하는 카테고리입니다", HttpStatus.CONFLICT),
+    CATEGORY_MAX_DEPTH_EXCEEDED("CATEGORY_004", "카테고리는 최대 3단계까지만 생성할 수 있습니다", HttpStatus.BAD_REQUEST),
+    CATEGORY_PARENT_TYPE_MISMATCH("CATEGORY_006", "상위 카테고리와 카테고리 타입이 일치하지 않습니다", HttpStatus.BAD_REQUEST),
+    CATEGORY_INVALID_ORDER("CATEGORY_007", "카테고리 순서 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 찜 (FAVORITE) =====================
     FAVORITE_NOT_FOUND("FAVORITE_001", "존재하지 않는 찜 정보입니다", HttpStatus.NOT_FOUND),
     FAVORITE_ACCESS_DENIED("FAVORITE_002", "찜 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     FAVORITE_ALREADY_EXISTS("FAVORITE_003", "이미 찜한 대상입니다", HttpStatus.CONFLICT),
+    FAVORITE_INVALID_PERIOD("FAVORITE_004", "조회 시작일이 종료일보다 늦을 수 없습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 알림 (NOTIFICATION) =====================
     NOTIFICATION_NOT_FOUND("NOTIFICATION_001", "존재하지 않는 알림입니다", HttpStatus.NOT_FOUND),
@@ -228,6 +246,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     INQUIRY_TARGET_TYPE_MISMATCH("INQUIRY_006", "해당 문의 유형에 대한 답변 권한이 없습니다", HttpStatus.FORBIDDEN),
     INQUIRY_ANSWER_NOT_FOUND("INQUIRY_007", "존재하지 않는 답변입니다", HttpStatus.NOT_FOUND),
     INQUIRY_STORE_NOT_ALLOWED("INQUIRY_008", "관리자 문의에는 storeId를 포함할 수 없습니다", HttpStatus.BAD_REQUEST),
+    INQUIRY_ALREADY_CLOSED("INQUIRY_009", "이미 종료된 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_NOT_CLOSED("INQUIRY_010", "종료 상태가 아닌 문의입니다", HttpStatus.CONFLICT),
+    INQUIRY_CLOSED("INQUIRY_011", "종료된 문의에는 답변할 수 없습니다", HttpStatus.CONFLICT),
 
     // ===================== 신고 (REPORT) =====================
     REPORT_NOT_FOUND("REPORT_001", "존재하지 않는 신고입니다.", HttpStatus.NOT_FOUND),
@@ -235,6 +256,8 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     REPORT_ALREADY_EXISTS("REPORT_003", "이미 신고한 대상입니다.", HttpStatus.CONFLICT),
     REPORT_ALREADY_PROCESSED("REPORT_004", "이미 처리된 신고입니다.", HttpStatus.CONFLICT),
     REPORT_SELF_NOT_ALLOWED("REPORT_005", "자기 자신 또는 자신의 콘텐츠는 신고할 수 없습니다.", HttpStatus.BAD_REQUEST),
+    REPORT_ACTION_NOT_ALLOWED("REPORT_006", "해당 신고 대상에 적용할 수 없는 조치입니다.", HttpStatus.BAD_REQUEST),
+    REPORT_TARGET_NOT_AVAILABLE("REPORT_007", "신고 대상이 삭제되었거나 조치할 수 없는 상태입니다.", HttpStatus.CONFLICT),
 
     // ===================== 이미지 (IMAGE) =====================
     IMAGE_INVALID_FORMAT("IMAGE_001", "지원하지 않는 이미지 형식입니다 (jpg, png, webp만 가능)", HttpStatus.BAD_REQUEST),

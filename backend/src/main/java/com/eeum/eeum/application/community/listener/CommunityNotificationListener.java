@@ -88,7 +88,8 @@ public class CommunityNotificationListener {
                 .accountId(event.targetAccountId())
                 .type(NotificationType.COMMUNITY_ADMIN_ACTION)
                 .title("관리자 조치 안내")
-                .content(String.format("회원님의 게시물에 관리자 조치가 취해졌습니다. 사유: %s", event.reason()))
+                .content(String.format("회원님의 게시물에 관리자 조치가 취해졌습니다. 조치: %s, 사유: %s",
+                        event.actionLabel(), event.adminNote()))
                 .refType(event.refType())
                 .refId(event.refId())
                 .linkUrl(null)

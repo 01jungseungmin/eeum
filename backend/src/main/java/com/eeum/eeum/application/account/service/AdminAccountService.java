@@ -9,6 +9,7 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationListRespon
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.account.mapper.StoreApprovalMapper;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.application.store.service.StoreLocationResolver;
@@ -23,6 +24,7 @@ import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.repository.StoreVisitReservationSettingRepository;
+import com.eeum.eeum.domain.sanction.enums.SanctionAction;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -55,7 +57,9 @@ public class AdminAccountService {
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
-    private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    private final AccountWithdrawalProcessor accountWithdrawalProcessor;
+    private final AccountSanctionPolicy accountSanctionPolicy;
+    private final SanctionHistoryService sanctionHistoryService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ===================== 관리자 - 탈퇴 예정 회원 목록 =====================
@@ -99,11 +103,17 @@ public class AdminAccountService {
         Account target = accountRepository.findByIdWithLock(targetAccountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (target.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
+        // 잠금을 얻은 뒤 자격을 확인한다. 이 검사가 없으면 동시 요청이 직렬화된 뒤에도
+        // 두 번째 요청이 SUSPEND 제재 이력을 한 건 더 남긴다.
+        // 판정은 신고 처리 경로와 같은 정책을 쓴다 — 관리자 대상 차단이 한쪽에만 있으면 구멍이 된다.
+        accountSanctionPolicy.validateSuspendable(target);
 
         target.suspend();
+        sanctionHistoryService.recordDirectAccountAction(
+                targetAccountId,
+                SanctionAction.SUSPEND,
+                adminId
+        );
 
         // DB 커밋 성공 후 Refresh Token 삭제
         eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
@@ -119,8 +129,18 @@ public class AdminAccountService {
         if (target.isWithdrawn()) {
             throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
         }
+        // 정지 해제는 정지 상태에서만 의미가 있다. 이 검사가 없으면 PENDING 계정에 해제를 호출했을 때
+        // Account.activate()가 status를 ACTIVE로 바꿔 가입 절차를 건너뛴 채 활성 계정이 된다.
+        if (!target.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_SUSPENDED);
+        }
 
         target.activate();
+        sanctionHistoryService.recordDirectAccountAction(
+                targetAccountId,
+                SanctionAction.ACTIVATE,
+                adminId
+        );
 
         log.info("회원 정지 해제: adminId={}, targetId={}", adminId, targetAccountId);
     }
@@ -145,17 +165,12 @@ public class AdminAccountService {
         Account target = accountRepository.findByIdWithLock(targetAccountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (target.isWithdrawn()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
-        }
+        // 정지 계정도 강제 탈퇴 대상이다 — validateSuspendable을 쓰면 정지 → 탈퇴 흐름이 막힌다.
+        accountSanctionPolicy.validateForceWithdrawable(target);
 
-        // 사장 계정이면 상점/상품/이벤트 상품을 비활성화 — AccountService.withdraw와 동일하게 처리해야
-        // 강제 탈퇴한 사장의 상점이 사용자 화면에 계속 노출되고 주문/예약이 들어오는 것을 막는다.
-        if (target.getRole() == AccountRole.ROLE_OWNER) {
-            ownerStoreWithdrawalService.deactivateForWithdrawal(targetAccountId);
-        }
-
-        target.withdraw();
+        // 본인 탈퇴와 같은 뒷정리를 한다 — 상점 비활성화, 탈퇴 처리, 찜 정리.
+        // 강제 탈퇴만 찜을 남겨두면 탈퇴자의 찜이 상점·게시글 favoriteCount에 계속 잡힌다.
+        accountWithdrawalProcessor.process(target);
 
         // DB 커밋 성공 후 Refresh Token 삭제
         eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
@@ -198,17 +213,37 @@ public class AdminAccountService {
 
     @Transactional
     public void approveOwner(Long adminId, Long ownerInfoId) {
-        OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
+        // 잠글 계정을 알아내기 위한 선행 조회. 엔티티가 아니라 ID만 읽는다 —
+        // 여기서 OwnerInfo를 엔티티로 읽으면 영속성 컨텍스트에 남아 아래 잠금 조회가
+        // DB 최신 행 대신 그 인스턴스를 돌려주고, 재조회의 의미가 사라진다.
+        Long accountId = ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        Account account = ownerInfo.getAccount();
+        // 잠금 순서 account → owner_info. 사업자 정보 수정(AccountService.updateOwnerInfo)과 같은 순서다.
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        Store store = storeRepository.findByAccount_AccountId(account.getAccountId())
+        // 잠금을 잡은 뒤 다시 읽는다. 선행 조회 결과를 그대로 쓰면 같은 트랜잭션의 스냅샷·1차 캐시에
+        // 묶여 그 사이 커밋된 사업자번호 변경을 보지 못한 채 승인하게 된다.
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
+
+        // 선행조건을 먼저 검증한다 — 상태를 확정하기 전에는 Store 조회·좌표 보정 같은
+        // 부수효과를 시작하지 않는다.
+        //
+        // 신청 상태가 계정 상태보다 우선한다. 접수되지 않은 신청은 승인 대상이 아니다.
+        // PENDING만 보면 아직 체크리스트도 안 끝낸 신규 OwnerInfo(create 직후·사업자번호
+        // 변경 직후)까지 ownerInfoId만 알면 승인된다.
+        assertReviewable(ownerInfo);
+
+        // 승인은 ROLE_OWNER를 부여한다 — 살아 있지 않은 계정에 권한을 주면 정지·탈퇴가 무력화된다.
+        // 거절과 달리 승인만 계정 상태를 요구하는 이유다. (거절은 아무 권한도 주지 않으므로
+        // 탈퇴한 신청자의 대기열 정리를 막지 않는다.)
+        // 상태 판정은 assertWritable()에 맡긴다 — 탈퇴·정지·가입 미완료를 구분해 던진다.
+        account.assertWritable();
+
+        Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
-
-        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
-        }
 
         if (store.getRegion() == null || store.getLatitude() == null || store.getLongitude() == null) {
             storeLocationResolver.resolveAndApplyLocation(store);
@@ -248,19 +283,42 @@ public class AdminAccountService {
 
     @Transactional
     public void rejectOwner(Long adminId, Long ownerInfoId, RejectRequestDto request) {
-        OwnerInfo ownerInfo = ownerInfoRepository.findById(ownerInfoId)
+        // 승인과 같은 잠금 규약을 쓴다. 잠그지 않고 읽으면 PENDING을 본 뒤 approveOwner가
+        // ROLE_OWNER + APPROVED를 커밋하고, 이 트랜잭션이 나중에 flush하며 상태만 REJECTED로
+        // 덮는다. reject()는 계정 권한을 되돌리지 않으므로 "거절당했는데 /owner/**는 계속 되는"
+        // ROLE_OWNER + REJECTED가 DB에 남고, 수동 복구 외에는 회복되지 않는다.
+        // OwnerInfo에는 @Version이 없어 dirty checking이 행 전체를 덮어쓴다.
+        Long accountId = ownerInfoRepository.findAccountIdByOwnerInfoId(ownerInfoId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
-        }
+        // 잠금 순서 account → owner_info. approveOwner·requestReview와 같은 순서다.
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        Account account = ownerInfo.getAccount();
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
+
+        // 잠금을 잡은 뒤 재검증 — 먼저 커밋된 승인을 여기서 보고 멈춘다.
+        assertReviewable(ownerInfo);
 
         ownerInfo.reject(request.getReason());
 
         log.info("사장 거절: adminId={}, ownerInfoId={}, accountId={}",
                 adminId, ownerInfoId, account.getAccountId());
+    }
+
+    // 승인·거절 공통 선행조건 — 심사 대기 중인 신청만 처리할 수 있다.
+    // 미접수(제출 전)와 REJECTED(재신청 전) 둘 다 여기서 걸린다. 거절은 접수 시각을 남기므로
+    // 시각만 보면 거절된 신청이 재신청 없이 승인되고, 이미 거절된 건이 다시 거절돼
+    // 거절 사유가 덮인다.
+    private void assertReviewable(OwnerInfo ownerInfo) {
+        if (ownerInfo.isApproved()) {
+            throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
+        if (!ownerInfo.isAwaitingReview()) {
+            throw new BusinessException(ErrorCode.OWNER_REVIEW_NOT_PENDING);
+        }
     }
 
     // ===================== 내부 유틸 =====================

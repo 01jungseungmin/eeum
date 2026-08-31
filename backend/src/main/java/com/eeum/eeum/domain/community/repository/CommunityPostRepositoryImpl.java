@@ -29,6 +29,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
                 .join(post.region).fetchJoin()
                 .where(
                         post.region.regionId.eq(regionId),
+                        post.hidden.isFalse(),
                         keywordContains(keyword)
                 )
                 .offset(pageable.getOffset())
@@ -41,6 +42,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
                 .from(post)
                 .where(
                         post.region.regionId.eq(regionId),
+                        post.hidden.isFalse(),
                         keywordContains(keyword)
                 )
                 .fetchOne();

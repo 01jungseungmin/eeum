@@ -29,7 +29,6 @@ public interface ProductCategoryRepository extends JpaRepository<ProductCategory
             Long productCategoryId
     );
 
-    void deleteByStore_StoreId(Long storeId);
 
     @Query("""
         select count(p)

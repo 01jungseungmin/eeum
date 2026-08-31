@@ -8,9 +8,11 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Entity
 @Getter
+@DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "community_post")
 public class CommunityPost extends BaseEntity {
@@ -47,6 +49,9 @@ public class CommunityPost extends BaseEntity {
     @Column(name = "comment_count", nullable = false)
     private int commentCount = 0;
 
+    @Column(name = "is_hidden", nullable = false)
+    private boolean hidden = false;
+
     public static CommunityPost create(Account account, Category category, Region region, String title, String content) {
         CommunityPost post = new CommunityPost();
         post.account = account;
@@ -65,5 +70,9 @@ public class CommunityPost extends BaseEntity {
 
     public boolean isOwnedBy(Long accountId) {
         return this.account.getAccountId().equals(accountId);
+    }
+
+    public void hide() {
+        this.hidden = true;
     }
 }

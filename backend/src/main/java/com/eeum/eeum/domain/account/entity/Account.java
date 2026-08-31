@@ -4,6 +4,8 @@ import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -21,7 +23,11 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uk_account_provider", columnNames = {"provider", "provider_id"})
         },
         indexes = { //인덱스 primary_region_id 컬럼으로 검색할 일이 있을 때 더 빠르게 찾기 위한 설정
-                @Index(name = "idx_account_primary_region", columnList = "primary_region_id")
+                @Index(name = "idx_account_primary_region", columnList = "primary_region_id"),
+                // 개인정보 파기 대상 조회 전용 — 조건(status, anonymized_at, deleted_at) 뒤에
+                // keyset 커서(account_id)를 둬서 배치마다 이어서 읽는다.
+                @Index(name = "idx_account_anonymize_target",
+                        columnList = "status, anonymized_at, deleted_at, account_id")
         }
 )
 @Getter
@@ -78,8 +84,17 @@ public class Account extends BaseEntity {
     @Column(name = "fcm_token", length = 255)
     private String fcmToken;
 
+    // 개인정보 파기 시각. WITHDRAWN만으로는 "유예 중"과 "파기 완료"를 구분할 수 없어
+    // 스케줄러가 같은 계정을 반복 처리한다.
+    @Column(name = "anonymized_at")
+    private LocalDateTime anonymizedAt;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @Version
+    @Column(name = "version", nullable = false, columnDefinition = "BIGINT NOT NULL DEFAULT 0")
+    private Long version;
 
     public static Account createUser(
             String email,
@@ -170,9 +185,45 @@ public class Account extends BaseEntity {
         this.deletedAt = null;
     }
 
+    /**
+     * 탈퇴 취소 — 유예 기간 안에서만 되돌릴 수 있다.
+     *
+     * <p>개인정보가 이미 파기된 계정은 되돌리지 않는다. 되살리면 email·이름·전화가 지워진 채
+     * ACTIVE가 되어, 로그인도 안 되고 다른 사용자에게는 "탈퇴한 회원"으로 보이는 계정이 남는다.
+     */
     public void cancelWithdrawal() {
+        if (isAnonymized()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_ANONYMIZED);
+        }
         this.status = AccountStatus.ACTIVE;
         this.deletedAt = null;
+    }
+
+    /**
+     * 개인정보 파기 — 행은 남기고 식별 가능한 값만 지운다.
+     *
+     * <p>계정 행을 물리 삭제하려면 이 계정을 참조하는 18개 테이블(주문·결제·신고·채팅 등)을
+     * 함께 정리해야 하는데, 주문·결제는 정산과 보존 의무가 걸려 지울 수 없다.
+     * 파기해야 하는 것은 식별 정보이지 활동 이력이 아니므로, 행을 남기고 값만 지운다.
+     *
+     * <p>email·nickname에는 UNIQUE 제약이 있다. 고정값으로 지우면 두 번째 탈퇴자부터 충돌하고
+     * 같은 이메일로 재가입할 수도 없으므로, 계정 ID를 섞어 유일성을 만든다.
+     */
+    public void anonymize() {
+        this.email = "deleted_" + this.accountId + "@removed.local";
+        this.nickname = "탈퇴한회원_" + this.accountId;
+        this.name = "탈퇴한 회원";
+        this.phone = "";
+        this.password = null;
+        this.providerId = null;
+        this.profileImageUrl = DEFAULT_PROFILE_IMAGE_URL;
+        this.fcmToken = null;
+        this.primaryRegionId = null;
+        this.anonymizedAt = LocalDateTime.now();
+    }
+
+    public boolean isAnonymized() {
+        return this.anonymizedAt != null;
     }
 
     public void withdraw() {
@@ -214,12 +265,27 @@ public class Account extends BaseEntity {
         this.primaryRegionId = null;
     }
 
+    // 쓰기 경로 공통 가드 — 상태별로 구분해서 던진다.
+    // !isActive()를 한 덩어리로 묶으면 가입 미완료(PENDING) 계정까지 "정지된 계정"으로 응답한다.
+    public void assertWritable() {
+        switch (this.status) {
+            case ACTIVE -> { }
+            case WITHDRAWN -> throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+            case SUSPENDED -> throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+            case PENDING -> throw new BusinessException(ErrorCode.ACCOUNT_SIGNUP_INCOMPLETE);
+        }
+    }
+
     public boolean isActive() {
         return this.status == AccountStatus.ACTIVE;
     }
 
     public boolean isWithdrawn() {
         return this.status == AccountStatus.WITHDRAWN;
+    }
+
+    public boolean isSuspended() {
+        return this.status == AccountStatus.SUSPENDED;
     }
 
     public boolean isAdmin() {

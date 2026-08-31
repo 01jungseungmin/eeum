@@ -27,6 +27,7 @@ import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
 import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.entity.StoreNotice;
 import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
+import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
 import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreNoticeRepository;
@@ -93,7 +94,12 @@ public class StoreService {
 
     @Transactional
     public void updateStoreStatus(Long accountId, StoreStatusUpdateRequestDto request) {
-        Store store = getStore(accountId);
+        Store store = storeRepository.findByAccountIdWithPessimisticLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+
+        if (store.getStatus() == StoreStatus.SUSPENDED) {
+            throw new BusinessException(ErrorCode.STORE_SUSPENDED);
+        }
 
         switch (request.getStatus()) {
             case OPEN -> store.reopen();

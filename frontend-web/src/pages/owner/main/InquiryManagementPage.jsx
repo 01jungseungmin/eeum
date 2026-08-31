@@ -79,12 +79,12 @@ export default function InquiryManagement() {
 
   // 룸 ID 상태 (개설 완료 문구에 룸 ID 표출용으로 유지)
   const [myRoomId, setMyRoomId] = useState(() => {
-    return localStorage.getItem('storeChatRoom_id') || null;
+    return sessionStorage.getItem('storeChatRoom_id') || null;
   });
 
   // 채팅방 개설 유무 상태 추가 (로컬스토리지에서 불리언 판별값 가져오기)
   const [isChatRoomCreated, setIsChatRoomCreated] = useState(() => {
-    return localStorage.getItem('storeChatRoomCreated') === 'true';
+    return sessionStorage.getItem('storeChatRoomCreated') === 'true';
   });
 
   // 필터 상태 관리
@@ -117,7 +117,7 @@ export default function InquiryManagement() {
         name: '맛있는 반찬가게 사장님 단톡방',
         type: 'GROUP',
         refType: 'STORE',
-        refId: localStorage.getItem('my_store_id'),
+        refId: sessionStorage.getItem('my_store_id'),
         participantAccountIds: [],
       };
 
@@ -125,12 +125,12 @@ export default function InquiryManagement() {
 
       if (res.data.success && res.data.data.roomId !== undefined) {
         const newRoomId = res.data.data.roomId;
-        console.log('채팅방 생성 성공, Room ID:', newRoomId);
-        setMyRoomId(newRoomId);
-        setIsChatRoomCreated(true); // 💡 로컬 상태 즉시 반영
 
-        localStorage.setItem('storeChatRoom_id', String(newRoomId));
-        localStorage.setItem('storeChatRoomCreated', 'true'); // 💡 문자열 저장 연동
+        setMyRoomId(newRoomId);
+        setIsChatRoomCreated(true);
+
+        sessionStorage.setItem('storeChatRoom_id', String(newRoomId));
+        sessionStorage.setItem('storeChatRoomCreated', 'true');
 
         alert(
           '🎉 상점 대표 실시간 채팅방이 성공적으로 개설되었습니다! 왼쪽 [채팅] 메뉴에서 확인하세요.',
@@ -217,7 +217,10 @@ export default function InquiryManagement() {
       {loading ? (
         <LoadingText>문의 내역을 불러오는 중입니다...</LoadingText>
       ) : (
-        <InquiryList data={filteredInquiries} onRefresh={loadInquiries} />
+        <InquiryList
+          data={filteredInquiries}
+          onRefresh={loadInquiries}
+        />
       )}
     </Container>
   );

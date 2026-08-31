@@ -15,4 +15,7 @@ public interface StoreRepositoryCustom {
     Page<Store> searchAdminStores(String keyword, String status, Pageable pageable);
 
     List<Store> findNearbyStoresWithFilter(NearbyStoreSearchCondition condition);
+
+    // 공개 노출 가능한 상점인지 — 조건은 StoreVisibilityPredicate 한 곳에서 관리한다.
+    boolean isPubliclyVisible(Long storeId);
 }

@@ -13,7 +13,34 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "favorite")
+@Table(
+        name = "favorite",
+        uniqueConstraints = {
+                // 동일 대상 중복 찜을 DB 레벨에서 차단.
+                // 없으면 동시 토글로 중복 행이 생겨 favoriteCount가 부풀고,
+                // 이후 단건 찜 조회(Optional 반환)가 IncorrectResultSize로 실패한다.
+                @UniqueConstraint(
+                        name = "uk_favorite_account_ref",
+                        columnNames = {"account_id", "ref_type", "ref_id"})
+        },
+        indexes = {
+                // 대상 기준 조회 전용. UNIQUE 인덱스는 account_id가 선행 컬럼이라
+                // 대상별 카운트·통계·CASCADE 삭제(ref_type + ref_id)에 쓰이지 못한다.
+                @Index(name = "idx_favorite_ref", columnList = "ref_type, ref_id"),
+                // 내 찜 목록(타입별 + 등록 최신순 + PK tie-break). UNIQUE 인덱스는
+                // 세 번째 컬럼이 ref_id라 created_at 정렬에 쓰이지 못한다.
+                @Index(name = "idx_favorite_account_type_created",
+                        columnList = "account_id, ref_type, created_at, favorite_id"),
+                // 내 찜 전체 목록(타입 무관 + 등록 최신순). 위 인덱스는 두 번째 컬럼이 ref_type이라
+                // account_id만 등호로 고정하면 그 안이 ref_type 순으로 정렬돼 created_at 정렬에 쓰이지 못한다.
+                // 실측(찜 2000건): 이 인덱스가 없으면 옵티마이저가 UNIQUE 인덱스를 골라
+                // 해당 계정의 전체 행을 읽고 filesort한다(rows=2000, Using filesort).
+                // 추가하면 Backward index scan + Using index로 LIMIT만큼만 읽는다(실측 21행, 0.1ms).
+                // 페이지당 비용이 찜 개수에 비례하던 것이 상수가 된다.
+                @Index(name = "idx_favorite_account_created",
+                        columnList = "account_id, created_at, favorite_id")
+        }
+)
 public class Favorite extends BaseEntity {
 
     @Id

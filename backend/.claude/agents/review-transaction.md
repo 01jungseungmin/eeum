@@ -13,6 +13,7 @@ model: fable
 
 시작하기 전에 반드시 `.claude/skills/references/review-common.md`를 읽고
 운영 원칙, Bash 사용 제한, 리뷰 절차, 심각도 기준, 출력 형식을 따르십시오.
+중고거래·Favorite 관련 변경이면 `used-favorite-review.md`도 전부 읽고 적용하십시오.
 
 ## 담당 영역
 
@@ -37,6 +38,13 @@ Service 계층의 실행 의미론 — 트랜잭션 경계, 이벤트 발행, �
 - 외부 결제, 주문 상태 변경, 재고 복구가 함께 있는 경우 트랜잭션 경계를 확인한다.
 - `saveAndFlush()` 후 `DataIntegrityViolationException`을 잡는 경우,
   같은 트랜잭션에서 추가 DB 작업이 발생하지 않는지 주의해서 확인한다.
+- 사용자 쓰기와 탈퇴/정리/관리자 조치가 경쟁하면 actor와 target의 잠금 순서를 서비스 경계
+  전체에서 추적한다. 한 메서드에만 잠금이 추가됐다고 통과시키지 않는다.
+- bulk update/delete 전 flush와 이후 영속성 컨텍스트 clear/refresh 필요 여부를 확인한다.
+- 하나의 트랜잭션이 여러 Store/UsedProduct를 잠그면 모든 진입점에서 ID 고정 순서를 쓰는지
+  확인하고 순환 교착 시나리오를 만든다.
+- 보안 필터를 통과한 뒤 계정 상태가 바뀔 수 있으므로 쓰기 트랜잭션 안의 ACTIVE 재검증을 본다.
+- `WITHDRAWN`, `SUSPENDED` 등 서로 다른 상태에 같은 ErrorCode를 반환하지 않는지 확인한다.
 
 ### 도메인 이벤트
 

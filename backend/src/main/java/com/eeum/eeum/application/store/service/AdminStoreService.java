@@ -4,11 +4,13 @@ import com.eeum.eeum.application.store.dto.response.AdminStoreDetailResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
 import com.eeum.eeum.application.store.mapper.StoreMapper;
+import com.eeum.eeum.application.sanction.service.SanctionHistoryService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.SettlementAccount;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.sanction.enums.SanctionAction;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.*;
 import com.eeum.eeum.exception.BusinessException;
@@ -35,6 +37,7 @@ public class AdminStoreService {
     private final StoreNoticeRepository storeNoticeRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
     private final StoreMapper storeMapper;
+    private final SanctionHistoryService sanctionHistoryService;
 
     @Transactional(readOnly = true)
     public Page<StoreListResponseDto> getStores(
@@ -91,32 +94,47 @@ public class AdminStoreService {
 
     @Transactional
     public void suspendStore(Long adminId, Long storeId) {
-        Store store = getStore(storeId);
+        Store store = getStoreForUpdate(storeId);
 
         if (store.getStatus() == StoreStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
 
         store.suspend();
+        sanctionHistoryService.recordDirectStoreAction(
+                storeId,
+                SanctionAction.SUSPEND,
+                adminId
+        );
 
         log.info("상점 관리자 정지: adminId={}, storeId={}", adminId, storeId);
     }
 
     @Transactional
     public void activateStore(Long adminId, Long storeId) {
-        Store store = getStore(storeId);
+        Store store = getStoreForUpdate(storeId);
 
         if (store.getStatus() != StoreStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
         }
 
         store.activate();
+        sanctionHistoryService.recordDirectStoreAction(
+                storeId,
+                SanctionAction.ACTIVATE,
+                adminId
+        );
 
         log.info("상점 관리자 정지 해제: adminId={}, storeId={}", adminId, storeId);
     }
 
     private Store getStore(Long storeId) {
         return storeRepository.findById(storeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+    }
+
+    private Store getStoreForUpdate(Long storeId) {
+        return storeRepository.findByIdWithPessimisticLock(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
     }
 

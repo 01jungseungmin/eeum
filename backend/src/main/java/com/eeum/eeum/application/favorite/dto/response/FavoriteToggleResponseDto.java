@@ -25,7 +25,9 @@ public class FavoriteToggleResponseDto {
     @Schema(description = "찜 대상 ID", example = "3")
     private Long refId;
 
-    @Schema(description = "현재 찜 수", example = "128")
+    @Schema(description = "현재 찜 수. 비공개 대상(숨김 게시글·미승인 상점)의 찜을 해제한 경우 null이다 — "
+            + "정확한 수를 돌려주면 공개 카운트 API를 막아둔 의미가 없어진다.",
+            example = "128", nullable = true)
     private Long favoriteCount;
 
     @Schema(description = "찜 등록 시각 (해제 시 null)")
@@ -44,7 +46,9 @@ public class FavoriteToggleResponseDto {
     }
 
     // 찜 해제 응답
-    public static FavoriteToggleResponseDto removed(FavoriteRefType refType, Long refId, long favoriteCount) {
+    // favoriteCount는 비공개 대상(숨김 글·미승인 상점) 해제 시 null이다 —
+    // 정확한 수를 돌려주면 공개 카운트 API를 막아둔 의미가 없어진다.
+    public static FavoriteToggleResponseDto removed(FavoriteRefType refType, Long refId, Long favoriteCount) {
         return FavoriteToggleResponseDto.builder()
                 .favorited(false)
                 .favoriteId(null)

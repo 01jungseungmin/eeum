@@ -62,7 +62,7 @@ const RightDetailPanel = styled.div`
     outline: none;
     font-family: inherit;
     box-sizing: border-box;
-    margin-bottom: 32px; /* 버튼과의 간격 확보 */
+    margin-bottom: 32px;
     transition: all 0.2s;
 
     &:focus {
@@ -99,15 +99,14 @@ const DocCard = styled.div`
   }
 `;
 
-// 🔘 피그마 시안 완벽 매칭 버튼 그룹 레이아웃
 const ActionButtonBar = styled.div`
   display: flex;
   justify-content: center;
   gap: 12px;
 
   button {
-    flex: 1; /* 가로폭을 균등하게 넓혀 채워줍니다 */
-    max-width: 160px; /* 너무 퍼지지 않게 적정 최대 너비 제한 */
+    flex: 1;
+    max-width: 160px;
     padding: 11px 0;
     border-radius: 6px;
     font-size: 14px;
@@ -144,7 +143,7 @@ const ActionButtonBar = styled.div`
   .btn-approve {
     background: #2d5a43;
     color: white;
-    max-width: 200px; /* 승인 버튼은 피그마처럼 비중을 살짝 더 넓게 세팅 */
+    max-width: 200px;
     &:hover {
       background: #1f3f2f;
     }
@@ -159,23 +158,62 @@ function ApprovalDetailPanel({
   onReject,
   onApprove,
 }) {
-  const nickname = account?.nickname || '상점명 없음';
-  const name = account?.name || '-';
+  // 실제 데이터 추출
+  const storeName = account?.storeName || account?.nickname || '상점명 없음';
+  const ownerName = account?.ownerName || account?.name || '-';
   const email = account?.email || '-';
+  const businessNumber = account?.businessNumber || '-';
+  const phone = account?.phone || account?.storePhone || '-';
+  const storeCategoryName = account?.storeCategoryName || '-';
+  const openingDate = account?.openingDate || '-';
+  const storeAddress = account?.storeAddress || '-';
+  const storeDescription = account?.storeDescription || '';
 
   return (
     <RightDetailPanel>
-      <h2>{nickname}</h2>
+      <h2>{storeName}</h2>
 
       <div className="info-grid">
         <div className="field-block">
-          <div className="label">사업자명</div>
-          <div className="value">{name}</div>
+          <div className="label">사업자명 (대표자)</div>
+          <div className="value">{ownerName}</div>
         </div>
         <div className="field-block">
           <div className="label">이메일</div>
           <div className="value">{email}</div>
         </div>
+        <div className="field-block">
+          <div className="label">사업자 등록번호</div>
+          <div className="value">{businessNumber}</div>
+        </div>
+        <div className="field-block">
+          <div className="label">대표 연락처</div>
+          <div className="value">{phone}</div>
+        </div>
+        <div className="field-block">
+          <div className="label">가게 카테고리</div>
+          <div className="value">{storeCategoryName}</div>
+        </div>
+        <div className="field-block">
+          <div className="label">개업일</div>
+          <div className="value">{openingDate}</div>
+        </div>
+        <div
+          className="field-block"
+          style={{ gridColumn: 'span 2' }}
+        >
+          <div className="label">가게 주소</div>
+          <div className="value">{storeAddress}</div>
+        </div>
+        {storeDescription && (
+          <div
+            className="field-block"
+            style={{ gridColumn: 'span 2' }}
+          >
+            <div className="label">가게 소개</div>
+            <div className="value">{storeDescription}</div>
+          </div>
+        )}
       </div>
 
       <div className="section-title">제출 서류</div>
@@ -209,13 +247,22 @@ function ApprovalDetailPanel({
       />
 
       <ActionButtonBar>
-        <button className="btn-list" onClick={onGoBack}>
+        <button
+          className="btn-list"
+          onClick={onGoBack}
+        >
           목록으로
         </button>
-        <button className="btn-reject" onClick={onReject}>
+        <button
+          className="btn-reject"
+          onClick={onReject}
+        >
           거부
         </button>
-        <button className="btn-approve" onClick={onApprove}>
+        <button
+          className="btn-approve"
+          onClick={onApprove}
+        >
           <Check size={16} /> 승인
         </button>
       </ActionButtonBar>

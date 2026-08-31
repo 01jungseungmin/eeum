@@ -7,7 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -15,6 +15,9 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 /**
  * {@link ChatBroadcastEventListener} 단위 테스트.
+ *
+ * 브로커로 직접 밀지 않고 Redis 중계로 발행한다 — 메시지를 만든 인스턴스와 구독자가 붙은
+ * 인스턴스가 다를 수 있다. 실제 왕복은 RealtimeRelayIntegrationTest에서 검증한다.
  *
  * {@code @TransactionalEventListener(phase = AFTER_COMMIT)} 위상은 Spring 트랜잭션 인프라가 관리하므로
  * 단위 테스트에서는 메서드 동작(destination · payload 전달)만 검증한다.
@@ -26,7 +29,7 @@ class ChatBroadcastEventListenerTest {
     @InjectMocks
     private ChatBroadcastEventListener chatBroadcastEventListener;
 
-    @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private RealtimeRelayPublisher realtimeRelayPublisher;
 
     // ===================== onBroadcast =====================
 
@@ -41,8 +44,8 @@ class ChatBroadcastEventListenerTest {
         chatBroadcastEventListener.onBroadcast(event);
 
         // Then
-        verify(messagingTemplate).convertAndSend("/sub/chat/rooms/" + roomId, payload);
-        verifyNoMoreInteractions(messagingTemplate);
+        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/" + roomId, payload);
+        verifyNoMoreInteractions(realtimeRelayPublisher);
     }
 
     @Test
@@ -56,7 +59,7 @@ class ChatBroadcastEventListenerTest {
         chatBroadcastEventListener.onBroadcast(event);
 
         // Then
-        verify(messagingTemplate).convertAndSend("/sub/chat/rooms/20", payload);
+        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/20", payload);
     }
 
     @Test
@@ -72,9 +75,9 @@ class ChatBroadcastEventListenerTest {
         chatBroadcastEventListener.onBroadcast(new ChatMessageBroadcastEvent(roomIdB, payloadB));
 
         // Then — roomId별 독립 채널로 분리됨
-        verify(messagingTemplate).convertAndSend("/sub/chat/rooms/10", payloadA);
-        verify(messagingTemplate).convertAndSend("/sub/chat/rooms/99", payloadB);
-        verifyNoMoreInteractions(messagingTemplate);
+        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/10", payloadA);
+        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/99", payloadB);
+        verifyNoMoreInteractions(realtimeRelayPublisher);
     }
 
     @Test
@@ -87,6 +90,6 @@ class ChatBroadcastEventListenerTest {
         chatBroadcastEventListener.onBroadcast(new ChatMessageBroadcastEvent(roomId, payload));
 
         // Then — /sub/chat/rooms/{roomId} 형식 준수
-        verify(messagingTemplate).convertAndSend("/sub/chat/rooms/1", payload);
+        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/1", payload);
     }
 }
