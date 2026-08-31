@@ -329,14 +329,10 @@ public class AuthService {
      *
      * <p>Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
      *
-     * <p>계정 행을 <b>잠그고</b> 읽는 이유는 제재와 직렬화하기 위해서다. 잠그지 않으면
-     * 상태를 ACTIVE로 확인한 뒤 정지가 커밋되고, 그 뒤 새 Refresh Token이 저장돼
-     * 제재가 무력화된다. 정지·탈퇴 경로도 같은 행을 잠그므로 둘 중 하나가 먼저 끝난다.
-     *
-     * <p>그래도 남는 창은 계정에 기록된 무효화 시각이 덮는다 — 제재보다 먼저 발급된 토큰은
-     * Redis에 남아 있어도 무효다.
+     * <p>제재와의 경쟁은 잠금이 아니라 <b>토큰 세대</b>로 푼다. 여기서 계정을 읽어 세대 N을
+     * 확인한 뒤 정지가 커밋돼 세대가 N+1이 되더라도, 이 요청이 발급하는 토큰은 N을 실은 채
+     * 나가므로 다음 검증에서 걸린다. 행 잠금으로 직렬화할 필요가 없다.
      */
-    @Transactional
     public TokenResponseDto reissue(ReissueRequestDto request) {
         // JWT 기본 형식/타입만 lock 밖에서 먼저 검증 (빠른 실패)
         if (!jwtProvider.isValid(request.getRefreshToken()) || !jwtProvider.isRefreshToken(request.getRefreshToken())) {
@@ -351,13 +347,13 @@ public class AuthService {
                 Duration.ofSeconds(5),
                 () -> {
                     Long validatedId = tokenService.validateRefreshToken(request.getRefreshToken());
-                    Account account = accountRepository.findByIdWithLock(validatedId)
+                    Account account = accountRepository.findById(validatedId)
                             .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
                     validateAccountStatus(account);
 
-                    // 회수된 토큰이면 Redis에 남아 있어도 재발급하지 않는다.
-                    if (account.isTokenInvalidated(
-                            jwtProvider.getIssuedAt(request.getRefreshToken()))) {
+                    // 회수된 세대의 토큰이면 Redis에 남아 있어도 재발급하지 않는다.
+                    if (!account.isTokenVersionCurrent(
+                            jwtProvider.getTokenVersion(request.getRefreshToken()))) {
                         throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
                     }
 
@@ -450,6 +446,13 @@ public class AuthService {
         //    발송 시점에는 활성이었어도 토큰 유효 시간 안에 정지될 수 있어 여기서 다시 본다.
         account.assertWritable();
 
+        //    회수된 세대의 토큰이면 거부한다. Redis 삭제는 비동기라 유실될 수 있어,
+        //    "정지 전에 받은 재설정 토큰 → 재활성화 → 비밀번호 변경" 경로가 열린다.
+        if (!account.isTokenVersionCurrent(
+                jwtProvider.getTokenVersion(request.getPasswordResetToken()))) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_RESET_TOKEN);
+        }
+
         // 5. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
         if (account.isOAuthAccount()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
@@ -480,7 +483,8 @@ public class AuthService {
         emailService.verifyPasswordResetCode(request.getEmail(), request.getCode());
 
         // 2. 검증 성공 후 JWT password reset token 발급
-        return tokenService.generateAndSavePasswordResetToken(account.getAccountId());
+        return tokenService.generateAndSavePasswordResetToken(
+                account.getAccountId(), account.getTokenVersion());
     }
 
     // ===================== 재인증 =====================
@@ -498,7 +502,8 @@ public class AuthService {
             validateOAuthReAuth(account, request);
         }
 
-        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId);
+        String reAuthToken = tokenService.generateAndSaveReAuthToken(
+                accountId, account.getTokenVersion());
 
         return ReAuthResponseDto.builder()
                 .reAuthToken(reAuthToken)
@@ -574,12 +579,16 @@ public class AuthService {
     }
 
     private TokenResponseDto issueTokens(Account account) {
+        // 발급 시점의 세대를 박는다. 발급 도중 제재가 커밋돼 세대가 오르면
+        // 이 토큰은 낡은 세대를 실은 채로 나가 검증에서 걸린다 — 잠금 없이 경쟁이 해소된다.
         String accessToken = jwtProvider.generateAccessToken(
                 account.getAccountId(),
-                account.getRole().name()
+                account.getRole().name(),
+                account.getTokenVersion()
         );
 
-        String refreshToken = jwtProvider.generateRefreshToken(account.getAccountId());
+        String refreshToken = jwtProvider.generateRefreshToken(
+                account.getAccountId(), account.getTokenVersion());
 
         tokenService.saveRefreshToken(account.getAccountId(), refreshToken);
 

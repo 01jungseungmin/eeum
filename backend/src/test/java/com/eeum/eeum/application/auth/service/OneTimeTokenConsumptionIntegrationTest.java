@@ -41,7 +41,7 @@ class OneTimeTokenConsumptionIntegrationTest extends IntegrationTestSupport {
     void 같은_재인증_토큰으로_동시에_요청해도_한_번만_통과한다() throws Exception {
         // Given
         Long accountId = 90001L;
-        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId);
+        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId, 0L);
 
         // When
         Result result = raceOnSameToken(() -> {
@@ -60,7 +60,7 @@ class OneTimeTokenConsumptionIntegrationTest extends IntegrationTestSupport {
     void 소비된_재인증_토큰은_다시_쓸_수_없다() {
         // Given
         Long accountId = 90002L;
-        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId);
+        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId, 0L);
         tokenService.consumeReAuthToken(accountId, reAuthToken);
 
         // When & Then
@@ -76,7 +76,7 @@ class OneTimeTokenConsumptionIntegrationTest extends IntegrationTestSupport {
     void 같은_비밀번호_재설정_토큰으로_동시에_요청해도_한_번만_통과한다() throws Exception {
         // Given
         Long accountId = 90003L;
-        String resetToken = tokenService.generateAndSavePasswordResetToken(accountId);
+        String resetToken = tokenService.generateAndSavePasswordResetToken(accountId, 0L);
 
         // When
         Result result = raceOnSameToken(() -> tokenService.consumePasswordResetToken(resetToken));
@@ -91,7 +91,7 @@ class OneTimeTokenConsumptionIntegrationTest extends IntegrationTestSupport {
     void 소비된_비밀번호_재설정_토큰은_다시_쓸_수_없다() {
         // Given
         Long accountId = 90004L;
-        String resetToken = tokenService.generateAndSavePasswordResetToken(accountId);
+        String resetToken = tokenService.generateAndSavePasswordResetToken(accountId, 0L);
         assertThat(tokenService.consumePasswordResetToken(resetToken)).isEqualTo(accountId);
 
         // When & Then

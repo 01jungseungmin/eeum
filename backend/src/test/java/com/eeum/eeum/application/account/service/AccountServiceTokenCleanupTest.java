@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -45,6 +46,7 @@ class AccountServiceTokenCleanupTest {
     @Mock AccountRegionRepository accountRegionRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock TokenService tokenService;
+    @Mock com.eeum.eeum.security.jwt.JwtProvider jwtProvider;
     @Mock AccountMapper accountMapper;
     @Mock OwnerApplicationMapper ownerApplicationMapper;
     @Mock ApplicationEventPublisher eventPublisher;
@@ -66,6 +68,9 @@ class AccountServiceTokenCleanupTest {
         when(request.getNewPassword()).thenReturn(newPass);
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(false);
         when(account.getPassword()).thenReturn("encodedCurrent");
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
@@ -92,6 +97,9 @@ class AccountServiceTokenCleanupTest {
         // getNewPassword()는 비밀번호 불일치 분기에서 호출되지 않음 — stub 불필요
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(false);
         when(account.getPassword()).thenReturn("encoded");
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
@@ -115,6 +123,9 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("reauth");
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         doThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN)).when(account).assertWritable();
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
@@ -162,6 +173,9 @@ class AccountServiceTokenCleanupTest {
         // given
         Long accountId = 1L;
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         doThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN)).when(account).assertWritable();
         when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
@@ -191,6 +205,9 @@ class AccountServiceTokenCleanupTest {
 
     private Account givenActiveAccount(Long accountId) {
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         return account;
     }
@@ -231,6 +248,9 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("reauth");
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 

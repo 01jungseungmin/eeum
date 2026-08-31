@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.Date;
 
 // 토큰 생성/검증/파싱 담당(토큰 문자열을 만들고 해석하는 클래스)
@@ -24,6 +23,7 @@ public class JwtProvider {
 
     private static final String TOKEN_TYPE_CLAIM = "type"; //type == 토큰 종류(ACCESS,REFRESH,REAUTH,PASSWORD_RESET)
     private static final String ROLE_CLAIM = "role"; //role == 회원의 role(ROLE_USER,ROLE_OWNER,ROLE_ADMIN)
+    private static final String TOKEN_VERSION_CLAIM = "ver"; //ver == 발급 시점의 계정 토큰 세대
 
     private static final String TOKEN_TYPE_ACCESS = "ACCESS";
     private static final String TOKEN_TYPE_REFRESH = "REFRESH";
@@ -70,24 +70,27 @@ public class JwtProvider {
 
     // ===================== 토큰 생성 =====================
 
-    public String generateAccessToken(Long accountId, String role) { //Access Token을 생성
-        return buildToken(String.valueOf(accountId), TOKEN_TYPE_ACCESS, role, accessTokenExpiration);
+    // 모든 토큰에 발급 시점의 세대(ver)를 박는다. 제재 시 계정의 세대가 오르면
+    // 그 이전에 발급된 토큰은 claim이 낡아 전부 무효가 된다(Account#tokenVersion 참고).
+    public String generateAccessToken(Long accountId, String role, Long tokenVersion) {
+        return buildToken(String.valueOf(accountId), TOKEN_TYPE_ACCESS, role, tokenVersion, accessTokenExpiration);
     }
 
-    public String generateRefreshToken(Long accountId) { //Refresh Token 생성
-        return buildToken(String.valueOf(accountId), TOKEN_TYPE_REFRESH, null, refreshTokenExpiration);
+    public String generateRefreshToken(Long accountId, Long tokenVersion) {
+        return buildToken(String.valueOf(accountId), TOKEN_TYPE_REFRESH, null, tokenVersion, refreshTokenExpiration);
     }
 
-    public String generateReAuthToken(Long accountId) { //ReAuth Token 생성
-        return buildToken(String.valueOf(accountId), TOKEN_TYPE_REAUTH, null, reauthTokenExpiration);
+    public String generateReAuthToken(Long accountId, Long tokenVersion) {
+        return buildToken(String.valueOf(accountId), TOKEN_TYPE_REAUTH, null, tokenVersion, reauthTokenExpiration);
     }
 
-    public String generatePasswordResetToken(Long accountId) { //Password Reset Token 생성
-        return buildToken(String.valueOf(accountId), TOKEN_TYPE_PASSWORD_RESET, null, passwordResetTokenExpiration);
+    public String generatePasswordResetToken(Long accountId, Long tokenVersion) {
+        return buildToken(String.valueOf(accountId), TOKEN_TYPE_PASSWORD_RESET, null, tokenVersion, passwordResetTokenExpiration);
     }
 
     //JWT를 만드는 공통 메서드
-    private String buildToken(String subject, String tokenType, String role, long expirationSeconds) {
+    private String buildToken(String subject, String tokenType, String role,
+                              Long tokenVersion, long expirationSeconds) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationSeconds * 1000L); //만료시간 초 단위라서 밀리초로 바꾸기 위해 1000L을 곱
 
@@ -100,6 +103,10 @@ public class JwtProvider {
 
         if (role != null) { //role이 있으면 JWT에 role claim을 추가 (Access Token에만 ROLE 값 존재)
             builder.claim(ROLE_CLAIM, role);
+        }
+
+        if (tokenVersion != null) {
+            builder.claim(TOKEN_VERSION_CLAIM, tokenVersion);
         }
 
         return builder.compact(); //JWT 구조 == Header.Payload.Signature
@@ -127,9 +134,15 @@ public class JwtProvider {
         return getClaims(token).getExpiration();
     }
 
-    // 토큰의 발급 시각. 계정에 남긴 무효화 시각과 대조해 "그 이전에 발급된 토큰"을 걸러낸다.
-    public Instant getIssuedAt(String token) {
-        return getClaims(token).getIssuedAt().toInstant();
+    /**
+     * 토큰이 실린 세대. 계정의 현재 세대와 대조해 회수된 토큰을 걸러낸다.
+     *
+     * <p>이 기능 도입 전에 발급된 토큰에는 claim이 없어 {@code null}이 나온다.
+     * 호출부는 그것을 무효로 다룬다({@code Account#isTokenVersionCurrent}).
+     */
+    public Long getTokenVersion(String token) {
+        Object claim = getClaims(token).get(TOKEN_VERSION_CLAIM);
+        return claim instanceof Number number ? number.longValue() : null;
     }
 
     public long getRemainingSeconds(String token) { //토큰이 앞으로 몇 초 남았는지 계산하는 메서드

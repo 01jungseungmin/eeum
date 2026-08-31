@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.LockModeType;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -73,6 +74,14 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
     // 관리자 계정 ID 조회 (관리자 알림 수신 대상)
     @Query("SELECT a.accountId FROM Account a WHERE a.role = 'ROLE_ADMIN' AND a.status = 'ACTIVE'")
     List<Long> findAdminAccountIds();
+
+    // 상태 + 토큰 세대를 함께 읽는 projection — WebSocket 인증과 세션 대조에 쓴다.
+    @Query("""
+        SELECT new com.eeum.eeum.domain.account.repository.AccountAuthState(
+                a.accountId, a.status, a.tokenVersion)
+        FROM Account a WHERE a.accountId IN :accountIds
+        """)
+    List<AccountAuthState> findAuthStates(@Param("accountIds") Collection<Long> accountIds);
 
     // 상태 컬럼만 읽는 projection — 트랜잭션 밖 인가 게이트(WebSocket CONNECT)용.
     // 엔티티를 로딩하면 영속성 컨텍스트도 트랜잭션도 없는 자리에서 불필요한 컬럼까지 끌고 온다.

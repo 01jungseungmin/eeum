@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -77,6 +78,9 @@ class AuthServiceTokenCleanupTest {
         when(tokenService.consumePasswordResetToken(resetToken)).thenReturn(accountId);
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(false);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
         when(passwordEncoder.encode(newPassword)).thenReturn("encoded");
@@ -122,6 +126,9 @@ class AuthServiceTokenCleanupTest {
         when(tokenService.consumePasswordResetToken("token")).thenReturn(accountId);
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
@@ -246,14 +253,17 @@ class AuthServiceTokenCleanupTest {
                 });
 
         Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isWithdrawn()).thenReturn(false);
         when(account.isActive()).thenReturn(true);
         when(account.getAccountId()).thenReturn(accountId);
         when(account.getRole()).thenReturn(com.eeum.eeum.domain.account.enums.AccountRole.ROLE_USER);
         when(tokenService.validateRefreshToken(refreshToken)).thenReturn(accountId);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(jwtProvider.generateAccessToken(any(), any())).thenReturn("new-access");
-        when(jwtProvider.generateRefreshToken(any())).thenReturn("new-refresh");
+        when(jwtProvider.generateAccessToken(any(), any(), any())).thenReturn("new-access");
+        when(jwtProvider.generateRefreshToken(any(), any())).thenReturn("new-refresh");
 
         // when
         authService.reissue(request);
@@ -407,8 +417,8 @@ class AuthServiceTokenCleanupTest {
         // saveAndFlush()의 반환값은 oauthComplete에서 사용하지 않음 (로컬 account 변수를 그대로 사용)
         when(accountRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        when(jwtProvider.generateAccessToken(any(), any())).thenReturn("access");
-        when(jwtProvider.generateRefreshToken(any())).thenReturn("refresh");
+        when(jwtProvider.generateAccessToken(any(), any(), any())).thenReturn("access");
+        when(jwtProvider.generateRefreshToken(any(), any())).thenReturn("refresh");
 
         // when
         authService.oauthComplete(request);

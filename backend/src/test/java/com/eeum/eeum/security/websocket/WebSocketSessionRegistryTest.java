@@ -37,8 +37,8 @@ class WebSocketSessionRegistryTest {
         WebSocketSession tablet = session("s2");
         registry.register(phone);
         registry.register(tablet);
-        registry.bindAccount("s1", 1L);
-        registry.bindAccount("s2", 1L);
+        registry.bindAccount("s1", 1L, 0L);
+        registry.bindAccount("s2", 1L, 0L);
 
         // When
         int closed = registry.closeAll(1L, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
@@ -57,8 +57,8 @@ class WebSocketSessionRegistryTest {
         WebSocketSession other = session("s2");
         registry.register(mine);
         registry.register(other);
-        registry.bindAccount("s1", 1L);
-        registry.bindAccount("s2", 2L);
+        registry.bindAccount("s1", 1L, 0L);
+        registry.bindAccount("s2", 2L, 0L);
 
         // When
         registry.closeAll(1L, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
@@ -73,7 +73,7 @@ class WebSocketSessionRegistryTest {
     void 연결이_끊기면_계정_인덱스에서도_빠진다() {
         // Given: 세션만 지우고 계정 인덱스를 두면 끊긴 ID가 계속 쌓인다
         registry.register(session("s1"));
-        registry.bindAccount("s1", 1L);
+        registry.bindAccount("s1", 1L, 0L);
 
         // When
         registry.unregister("s1");
@@ -90,8 +90,8 @@ class WebSocketSessionRegistryTest {
         doThrow(new IOException("already closed")).when(broken).close(any());
         registry.register(broken);
         registry.register(alive);
-        registry.bindAccount("s1", 1L);
-        registry.bindAccount("s2", 1L);
+        registry.bindAccount("s1", 1L, 0L);
+        registry.bindAccount("s2", 1L, 0L);
 
         // When
         int closed = registry.closeAll(1L, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);

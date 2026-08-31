@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -95,6 +96,10 @@ class StompAuthChannelInterceptorTest {
         when(jwtProvider.getAccountId(TOKEN)).thenReturn(ACCOUNT_ID);
     }
 
+    private void givenTokenVersion(Long version) {
+        when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(version);
+    }
+
     // ===================== CONNECT =====================
 
     @Test
@@ -109,9 +114,9 @@ class StompAuthChannelInterceptorTest {
         // Then
         assertThat(accessor.getUser()).isNotNull();
         assertThat(accessor.getUser().getName()).isEqualTo(String.valueOf(ACCOUNT_ID));
-        verify(accountWriteGuard).assertUsableWithoutLock(ACCOUNT_ID);
+        verify(accountWriteGuard).assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any());
         // 제재·탈퇴 시 이 연결을 찾아 끊으려면 계정에 묶여 있어야 한다
-        verify(sessionRegistry).bindAccount(accessor.getSessionId(), ACCOUNT_ID);
+        verify(sessionRegistry).bindAccount(eq(accessor.getSessionId()), eq(ACCOUNT_ID), any());
     }
 
     @Test
@@ -119,8 +124,8 @@ class StompAuthChannelInterceptorTest {
         // Given: 정지는 이미 발급된 Access Token을 무효화하지 않는다.
         //        토큰 검증만으로 통과시키면 남은 수명(30분) 동안 채팅 연결이 열린다.
         givenValidToken();
-        doThrow(new BusinessException(ErrorCode.ACCOUNT_SUSPENDED))
-                .when(accountWriteGuard).assertUsableWithoutLock(ACCOUNT_ID);
+        when(accountWriteGuard.assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any()))
+                .thenThrow(new BusinessException(ErrorCode.ACCOUNT_SUSPENDED));
         StompHeaderAccessor accessor = connectAccessor();
 
         // When & Then
@@ -133,27 +138,56 @@ class StompAuthChannelInterceptorTest {
     void 거부된_연결은_계정에_묶이지_않는다() {
         // Given: 묶이면 끊을 대상 목록에 유령 세션이 남는다
         givenValidToken();
-        doThrow(new BusinessException(ErrorCode.ACCOUNT_SUSPENDED))
-                .when(accountWriteGuard).assertUsableWithoutLock(ACCOUNT_ID);
+        when(accountWriteGuard.assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any()))
+                .thenThrow(new BusinessException(ErrorCode.ACCOUNT_SUSPENDED));
 
         // When & Then
         assertThatThrownBy(() -> interceptor.preSend(toMessage(connectAccessor()), channel))
                 .isInstanceOf(MessageDeliveryException.class);
-        verify(sessionRegistry, never()).bindAccount(any(), anyLong());
+        verify(sessionRegistry, never()).bindAccount(any(), anyLong(), any());
     }
 
     @Test
     void 탈퇴한_계정은_토큰이_유효해도_연결이_거부된다() {
         // Given
         givenValidToken();
-        doThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN))
-                .when(accountWriteGuard).assertUsableWithoutLock(ACCOUNT_ID);
+        when(accountWriteGuard.assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any()))
+                .thenThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN));
         StompHeaderAccessor accessor = connectAccessor();
 
         // When & Then
         assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
                 .isInstanceOf(MessageDeliveryException.class);
         assertThat(accessor.getUser()).isNull();
+    }
+
+    @Test
+    void 회수된_세대의_토큰으로는_연결할_수_없다() {
+        // Given: 비밀번호 재설정·사장 승인은 계정을 ACTIVE로 남긴다.
+        //        상태만 보면 회수된 토큰으로 다시 연결할 수 있다.
+        givenValidToken();
+        when(accountWriteGuard.assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any()))
+                .thenThrow(new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
+        StompHeaderAccessor accessor = connectAccessor();
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
+                .isInstanceOf(MessageDeliveryException.class);
+        assertThat(accessor.getUser()).isNull();
+    }
+
+    @Test
+    void 연결_시점의_토큰_세대를_세션에_기록한다() {
+        // Given: 주기적 대조가 이 값과 DB를 비교해 회수된 연결을 찾는다
+        givenValidToken();
+        when(accountWriteGuard.assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any())).thenReturn(7L);
+        StompHeaderAccessor accessor = connectAccessor();
+
+        // When
+        interceptor.preSend(toMessage(accessor), channel);
+
+        // Then
+        verify(sessionRegistry).bindAccount(eq(accessor.getSessionId()), eq(ACCOUNT_ID), eq(7L));
     }
 
     @Test
@@ -165,7 +199,7 @@ class StompAuthChannelInterceptorTest {
         // When & Then
         assertThatThrownBy(() -> interceptor.preSend(toMessage(accessor), channel))
                 .isInstanceOf(MessageDeliveryException.class);
-        verify(accountWriteGuard, never()).assertUsableWithoutLock(anyLong());
+        verify(accountWriteGuard, never()).assertUsableTokenWithoutLock(anyLong(), any());
     }
 
     // ===================== SUBSCRIBE destination 화이트리스트 =====================

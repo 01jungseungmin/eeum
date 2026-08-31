@@ -1,12 +1,16 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.repository.AccountAuthState;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * 사용자 쓰기 경로의 첫 단계 — 요청자 계정 행을 잠그고 사용 가능 상태를 확인한다.
@@ -47,5 +51,26 @@ public class AccountWriteGuard {
         accountRepository.findStatusByAccountId(accountId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND))
                 .assertWritable();
+    }
+
+    /**
+     * 상태와 토큰 세대를 함께 확인하고, 현재 세대를 돌려준다.
+     *
+     * <p>상태만 보면 정지·탈퇴는 걸러지지만 비밀번호 재설정·권한 변경으로 회수한 토큰은 통과한다
+     * — 그 경로들은 계정을 ACTIVE로 남기기 때문이다.
+     *
+     * @return 계정의 현재 토큰 세대. 호출부가 세션에 기록해 두면 나중에 대조할 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public Long assertUsableTokenWithoutLock(Long accountId, Long tokenVersionClaim) {
+        AccountAuthState state = accountRepository.findAuthStates(List.of(accountId)).stream()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        state.status().assertWritable();
+        if (!state.isTokenVersionCurrent(tokenVersionClaim)) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+        }
+        return state.tokenVersion();
     }
 }

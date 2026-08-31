@@ -89,8 +89,8 @@ public class TokenService {
 
     // ===================== ReAuth Token =====================
     //ReAuth Token 생성 및 저장
-    public String generateAndSaveReAuthToken(Long accountId) {
-        String reAuthToken = jwtProvider.generateReAuthToken(accountId); //wtProvider에게 ReAuth Token 생성을 요청
+    public String generateAndSaveReAuthToken(Long accountId, Long tokenVersion) {
+        String reAuthToken = jwtProvider.generateReAuthToken(accountId, tokenVersion);
 
         redisUtil.set( //Redis에 저장 시작
                 reAuthTokenKey(accountId), //Redis key
@@ -139,8 +139,8 @@ public class TokenService {
     // ===================== Password Reset Token =====================
 
     //비밀번호 재설정 토큰을 생성하고 Redis에 저장한 뒤, 생성한 토큰 문자열을 반환하는 메서드
-    public String generateAndSavePasswordResetToken(Long accountId) {
-        String resetToken = jwtProvider.generatePasswordResetToken(accountId); //JwtProvider를 이용해서 비밀번호 재설정용 JWT를 생성
+    public String generateAndSavePasswordResetToken(Long accountId, Long tokenVersion) {
+        String resetToken = jwtProvider.generatePasswordResetToken(accountId, tokenVersion);
 
         redisUtil.set( //Redis에 값을 저장하는 메서드
                 passwordResetTokenKey(accountId), //key

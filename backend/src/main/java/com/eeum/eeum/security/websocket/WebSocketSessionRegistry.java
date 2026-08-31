@@ -33,6 +33,8 @@ public class WebSocketSessionRegistry {
 
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<Long, Set<String>> sessionIdsByAccount = new ConcurrentHashMap<>();
+    // 연결 시점의 토큰 세대. 주기적 대조가 이 값과 DB를 비교해 회수된 연결을 찾는다.
+    private final Map<Long, Long> tokenVersionByAccount = new ConcurrentHashMap<>();
 
     // HTTP 업그레이드 직후. 아직 인증 전이라 계정은 모른다.
     public void register(WebSocketSession session) {
@@ -40,13 +42,21 @@ public class WebSocketSessionRegistry {
     }
 
     // STOMP CONNECT 인증 후. 한 계정이 여러 기기로 붙을 수 있어 집합으로 둔다.
-    public void bindAccount(String sessionId, Long accountId) {
+    public void bindAccount(String sessionId, Long accountId, Long tokenVersion) {
         if (sessionId == null || accountId == null) {
             return;
         }
         sessionIdsByAccount
                 .computeIfAbsent(accountId, id -> ConcurrentHashMap.newKeySet())
                 .add(sessionId);
+        if (tokenVersion != null) {
+            tokenVersionByAccount.put(accountId, tokenVersion);
+        }
+    }
+
+    /** 이 인스턴스에 붙어 있는 계정과 연결 시점의 토큰 세대. 주기적 대조용. */
+    public Map<Long, Long> connectedTokenVersions() {
+        return Map.copyOf(tokenVersionByAccount);
     }
 
     /**
@@ -58,6 +68,7 @@ public class WebSocketSessionRegistry {
         sessions.remove(sessionId);
         sessionIdsByAccount.values().forEach(ids -> ids.remove(sessionId));
         sessionIdsByAccount.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        tokenVersionByAccount.keySet().removeIf(accountId -> !sessionIdsByAccount.containsKey(accountId));
     }
 
     /**
@@ -66,6 +77,7 @@ public class WebSocketSessionRegistry {
      * @return 실제로 끊은 세션 수
      */
     public int closeAll(Long accountId, CloseStatus status) {
+        tokenVersionByAccount.remove(accountId);
         Set<String> sessionIds = sessionIdsByAccount.remove(accountId);
         if (sessionIds == null || sessionIds.isEmpty()) {
             return 0;

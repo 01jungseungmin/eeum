@@ -86,8 +86,13 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         // 토큰이 유효하다고 계정이 쓸 수 있는 상태인 것은 아니다.
         // 정지·탈퇴는 발급된 Access Token을 무효화하지 않으므로 남은 수명(30분) 동안 연결이 열린다.
         // REST는 JwtAuthenticationFilter가 요청마다 계정을 다시 읽지만, /ws는 그 필터를 건너뛴다.
+        //
+        // 세대까지 보는 이유는 상태만으로 부족하기 때문이다. 비밀번호 재설정·사장 승인은
+        // 계정을 ACTIVE로 남기므로, 상태만 보면 회수된 토큰으로 다시 연결할 수 있다.
+        Long tokenVersion;
         try {
-            accountWriteGuard.assertUsableWithoutLock(accountId);
+            tokenVersion = accountWriteGuard.assertUsableTokenWithoutLock(
+                    accountId, jwtProvider.getTokenVersion(token));
         } catch (BusinessException e) {
             log.warn("WebSocket 연결 거부: accountId={}, reason={}", accountId, e.getMessage());
             throw new MessageDeliveryException("WebSocket 인증 실패: " + e.getMessage());
@@ -96,7 +101,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         accessor.setUser(new StompPrincipal(accountId));
         // 제재·탈퇴 시 이 연결을 찾아 끊을 수 있도록 계정에 묶는다.
         // 세션 자체는 HTTP 업그레이드 때 이미 등록돼 있고, 여기서 주인만 붙인다.
-        sessionRegistry.bindAccount(accessor.getSessionId(), accountId);
+        // 세대를 함께 기록해 둔다 — 주기적 대조가 이 값과 DB를 비교해 회수된 연결을 끊는다.
+        sessionRegistry.bindAccount(accessor.getSessionId(), accountId, tokenVersion);
         log.debug("WebSocket 인증 성공: accountId={}", accountId);
     }
 

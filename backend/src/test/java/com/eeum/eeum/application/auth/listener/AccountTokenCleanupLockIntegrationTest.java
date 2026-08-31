@@ -20,13 +20,13 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 제재 토큰 정리가 재발급과 같은 락으로 직렬화되는지 검증한다.
+ * 제재 토큰 정리가 재발급 락에 묶이지 않는지 검증한다.
  *
- * <p>직렬화하지 않으면 이런 순서가 가능하다 — 재발급이 계정 상태를 ACTIVE로 확인 →
- * 관리자가 정지시키고 정리가 토큰 삭제 → 재발급이 <b>새 Refresh Token을 저장</b>.
- * 제재했는데 토큰이 되살아난다.
+ * <p>회수의 보장은 여기가 아니다. 발급 시점의 토큰 세대가 JWT에 박히고, 제재가 같은
+ * 트랜잭션에서 세대를 올리므로 그 이전 토큰은 Redis에 남아 있어도 검증에서 걸린다.
+ * Redis 삭제는 즉시성을 위한 최적화다.
  *
- * <p>Mock으로는 검증할 수 없다. 락 획득 자체가 검증 대상이라 실제 Redis가 필요하다.
+ * <p>그래서 여기서 확인하는 것은 "정리가 아무것도 기다리지 않는다"이다.
  */
 @EnabledIfDockerAvailable
 @RequiredArgsConstructor
@@ -40,43 +40,32 @@ class AccountTokenCleanupLockIntegrationTest extends IntegrationTestSupport {
     private final RedisUtil redisUtil;
 
     @Test
-    void 재발급이_진행_중이면_토큰_정리가_끝날_때까지_기다린다() throws Exception {
-        // Given: 재발급이 락을 잡은 채 아직 새 토큰을 저장하지 않은 상태
-        tokenService.saveRefreshToken(ACCOUNT_ID, "old-refresh-token");
-        CountDownLatch lockHeld = new CountDownLatch(1);
+    void 재발급이_진행_중이어도_정리가_막히지_않는다() {
+        // Given: 예전에는 정리가 재발급 락을 기다렸다. 그 대기는 비동기 스레드를 최대 10초 묶으면서도
+        //        lease 만료·lockless fallback에서 경쟁이 다시 성립해 보장은 못 했다.
+        //        지금 보장은 계정의 토큰 세대가 맡는다 — 제재와 같은 트랜잭션에서 오른다.
+        tokenService.saveRefreshToken(ACCOUNT_ID, "refresh-token");
         CountDownLatch releaseLock = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
 
         try {
-            Future<?> reissue = pool.submit(() -> redisLockService.executeWithLock(
+            Future<?> holder = pool.submit(() -> redisLockService.executeWithLock(
                     LockKeys.reissue(ACCOUNT_ID), Duration.ofSeconds(20),
-                    () -> {
-                        lockHeld.countDown();
-                        awaitQuietly(releaseLock);
-                        // 재발급이 마지막에 하는 일 — 새 Refresh Token 저장
-                        tokenService.saveRefreshToken(ACCOUNT_ID, "new-refresh-token");
-                    }));
+                    () -> awaitQuietly(releaseLock)));
+            sleepQuietly(200);
 
-            assertThat(lockHeld.await(5, TimeUnit.SECONDS)).isTrue();
+            // When: 재발급 락이 잡혀 있는 동안 정리가 들어온다
+            listener.onAccountTokenCleanup(AccountTokenCleanupEvent.allTokens(ACCOUNT_ID));
 
-            // When: 제재 정리가 들어온다
-            Future<?> cleanup = pool.submit(() ->
-                    listener.onAccountTokenCleanup(AccountTokenCleanupEvent.allTokens(ACCOUNT_ID)));
-
-            // Then: 재발급이 끝나기 전에는 지우지 못한다 (빠른 실패였다면 여기서 이미 사라졌다)
-            sleepQuietly(500);
-            assertThat(redisUtil.get("refresh:" + ACCOUNT_ID))
-                    .as("재발급이 락을 쥔 동안 정리가 먼저 지나갔다")
-                    .isPresent();
+            // Then: 기다리지 않고 바로 지운다
+            assertThat(awaitTokenDeleted())
+                    .as("정리가 재발급 락을 기다렸다 — 비동기 스레드가 묶인다")
+                    .isTrue();
 
             releaseLock.countDown();
-            reissue.get(10, TimeUnit.SECONDS);
-            cleanup.get(20, TimeUnit.SECONDS);
-
-            // 재발급이 저장한 새 토큰까지 회수돼야 제재가 성립한다
-            assertThat(awaitTokenDeleted())
-                    .as("재발급이 저장한 토큰이 남았다 — 제재가 무력화된다")
-                    .isTrue();
+            holder.get(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
         } finally {
             releaseLock.countDown();
             pool.shutdownNow();

@@ -7,10 +7,6 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
 
@@ -24,7 +20,7 @@ public class CustomUserDetails implements UserDetails {
     private final String role;
     private final AccountStatus status;
     // 계정 엔티티를 들고 있지 않으므로 판정에 필요한 값만 복사한다.
-    private final LocalDateTime tokenInvalidatedAt;
+    private final Long tokenVersion;
 
     //Account 객체를 입력받아서, 그 안에 있는 값들을 꺼낸 다음 CustomUserDetails 객체 안에 저장
     public CustomUserDetails(Account account) {
@@ -33,24 +29,18 @@ public class CustomUserDetails implements UserDetails {
         this.password = account.getPassword();
         this.role = account.getRole().name();
         this.status = account.getStatus();
-        this.tokenInvalidatedAt = account.getTokenInvalidatedAt();
+        this.tokenVersion = account.getTokenVersion();
     }
 
     /**
-     * 이 토큰이 회수 대상인지. 무효화 시각 이전에 발급된 토큰은 전부 무효다.
+     * 이 토큰이 현재 세대인지. 회수된 세대면 인증하지 않는다.
      *
      * <p>계정 상태만 보면 정지·탈퇴는 걸러지지만 비밀번호 재설정·권한 변경은 걸러지지 않는다.
-     * Redis에서 Refresh Token을 지우는 것으로 처리해 왔는데, 그 삭제는 비동기 풀을 타므로
-     * 보장되지 않는다. 이 판정이 최종 근거다.
+     * Redis에서 Refresh Token을 지우는 것으로 처리해 왔는데 그 삭제는 비동기라 보장되지 않는다.
      */
-    public boolean isTokenInvalidated(Instant issuedAt) {
-        if (tokenInvalidatedAt == null || issuedAt == null) {
-            return false;
-        }
-        Instant invalidatedAt = tokenInvalidatedAt.atZone(ZoneId.systemDefault()).toInstant();
-        // iat는 초 단위라 같은 초면 구분할 수 없다 — 살려두기보다 막는 쪽을 택한다.
-        return !issuedAt.truncatedTo(ChronoUnit.SECONDS)
-                .isAfter(invalidatedAt.truncatedTo(ChronoUnit.SECONDS));
+    public boolean isTokenVersionCurrent(Long tokenVersionClaim) {
+        return tokenVersionClaim != null
+                && tokenVersionClaim.equals(tokenVersion == null ? 0L : tokenVersion);
     }
 
     @Override

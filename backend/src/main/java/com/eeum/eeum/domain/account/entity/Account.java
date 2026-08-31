@@ -11,10 +11,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(
@@ -96,17 +93,21 @@ public class Account extends BaseEntity {
     private LocalDateTime deletedAt;
 
     /**
-     * 이 시각 이전에 발급된 토큰은 모두 무효다.
+     * 토큰 세대. 발급 시점의 값이 JWT {@code ver} claim에 박히고, 검증 때 현재 값과 대조한다.
      *
-     * <p>Redis에서 토큰을 지우는 것만으로는 회수가 보장되지 않는다. 삭제는 비동기 풀을 타므로
-     * 포화 시 버려질 수 있고, 진행 중인 재발급이 삭제 직후 새 토큰을 저장할 수도 있으며,
-     * 인스턴스 간 신호는 유실될 수 있다. 이 값은 제재와 <b>같은 트랜잭션</b>에서 커밋되므로
-     * 그 모든 경로와 무관하게 남는다 — 회수의 최종 근거다.
+     * <p>Redis에서 토큰을 지우는 것만으로는 회수가 보장되지 않는다 — 삭제가 비동기 풀을 타고,
+     * 인스턴스 간 신호는 유실되며, 진행 중인 발급이 삭제 직후 새 토큰을 저장한다.
+     * 이 값은 제재와 <b>같은 트랜잭션</b>에서 커밋되므로 그 경로들과 무관하다.
      *
-     * <p>Redis 삭제는 이제 보장이 아니라 즉시성을 위한 최적화다.
+     * <p>시각이 아니라 정수인 이유가 중요하다. 시각으로 비교하면
+     * (1) {@code iat}가 초 단위라 같은 초에 발급된 토큰을 구분할 수 없고,
+     * (2) 인스턴스마다 timezone이 다르면 같은 값의 판정이 갈리며,
+     * (3) 제재 직후 발급된 토큰이 "더 늦은 시각"이라는 이유로 통과한다.
+     * 세대 번호는 셋 다 겪지 않는다 — 발급 시점에 읽은 값이 낡았으면 그 토큰은 낡은 것이다.
      */
-    @Column(name = "token_invalidated_at")
-    private LocalDateTime tokenInvalidatedAt;
+    @Column(name = "token_version", nullable = false,
+            columnDefinition = "BIGINT NOT NULL DEFAULT 0")
+    private Long tokenVersion = 0L;
 
     @Version
     @Column(name = "version", nullable = false, columnDefinition = "BIGINT NOT NULL DEFAULT 0")
@@ -238,24 +239,20 @@ public class Account extends BaseEntity {
         this.anonymizedAt = LocalDateTime.now();
     }
 
-    /** 지금 이후로 기존 토큰을 전부 무효화한다. 제재·탈퇴·비밀번호 재설정·권한 변경에서 호출한다. */
-    public void invalidateTokensBefore(LocalDateTime at) {
-        this.tokenInvalidatedAt = at;
+    /** 기존 토큰을 전부 무효화한다. 제재·탈퇴·비밀번호 재설정·권한 변경에서 호출한다. */
+    public void invalidateIssuedTokens() {
+        this.tokenVersion = (this.tokenVersion == null ? 0L : this.tokenVersion) + 1;
     }
 
     /**
-     * 이 토큰이 무효화 시각 이전에 발급됐는지.
+     * 이 토큰이 현재 세대인지.
      *
-     * <p>JWT의 {@code iat}는 초 단위라 같은 초에 발급·무효화가 겹치면 구분할 수 없다.
-     * 그 경우 무효로 본다 — 살려두는 쪽보다 최대 1초 과하게 막는 쪽이 안전하다.
+     * <p>{@code ver} claim이 없는 토큰(이 기능 도입 전에 발급된 것)은 무효로 본다.
+     * 낡은 토큰을 살려두는 것보다 한 번 재로그인시키는 편이 안전하다.
      */
-    public boolean isTokenInvalidated(Instant issuedAt) {
-        if (this.tokenInvalidatedAt == null || issuedAt == null) {
-            return false;
-        }
-        Instant invalidatedAt = this.tokenInvalidatedAt.atZone(ZoneId.systemDefault()).toInstant();
-        return !issuedAt.truncatedTo(ChronoUnit.SECONDS)
-                .isAfter(invalidatedAt.truncatedTo(ChronoUnit.SECONDS));
+    public boolean isTokenVersionCurrent(Long tokenVersionClaim) {
+        return tokenVersionClaim != null
+                && tokenVersionClaim.equals(this.tokenVersion == null ? 0L : this.tokenVersion);
     }
 
     public boolean isAnonymized() {

@@ -9,16 +9,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.LocalDateTime;
-
 /**
- * 토큰 회수의 최종 근거를 계정에 남긴다.
+ * 토큰 회수의 최종 근거 — 계정의 토큰 세대를 올린다.
  *
  * <p>Redis 삭제만으로는 회수가 보장되지 않는다. 세 가지 경로로 새어나간다 —
  * 비동기 풀이 포화되면 삭제 작업이 버려지고, 진행 중인 재발급이 삭제 직후 새 토큰을 저장하며,
  * 인스턴스 간 종료 신호(Pub/Sub)는 유실될 수 있다.
  *
- * <p>그래서 무효화 시각을 <b>제재와 같은 트랜잭션</b>에서 기록한다.
+ * <p>그래서 토큰 세대를 <b>제재와 같은 트랜잭션</b>에서 올린다.
  * {@code BEFORE_COMMIT}이라 이 변경은 원 트랜잭션과 함께 커밋된다 — 비동기도 아니고
  * 별도 커넥션도 쓰지 않으므로 위 세 경로 어디에도 걸리지 않는다.
  *
@@ -46,7 +44,8 @@ public class AccountTokenInvalidationListener {
             return;
         }
 
-        account.invalidateTokensBefore(LocalDateTime.now());
-        log.debug("토큰 무효화 시각 기록: accountId={}", event.accountId());
+        account.invalidateIssuedTokens();
+        log.debug("토큰 세대 증가: accountId={}, version={}",
+                event.accountId(), account.getTokenVersion());
     }
 }

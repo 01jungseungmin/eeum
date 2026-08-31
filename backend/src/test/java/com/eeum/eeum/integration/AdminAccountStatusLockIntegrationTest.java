@@ -197,38 +197,38 @@ class AdminAccountStatusLockIntegrationTest extends IntegrationTestSupport {
     }
 
     /**
-     * 토큰 무효화 시각은 제재와 <b>같은 트랜잭션</b>에서 커밋돼야 한다.
+     * 토큰 세대는 제재와 <b>같은 트랜잭션</b>에서 올라가야 한다.
      *
      * <p>Redis 삭제와 세션 종료는 비동기 풀·Pub/Sub을 타므로 유실될 수 있다.
      * 이 값이 비동기였다면 같은 이유로 유실되고, 그러면 회수의 최종 근거가 사라진다.
-     * 제재 호출이 반환된 직후 이미 기록돼 있어야 동기 커밋이 보장된다.
+     * 제재 호출이 반환된 직후 이미 올라 있어야 동기 커밋이 보장된다.
      */
     @Test
-    void 정지하면_토큰_무효화_시각이_같은_트랜잭션에서_기록된다() {
+    void 정지하면_토큰_세대가_같은_트랜잭션에서_올라간다() {
         // Given
         Long targetId = targetAccount.getAccountId();
-        assertThat(accountRepository.findById(targetId).orElseThrow().getTokenInvalidatedAt())
-                .isNull();
+        Long before = accountRepository.findById(targetId).orElseThrow().getTokenVersion();
 
         // When
         adminAccountService.suspendAccount(ADMIN_ID, targetId);
 
-        // Then: 비동기였다면 여기서 아직 null이다
-        assertThat(accountRepository.findById(targetId).orElseThrow().getTokenInvalidatedAt())
-                .as("무효화 시각이 기록되지 않았다 — 토큰 회수의 최종 근거가 사라진다")
-                .isNotNull();
+        // Then: 비동기였다면 여기서 아직 그대로다
+        assertThat(accountRepository.findById(targetId).orElseThrow().getTokenVersion())
+                .as("세대가 오르지 않았다 — 토큰 회수의 최종 근거가 사라진다")
+                .isGreaterThan(before);
     }
 
     @Test
-    void 강제_탈퇴도_토큰_무효화_시각을_남긴다() {
+    void 강제_탈퇴도_토큰_세대를_올린다() {
         // Given
         Long targetId = targetAccount.getAccountId();
+        Long before = accountRepository.findById(targetId).orElseThrow().getTokenVersion();
 
         // When
         adminAccountService.forceDeleteAccount(ADMIN_ID, targetId);
 
         // Then
-        assertThat(accountRepository.findById(targetId).orElseThrow().getTokenInvalidatedAt())
-                .isNotNull();
+        assertThat(accountRepository.findById(targetId).orElseThrow().getTokenVersion())
+                .isGreaterThan(before);
     }
 }
