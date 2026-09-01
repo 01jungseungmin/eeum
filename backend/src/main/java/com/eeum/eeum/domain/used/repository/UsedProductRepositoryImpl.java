@@ -81,7 +81,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
     public CursorSlice<UsedProduct> search(
             UsedProductSearchCondition condition, UsedProductCursor cursor, int size, Sort requestedSort) {
         // tie-break까지 포함해 확정한다. SQL에만 붙이고 메타데이터에서 빠뜨리면
-        // 응답 Slice.pageable.sort가 실제 정렬 순서와 달라진다.
+        // 응답 CursorSlice.sort가 실제 정렬 순서와 달라진다.
         Sort appliedSort = resolveSort(requestedSort);
 
         List<UsedProduct> content = queryFactory
@@ -263,7 +263,7 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
      * <p>정렬 키를 하나로 좁히는 것은 커서 페이징의 전제다. 키가 둘 이상이면 커서가 그 값을
      * 모두 담아야 하고, 클라이언트는 정렬 조합마다 다른 커서를 만들어야 한다.
      * 실제로 이 목록은 한 번에 한 기준으로만 정렬하므로 첫 번째 허용 필드만 쓴다.
-     * 무엇이 적용됐는지는 응답 Slice의 Pageable.sort에 그대로 실려 나간다.
+     * 무엇이 적용됐는지는 응답 {@code CursorSlice.sort}에 그대로 실려 나간다.
      */
     private Sort resolveSort(Sort requested) {
         List<Sort.Order> applied = requested.stream()

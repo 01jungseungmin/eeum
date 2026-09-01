@@ -24,7 +24,7 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
      *
      * <p>tie-break가 없으면 createdAt 동률에서 페이지 경계 항목이 중복되거나 유실된다.
      *
-     * <p>이 값 하나가 실제 SQL(orderBy)과 응답 메타데이터(Slice의 Pageable) 양쪽의 근거다.
+     * <p>이 값 하나가 실제 SQL(orderBy)과 응답 메타데이터({@code CursorSlice.sort}) 양쪽의 근거다.
      * 두 곳에서 따로 정하면 갈린다.
      */
     private static final Sort REVIEW_SORT = Sort.by(
