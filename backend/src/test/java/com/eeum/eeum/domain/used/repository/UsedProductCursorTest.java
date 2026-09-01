@@ -41,6 +41,16 @@ class UsedProductCursorTest {
     }
 
     @Test
+    void 빈_값만_보내도_첫_페이지가_아니다() {
+        // 가격제안 글 구간의 커서는 값이 비지만 게시글 ID가 함께 온다.
+        // ID 없이 빈 값만 오면 커서를 보냈다고 믿는 클라이언트가 첫 페이지를 반복해서 받는다.
+        assertThatThrownBy(() -> UsedProductCursor.ofNullable("", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_CURSOR);
+    }
+
+    @Test
     void 값만_보내면_거절한다() {
         // tie-break용 ID가 없으면 정렬 키가 같은 글들 사이에서 경계를 끊지 못한다.
         assertThatThrownBy(() -> UsedProductCursor.ofNullable("2026-09-01T10:00", null))

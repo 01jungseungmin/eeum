@@ -36,15 +36,18 @@ public record ChatRoomCursor(LocalDateTime lastMessageAt, Long chatroomId) {
      * 목록마다 다른 타입을 클라이언트가 알 필요가 없다.
      */
     public static ChatRoomCursor ofNullable(String cursorValue, Long chatroomId) {
-        boolean blankValue = cursorValue == null || cursorValue.isBlank();
-        if (chatroomId == null) {
-            if (!blankValue) {
-                throw new BadRequestException(ErrorCode.CHAT_INVALID_CURSOR);
-            }
+        // 첫 페이지는 "둘 다 보내지 않은" 경우뿐이다. 값만 보냈다면(빈 값이라도) 커서를 보냈다고
+        // 믿는 클라이언트에게 첫 페이지를 돌려주는 셈이라 목록이 반복된다.
+        if (cursorValue == null && chatroomId == null) {
             return null;
         }
-        // 값이 없는 커서는 정상이다 — 대화가 없는 방 구간을 가리킨다.
-        return new ChatRoomCursor(blankValue ? null : parseLastMessageAt(cursorValue.trim()), chatroomId);
+        if (chatroomId == null) {
+            throw new BadRequestException(ErrorCode.CHAT_INVALID_CURSOR);
+        }
+        // 방 ID와 함께 온 빈 값은 정상이다 — 대화가 없는 방 구간(lastMessageAt이 null)을 가리킨다.
+        boolean blankValue = cursorValue == null || cursorValue.isBlank();
+        return new ChatRoomCursor(
+                blankValue ? null : parseLastMessageAt(cursorValue.trim()), chatroomId);
     }
 
     /**

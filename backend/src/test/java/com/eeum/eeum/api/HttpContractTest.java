@@ -11,7 +11,9 @@ import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.domain.used.entity.UsedReview;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.domain.used.repository.UsedReviewRepository;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +22,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.jayway.jsonpath.JsonPath;
+
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -40,12 +46,14 @@ class HttpContractTest extends IntegrationTestSupport {
 
     private final MockMvc mockMvc;
     private final UsedProductRepository usedProductRepository;
+    private final UsedReviewRepository usedReviewRepository;
     private final AccountRepository accountRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
 
     private Long regionId;
     private Long sellerId;
+    private final List<Long> reviewIds = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -62,10 +70,26 @@ class HttpContractTest extends IntegrationTestSupport {
                 seller, category, region,
                 "자전거 팝니다", "거의 새것입니다",
                 UsedProductPriceType.FIXED, new BigDecimal("10000")));
+
+        // 커서 왕복을 검증하려면 한 페이지를 넘기는 목록이 필요하다. 후기는 거래당 1건이라
+        // 판매완료 게시글을 3개 만들고 같은 구매자가 하나씩 남긴다.
+        Account buyer = accountRepository.save(Account.createUser(
+                "buyer@test.com", "encoded_pw", "구매자", "구매자닉", "010-3333-3333"));
+        reviewIds.clear();
+        for (int i = 0; i < 3; i++) {
+            UsedProduct sold = UsedProduct.create(
+                    seller, category, region, "판매완료" + i, "내용",
+                    UsedProductPriceType.FIXED, new BigDecimal("20000"));
+            sold.markSold(buyer);
+            usedProductRepository.saveAndFlush(sold);
+            reviewIds.add(usedReviewRepository.saveAndFlush(
+                    UsedReview.create(sold, buyer, 5, "후기" + i)).getUsedReviewId());
+        }
     }
 
     @AfterEach
     void tearDown() {
+        usedReviewRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
@@ -269,22 +293,68 @@ class HttpContractTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 커서_없는_첫_페이지_응답은_페이지_번호_대신_다음_커서를_담는다() throws Exception {
-        MvcResult result = mockMvc.perform(get("/used")
-                        .param("regionId", String.valueOf(regionId)))
+    void 후기_목록은_받은_커서로_이어_읽히고_마지막_페이지는_커서를_비운다() throws Exception {
+        // 응답이 준 커서를 그대로 되돌려보내는 것이 클라이언트가 할 일의 전부여야 한다.
+        MvcResult first = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("size", "2"))
                 .andReturn();
 
-        String responseBody = body(result);
-        assertThat(result.getResponse().getStatus())
-                .as("예외: %s / 응답: %s", resolved(result), responseBody)
+        String firstBody = body(first);
+        assertThat(first.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(first), firstBody)
                 .isEqualTo(200);
-        // Slice로 돌리면 두 번째 페이지에도 number=0, first=true가 실려 위치를 잘못 설명한다.
-        assertThat(responseBody)
-                .contains("hasNext")
-                .contains("nextCursorValue")
-                .contains("nextCursorId")
+        boolean firstHasNext = JsonPath.read(firstBody, "$.data.hasNext");
+        assertThat(firstHasNext).isTrue();
+        assertThat(JsonPath.read(firstBody, "$.data.content").toString())
+                .as("첫 페이지는 최신 후기 2건이다")
+                .contains("후기2").contains("후기1").doesNotContain("후기0");
+
+        // 페이지 번호 계약을 섞지 않는다 — Slice로 돌리면 두 번째 페이지도 number=0, first=true다.
+        assertThat(firstBody)
                 .doesNotContain("\"first\"")
-                .doesNotContain("\"pageable\"");
+                .doesNotContain("\"pageable\"")
+                .doesNotContain("\"number\"");
+        // 정렬은 상태가 아니라 실제 필드·방향으로 나가야 한다.
+        assertThat(JsonPath.read(firstBody, "$.data.sort").toString())
+                .isEqualTo("[\"createdAt,DESC\",\"usedReviewId,DESC\"]");
+
+        // 지역 변수로 받는다 — param(String, String...)에 바로 넘기면 제네릭이 String[]로 추론된다.
+        String nextCursorValue = JsonPath.read(firstBody, "$.data.nextCursorValue");
+        Number nextCursorId = JsonPath.read(firstBody, "$.data.nextCursorId");
+
+        MvcResult second = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("size", "2")
+                        .param("cursorValue", nextCursorValue)
+                        .param("cursorId", String.valueOf(nextCursorId.longValue())))
+                .andReturn();
+
+        String secondBody = body(second);
+        assertThat(second.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(second), secondBody)
+                .isEqualTo(200);
+        // 이미 본 후기가 다시 오면 안 되고, 마지막 페이지는 커서를 비워야 한다 —
+        // 남겨두면 클라이언트가 빈 페이지를 한 번 더 요청한다.
+        assertThat(JsonPath.read(secondBody, "$.data.content").toString())
+                .contains("후기0").doesNotContain("후기1").doesNotContain("후기2");
+        boolean secondHasNext = JsonPath.read(secondBody, "$.data.hasNext");
+        assertThat(secondHasNext).isFalse();
+        Object lastPageCursorValue = JsonPath.read(secondBody, "$.data.nextCursorValue");
+        Object lastPageCursorId = JsonPath.read(secondBody, "$.data.nextCursorId");
+        assertThat(lastPageCursorValue).isNull();
+        assertThat(lastPageCursorId).isNull();
+    }
+
+    @Test
+    void 빈_커서_값만_보내도_400으로_거절한다() throws Exception {
+        // ?cursorValue= 를 첫 페이지로 처리하면, 커서를 보냈다고 믿는 클라이언트가
+        // 같은 목록을 계속 다시 받는다.
+        MvcResult result = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("cursorValue", ""))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
     }
 
     // MockMvc가 붙잡은 실제 예외 — 500의 원인을 로그 없이 확정한다.

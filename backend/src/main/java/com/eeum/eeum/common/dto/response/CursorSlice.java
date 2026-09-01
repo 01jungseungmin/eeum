@@ -46,11 +46,19 @@ public class CursorSlice<T> {
     @Schema(description = "다음 요청에 그대로 넣을 cursorId. 다음 페이지가 없으면 null", example = "41")
     private final Long nextCursorId;
 
-    @Schema(description = "실제로 적용된 정렬. 요청 정렬을 무시했더라도 여기에는 적용값이 담긴다")
-    private final Sort sort;
+    /**
+     * 실제로 적용된 정렬. {@code "속성,방향"} 형식이고, NULL 처리를 지정한 항목에는
+     * {@code NULLS_LAST}/{@code NULLS_FIRST}가 덧붙는다.
+     *
+     * <p>Spring의 {@code Sort}를 그대로 실으면 JSON에 {@code sorted/unsorted/empty} 세 개만 나가
+     * 정작 어떤 필드를 어느 방향으로 정렬했는지가 응답에서 사라진다. 그래서 문자열로 펼쳐 담는다.
+     */
+    @Schema(description = "실제로 적용된 정렬. 요청 정렬을 무시했더라도 여기에는 적용값이 담긴다",
+            example = "[\"createdAt,DESC\", \"usedReviewId,DESC\"]")
+    private final List<String> sort;
 
     private CursorSlice(
-            List<T> content, boolean hasNext, String nextCursorValue, Long nextCursorId, Sort sort) {
+            List<T> content, boolean hasNext, String nextCursorValue, Long nextCursorId, List<String> sort) {
         this.content = content;
         this.hasNext = hasNext;
         this.nextCursorValue = nextCursorValue;
@@ -69,11 +77,29 @@ public class CursorSlice<T> {
                 hasNext,
                 hasNext ? nextCursorValue : null,
                 hasNext ? nextCursorId : null,
-                sort);
+                describe(sort));
     }
 
     public static <T> CursorSlice<T> empty(Sort sort) {
-        return new CursorSlice<>(List.of(), false, null, null, sort);
+        return new CursorSlice<>(List.of(), false, null, null, describe(sort));
+    }
+
+    /**
+     * 정렬을 JSON에 그대로 드러나는 문자열로 펼친다.
+     *
+     * <p>NULL 처리는 지정했을 때만 붙인다. NOT NULL 컬럼에까지 붙이면 응답이 실제로 일어나지
+     * 않는 NULL 처리를 주장하게 된다.
+     */
+    private static List<String> describe(Sort sort) {
+        List<String> orders = new ArrayList<>();
+        for (Sort.Order order : sort) {
+            String described = order.getProperty() + "," + order.getDirection();
+            if (order.getNullHandling() != Sort.NullHandling.NATIVE) {
+                described += "," + order.getNullHandling();
+            }
+            orders.add(described);
+        }
+        return List.copyOf(orders);
     }
 
     /**

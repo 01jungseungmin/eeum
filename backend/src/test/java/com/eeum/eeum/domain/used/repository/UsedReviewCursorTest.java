@@ -36,6 +36,25 @@ class UsedReviewCursorTest {
     }
 
     @Test
+    void 빈_값만_보내도_첫_페이지가_아니다() {
+        // ?cursorValue= 를 첫 페이지로 처리하면, 커서를 보냈다고 믿는 클라이언트가
+        // 같은 목록을 계속 다시 받는다. 첫 페이지는 둘 다 보내지 않은 경우뿐이다.
+        assertThatThrownBy(() -> UsedReviewCursor.ofNullable("", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_REVIEW_INVALID_CURSOR);
+    }
+
+    @Test
+    void 빈_값은_후기_ID와_함께_와도_거절한다() {
+        // 후기의 작성일시는 NULL일 수 없어 빈 커서 값이 성립하지 않는다.
+        assertThatThrownBy(() -> UsedReviewCursor.ofNullable("  ", 41L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_REVIEW_INVALID_CURSOR);
+    }
+
+    @Test
     void 작성일시만_보내면_거절한다() {
         assertThatThrownBy(() -> UsedReviewCursor.ofNullable(CREATED_AT_VALUE, null))
                 .isInstanceOf(BusinessException.class)

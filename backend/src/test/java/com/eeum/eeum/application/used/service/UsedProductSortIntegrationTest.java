@@ -95,11 +95,9 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
     void 응답_Sort_메타데이터의_NULL_처리가_실제_실행과_일치한다() {
         CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
 
-        Sort.Order priceOrder = result.getSort().getOrderFor("price");
-        assertThat(priceOrder).isNotNull();
-        assertThat(priceOrder.getNullHandling())
-                .as("SQL은 NULLS LAST인데 메타데이터가 NATIVE면 클라이언트는 정반대로 읽는다")
-                .isEqualTo(Sort.NullHandling.NULLS_LAST);
+        assertThat(result.getSort())
+                .as("SQL은 NULLS LAST인데 메타데이터가 그 말을 빠뜨리면 클라이언트는 정반대로 읽는다")
+                .contains("price,ASC,NULLS_LAST");
     }
 
     @Test
@@ -108,11 +106,9 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
         // 메타데이터도 실제로 일어나지 않는 NULL 처리를 주장하게 된다.
         CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        Sort sort = result.getSort();
-        assertThat(sort.getOrderFor("createdAt").getNullHandling())
-                .isEqualTo(Sort.NullHandling.NATIVE);
-        assertThat(sort.getOrderFor("usedProductId").getNullHandling())
-                .isEqualTo(Sort.NullHandling.NATIVE);
+        // NULL 처리를 붙이지 않은 항목은 "속성,방향"까지만 나온다.
+        assertThat(result.getSort())
+                .containsExactly("createdAt,DESC", "usedProductId,DESC");
     }
 
     @Test
@@ -120,9 +116,7 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
         // SQL에만 붙이고 메타데이터에서 빠뜨리면 응답이 실제 정렬을 설명하지 못한다.
         CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
 
-        Sort.Order tieBreak = result.getSort().getOrderFor("usedProductId");
-        assertThat(tieBreak).isNotNull();
-        assertThat(tieBreak.getDirection()).isEqualTo(Sort.Direction.DESC);
+        assertThat(result.getSort()).contains("usedProductId,DESC");
     }
 
     private CursorSlice<UsedProductSummaryResponseDto> search(Sort sort) {

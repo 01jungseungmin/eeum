@@ -32,13 +32,15 @@ public record UsedProductCursor(String sortValue, Long usedProductId) {
      * 무한 스크롤이 같은 목록을 반복하게 된다.
      */
     public static UsedProductCursor ofNullable(String sortValue, Long usedProductId) {
-        if (usedProductId == null) {
-            if (sortValue != null && !sortValue.isBlank()) {
-                throw new BadRequestException(ErrorCode.USED_PRODUCT_INVALID_CURSOR);
-            }
+        // 첫 페이지는 "둘 다 보내지 않은" 경우뿐이다. 값만 보냈다면(빈 값이라도) 커서를 보냈다고
+        // 믿는 클라이언트에게 첫 페이지를 돌려주는 셈이라 목록이 반복된다.
+        if (sortValue == null && usedProductId == null) {
             return null;
         }
-        // 값이 빈 커서는 정상이다 — 정렬 키가 NULL인 구간(가격제안 글)을 가리킨다.
+        if (usedProductId == null) {
+            throw new BadRequestException(ErrorCode.USED_PRODUCT_INVALID_CURSOR);
+        }
+        // 게시글 ID와 함께 온 빈 값은 정상이다 — 정렬 키가 NULL인 구간(가격제안 글)을 가리킨다.
         return new UsedProductCursor(
                 sortValue == null || sortValue.isBlank() ? null : sortValue.trim(), usedProductId);
     }

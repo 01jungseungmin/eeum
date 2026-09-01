@@ -25,16 +25,18 @@ public record UsedReviewCursor(LocalDateTime createdAt, Long usedReviewId) {
      *
      * <p>하나만 보내는 것은 막는다. 조용히 무시하면 클라이언트는 커서를 보냈다고 믿는데
      * 서버는 첫 페이지를 돌려주므로, 무한 스크롤이 같은 목록을 영원히 반복한다.
+     * 빈 문자열도 "보낸 것"으로 본다 — 후기의 작성일시는 NULL일 수 없어 빈 커서 값이 성립하지 않는다.
      *
      * <p>값은 문자열로 받는다 — 응답의 {@code nextCursorValue}를 그대로 되돌려보내는 계약이라
      * 목록마다 다른 타입을 클라이언트가 알 필요가 없다.
      */
     public static UsedReviewCursor ofNullable(String cursorValue, Long usedReviewId) {
-        boolean blankValue = cursorValue == null || cursorValue.isBlank();
-        if (blankValue && usedReviewId == null) {
+        // 첫 페이지는 "둘 다 보내지 않은" 경우뿐이다. ?cursorValue= 처럼 빈 값이라도 보냈다면
+        // 클라이언트는 커서를 보냈다고 믿고 있으므로, 첫 페이지를 돌려주면 목록이 반복된다.
+        if (cursorValue == null && usedReviewId == null) {
             return null;
         }
-        if (blankValue || usedReviewId == null) {
+        if (usedReviewId == null || cursorValue == null || cursorValue.isBlank()) {
             throw new BadRequestException(ErrorCode.USED_REVIEW_INVALID_CURSOR);
         }
         return new UsedReviewCursor(parseCreatedAt(cursorValue.trim()), usedReviewId);

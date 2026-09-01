@@ -342,9 +342,7 @@ class UsedProductInquiryRoomIntegrationTest extends IntegrationTestSupport {
 
         // Then
         assertThat(rooms.getSort())
-                .containsExactly(
-                        Sort.Order.desc("lastMessageAt").nullsLast(),
-                        Sort.Order.desc("chatroomId"));
+                .containsExactly("lastMessageAt,DESC,NULLS_LAST", "chatroomId,DESC");
     }
 
     private List<Long> roomIds(Long accountId, boolean includeClosed) {
