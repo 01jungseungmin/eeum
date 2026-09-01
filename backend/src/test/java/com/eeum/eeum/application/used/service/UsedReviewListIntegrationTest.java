@@ -4,7 +4,6 @@ import com.eeum.eeum.application.used.dto.request.UsedReviewCreateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.used.repository.UsedReviewCursor;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
@@ -30,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -100,7 +100,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         }
 
         Slice<UsedReviewResponseDto> result =
-                usedReviewService.getSellerReviews(sellerId, strangerId, null, 20);
+                usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 20);
 
         // 마지막에 쓴 후기가 먼저 온다.
         assertThat(result.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
@@ -123,12 +123,12 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
             reviewIds.add(writeReview("상품" + i, 3, "후기" + i));
         }
         UsedReviewResponseDto middle = usedReviewService
-                .getSellerReviews(sellerId, strangerId, null, 20).getContent().get(1);
+                .getSellerReviews(sellerId, strangerId, null, null, 20).getContent().get(1);
 
         // When: 커서의 createdAt이 middle과 정확히 같다 — 동률 분기를 탄다
         Slice<UsedReviewResponseDto> next = usedReviewService.getSellerReviews(
                 sellerId, strangerId,
-                new UsedReviewCursor(middle.getCreatedAt(), middle.getUsedReviewId()), 20);
+                middle.getCreatedAt(), middle.getUsedReviewId(), 20);
 
         // Then: 커서로 쓴 행 자신은 빠지고 그보다 오래된 것만 온다
         assertThat(next.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
@@ -145,7 +145,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         Long newest = writeReview("상품2", 5, "후기2");
 
         Slice<UsedReviewResponseDto> first =
-                usedReviewService.getSellerReviews(sellerId, strangerId, null, 2);
+                usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 2);
         assertThat(first.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
                 .containsExactly(newest, middle);
 
@@ -153,7 +153,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         Long inserted = writeReviewBy(strangerId, "끼어든 상품", 4, "끼어든 후기");
 
         Slice<UsedReviewResponseDto> second =
-                usedReviewService.getSellerReviews(sellerId, strangerId, cursorOf(first), 2);
+                usedReviewService.getSellerReviews(sellerId, strangerId, cursorCreatedAt(first), cursorId(first), 2);
 
         // Then: 이미 본 것은 다시 오지 않고, 남은 것만 온다.
         // OFFSET(2)이었다면 여기서 middle이 한 번 더 나온다.
@@ -169,9 +169,9 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         }
 
         Slice<UsedReviewResponseDto> first =
-                usedReviewService.getSellerReviews(sellerId, strangerId, null, 2);
+                usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 2);
         Slice<UsedReviewResponseDto> second =
-                usedReviewService.getSellerReviews(sellerId, strangerId, cursorOf(first), 2);
+                usedReviewService.getSellerReviews(sellerId, strangerId, cursorCreatedAt(first), cursorId(first), 2);
 
         assertThat(first.getContent()).hasSize(2);
         assertThat(first.hasNext()).isTrue();
@@ -189,7 +189,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         writeReviewBy(otherBuyer.getAccountId(), "남이 산 물건", 4, "괜찮아요");
 
         Slice<UsedReviewResponseDto> mine =
-                usedReviewService.getMyReviews(buyerId, null, 20);
+                usedReviewService.getMyReviews(buyerId, null, null, 20);
 
         assertThat(mine.getContent()).hasSize(1);
         assertThat(mine.getContent().get(0).getContent()).isEqualTo("좋았어요");
@@ -206,7 +206,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.saveAndFlush(product);
 
         UsedReviewResponseDto review = usedReviewService
-                .getSellerReviews(sellerId, strangerId, null, 20).getContent().get(0);
+                .getSellerReviews(sellerId, strangerId, null, null, 20).getContent().get(0);
 
         assertThat(review.getContent()).isEqualTo("별로였어요");
         assertThat(review.isUsedProductVisible()).isFalse();
@@ -225,7 +225,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.saveAndFlush(product);
 
         UsedReviewResponseDto review = usedReviewService
-                .getSellerReviews(sellerId, strangerId, null, 20).getContent().get(0);
+                .getSellerReviews(sellerId, strangerId, null, null, 20).getContent().get(0);
 
         assertThat(review.isUsedProductVisible()).isFalse();
         assertThat(review.getUsedProductTitle()).isNull();
@@ -241,7 +241,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         SqlCaptureInspector.reset();
 
         Slice<UsedReviewResponseDto> result =
-                usedReviewService.getSellerReviews(sellerId, strangerId, null, 20);
+                usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 20);
         result.getContent().forEach(UsedReviewResponseDto::getUsedProductTitle);
 
         assertThat(selectCount()).as("실행된 select: %s", SqlCaptureInspector.captured()).isEqualTo(1);
@@ -257,7 +257,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         softDelete(productId);
 
         UsedReviewResponseDto mine = usedReviewService
-                .getMyReviews(buyerId, null, 20).getContent().get(0);
+                .getMyReviews(buyerId, null, null, 20).getContent().get(0);
 
         assertThat(mine.getUsedProductTitle()).isEqualTo("자전거 팝니다");
         assertThat(mine.isUsedProductVisible())
@@ -272,9 +272,9 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         softDelete(productId);
 
         UsedReviewResponseDto asAuthor = usedReviewService
-                .getSellerReviews(sellerId, buyerId, null, 20).getContent().get(0);
+                .getSellerReviews(sellerId, buyerId, null, null, 20).getContent().get(0);
         UsedReviewResponseDto asStranger = usedReviewService
-                .getSellerReviews(sellerId, strangerId, null, 20).getContent().get(0);
+                .getSellerReviews(sellerId, strangerId, null, null, 20).getContent().get(0);
 
         assertThat(asAuthor.getUsedProductTitle()).isEqualTo("자전거 팝니다");
         assertThat(asStranger.getUsedProductTitle()).isNull();
@@ -291,7 +291,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         softDelete(productId);
 
         UsedReviewResponseDto asSeller = usedReviewService
-                .getSellerReviews(sellerId, sellerId, null, 20).getContent().get(0);
+                .getSellerReviews(sellerId, sellerId, null, null, 20).getContent().get(0);
 
         assertThat(asSeller.getUsedProductTitle()).isEqualTo("자전거 팝니다");
         assertThat(asSeller.isUsedProductVisible()).isFalse();
@@ -305,7 +305,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         softDelete(productId);
 
         UsedReviewResponseDto anonymous = usedReviewService
-                .getSellerReviews(sellerId, null, null, 20).getContent().get(0);
+                .getSellerReviews(sellerId, null, null, null, 20).getContent().get(0);
 
         assertThat(anonymous.getUsedProductTitle()).isNull();
         assertThat(anonymous.getContent()).isEqualTo("별로였어요");
@@ -440,9 +440,16 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
 
     // 직전 페이지의 마지막 행 = 다음 요청의 커서. 클라이언트가 응답만 보고 만들 수 있어야 한다
     // (usedReviewId와 createdAt 둘 다 응답 DTO에 있다).
-    private UsedReviewCursor cursorOf(Slice<UsedReviewResponseDto> page) {
-        UsedReviewResponseDto last = page.getContent().get(page.getContent().size() - 1);
-        return new UsedReviewCursor(last.getCreatedAt(), last.getUsedReviewId());
+    private LocalDateTime cursorCreatedAt(Slice<UsedReviewResponseDto> page) {
+        return lastOf(page).getCreatedAt();
+    }
+
+    private Long cursorId(Slice<UsedReviewResponseDto> page) {
+        return lastOf(page).getUsedReviewId();
+    }
+
+    private UsedReviewResponseDto lastOf(Slice<UsedReviewResponseDto> page) {
+        return page.getContent().get(page.getContent().size() - 1);
     }
 
     private UsedReviewCreateRequestDto request(int rating, String content) {

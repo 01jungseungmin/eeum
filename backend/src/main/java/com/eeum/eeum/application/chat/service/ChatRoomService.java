@@ -30,6 +30,7 @@ import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
+import com.eeum.eeum.domain.chat.repository.ChatRoomCursor;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -46,7 +47,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -261,13 +261,18 @@ public class ChatRoomService {
 
     // ===================== 조회 =====================
 
-    // 내 채팅방 목록 (lastMessageAt 내림차순, unreadCount 포함) — 무한 스크롤
+    // 내 채팅방 목록 (lastMessageAt 내림차순, unreadCount 포함) — 커서 무한 스크롤.
+    // 페이지 번호를 쓰지 않는 이유는 메시지 한 번에 그 방이 맨 앞으로 올라와 목록이 밀리기 때문이다.
     // 배치 쿼리 3개로 N+1 제거: 참여자 수, 최신 메시지, Redis unread
     // includeClosed=true면 종료된 방까지 반환한다 — 종료 시 참여자를 LEFT로 바꾸지 않으므로
     // 대화 기록은 DB에 남아 있고, 이 플래그가 유일한 열람 경로다 (응답의 active로 구분).
     @Transactional(readOnly = true)
-    public Slice<ChatRoomResponseDto> getMyRooms(Long accountId, Pageable pageable, boolean includeClosed) {
-        Slice<ChatRoom> rooms = chatRoomRepository.findMyRooms(accountId, pageable, includeClosed);
+    public Slice<ChatRoomResponseDto> getMyRooms(
+            Long accountId, LocalDateTime cursorLastMessageAt, Long cursorRoomId,
+            int size, boolean includeClosed) {
+        // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorLastMessageAt, cursorRoomId);
+        Slice<ChatRoom> rooms = chatRoomRepository.findMyRooms(accountId, cursor, size, includeClosed);
         if (rooms.isEmpty()) {
             return rooms.map(room -> ChatRoomResponseDto.of(room, null, 0L, 0L));
         }
@@ -718,11 +723,13 @@ public class ChatRoomService {
 
     // 지역 내 공개 채팅방 목록 (GROUP/GROUP_STREET) — 입장 전 탐색용, 무한 스크롤
     @Transactional(readOnly = true)
-    public Slice<ChatRoomPublicResponseDto> getPublicRooms(Long accountId, Pageable pageable) {
+    public Slice<ChatRoomPublicResponseDto> getPublicRooms(
+            Long accountId, LocalDateTime cursorLastMessageAt, Long cursorRoomId, int size) {
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorLastMessageAt, cursorRoomId);
         Account account = getAccount(accountId);
         Region region = getRegionOrThrow(account);
 
-        Slice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), pageable);
+        Slice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), cursor, size);
         if (rooms.isEmpty()) {
             return rooms.map(r -> ChatRoomPublicResponseDto.of(r, 0L, false));
         }

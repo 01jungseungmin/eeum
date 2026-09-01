@@ -42,6 +42,10 @@ public class UsedProductSummaryResponseDto {
     @Schema(description = "찜 수")
     private int favoriteCount;
 
+    // 조회수순 정렬의 커서 값이 된다 — 응답에 없으면 클라이언트가 다음 페이지를 요청할 수 없다.
+    @Schema(description = "조회수")
+    private int viewCount;
+
     @Schema(description = "작성일시")
     private LocalDateTime createdAt;
 
@@ -56,6 +60,7 @@ public class UsedProductSummaryResponseDto {
                 .categoryName(product.getCategory().getName())
                 .thumbnailUrl(thumbnailUrl)
                 .favoriteCount(product.getFavoriteCount())
+                .viewCount(product.getViewCount())
                 .createdAt(product.getCreatedAt())
                 .build();
     }

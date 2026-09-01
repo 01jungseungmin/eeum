@@ -45,6 +45,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -195,10 +196,10 @@ class UsedProductServiceTest {
     void 지역을_지정하지_않으면_내가_선택한_동네만_조회한다() {
         // given — 활동 지역이 2개여도 사용자는 하나를 선택해 쓴다. 둘을 합쳐 보여주지 않는다.
         givenSelectedRegion(true);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         // when
-        usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), PageRequest.of(0, 20));
+        usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20));
 
         // then
         assertThat(capturedCondition().regionId()).isEqualTo(REGION_ID);
@@ -208,10 +209,10 @@ class UsedProductServiceTest {
     void 비회원도_지역을_지정하면_목록을_볼_수_있다() {
         // given — 둘러보기는 열어둔다. 지역 인증은 실제 거래(채팅) 단계에서 요구한다.
         when(regionRepository.existsById(REGION_ID)).thenReturn(true);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         // when — viewerId가 null인 비로그인 상태
-        usedProductService.getRegionProducts(null, searchRequest(REGION_ID), PageRequest.of(0, 20));
+        usedProductService.getRegionProducts(null, searchRequest(REGION_ID), null, null, PageRequest.of(0, 20));
 
         // then
         assertThat(capturedCondition().regionId()).isEqualTo(REGION_ID);
@@ -221,10 +222,10 @@ class UsedProductServiceTest {
     void 지역_인증을_받지_않았어도_선택한_동네_목록은_볼_수_있다() {
         // given — verified=false여도 조회는 막지 않는다
         givenSelectedRegion(false);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         // when
-        usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), PageRequest.of(0, 20));
+        usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20));
 
         // then
         assertThat(capturedCondition().regionId()).isEqualTo(REGION_ID);
@@ -235,9 +236,9 @@ class UsedProductServiceTest {
         // given — 조회 단계에서는 소속 여부를 따지지 않는다
         Long otherRegionId = 7777L;
         when(regionRepository.existsById(otherRegionId)).thenReturn(true);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
-        usedProductService.getRegionProducts(SELLER_ID, searchRequest(otherRegionId), PageRequest.of(0, 20));
+        usedProductService.getRegionProducts(SELLER_ID, searchRequest(otherRegionId), null, null, PageRequest.of(0, 20));
 
         assertThat(capturedCondition().regionId()).isEqualTo(otherRegionId);
     }
@@ -246,7 +247,7 @@ class UsedProductServiceTest {
     void 존재하지_않는_지역은_조회할_수_없다() {
         when(regionRepository.existsById(REGION_ID)).thenReturn(false);
 
-        assertThatThrownBy(() -> usedProductService.getRegionProducts(null, searchRequest(REGION_ID), PageRequest.of(0, 20)))
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(null, searchRequest(REGION_ID), null, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.REGION_NOT_FOUND);
@@ -254,7 +255,7 @@ class UsedProductServiceTest {
 
     @Test
     void 비회원이_지역을_지정하지_않으면_어느_동네인지_알_수_없어_거부한다() {
-        assertThatThrownBy(() -> usedProductService.getRegionProducts(null, searchRequest(null), PageRequest.of(0, 20)))
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(null, searchRequest(null), null, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_REGION_REQUIRED);
@@ -266,7 +267,7 @@ class UsedProductServiceTest {
         ReflectionTestUtils.setField(account, "primaryRegionId", null);
         when(accountRepository.findById(SELLER_ID)).thenReturn(Optional.of(account));
 
-        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), PageRequest.of(0, 20)))
+        assertThatThrownBy(() -> usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_REGION_REQUIRED);
@@ -300,14 +301,14 @@ class UsedProductServiceTest {
         // given — 게시글마다 사진을 조회하면 페이지 크기만큼 쿼리가 나간다(N+1)
         UsedProduct product = product();
         givenSelectedRegion(true);
-        when(usedProductRepository.search(any(), any()))
+        when(usedProductRepository.search(any(), any(), anyInt(), any()))
                 .thenReturn(new SliceImpl<>(List.of(product), PageRequest.of(0, 20), false));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of(UsedProductImage.create(product, "thumb.jpg", 1, true)));
 
         // when
         Slice<UsedProductSummaryResponseDto> result =
-                usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), PageRequest.of(0, 20));
+                usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20));
 
         // then
         assertThat(result.getContent()).hasSize(1);
@@ -319,13 +320,13 @@ class UsedProductServiceTest {
     @Test
     void 사진이_없는_게시글의_대표_사진은_null이다() {
         givenSelectedRegion(true);
-        when(usedProductRepository.search(any(), any()))
+        when(usedProductRepository.search(any(), any(), anyInt(), any()))
                 .thenReturn(new SliceImpl<>(List.of(product()), PageRequest.of(0, 20), false));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of());
 
         Slice<UsedProductSummaryResponseDto> result =
-                usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), PageRequest.of(0, 20));
+                usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20));
 
         assertThat(result.getContent().get(0).getThumbnailUrl()).isNull();
     }
@@ -340,12 +341,12 @@ class UsedProductServiceTest {
 
         // when & then
         assertThatThrownBy(() ->
-                usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20)))
+                usedProductService.getRegionProducts(SELLER_ID, request, null, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_PRICE_RANGE);
 
-        verify(usedProductRepository, never()).search(any(), any());
+        verify(usedProductRepository, never()).search(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -355,14 +356,14 @@ class UsedProductServiceTest {
                 REGION_ID, null, null, null,
                 new BigDecimal("1000"), new BigDecimal("1000"), null);
         when(regionRepository.existsById(REGION_ID)).thenReturn(true);
-        when(usedProductRepository.search(any(), any()))
+        when(usedProductRepository.search(any(), any(), anyInt(), any()))
                 .thenReturn(new SliceImpl<>(List.of()));
 
         // when
-        usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20));
+        usedProductService.getRegionProducts(SELLER_ID, request, null, null, PageRequest.of(0, 20));
 
         // then
-        verify(usedProductRepository).search(any(), any());
+        verify(usedProductRepository).search(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -370,7 +371,7 @@ class UsedProductServiceTest {
         // given — 필터는 사용자가 고른 값이므로 서버가 손대지 않는다
         givenSelectedRegion(true);
         givenUsedCategories(rootCategory());
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         UsedProductSearchRequestDto request = new UsedProductSearchRequestDto(
                 null, "자전거", CATEGORY_ID, UsedProductPriceType.FIXED,
@@ -378,7 +379,7 @@ class UsedProductServiceTest {
                 List.of(UsedProductStatus.SELLING, UsedProductStatus.RESERVED));
 
         // when
-        usedProductService.getRegionProducts(SELLER_ID, request, PageRequest.of(0, 20));
+        usedProductService.getRegionProducts(SELLER_ID, request, null, null, PageRequest.of(0, 20));
 
         // then
         UsedProductSearchCondition applied = capturedCondition();
@@ -397,12 +398,14 @@ class UsedProductServiceTest {
         // given
         Long otherRegionId = 7777L;
         when(regionRepository.existsById(otherRegionId)).thenReturn(true);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         // when
         usedProductService.getRegionProducts(
                 null,
                 new UsedProductSearchRequestDto(otherRegionId, "책상", null, null, null, null, null),
+                null,
+                null,
                 PageRequest.of(0, 20));
 
         // then
@@ -421,11 +424,11 @@ class UsedProductServiceTest {
 
         givenSelectedRegion(true);
         givenUsedCategories(root, child, grandChild, unrelated);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         // when
         usedProductService.getRegionProducts(
-                SELLER_ID, searchRequestWithCategory(CATEGORY_ID), PageRequest.of(0, 20));
+                SELLER_ID, searchRequestWithCategory(CATEGORY_ID), null, null, PageRequest.of(0, 20));
 
         // then — 3단계까지 펼쳐지고 다른 트리는 섞이지 않는다
         assertThat(capturedCondition().categoryIds())
@@ -439,10 +442,10 @@ class UsedProductServiceTest {
 
         givenSelectedRegion(true);
         givenUsedCategories(root, child);
-        when(usedProductRepository.search(any(), any())).thenReturn(emptySlice());
+        when(usedProductRepository.search(any(), any(), anyInt(), any())).thenReturn(emptySlice());
 
         usedProductService.getRegionProducts(
-                SELLER_ID, searchRequestWithCategory(200L), PageRequest.of(0, 20));
+                SELLER_ID, searchRequestWithCategory(200L), null, null, PageRequest.of(0, 20));
 
         assertThat(capturedCondition().categoryIds()).containsExactly(200L);
     }
@@ -454,7 +457,7 @@ class UsedProductServiceTest {
         givenUsedCategories(rootCategory());
 
         assertThatThrownBy(() -> usedProductService.getRegionProducts(
-                SELLER_ID, searchRequestWithCategory(9999L), PageRequest.of(0, 20)))
+                SELLER_ID, searchRequestWithCategory(9999L), null, null, PageRequest.of(0, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
@@ -806,7 +809,7 @@ class UsedProductServiceTest {
     private UsedProductSearchCondition capturedCondition() {
         ArgumentCaptor<UsedProductSearchCondition> captor =
                 ArgumentCaptor.forClass(UsedProductSearchCondition.class);
-        verify(usedProductRepository).search(captor.capture(), any());
+        verify(usedProductRepository).search(captor.capture(), any(), anyInt(), any());
         return captor.getValue();
     }
 

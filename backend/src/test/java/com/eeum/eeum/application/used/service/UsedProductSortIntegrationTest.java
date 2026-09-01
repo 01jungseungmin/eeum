@@ -129,6 +129,8 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
         return usedProductService.getRegionProducts(
                 null,
                 new UsedProductSearchRequestDto(regionId, null, null, null, null, null, null),
+                null,
+                null,
                 PageRequest.of(0, 20, sort));
     }
 

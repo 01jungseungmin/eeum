@@ -54,8 +54,13 @@ public class UsedProductController {
             summary = "동네 중고 게시글 목록",
             description = "로그인 없이 조회할 수 있습니다. regionId를 지정하면 해당 동네를, " +
                     "생략하면 내가 선택한 동네를 조회합니다(비회원이거나 선택한 동네가 없으면 regionId가 필요합니다). " +
-                    "삭제되거나 숨김 처리된 게시글은 제외됩니다. 무한 스크롤용 Slice로 반환합니다. " +
-                    "정렬은 createdAt·price·favoriteCount·viewCount만 지원하며, 그 외 값은 무시하고 최신순으로 조회합니다."
+                    "삭제되거나 숨김 처리된 게시글은 제외됩니다. 커서 무한 스크롤(Slice)입니다 — " +
+                    "첫 페이지는 커서 없이 요청하고, 다음 페이지는 받은 마지막 항목의 정렬 키 값과 " +
+                    "usedProductId를 cursorValue·cursorId에 담아 보냅니다(page 파라미터는 무시됩니다). " +
+                    "정렬을 바꾸면 커서도 버리고 첫 페이지부터 다시 읽어야 합니다 — 값 형식이 맞지 않으면 400입니다. " +
+                    "정렬은 createdAt·price·favoriteCount·viewCount 중 하나만 지원하며(둘 이상 보내면 첫 번째만 적용), " +
+                    "그 외 값은 무시하고 최신순으로 조회합니다. 적용된 정렬은 응답 pageable.sort에 실려 옵니다. " +
+                    "가격순에서 가격제안(price null) 글은 맨 뒤에 오며, 그 구간의 커서는 cursorValue를 비우고 보냅니다."
     )
     public ResponseEntity<ApiResponse<Slice<UsedProductSummaryResponseDto>>> getRegionProducts(
             @Parameter(description = "거래 지역 ID. 생략 시 내가 선택한 동네")
@@ -80,6 +85,11 @@ public class UsedProductController {
             // 요소에 @NotNull이 없으면 ?status= 같은 빈 값이 null 원소로 변환돼
             // status IN (null)로 나가고, 잘못된 요청이 400 대신 조용히 0건으로 끝난다.
             @RequestParam(required = false) List<@NotNull UsedProductStatus> status,
+            @Parameter(description = "직전 페이지 마지막 항목의 정렬 키 값(최신순이면 createdAt). "
+                    + "첫 페이지이거나 가격제안 글 구간이면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 페이지 마지막 항목의 usedProductId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.
@@ -89,6 +99,8 @@ public class UsedProductController {
                         viewerId,
                         new UsedProductSearchRequestDto(
                                 regionId, keyword, categoryId, priceType, minPrice, maxPrice, status),
+                        cursorValue,
+                        cursorId,
                         pageable)));
     }
 

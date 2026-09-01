@@ -42,8 +42,8 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     private final QChatParticipant participant = QChatParticipant.chatParticipant;
 
     @Override
-    public Slice<ChatRoom> findMyRooms(Long accountId, Pageable pageable, boolean includeClosed) {
-        int size = pageable.getPageSize();
+    public Slice<ChatRoom> findMyRooms(
+            Long accountId, ChatRoomCursor cursor, int size, boolean includeClosed) {
         List<ChatRoom> content = queryFactory
                 .select(room)
                 .from(participant)
@@ -51,44 +51,68 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
                 .where(
                         participant.account.accountId.eq(accountId),
                         participant.status.eq(ParticipantStatus.ACTIVE),
-                        activeOnly(includeClosed)
+                        activeOnly(includeClosed),
+                        afterCursor(cursor)
                 )
                 .orderBy(room.lastMessageAt.desc().nullsLast(), room.chatroomId.desc())
-                .offset(pageable.getOffset())
                 .limit(size + 1L)
                 .fetch();
 
-        boolean hasNext = content.size() > size;
-        if (hasNext) {
-            content = content.subList(0, size);
-        }
-        return new SliceImpl<>(content, appliedPageable(pageable), hasNext);
+        return toSlice(content, size);
     }
 
     @Override
-    public Slice<ChatRoom> findPublicRooms(Long regionId, Pageable pageable) {
-        int size = pageable.getPageSize();
+    public Slice<ChatRoom> findPublicRooms(Long regionId, ChatRoomCursor cursor, int size) {
         List<ChatRoom> content = queryFactory
                 .selectFrom(room)
                 .where(
                         room.region.regionId.eq(regionId),
                         room.type.in(ChatRoomType.GROUP, ChatRoomType.GROUP_STREET),
-                        room.isActive.isTrue()
+                        room.isActive.isTrue(),
+                        afterCursor(cursor)
                 )
                 .orderBy(room.lastMessageAt.desc().nullsLast(), room.chatroomId.desc())
-                .offset(pageable.getOffset())
                 .limit(size + 1L)
                 .fetch();
 
-        boolean hasNext = content.size() > size;
-        if (hasNext) {
-            content = content.subList(0, size);
-        }
-        return new SliceImpl<>(content, appliedPageable(pageable), hasNext);
+        return toSlice(content, size);
     }
 
-    private Pageable appliedPageable(Pageable pageable) {
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), ROOM_LIST_SORT);
+    /**
+     * 커서(keyset) 페이징. OFFSET을 쓰지 않는다.
+     *
+     * <p>최근 대화순 목록은 메시지가 오는 순간 그 방이 맨 앞으로 올라온다. OFFSET은 그 밀림을
+     * 그대로 맞아 경계에 있던 방이 다음 페이지에서 중복으로 나온다.
+     *
+     * <p>페이지 번호는 의미가 없어 항상 0으로 채운다. 클라이언트는 받은 마지막 방의
+     * {@code lastMessageAt}과 {@code chatroomId}를 다음 요청의 커서로 그대로 보내면 된다.
+     */
+    private Slice<ChatRoom> toSlice(List<ChatRoom> fetched, int size) {
+        boolean hasNext = fetched.size() > size;
+        List<ChatRoom> content = hasNext ? fetched.subList(0, size) : fetched;
+        return new SliceImpl<>(content, PageRequest.of(0, size, ROOM_LIST_SORT), hasNext);
+    }
+
+    /**
+     * 커서 이후 구간. 정렬이 {@code lastMessageAt desc nulls last, chatroomId desc}이므로
+     * "대화가 더 오래됐거나, 같으면 방 ID가 더 작거나, 아예 대화가 없는" 방들이다.
+     *
+     * <p>세 번째 항(대화 없는 방)을 빼면 그 방들이 목록에서 통째로 사라진다 —
+     * NULL 비교는 참이 되지 않아 앞의 두 조건에 걸리지 않기 때문이다.
+     *
+     * <p>커서 자신이 대화 없는 방이면 이미 NULL 구간에 들어선 것이라 ID로만 뒤로 간다.
+     */
+    private BooleanExpression afterCursor(ChatRoomCursor cursor) {
+        if (cursor == null) {
+            return null;
+        }
+        if (cursor.lastMessageAt() == null) {
+            return room.lastMessageAt.isNull().and(room.chatroomId.lt(cursor.chatroomId()));
+        }
+        return room.lastMessageAt.lt(cursor.lastMessageAt())
+                .or(room.lastMessageAt.eq(cursor.lastMessageAt())
+                        .and(room.chatroomId.lt(cursor.chatroomId())))
+                .or(room.lastMessageAt.isNull());
     }
 
     @Override

@@ -26,6 +26,7 @@ import com.eeum.eeum.domain.used.event.UsedProductSoldEvent;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.domain.used.repository.UsedProductCursor;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
 import com.eeum.eeum.exception.BadRequestException;
@@ -96,13 +97,22 @@ public class UsedProductService {
                 usedProductRepository.save(product), List.of(), sellerId);
     }
 
-    // 내 동네 중고 목록
+    /**
+     * 내 동네 중고 목록 — 커서 무한 스크롤.
+     *
+     * <p>페이지 번호를 쓰지 않는 이유는 새 글이 목록 맨 앞에 꽂혀, 스크롤 도중 등록된 한 건에
+     * 경계 항목이 중복되거나 누락되기 때문이다. {@code pageable}에서는 정렬과 크기만 쓴다.
+     */
     @Transactional(readOnly = true)
     public Slice<UsedProductSummaryResponseDto> getRegionProducts(
             Long viewerId,
             UsedProductSearchRequestDto request,
+            String cursorValue,
+            Long cursorId,
             Pageable pageable
     ) {
+        // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
+        UsedProductCursor cursor = UsedProductCursor.ofNullable(cursorValue, cursorId);
         validatePriceRange(request.getMinPrice(), request.getMaxPrice());
 
         Long targetRegionId = resolveViewRegionId(viewerId, request.getRegionId());
@@ -118,7 +128,8 @@ public class UsedProductService {
                 request.getStatuses()
         );
 
-        Slice<UsedProduct> products = usedProductRepository.search(resolved, pageable);
+        Slice<UsedProduct> products = usedProductRepository.search(
+                resolved, cursor, pageable.getPageSize(), pageable.getSort());
 
         Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());
 

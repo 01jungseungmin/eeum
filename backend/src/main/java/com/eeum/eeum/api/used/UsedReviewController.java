@@ -5,7 +5,6 @@ import com.eeum.eeum.application.used.dto.request.UsedReviewUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedReviewService;
-import com.eeum.eeum.domain.used.repository.UsedReviewCursor;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -77,7 +76,7 @@ public class UsedReviewController {
         // 비회원도 볼 수 있는 경로라 뷰어가 없을 수 있다.
         Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(usedReviewService.getSellerReviews(
-                sellerId, viewerId, UsedReviewCursor.ofNullable(cursorCreatedAt, cursorId), size)));
+                sellerId, viewerId, cursorCreatedAt, cursorId, size)));
     }
 
     @GetMapping("/sellers/{sellerId}/reviews/summary")
@@ -116,7 +115,7 @@ public class UsedReviewController {
     ) {
         Long reviewerId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(usedReviewService.getMyReviews(
-                reviewerId, UsedReviewCursor.ofNullable(cursorCreatedAt, cursorId), size)));
+                reviewerId, cursorCreatedAt, cursorId, size)));
     }
 
     @PatchMapping("/reviews/{usedReviewId}")

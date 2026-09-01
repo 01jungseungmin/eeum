@@ -187,7 +187,7 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
         SqlCaptureInspector.reset();
 
         Slice<ChatRoomResponseDto> rooms =
-                chatRoomService.getMyRooms(buyerId, PageRequest.of(0, 20), false);
+                chatRoomService.getMyRooms(buyerId, null, null, 20, false);
 
         assertThat(rooms.getContent()).hasSizeGreaterThanOrEqualTo(3);
         assertThat(selectsFrom("used_product_image"))
@@ -212,7 +212,7 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
     }
 
     private UsedProductChatSummaryDto firstRoomSummary() {
-        return chatRoomService.getMyRooms(buyerId, PageRequest.of(0, 20), false)
+        return chatRoomService.getMyRooms(buyerId, null, null, 20, false)
                 .getContent().stream()
                 .map(ChatRoomResponseDto::getUsedProduct)
                 .filter(java.util.Objects::nonNull)
@@ -221,7 +221,7 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
     }
 
     private UsedProductChatSummaryDto summaryOf(Long usedProductId) {
-        return chatRoomService.getMyRooms(buyerId, PageRequest.of(0, 20), false)
+        return chatRoomService.getMyRooms(buyerId, null, null, 20, false)
                 .getContent().stream()
                 .map(ChatRoomResponseDto::getUsedProduct)
                 .filter(java.util.Objects::nonNull)

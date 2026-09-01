@@ -338,7 +338,7 @@ class UsedProductInquiryRoomIntegrationTest extends IntegrationTestSupport {
 
         // When
         Slice<ChatRoomResponseDto> rooms =
-                chatRoomService.getMyRooms(buyerId, PageRequest.of(0, 20), true);
+                chatRoomService.getMyRooms(buyerId, null, null, 20, true);
 
         // Then
         assertThat(rooms.getPageable().getSort())
@@ -348,7 +348,7 @@ class UsedProductInquiryRoomIntegrationTest extends IntegrationTestSupport {
     }
 
     private List<Long> roomIds(Long accountId, boolean includeClosed) {
-        return chatRoomService.getMyRooms(accountId, PageRequest.of(0, 20), includeClosed)
+        return chatRoomService.getMyRooms(accountId, null, null, 20, includeClosed)
                 .getContent().stream()
                 .map(ChatRoomResponseDto::getRoomId)
                 .toList();
