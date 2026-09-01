@@ -26,7 +26,14 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uk_chat_room_active_ref", columnNames = {"active_ref_key"})
         },
         indexes = {
-                @Index(name = "idx_chat_room_ref", columnList = "ref_type, ref_id, is_active")
+                @Index(name = "idx_chat_room_ref", columnList = "ref_type, ref_id, is_active"),
+                // 지역 공개 방 탐색 — 지역·활성으로 좁히고 최근 대화순으로 읽는다.
+                // 없으면 chat_room 전체를 스캔한 뒤 정렬한다(EXPLAIN: type=ALL, Using filesort).
+                // 정렬 키(last_message_at, chat_room_id)를 뒤에 붙여야 커서 조건이 range로 풀리고
+                // 정렬도 인덱스가 처리한다(backward index scan).
+                // type은 넣지 않는다 — IN 조건을 정렬 키 앞에 두면 인덱스 정렬이 깨진다.
+                @Index(name = "idx_chat_room_public_list",
+                        columnList = "region_id, is_active, last_message_at, chat_room_id")
         }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
