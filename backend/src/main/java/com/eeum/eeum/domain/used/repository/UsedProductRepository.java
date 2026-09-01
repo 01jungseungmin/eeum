@@ -92,9 +92,6 @@ public interface UsedProductRepository
     List<Long> findReservedProductIdsBySeller(
             @Param("sellerId") Long sellerId, @Param("status") UsedProductStatus status);
 
-    List<UsedProduct> findBySeller_AccountIdAndStatusAndDeletedAtIsNullOrderByUsedProductIdAsc(
-            Long sellerAccountId, UsedProductStatus status);
-
     // 신고 조치 폴백용 판매자 ID 조회 — 잠금 없이 읽는다.
     // 여기서 상품 행을 잠그면 뒤이어 계정을 잠그게 되어 used_product → account 순서가 되는데,
     // 판매자 경로(AccountWriteGuard)는 account → used_product라 정반대다. 두 요청이 겹치면 교착이다.

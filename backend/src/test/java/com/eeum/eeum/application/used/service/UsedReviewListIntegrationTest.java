@@ -2,6 +2,7 @@ package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.request.UsedReviewCreateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedReviewSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -314,6 +315,94 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         Long productId = soldProductFor(reviewerId, title);
         return usedReviewService.create(reviewerId, productId, request(rating, content))
                 .getUsedReviewId();
+    }
+
+    // ===================== 판매자 평판 요약 =====================
+
+    @Test
+    void 후기가_없으면_평균은_null이고_개수는_0이다() {
+        // Given: 0.0으로 내리면 "별 0개"로 읽혀 후기 없는 판매자가 최악으로 보인다
+
+        // When
+        UsedReviewSummaryResponseDto summary = usedReviewService.getSellerReviewSummary(sellerId);
+
+        // Then
+        assertThat(summary.getReviewCount()).isZero();
+        assertThat(summary.getAverageRating()).isNull();
+    }
+
+    @Test
+    void 받은_후기의_개수와_평균_별점을_돌려준다() {
+        // Given
+        writeReview("상품A", 5, "좋아요");
+        writeReviewBy(strangerId, "상품B", 4, "괜찮아요");
+
+        // When
+        UsedReviewSummaryResponseDto summary = usedReviewService.getSellerReviewSummary(sellerId);
+
+        // Then
+        assertThat(summary.getSellerId()).isEqualTo(sellerId);
+        assertThat(summary.getReviewCount()).isEqualTo(2);
+        assertThat(summary.getAverageRating()).isEqualByComparingTo("4.5");
+    }
+
+    @Test
+    void 평균은_소수_1자리로_반올림한다() {
+        // Given: double을 그대로 내보내면 JSON에 4.333333...이 나간다
+        writeReview("상품A", 5, "좋아요");
+        writeReviewBy(strangerId, "상품B", 4, "괜찮아요");
+        writeReviewBy(buyerId2(), "상품C", 4, "무난해요");
+
+        // When
+        UsedReviewSummaryResponseDto summary = usedReviewService.getSellerReviewSummary(sellerId);
+
+        // Then
+        assertThat(summary.getAverageRating()).isEqualByComparingTo("4.3");
+    }
+
+    @Test
+    void 삭제된_게시글의_후기도_집계에_포함한다() {
+        // Given: 빼면 판매자가 나쁜 후기 달린 글을 지워 평균을 올릴 수 있다
+        writeReview("좋은거래", 5, "좋아요");
+        Long badProductId = soldProductFor(strangerId, "나쁜거래");
+        usedReviewService.create(strangerId, badProductId, request(1, "별로예요"));
+
+        UsedProduct bad = usedProductRepository.findById(badProductId).orElseThrow();
+        bad.softDelete();
+        usedProductRepository.saveAndFlush(bad);
+
+        // When
+        UsedReviewSummaryResponseDto summary = usedReviewService.getSellerReviewSummary(sellerId);
+
+        // Then: 삭제해도 별 1점이 평균에 남아 있어야 한다
+        assertThat(summary.getReviewCount()).isEqualTo(2);
+        assertThat(summary.getAverageRating()).isEqualByComparingTo("3.0");
+    }
+
+    @Test
+    void 다른_판매자의_후기는_섞이지_않는다() {
+        // Given
+        writeReview("내상품", 5, "좋아요");
+        Account otherSeller = accountRepository.save(Account.createUser(
+                "l-other-seller-" + UUID.randomUUID().toString().substring(0, 8) + "@test.com",
+                "pw", "판매자2", "판매자2" + UUID.randomUUID().toString().substring(0, 8),
+                "010-6666-6666"));
+
+        // When
+        UsedReviewSummaryResponseDto summary =
+                usedReviewService.getSellerReviewSummary(otherSeller.getAccountId());
+
+        // Then
+        assertThat(summary.getReviewCount()).isZero();
+    }
+
+    // 세 번째 후기 작성자 — 평균 반올림 검증용
+    private Long buyerId2() {
+        Account extra = accountRepository.save(Account.createUser(
+                "l-buyer2-" + UUID.randomUUID().toString().substring(0, 8) + "@test.com",
+                "pw", "구매자2", "구매자2" + UUID.randomUUID().toString().substring(0, 8),
+                "010-7777-7777"));
+        return extra.getAccountId();
     }
 
     private UsedReviewCreateRequestDto request(int rating, String content) {

@@ -3,6 +3,7 @@ package com.eeum.eeum.api.used;
 import com.eeum.eeum.application.used.dto.request.UsedReviewCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedReviewUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedReviewSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedReviewService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -63,6 +64,21 @@ public class UsedReviewController {
         Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(
                 usedReviewService.getSellerReviews(sellerId, viewerId, pageable)));
+    }
+
+    @GetMapping("/sellers/{sellerId}/reviews/summary")
+    @Operation(
+            summary = "판매자 평판 요약",
+            description = "받은 후기 수와 평균 별점입니다. 판매자 평판이므로 로그인 없이 볼 수 있습니다. " +
+                    "게시글이 삭제·숨김된 후기도 집계에 포함됩니다 — 나쁜 후기가 달린 글을 지워 " +
+                    "평균을 올리는 것을 막기 위해서입니다. " +
+                    "후기가 없으면 reviewCount는 0이고 averageRating은 null입니다(0.0이 아닙니다)."
+    )
+    public ResponseEntity<ApiResponse<UsedReviewSummaryResponseDto>> getSellerReviewSummary(
+            @Parameter(description = "판매자 계정 ID") @PathVariable @Positive Long sellerId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                usedReviewService.getSellerReviewSummary(sellerId)));
     }
 
     @GetMapping("/reviews/me")

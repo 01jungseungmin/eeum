@@ -4,6 +4,7 @@ import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.application.used.dto.request.UsedReviewCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedReviewUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedReviewSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedReview;
@@ -125,6 +126,19 @@ public class UsedReviewService {
             Long sellerId, Long viewerId, Pageable pageable) {
         return usedReviewRepository.findSellerReviews(sellerId, pageable)
                 .map(review -> UsedReviewResponseDto.from(review, viewerId));
+    }
+
+    /**
+     * 판매자 평판 요약. 비회원도 볼 수 있다 — 후기 목록과 같은 공개 범위다.
+     *
+     * <p>집계는 실시간으로 낸다. 비정규화 컬럼을 두면 후기 생성·수정·삭제마다 갱신해야 하고
+     * 어긋나면 되돌리기 어렵다. 후기는 거래당 1건이라 판매자당 수십 건 수준이고
+     * {@code idx_used_product_seller}로 좁혀지므로, 드리프트 위험을 지고 갈 이유가 약하다.
+     */
+    @Transactional(readOnly = true)
+    public UsedReviewSummaryResponseDto getSellerReviewSummary(Long sellerId) {
+        return UsedReviewSummaryResponseDto.of(
+                sellerId, usedReviewRepository.aggregateSellerReviews(sellerId));
     }
 
     @Transactional(readOnly = true)

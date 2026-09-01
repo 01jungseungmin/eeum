@@ -4,6 +4,7 @@ import com.eeum.eeum.domain.account.entity.QAccount;
 import com.eeum.eeum.domain.used.entity.QUsedProduct;
 import com.eeum.eeum.domain.used.entity.QUsedReview;
 import com.eeum.eeum.domain.used.entity.UsedReview;
+import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +68,21 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
                 .join(review.usedProduct, product).fetchJoin()
                 .join(product.seller, seller).fetchJoin()
                 .join(review.reviewer, reviewer).fetchJoin();
+    }
+
+    @Override
+    public UsedReviewSummary aggregateSellerReviews(Long sellerId) {
+        // fetch join 없이 집계만 한다 — 여기서는 행 내용이 필요 없다.
+        UsedReviewSummary summary = queryFactory
+                .select(Projections.constructor(UsedReviewSummary.class,
+                        review.count(), review.rating.avg()))
+                .from(review)
+                .join(review.usedProduct, product)
+                .where(product.seller.accountId.eq(sellerId))
+                .fetchOne();
+
+        // 집계 쿼리는 행이 없어도 한 줄을 돌려주지만, 방어적으로 빈 값을 만들어 둔다.
+        return summary != null ? summary : new UsedReviewSummary(0L, null);
     }
 
     private Slice<UsedReview> toSlice(JPAQuery<UsedReview> query, Pageable pageable) {

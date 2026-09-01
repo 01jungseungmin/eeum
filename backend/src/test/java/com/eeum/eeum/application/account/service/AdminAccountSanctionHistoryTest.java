@@ -68,6 +68,9 @@ class AdminAccountSanctionHistoryTest {
         verify(account).suspend();
         verify(sanctionHistoryService)
                 .recordDirectAccountAction(10L, SanctionAction.SUSPEND, 1L);
+        // 정지되면 게시글이 전 화면에서 사라진다 — 예약을 남기면 구매자가 볼 수도 없는 글을 기다린다.
+        // 신고 조치 경로와 같은 정리를 해야 경로에 따라 결과가 갈리지 않는다.
+        verify(usedProductWithdrawalService).cancelReservationsForSellerInactivation(10L);
     }
 
     @Test

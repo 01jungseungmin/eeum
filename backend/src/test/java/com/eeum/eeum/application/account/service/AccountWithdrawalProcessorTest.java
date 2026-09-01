@@ -81,6 +81,22 @@ class AccountWithdrawalProcessorTest {
     }
 
     @Test
+    void 예약_중인_중고_거래를_탈퇴_처리보다_먼저_정리한다() {
+        // given — 뒤에 두면 seller가 이미 비활성이라 게시글이 조회에서 걸러진다.
+        // 정리를 건너뛰면 예약은 RESERVED로 남고 구매자는 볼 수도 없는 글을 통보 없이 기다린다.
+        Account account = givenUser();
+
+        // when
+        accountWithdrawalProcessor.process(account);
+
+        // then
+        InOrder inOrder = inOrder(usedProductWithdrawalService, account);
+        inOrder.verify(usedProductWithdrawalService)
+                .cancelReservationsForSellerInactivation(ACCOUNT_ID);
+        inOrder.verify(account).withdraw();
+    }
+
+    @Test
     void 일반_회원은_상점_비활성화를_거치지_않는다() {
         accountWithdrawalProcessor.process(givenUser());
 

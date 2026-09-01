@@ -78,6 +78,34 @@ class ReportedAccountActionServiceTest {
     }
 
     @Test
+    void 작성자_정지는_예약_중인_중고_거래도_정리한다() {
+        // given — 정지되면 isPubliclyVisible()이 거짓이라 게시글이 전 화면에서 사라진다.
+        // 직접 정지 API와 같은 정리를 하지 않으면 경로에 따라 예약이 남는 구멍이 생긴다.
+        Account account = createAccount();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        service.apply(ReportAction.SUSPEND_AUTHOR, ACCOUNT_ID);
+
+        // then
+        verify(usedProductWithdrawalService).cancelReservationsForSellerInactivation(ACCOUNT_ID);
+    }
+
+    @Test
+    void 작성자_경고는_예약을_건드리지_않는다() {
+        // given — 경고는 계정을 비활성으로 만들지 않는다. 게시글도 그대로 보인다.
+        Account account = createAccount();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        service.apply(ReportAction.WARN_AUTHOR, ACCOUNT_ID);
+
+        // then
+        verify(usedProductWithdrawalService, never())
+                .cancelReservationsForSellerInactivation(ACCOUNT_ID);
+    }
+
+    @Test
     void 경고_대상_계정이_없으면_조치할_수_없다() {
         // given
         when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.empty());
