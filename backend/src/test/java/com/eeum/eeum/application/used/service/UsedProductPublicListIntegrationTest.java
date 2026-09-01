@@ -19,7 +19,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 
 import java.math.BigDecimal;
 
@@ -76,7 +76,7 @@ class UsedProductPublicListIntegrationTest extends IntegrationTestSupport {
         accountRepository.saveAndFlush(withdrawn);
 
         // when
-        Slice<UsedProductSummaryResponseDto> result = usedProductService.getRegionProducts(
+        CursorSlice<UsedProductSummaryResponseDto> result = usedProductService.getRegionProducts(
                 null, searchRequest(), null, null, PageRequest.of(0, 20));
 
         // then
@@ -94,12 +94,12 @@ class UsedProductPublicListIntegrationTest extends IntegrationTestSupport {
         }
 
         // when: 커서를 이어 붙여 끝까지 읽는다
-        Slice<UsedProductSummaryResponseDto> first = usedProductService.getRegionProducts(
+        CursorSlice<UsedProductSummaryResponseDto> first = usedProductService.getRegionProducts(
                 null, searchRequest(), null, null, PageRequest.of(0, 2));
-        Slice<UsedProductSummaryResponseDto> second = usedProductService.getRegionProducts(
-                null, searchRequest(), cursorValue(first), cursorId(first), PageRequest.of(0, 2));
-        Slice<UsedProductSummaryResponseDto> last = usedProductService.getRegionProducts(
-                null, searchRequest(), cursorValue(second), cursorId(second), PageRequest.of(0, 2));
+        CursorSlice<UsedProductSummaryResponseDto> second = usedProductService.getRegionProducts(
+                null, searchRequest(), first.getNextCursorValue(), first.getNextCursorId(), PageRequest.of(0, 2));
+        CursorSlice<UsedProductSummaryResponseDto> last = usedProductService.getRegionProducts(
+                null, searchRequest(), second.getNextCursorValue(), second.getNextCursorId(), PageRequest.of(0, 2));
 
         // then
         assertThat(first.getContent()).hasSize(2);
@@ -119,7 +119,7 @@ class UsedProductPublicListIntegrationTest extends IntegrationTestSupport {
             createProduct("상품" + i, seller("s" + i), product -> { });
         }
 
-        Slice<UsedProductSummaryResponseDto> first = usedProductService.getRegionProducts(
+        CursorSlice<UsedProductSummaryResponseDto> first = usedProductService.getRegionProducts(
                 null, searchRequest(), null, null, PageRequest.of(0, 2));
         assertThat(first.getContent())
                 .extracting(UsedProductSummaryResponseDto::getTitle)
@@ -128,8 +128,8 @@ class UsedProductPublicListIntegrationTest extends IntegrationTestSupport {
         // when: 두 페이지를 읽는 사이 새 글이 등록된다
         createProduct("끼어든 상품", seller("late"), product -> { });
 
-        Slice<UsedProductSummaryResponseDto> second = usedProductService.getRegionProducts(
-                null, searchRequest(), cursorValue(first), cursorId(first), PageRequest.of(0, 2));
+        CursorSlice<UsedProductSummaryResponseDto> second = usedProductService.getRegionProducts(
+                null, searchRequest(), first.getNextCursorValue(), first.getNextCursorId(), PageRequest.of(0, 2));
 
         // then: OFFSET(2)이었다면 여기서 "상품1"이 한 번 더 나온다
         assertThat(second.getContent())
@@ -139,24 +139,14 @@ class UsedProductPublicListIntegrationTest extends IntegrationTestSupport {
 
     // 직전 페이지의 마지막 항목 = 다음 요청의 커서. 기본 정렬(createdAt desc) 기준이라
     // 정렬 키 값은 createdAt이다. 클라이언트도 응답 필드만으로 같은 값을 만들 수 있다.
-    private String cursorValue(Slice<UsedProductSummaryResponseDto> page) {
-        return lastOf(page).getCreatedAt().toString();
-    }
 
-    private Long cursorId(Slice<UsedProductSummaryResponseDto> page) {
-        return lastOf(page).getUsedProductId();
-    }
-
-    private UsedProductSummaryResponseDto lastOf(Slice<UsedProductSummaryResponseDto> page) {
-        return page.getContent().get(page.getContent().size() - 1);
-    }
 
     @Test
     void 목록_항목은_지역명과_카테고리명을_함께_담는다() {
         // fetch join이 seller 조인 추가로 깨지지 않았는지 확인한다
         createProduct("정상", seller("ok"), product -> { });
 
-        Slice<UsedProductSummaryResponseDto> result = usedProductService.getRegionProducts(
+        CursorSlice<UsedProductSummaryResponseDto> result = usedProductService.getRegionProducts(
                 null, searchRequest(), null, null, PageRequest.of(0, 20));
 
         assertThat(result.getContent()).singleElement()

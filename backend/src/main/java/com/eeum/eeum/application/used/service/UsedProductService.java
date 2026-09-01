@@ -26,6 +26,7 @@ import com.eeum.eeum.domain.used.event.UsedProductSoldEvent;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.eeum.eeum.domain.used.repository.UsedProductCursor;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
@@ -104,7 +105,7 @@ public class UsedProductService {
      * 경계 항목이 중복되거나 누락되기 때문이다. {@code pageable}에서는 정렬과 크기만 쓴다.
      */
     @Transactional(readOnly = true)
-    public Slice<UsedProductSummaryResponseDto> getRegionProducts(
+    public CursorSlice<UsedProductSummaryResponseDto> getRegionProducts(
             Long viewerId,
             UsedProductSearchRequestDto request,
             String cursorValue,
@@ -128,7 +129,7 @@ public class UsedProductService {
                 request.getStatuses()
         );
 
-        Slice<UsedProduct> products = usedProductRepository.search(
+        CursorSlice<UsedProduct> products = usedProductRepository.search(
                 resolved, cursor, pageable.getPageSize(), pageable.getSort());
 
         Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());

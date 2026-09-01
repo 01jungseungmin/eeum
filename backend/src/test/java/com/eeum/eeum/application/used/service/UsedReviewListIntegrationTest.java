@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
@@ -23,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
@@ -57,6 +58,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     private Long sellerId;
     private Long buyerId;
@@ -99,7 +101,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
             reviewIds.add(writeReview("상품" + i, 5 - i, "후기" + i));
         }
 
-        Slice<UsedReviewResponseDto> result =
+        CursorSlice<UsedReviewResponseDto> result =
                 usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 20);
 
         // 마지막에 쓴 후기가 먼저 온다.
@@ -108,31 +110,44 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
 
         // 응답 메타데이터도 실제 순서를 말해야 한다.
         // UNSORTED로 나가면 클라이언트는 응답만 보고 어떤 순서인지 알 수 없다.
-        assertThat(result.getPageable().getSort())
+        assertThat(result.getSort())
                 .containsExactly(
                         Sort.Order.desc("createdAt"),
                         Sort.Order.desc("usedReviewId"));
     }
 
     @Test
-    void 커서는_작성일시가_같은_행을_ID로_끊는다() {
+    void 작성일시가_같은_후기도_페이지_경계에서_겹치지_않는다() {
         // 커서에 createdAt만 담으면 같은 시각에 등록된 후기들 사이에서 경계를 끊지 못해
         // 그 행이 다음 페이지에 다시 나오거나 통째로 건너뛰어진다.
+        // 초 단위가 겹치는 것은 실제로 일어나므로 created_at을 같은 값으로 못박고 검증한다.
         List<Long> reviewIds = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             reviewIds.add(writeReview("상품" + i, 3, "후기" + i));
         }
-        UsedReviewResponseDto middle = usedReviewService
-                .getSellerReviews(sellerId, strangerId, null, null, 20).getContent().get(1);
+        fixCreatedAt(reviewIds, LocalDateTime.of(2026, 9, 1, 10, 0));
 
-        // When: 커서의 createdAt이 middle과 정확히 같다 — 동률 분기를 탄다
-        Slice<UsedReviewResponseDto> next = usedReviewService.getSellerReviews(
-                sellerId, strangerId,
-                middle.getCreatedAt(), middle.getUsedReviewId(), 20);
+        // When: 세 후기의 작성일시가 모두 같으므로 순서는 오직 ID 내림차순이다
+        CursorSlice<UsedReviewResponseDto> first =
+                usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 2);
+        CursorSlice<UsedReviewResponseDto> second = usedReviewService.getSellerReviews(
+                sellerId, strangerId, first.getNextCursorValue(), first.getNextCursorId(), 2);
 
-        // Then: 커서로 쓴 행 자신은 빠지고 그보다 오래된 것만 온다
-        assertThat(next.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
+        // Then: id < cursorId 분기가 없으면 여기서 2페이지가 1페이지를 그대로 반복한다
+        assertThat(first.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
+                .containsExactly(reviewIds.get(2), reviewIds.get(1));
+        assertThat(second.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
                 .containsExactly(reviewIds.get(0));
+        assertThat(second.hasNext()).isFalse();
+    }
+
+    // created_at은 @CreatedDate라 엔티티로는 고칠 수 없다. 동률 상황을 만들려면 직접 못박아야 한다.
+    private void fixCreatedAt(List<Long> reviewIds, LocalDateTime createdAt) {
+        for (Long reviewId : reviewIds) {
+            jdbcTemplate.update(
+                    "UPDATE used_review SET created_at = ? WHERE used_review_id = ?",
+                    createdAt, reviewId);
+        }
     }
 
     @Test
@@ -144,7 +159,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         Long middle = writeReview("상품1", 5, "후기1");
         Long newest = writeReview("상품2", 5, "후기2");
 
-        Slice<UsedReviewResponseDto> first =
+        CursorSlice<UsedReviewResponseDto> first =
                 usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 2);
         assertThat(first.getContent()).extracting(UsedReviewResponseDto::getUsedReviewId)
                 .containsExactly(newest, middle);
@@ -152,8 +167,8 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         // When: 두 페이지를 읽는 사이 새 후기가 등록된다
         Long inserted = writeReviewBy(strangerId, "끼어든 상품", 4, "끼어든 후기");
 
-        Slice<UsedReviewResponseDto> second =
-                usedReviewService.getSellerReviews(sellerId, strangerId, cursorCreatedAt(first), cursorId(first), 2);
+        CursorSlice<UsedReviewResponseDto> second =
+                usedReviewService.getSellerReviews(sellerId, strangerId, first.getNextCursorValue(), first.getNextCursorId(), 2);
 
         // Then: 이미 본 것은 다시 오지 않고, 남은 것만 온다.
         // OFFSET(2)이었다면 여기서 middle이 한 번 더 나온다.
@@ -168,10 +183,10 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
             writeReview("상품" + i, 5, "후기" + i);
         }
 
-        Slice<UsedReviewResponseDto> first =
+        CursorSlice<UsedReviewResponseDto> first =
                 usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 2);
-        Slice<UsedReviewResponseDto> second =
-                usedReviewService.getSellerReviews(sellerId, strangerId, cursorCreatedAt(first), cursorId(first), 2);
+        CursorSlice<UsedReviewResponseDto> second =
+                usedReviewService.getSellerReviews(sellerId, strangerId, first.getNextCursorValue(), first.getNextCursorId(), 2);
 
         assertThat(first.getContent()).hasSize(2);
         assertThat(first.hasNext()).isTrue();
@@ -188,7 +203,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
                 "l-other-" + tag + "@test.com", "pw", "다른구매자", "다른구매자" + tag, "010-4444-4444"));
         writeReviewBy(otherBuyer.getAccountId(), "남이 산 물건", 4, "괜찮아요");
 
-        Slice<UsedReviewResponseDto> mine =
+        CursorSlice<UsedReviewResponseDto> mine =
                 usedReviewService.getMyReviews(buyerId, null, null, 20);
 
         assertThat(mine.getContent()).hasSize(1);
@@ -240,7 +255,7 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
         }
         SqlCaptureInspector.reset();
 
-        Slice<UsedReviewResponseDto> result =
+        CursorSlice<UsedReviewResponseDto> result =
                 usedReviewService.getSellerReviews(sellerId, strangerId, null, null, 20);
         result.getContent().forEach(UsedReviewResponseDto::getUsedProductTitle);
 
@@ -436,20 +451,6 @@ class UsedReviewListIntegrationTest extends IntegrationTestSupport {
                 "pw", "구매자2", "구매자2" + UUID.randomUUID().toString().substring(0, 8),
                 "010-7777-7777"));
         return extra.getAccountId();
-    }
-
-    // 직전 페이지의 마지막 행 = 다음 요청의 커서. 클라이언트가 응답만 보고 만들 수 있어야 한다
-    // (usedReviewId와 createdAt 둘 다 응답 DTO에 있다).
-    private LocalDateTime cursorCreatedAt(Slice<UsedReviewResponseDto> page) {
-        return lastOf(page).getCreatedAt();
-    }
-
-    private Long cursorId(Slice<UsedReviewResponseDto> page) {
-        return lastOf(page).getUsedReviewId();
-    }
-
-    private UsedReviewResponseDto lastOf(Slice<UsedReviewResponseDto> page) {
-        return page.getContent().get(page.getContent().size() - 1);
     }
 
     private UsedReviewCreateRequestDto request(int rating, String content) {

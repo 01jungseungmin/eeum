@@ -4,6 +4,7 @@ import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.ErrorCode;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 
 /**
  * 후기 목록 커서 — 직전 페이지의 마지막 행 위치.
@@ -24,14 +25,30 @@ public record UsedReviewCursor(LocalDateTime createdAt, Long usedReviewId) {
      *
      * <p>하나만 보내는 것은 막는다. 조용히 무시하면 클라이언트는 커서를 보냈다고 믿는데
      * 서버는 첫 페이지를 돌려주므로, 무한 스크롤이 같은 목록을 영원히 반복한다.
+     *
+     * <p>값은 문자열로 받는다 — 응답의 {@code nextCursorValue}를 그대로 되돌려보내는 계약이라
+     * 목록마다 다른 타입을 클라이언트가 알 필요가 없다.
      */
-    public static UsedReviewCursor ofNullable(LocalDateTime createdAt, Long usedReviewId) {
-        if (createdAt == null && usedReviewId == null) {
+    public static UsedReviewCursor ofNullable(String cursorValue, Long usedReviewId) {
+        boolean blankValue = cursorValue == null || cursorValue.isBlank();
+        if (blankValue && usedReviewId == null) {
             return null;
         }
-        if (createdAt == null || usedReviewId == null) {
+        if (blankValue || usedReviewId == null) {
             throw new BadRequestException(ErrorCode.USED_REVIEW_INVALID_CURSOR);
         }
-        return new UsedReviewCursor(createdAt, usedReviewId);
+        return new UsedReviewCursor(parseCreatedAt(cursorValue.trim()), usedReviewId);
+    }
+
+    /**
+     * 커서 값은 응답의 {@code nextCursorValue}를 그대로 되돌려보낸 것이다. 형식이 어긋났다는 것은
+     * 클라이언트가 값을 직접 만들었거나 다른 목록의 커서를 보냈다는 뜻이라 조용히 넘기지 않는다.
+     */
+    private static LocalDateTime parseCreatedAt(String rawValue) {
+        try {
+            return LocalDateTime.parse(rawValue);
+        } catch (DateTimeParseException e) {
+            throw new BadRequestException(ErrorCode.USED_REVIEW_INVALID_CURSOR);
+        }
     }
 }

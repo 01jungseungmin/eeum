@@ -18,7 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.Sort;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
@@ -74,7 +74,7 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void 가격_오름차순에서_가격제안_글은_맨_뒤로_간다() {
-        Slice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
+        CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
 
         assertThat(result.getContent())
                 .extracting(UsedProductSummaryResponseDto::getTitle)
@@ -84,7 +84,7 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
     @Test
     void 가격_내림차순에서도_가격제안_글은_맨_뒤로_간다() {
         // NULLS LAST는 방향과 무관하게 유지돼야 한다. 방향만 뒤집으면 가격제안이 맨 앞으로 온다.
-        Slice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.DESC, "price"));
+        CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.DESC, "price"));
 
         assertThat(result.getContent())
                 .extracting(UsedProductSummaryResponseDto::getTitle)
@@ -93,9 +93,9 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void 응답_Sort_메타데이터의_NULL_처리가_실제_실행과_일치한다() {
-        Slice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
+        CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
 
-        Sort.Order priceOrder = result.getPageable().getSort().getOrderFor("price");
+        Sort.Order priceOrder = result.getSort().getOrderFor("price");
         assertThat(priceOrder).isNotNull();
         assertThat(priceOrder.getNullHandling())
                 .as("SQL은 NULLS LAST인데 메타데이터가 NATIVE면 클라이언트는 정반대로 읽는다")
@@ -106,9 +106,9 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
     void NOT_NULL_필드는_NULL_처리를_주장하지_않는다() {
         // createdAt·tie-break에까지 NULLS LAST를 붙이면 SQL에 불필요한 case 식이 생기고
         // 메타데이터도 실제로 일어나지 않는 NULL 처리를 주장하게 된다.
-        Slice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.DESC, "createdAt"));
+        CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        Sort sort = result.getPageable().getSort();
+        Sort sort = result.getSort();
         assertThat(sort.getOrderFor("createdAt").getNullHandling())
                 .isEqualTo(Sort.NullHandling.NATIVE);
         assertThat(sort.getOrderFor("usedProductId").getNullHandling())
@@ -118,14 +118,14 @@ class UsedProductSortIntegrationTest extends IntegrationTestSupport {
     @Test
     void 가격_정렬에도_tie_break가_메타데이터에_포함된다() {
         // SQL에만 붙이고 메타데이터에서 빠뜨리면 응답이 실제 정렬을 설명하지 못한다.
-        Slice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
+        CursorSlice<UsedProductSummaryResponseDto> result = search(Sort.by(Sort.Direction.ASC, "price"));
 
-        Sort.Order tieBreak = result.getPageable().getSort().getOrderFor("usedProductId");
+        Sort.Order tieBreak = result.getSort().getOrderFor("usedProductId");
         assertThat(tieBreak).isNotNull();
         assertThat(tieBreak.getDirection()).isEqualTo(Sort.Direction.DESC);
     }
 
-    private Slice<UsedProductSummaryResponseDto> search(Sort sort) {
+    private CursorSlice<UsedProductSummaryResponseDto> search(Sort sort) {
         return usedProductService.getRegionProducts(
                 null,
                 new UsedProductSearchRequestDto(regionId, null, null, null, null, null, null),

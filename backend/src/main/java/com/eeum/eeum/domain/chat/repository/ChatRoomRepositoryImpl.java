@@ -12,8 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -31,7 +30,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
      * 채팅방 목록 정렬 — 최근 대화순, 대화 없는 방은 뒤로, 동률은 PK로 끊는다.
      *
      * <p>실제 SQL과 응답 메타데이터가 같은 값에서 나오도록 여기 한 곳에서만 정한다.
-     * 요청 Pageable을 그대로 SliceImpl에 넘기면 sort가 UNSORTED로 나가,
+     * 이 값을 응답({@code CursorSlice.sort})에 그대로 실어 보내지 않으면
      * 클라이언트가 응답만 보고는 어떤 순서인지 알 수 없다.
      */
     private static final Sort ROOM_LIST_SORT = Sort.by(
@@ -42,7 +41,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     private final QChatParticipant participant = QChatParticipant.chatParticipant;
 
     @Override
-    public Slice<ChatRoom> findMyRooms(
+    public CursorSlice<ChatRoom> findMyRooms(
             Long accountId, ChatRoomCursor cursor, int size, boolean includeClosed) {
         List<ChatRoom> content = queryFactory
                 .select(room)
@@ -62,7 +61,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     }
 
     @Override
-    public Slice<ChatRoom> findPublicRooms(Long regionId, ChatRoomCursor cursor, int size) {
+    public CursorSlice<ChatRoom> findPublicRooms(Long regionId, ChatRoomCursor cursor, int size) {
         List<ChatRoom> content = queryFactory
                 .selectFrom(room)
                 .where(
@@ -84,13 +83,25 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
      * <p>최근 대화순 목록은 메시지가 오는 순간 그 방이 맨 앞으로 올라온다. OFFSET은 그 밀림을
      * 그대로 맞아 경계에 있던 방이 다음 페이지에서 중복으로 나온다.
      *
-     * <p>페이지 번호는 의미가 없어 항상 0으로 채운다. 클라이언트는 받은 마지막 방의
-     * {@code lastMessageAt}과 {@code chatroomId}를 다음 요청의 커서로 그대로 보내면 된다.
+     * <p>다음 커서는 서버가 만들어 응답에 싣는다. 페이지 번호가 없는 계약이라
+     * {@link CursorSlice}로 돌려준다 — Slice로 돌리면 두 번째 페이지에도 number=0,
+     * first=true가 실려 응답이 실제 위치를 잘못 설명한다.
+     *
+     * <p>마지막 방의 대화 시각이 null이면 커서 값도 null이다 — 대화 없는 방 구간은
+     * 방 ID만으로 이어 읽는다.
      */
-    private Slice<ChatRoom> toSlice(List<ChatRoom> fetched, int size) {
+    private CursorSlice<ChatRoom> toSlice(List<ChatRoom> fetched, int size) {
         boolean hasNext = fetched.size() > size;
         List<ChatRoom> content = hasNext ? fetched.subList(0, size) : fetched;
-        return new SliceImpl<>(content, PageRequest.of(0, size, ROOM_LIST_SORT), hasNext);
+        ChatRoom last = content.isEmpty() ? null : content.get(content.size() - 1);
+
+        return CursorSlice.of(
+                content,
+                hasNext,
+                last == null || last.getLastMessageAt() == null
+                        ? null : last.getLastMessageAt().toString(),
+                last == null ? null : last.getChatroomId(),
+                ROOM_LIST_SORT);
     }
 
     /**

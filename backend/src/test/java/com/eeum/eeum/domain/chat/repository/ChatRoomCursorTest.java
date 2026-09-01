@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ChatRoomCursorTest {
 
     private static final LocalDateTime LAST_MESSAGE_AT = LocalDateTime.of(2026, 9, 1, 10, 0);
+    private static final String LAST_MESSAGE_VALUE = LAST_MESSAGE_AT.toString();
 
     @Test
     void 둘_다_없으면_첫_페이지다() {
@@ -26,7 +27,7 @@ class ChatRoomCursorTest {
 
     @Test
     void 둘_다_있으면_커서를_만든다() {
-        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(LAST_MESSAGE_AT, 7L);
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(LAST_MESSAGE_VALUE, 7L);
 
         assertThat(cursor).isNotNull();
         assertThat(cursor.lastMessageAt()).isEqualTo(LAST_MESSAGE_AT);
@@ -44,9 +45,17 @@ class ChatRoomCursorTest {
     }
 
     @Test
-    void 시각만_보내면_거절한다() {
+    void 값의_형식이_어긋나면_거절한다() {
+        assertThatThrownBy(() -> ChatRoomCursor.ofNullable("어제", 7L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CHAT_INVALID_CURSOR);
+    }
+
+    @Test
+    void 값만_보내면_거절한다() {
         // 방 ID가 없으면 같은 시각 방들 사이에서 경계를 끊지 못해 OFFSET과 같은 중복이 난다.
-        assertThatThrownBy(() -> ChatRoomCursor.ofNullable(LAST_MESSAGE_AT, null))
+        assertThatThrownBy(() -> ChatRoomCursor.ofNullable(LAST_MESSAGE_VALUE, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CHAT_INVALID_CURSOR);

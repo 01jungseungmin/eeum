@@ -35,8 +35,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.domain.Sort;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -302,12 +302,12 @@ class UsedProductServiceTest {
         UsedProduct product = product();
         givenSelectedRegion(true);
         when(usedProductRepository.search(any(), any(), anyInt(), any()))
-                .thenReturn(new SliceImpl<>(List.of(product), PageRequest.of(0, 20), false));
+                .thenReturn(CursorSlice.of(List.of(product), false, null, null, Sort.by(Sort.Direction.DESC, "createdAt")));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of(UsedProductImage.create(product, "thumb.jpg", 1, true)));
 
         // when
-        Slice<UsedProductSummaryResponseDto> result =
+        CursorSlice<UsedProductSummaryResponseDto> result =
                 usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20));
 
         // then
@@ -321,11 +321,11 @@ class UsedProductServiceTest {
     void 사진이_없는_게시글의_대표_사진은_null이다() {
         givenSelectedRegion(true);
         when(usedProductRepository.search(any(), any(), anyInt(), any()))
-                .thenReturn(new SliceImpl<>(List.of(product()), PageRequest.of(0, 20), false));
+                .thenReturn(CursorSlice.of(List.of(product()), false, null, null, Sort.by(Sort.Direction.DESC, "createdAt")));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of());
 
-        Slice<UsedProductSummaryResponseDto> result =
+        CursorSlice<UsedProductSummaryResponseDto> result =
                 usedProductService.getRegionProducts(SELLER_ID, searchRequest(null), null, null, PageRequest.of(0, 20));
 
         assertThat(result.getContent().get(0).getThumbnailUrl()).isNull();
@@ -357,7 +357,7 @@ class UsedProductServiceTest {
                 new BigDecimal("1000"), new BigDecimal("1000"), null);
         when(regionRepository.existsById(REGION_ID)).thenReturn(true);
         when(usedProductRepository.search(any(), any(), anyInt(), any()))
-                .thenReturn(new SliceImpl<>(List.of()));
+                .thenReturn(CursorSlice.empty(Sort.by(Sort.Direction.DESC, "createdAt")));
 
         // when
         usedProductService.getRegionProducts(SELLER_ID, request, null, null, PageRequest.of(0, 20));
@@ -813,8 +813,8 @@ class UsedProductServiceTest {
         return captor.getValue();
     }
 
-    private Slice<UsedProduct> emptySlice() {
-        return new SliceImpl<>(List.of(), PageRequest.of(0, 20), false);
+    private CursorSlice<UsedProduct> emptySlice() {
+        return CursorSlice.empty(Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 
     private UsedProductCreateRequestDto createRequest(UsedProductPriceType priceType, BigDecimal price) {

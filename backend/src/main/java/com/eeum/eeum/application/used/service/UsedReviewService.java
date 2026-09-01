@@ -16,11 +16,9 @@ import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
-
-import java.time.LocalDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -127,10 +125,10 @@ public class UsedReviewService {
      * @param cursor   직전 페이지의 마지막 행. 첫 페이지면 null이다.
      */
     @Transactional(readOnly = true)
-    public Slice<UsedReviewResponseDto> getSellerReviews(
-            Long sellerId, Long viewerId, LocalDateTime cursorCreatedAt, Long cursorId, int size) {
+    public CursorSlice<UsedReviewResponseDto> getSellerReviews(
+            Long sellerId, Long viewerId, String cursorValue, Long cursorId, int size) {
         // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
-        UsedReviewCursor cursor = UsedReviewCursor.ofNullable(cursorCreatedAt, cursorId);
+        UsedReviewCursor cursor = UsedReviewCursor.ofNullable(cursorValue, cursorId);
         return usedReviewRepository.findSellerReviews(sellerId, cursor, size)
                 .map(review -> UsedReviewResponseDto.from(review, viewerId));
     }
@@ -149,9 +147,9 @@ public class UsedReviewService {
     }
 
     @Transactional(readOnly = true)
-    public Slice<UsedReviewResponseDto> getMyReviews(
-            Long reviewerId, LocalDateTime cursorCreatedAt, Long cursorId, int size) {
-        UsedReviewCursor cursor = UsedReviewCursor.ofNullable(cursorCreatedAt, cursorId);
+    public CursorSlice<UsedReviewResponseDto> getMyReviews(
+            Long reviewerId, String cursorValue, Long cursorId, int size) {
+        UsedReviewCursor cursor = UsedReviewCursor.ofNullable(cursorValue, cursorId);
         // 조회 조건이 작성자로 좁혀져 있어 모든 행의 작성자가 곧 뷰어다.
         return usedReviewRepository.findMyReviews(reviewerId, cursor, size)
                 .map(review -> UsedReviewResponseDto.from(review, reviewerId));

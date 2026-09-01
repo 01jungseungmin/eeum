@@ -7,6 +7,7 @@ import com.eeum.eeum.application.chat.dto.response.ChatRoomPublicResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.application.chat.service.ChatRoomService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,14 +17,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Slice;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
 
 @Tag(name = "15. Chat Room", description = "채팅방 API (그룹/단톡방)")
 @SecurityRequirement(name = "bearerAuth")
@@ -67,28 +64,28 @@ public class ChatRoomController {
     @Operation(
             summary = "내 채팅방 목록",
             description = "마지막 메시지 시각 내림차순(대화 없는 방은 뒤)으로 정렬되며 안 읽은 메시지 수를 포함합니다. " +
-                    "커서 무한 스크롤입니다 — 첫 페이지는 커서 없이 요청하고, 다음 페이지는 받은 마지막 방의 " +
-                    "lastMessageAt과 chatroomId를 cursorLastMessageAt·cursorRoomId에 담아 보냅니다. " +
-                    "cursorRoomId만 보내면 '대화 없는 방' 구간을 이어서 읽습니다(시각만 보내면 400). " +
+                    "커서 무한 스크롤입니다 — 첫 페이지는 커서 없이 요청하고, 다음 페이지는 직전 응답의 " +
+                    "nextCursorValue·nextCursorId를 cursorValue·cursorRoomId에 그대로 담아 보냅니다. " +
+                    "대화가 없는 방 구간에서는 nextCursorValue가 null이며 ID만으로 이어 읽습니다(값만 보내면 400). " +
+                    "다음 페이지가 없으면 nextCursor 값들은 null입니다. " +
                     "페이지 번호를 쓰지 않는 이유는 메시지가 오면 그 방이 맨 앞으로 올라와 목록이 밀리기 때문입니다. " +
                     "기본은 활성 채팅방만 반환하며, includeClosed=true를 주면 종료된 방까지 포함해 지난 대화를 열람할 수 있습니다 " +
                     "(응답의 active 필드로 구분)."
     )
     @GetMapping
-    public ResponseEntity<ApiResponse<Slice<ChatRoomResponseDto>>> getMyRooms(
+    public ResponseEntity<ApiResponse<CursorSlice<ChatRoomResponseDto>>> getMyRooms(
             @Parameter(description = "종료된 채팅방 포함 여부 (기본 false)")
             @RequestParam(defaultValue = "false") boolean includeClosed,
-            @Parameter(description = "직전 페이지 마지막 방의 lastMessageAt. 첫 페이지이거나 대화 없는 방이면 생략")
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorLastMessageAt,
-            @Parameter(description = "직전 페이지 마지막 방의 chatroomId. 첫 페이지면 생략")
+            @Parameter(description = "직전 응답의 nextCursorValue. 첫 페이지이거나 대화 없는 방 구간이면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
             @RequestParam(required = false) @Positive Long cursorRoomId,
             @Parameter(description = "페이지 크기(최대 50)")
             @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(chatRoomService.getMyRooms(
-                accountId, cursorLastMessageAt, cursorRoomId, size, includeClosed)));
+                accountId, cursorValue, cursorRoomId, size, includeClosed)));
     }
 
     @Operation(
@@ -98,18 +95,17 @@ public class ChatRoomController {
                     "주요 지역이 설정되지 않은 경우 404를 반환합니다. 내 채팅방 목록과 같은 커서 무한 스크롤입니다."
     )
     @GetMapping("/public")
-    public ResponseEntity<ApiResponse<Slice<ChatRoomPublicResponseDto>>> getPublicRooms(
-            @Parameter(description = "직전 페이지 마지막 방의 lastMessageAt. 첫 페이지이거나 대화 없는 방이면 생략")
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorLastMessageAt,
-            @Parameter(description = "직전 페이지 마지막 방의 chatroomId. 첫 페이지면 생략")
+    public ResponseEntity<ApiResponse<CursorSlice<ChatRoomPublicResponseDto>>> getPublicRooms(
+            @Parameter(description = "직전 응답의 nextCursorValue. 첫 페이지이거나 대화 없는 방 구간이면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
             @RequestParam(required = false) @Positive Long cursorRoomId,
             @Parameter(description = "페이지 크기(최대 50)")
             @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(chatRoomService.getPublicRooms(
-                accountId, cursorLastMessageAt, cursorRoomId, size)));
+                accountId, cursorValue, cursorRoomId, size)));
     }
 
     @Operation(summary = "채팅방 상세", description = "참여자(ACTIVE) 목록을 포함한 채팅방 상세를 조회합니다.")

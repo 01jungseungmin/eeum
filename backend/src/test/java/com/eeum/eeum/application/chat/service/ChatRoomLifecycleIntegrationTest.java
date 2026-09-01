@@ -28,7 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
@@ -194,9 +194,9 @@ class ChatRoomLifecycleIntegrationTest extends IntegrationTestSupport {
                 .getRoomId();
 
         // when
-        Slice<ChatRoomResponseDto> ownerRooms =
+        CursorSlice<ChatRoomResponseDto> ownerRooms =
                 chatRoomService.getMyRooms(ownerAccountId, null, null, 20, false);
-        Slice<ChatRoomResponseDto> customerRooms =
+        CursorSlice<ChatRoomResponseDto> customerRooms =
                 chatRoomService.getMyRooms(customerId, null, null, 20, false);
 
         // then: 종료된 방은 목록에서 사라지고 새 방만 남는다 — 사용자는 옛 방으로 되돌아갈 수 없다
@@ -220,7 +220,7 @@ class ChatRoomLifecycleIntegrationTest extends IntegrationTestSupport {
                 .getRoomId();
 
         // when: 종료된 방까지 포함해 조회
-        Slice<ChatRoomResponseDto> withClosed =
+        CursorSlice<ChatRoomResponseDto> withClosed =
                 chatRoomService.getMyRooms(customerId, null, null, 20, true);
 
         // then: 종료 시 참여자를 LEFT로 바꾸지 않으므로 지난 방도 조회된다 — active 값으로 구분 가능

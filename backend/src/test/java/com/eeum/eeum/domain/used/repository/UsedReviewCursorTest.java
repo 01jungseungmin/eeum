@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UsedReviewCursorTest {
 
     private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 9, 1, 10, 0);
+    private static final String CREATED_AT_VALUE = CREATED_AT.toString();
 
     @Test
     void 둘_다_없으면_첫_페이지다() {
@@ -27,7 +28,7 @@ class UsedReviewCursorTest {
 
     @Test
     void 둘_다_있으면_커서를_만든다() {
-        UsedReviewCursor cursor = UsedReviewCursor.ofNullable(CREATED_AT, 41L);
+        UsedReviewCursor cursor = UsedReviewCursor.ofNullable(CREATED_AT_VALUE, 41L);
 
         assertThat(cursor).isNotNull();
         assertThat(cursor.createdAt()).isEqualTo(CREATED_AT);
@@ -36,7 +37,17 @@ class UsedReviewCursorTest {
 
     @Test
     void 작성일시만_보내면_거절한다() {
-        assertThatThrownBy(() -> UsedReviewCursor.ofNullable(CREATED_AT, null))
+        assertThatThrownBy(() -> UsedReviewCursor.ofNullable(CREATED_AT_VALUE, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USED_REVIEW_INVALID_CURSOR);
+    }
+
+    @Test
+    void 값의_형식이_어긋나면_거절한다() {
+        // 응답의 nextCursorValue를 그대로 돌려보내는 계약이라, 형식이 깨졌다는 것은
+        // 클라이언트가 값을 직접 만들었거나 다른 목록의 커서를 보냈다는 뜻이다.
+        assertThatThrownBy(() -> UsedReviewCursor.ofNullable("어제", 41L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USED_REVIEW_INVALID_CURSOR);

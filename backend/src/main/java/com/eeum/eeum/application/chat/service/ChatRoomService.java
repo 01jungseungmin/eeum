@@ -30,6 +30,7 @@ import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.eeum.eeum.domain.chat.repository.ChatRoomCursor;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.common.lock.LockKeys;
@@ -267,12 +268,12 @@ public class ChatRoomService {
     // includeClosed=true면 종료된 방까지 반환한다 — 종료 시 참여자를 LEFT로 바꾸지 않으므로
     // 대화 기록은 DB에 남아 있고, 이 플래그가 유일한 열람 경로다 (응답의 active로 구분).
     @Transactional(readOnly = true)
-    public Slice<ChatRoomResponseDto> getMyRooms(
-            Long accountId, LocalDateTime cursorLastMessageAt, Long cursorRoomId,
+    public CursorSlice<ChatRoomResponseDto> getMyRooms(
+            Long accountId, String cursorValue, Long cursorRoomId,
             int size, boolean includeClosed) {
         // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
-        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorLastMessageAt, cursorRoomId);
-        Slice<ChatRoom> rooms = chatRoomRepository.findMyRooms(accountId, cursor, size, includeClosed);
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorValue, cursorRoomId);
+        CursorSlice<ChatRoom> rooms = chatRoomRepository.findMyRooms(accountId, cursor, size, includeClosed);
         if (rooms.isEmpty()) {
             return rooms.map(room -> ChatRoomResponseDto.of(room, null, 0L, 0L));
         }
@@ -723,13 +724,13 @@ public class ChatRoomService {
 
     // 지역 내 공개 채팅방 목록 (GROUP/GROUP_STREET) — 입장 전 탐색용, 무한 스크롤
     @Transactional(readOnly = true)
-    public Slice<ChatRoomPublicResponseDto> getPublicRooms(
-            Long accountId, LocalDateTime cursorLastMessageAt, Long cursorRoomId, int size) {
-        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorLastMessageAt, cursorRoomId);
+    public CursorSlice<ChatRoomPublicResponseDto> getPublicRooms(
+            Long accountId, String cursorValue, Long cursorRoomId, int size) {
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorValue, cursorRoomId);
         Account account = getAccount(accountId);
         Region region = getRegionOrThrow(account);
 
-        Slice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), cursor, size);
+        CursorSlice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), cursor, size);
         if (rooms.isEmpty()) {
             return rooms.map(r -> ChatRoomPublicResponseDto.of(r, 0L, false));
         }

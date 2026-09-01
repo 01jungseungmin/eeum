@@ -1,7 +1,7 @@
 package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.UsedReview;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 
 /**
  * 후기 목록 조회.
@@ -15,9 +15,9 @@ public interface UsedReviewRepositoryCustom {
      * @param cursor 직전 페이지의 마지막 행. 첫 페이지면 null이다.
      * @param size   한 페이지 크기. 다음 페이지 여부 판정을 위해 내부적으로 한 건 더 읽는다.
      */
-    Slice<UsedReview> findSellerReviews(Long sellerId, UsedReviewCursor cursor, int size);
+    CursorSlice<UsedReview> findSellerReviews(Long sellerId, UsedReviewCursor cursor, int size);
 
-    Slice<UsedReview> findMyReviews(Long reviewerId, UsedReviewCursor cursor, int size);
+    CursorSlice<UsedReview> findMyReviews(Long reviewerId, UsedReviewCursor cursor, int size);
 
     /**
      * 판매자 평판 집계 — 후기 수와 평균 별점.

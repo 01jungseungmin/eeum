@@ -2,7 +2,7 @@ package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 
 public interface UsedProductRepositoryCustom {
 
@@ -15,7 +15,7 @@ public interface UsedProductRepositoryCustom {
      * @param size          한 페이지 크기. 다음 페이지 여부 판정을 위해 내부적으로 한 건 더 읽는다.
      * @param requestedSort 요청 정렬. 허용 필드 하나만 반영하고 tie-break를 붙인다.
      */
-    Slice<UsedProduct> search(
+    CursorSlice<UsedProduct> search(
             UsedProductSearchCondition condition, UsedProductCursor cursor, int size, Sort requestedSort);
 
     // 조회수 +1. 상세 조회마다 엔티티를 더럽히면 같은 행에 UPDATE가 몰리므로 원자 연산으로 처리

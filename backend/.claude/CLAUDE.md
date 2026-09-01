@@ -127,7 +127,14 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - 사용자가 "결제·정산 전체 리뷰"를 요청하면 Git diff로 범위를 축소하지 않는다.
 
 ### 페이징 선택 기준
-- 무한 스크롤 (모바일 앱): `Slice<T>`
+- 무한 스크롤 (모바일 앱): `CursorSlice<T>` (`common/dto/response/CursorSlice`)
+  - 새 행이 목록 맨 앞에 꽂히는 정렬(최신순·최근 대화순)은 OFFSET 금지 — 페이지 사이 삽입
+    한 건에 목록이 통째로 밀려 경계 항목이 중복·누락된다
+  - 커서는 정렬 키를 전부 담는다. PK tie-break를 빼면 같은 값 구간에서 같은 결함이 재현된다
+  - 다음 커서(`nextCursorValue`/`nextCursorId`)는 서버가 만들어 응답에 싣고, 클라이언트는
+    그대로 되돌려보낸다. 한쪽만 보내거나 형식이 깨지면 400
+  - `Slice<T>`를 쓰지 않는다 — 페이지 번호가 없는데 `number=0`, `first=true`가 실려
+    응답이 실제 위치를 잘못 설명한다
 - 관리자 페이지 (번호 페이징): `Page<T>`
 
 ### 신규 도메인 단계별 개발

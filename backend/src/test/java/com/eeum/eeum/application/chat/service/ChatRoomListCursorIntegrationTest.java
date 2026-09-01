@@ -13,7 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import com.eeum.eeum.support.IntegrationTestSupport;
@@ -69,10 +69,10 @@ class ChatRoomListCursorIntegrationTest extends IntegrationTestSupport {
         Long room3 = room("방3", BASE.minusHours(1));
 
         // When
-        Slice<ChatRoomResponseDto> first = chatRoomService.getMyRooms(memberId, null, null, 2, false);
-        Slice<ChatRoomResponseDto> second =
+        CursorSlice<ChatRoomResponseDto> first = chatRoomService.getMyRooms(memberId, null, null, 2, false);
+        CursorSlice<ChatRoomResponseDto> second =
                 chatRoomService.getMyRooms(
-                        memberId, cursorLastMessageAt(first), cursorRoomId(first), 2, false);
+                        memberId, cursorValue(first), cursorRoomId(first), 2, false);
 
         // Then
         assertThat(first.getContent()).extracting(ChatRoomResponseDto::getRoomId)
@@ -90,16 +90,16 @@ class ChatRoomListCursorIntegrationTest extends IntegrationTestSupport {
         Long room2 = room("방2", BASE.minusHours(2));
         Long room3 = room("방3", BASE.minusHours(1));
 
-        Slice<ChatRoomResponseDto> first = chatRoomService.getMyRooms(memberId, null, null, 2, false);
+        CursorSlice<ChatRoomResponseDto> first = chatRoomService.getMyRooms(memberId, null, null, 2, false);
         assertThat(first.getContent()).extracting(ChatRoomResponseDto::getRoomId)
                 .containsExactly(room3, room2);
 
         // When: 두 페이지를 읽는 사이 방1에 메시지가 와 맨 앞으로 올라간다
         bumpLastMessage(room1, BASE.plusMinutes(1));
 
-        Slice<ChatRoomResponseDto> second =
+        CursorSlice<ChatRoomResponseDto> second =
                 chatRoomService.getMyRooms(
-                        memberId, cursorLastMessageAt(first), cursorRoomId(first), 2, false);
+                        memberId, cursorValue(first), cursorRoomId(first), 2, false);
 
         // Then: 이미 본 방은 다시 오지 않는다. 맨 앞으로 올라간 방1은 커서보다 앞이라 빠진다 —
         // 커서가 없앨 수 있는 것은 "이미 본 것의 중복"이고, 위로 올라간 방은
@@ -117,10 +117,10 @@ class ChatRoomListCursorIntegrationTest extends IntegrationTestSupport {
         Long silent2 = room("조용한 방2", null);
 
         // When
-        Slice<ChatRoomResponseDto> first = chatRoomService.getMyRooms(memberId, null, null, 2, false);
-        Slice<ChatRoomResponseDto> second =
+        CursorSlice<ChatRoomResponseDto> first = chatRoomService.getMyRooms(memberId, null, null, 2, false);
+        CursorSlice<ChatRoomResponseDto> second =
                 chatRoomService.getMyRooms(
-                        memberId, cursorLastMessageAt(first), cursorRoomId(first), 2, false);
+                        memberId, cursorValue(first), cursorRoomId(first), 2, false);
 
         // Then: 대화한 방이 먼저, 조용한 방들이 뒤따라 나온다
         assertThat(first.getContent().get(0).getRoomId()).isEqualTo(talked);
@@ -134,16 +134,13 @@ class ChatRoomListCursorIntegrationTest extends IntegrationTestSupport {
     }
 
     // 직전 페이지의 마지막 방 = 다음 요청의 커서. 응답 필드(lastMessageAt·roomId)만으로 만든다.
-    private LocalDateTime cursorLastMessageAt(Slice<ChatRoomResponseDto> page) {
-        return lastOf(page).getLastMessageAt();
+    // 서버가 준 다음 커서를 그대로 되돌려보낸다 — 클라이언트가 할 일이 정확히 이것이다.
+    private String cursorValue(CursorSlice<ChatRoomResponseDto> page) {
+        return page.getNextCursorValue();
     }
 
-    private Long cursorRoomId(Slice<ChatRoomResponseDto> page) {
-        return lastOf(page).getRoomId();
-    }
-
-    private ChatRoomResponseDto lastOf(Slice<ChatRoomResponseDto> page) {
-        return page.getContent().get(page.getContent().size() - 1);
+    private Long cursorRoomId(CursorSlice<ChatRoomResponseDto> page) {
+        return page.getNextCursorId();
     }
 
     private Long room(String name, LocalDateTime lastMessageAt) {

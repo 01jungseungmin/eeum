@@ -15,9 +15,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.Sort;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -74,11 +72,13 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
      * <p>기본 정렬이 최신순이라 새 글이 맨 앞에 꽂힌다. OFFSET은 페이지 사이 등록 한 건에
      * 목록 전체가 밀려 경계 항목이 다음 페이지에서 중복으로 나온다(삭제되면 반대로 건너뛴다).
      *
-     * <p>페이지 번호는 의미가 없어 항상 0으로 채운다. 클라이언트는 받은 마지막 항목의
-     * 정렬 키 값과 usedProductId를 다음 요청의 커서로 보낸다.
+     * <p>다음 커서는 서버가 만들어 응답에 싣는다({@code nextCursorValue}). 정렬 키가 무엇이냐에 따라
+     * 값의 형식이 달라지므로, 그 규칙을 아는 쪽이 만들어야 클라이언트가 정렬마다 다른 조립을
+     * 하지 않는다. 페이지 번호가 없는 계약이라 Slice가 아니라 {@link CursorSlice}로 돌려준다 —
+     * Slice로 돌리면 두 번째 페이지에도 number=0, first=true가 실려 응답이 위치를 잘못 설명한다.
      */
     @Override
-    public Slice<UsedProduct> search(
+    public CursorSlice<UsedProduct> search(
             UsedProductSearchCondition condition, UsedProductCursor cursor, int size, Sort requestedSort) {
         // tie-break까지 포함해 확정한다. SQL에만 붙이고 메타데이터에서 빠뜨리면
         // 응답 Slice.pageable.sort가 실제 정렬 순서와 달라진다.
@@ -100,9 +100,31 @@ public class UsedProductRepositoryImpl implements UsedProductRepositoryCustom {
         if (hasNext) {
             content = content.subList(0, size);
         }
+        UsedProduct last = content.isEmpty() ? null : content.get(content.size() - 1);
 
         // 실제로 적용한 정렬을 담아 돌리기 — 무시한 정렬이 메타데이터에 남으면 클라이언트가 정렬됐다고 오해
-        return new SliceImpl<>(content, PageRequest.of(0, size, appliedSort), hasNext);
+        return CursorSlice.of(
+                content,
+                hasNext,
+                last == null ? null : nextCursorValue(appliedSort, last),
+                last == null ? null : last.getUsedProductId(),
+                appliedSort);
+    }
+
+    /**
+     * 다음 커서에 실을 정렬 키 값. 적용된 정렬이 무엇이냐에 따라 형식이 달라진다.
+     *
+     * <p>가격제안 글(price null)에서는 null을 돌려준다 — 그 구간은 정렬상 맨 뒤라
+     * 게시글 ID만으로 이어 읽는다. {@code afterCursor}의 NULL 분기와 짝을 이룬다.
+     */
+    private String nextCursorValue(Sort appliedSort, UsedProduct last) {
+        return switch (appliedSort.iterator().next().getProperty()) {
+            case "price" -> last.getPrice() == null ? null : last.getPrice().toPlainString();
+            case "favoriteCount" -> String.valueOf(last.getFavoriteCount());
+            case "viewCount" -> String.valueOf(last.getViewCount());
+            // 기본 정렬이 createdAt이므로 나머지는 여기로 온다.
+            default -> last.getCreatedAt().toString();
+        };
     }
 
     /**

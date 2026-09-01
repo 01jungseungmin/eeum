@@ -9,9 +9,7 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 
@@ -47,13 +45,13 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
      * 평판을 세탁할 수 있다. 비공개 게시글의 제목 노출은 응답 단계에서 가린다.
      */
     @Override
-    public Slice<UsedReview> findSellerReviews(Long sellerId, UsedReviewCursor cursor, int size) {
+    public CursorSlice<UsedReview> findSellerReviews(Long sellerId, UsedReviewCursor cursor, int size) {
         return toSlice(baseQuery().where(seller.accountId.eq(sellerId)), cursor, size);
     }
 
     // 내가 쓴 후기. 게시글마다 판매자가 다르므로 판매자 fetch join이 특히 중요하다.
     @Override
-    public Slice<UsedReview> findMyReviews(Long reviewerId, UsedReviewCursor cursor, int size) {
+    public CursorSlice<UsedReview> findMyReviews(Long reviewerId, UsedReviewCursor cursor, int size) {
         return toSlice(baseQuery().where(reviewer.accountId.eq(reviewerId)), cursor, size);
     }
 
@@ -92,22 +90,29 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
      * 경계 항목이 다음 페이지에서 중복으로 나오거나(삽입), 건너뛰어진다(삭제).
      * 커서는 "이 행 다음부터"를 가리켜 그 사이 변화와 무관하다.
      *
-     * <p>페이지 번호는 의미가 없어 항상 0으로 채운다. 클라이언트는 받은 마지막 항목의
-     * {@code createdAt}과 {@code usedReviewId}를 다음 요청의 커서로 그대로 보내면 된다.
+     * <p>다음 커서는 서버가 만들어 응답에 싣는다. 페이지 번호가 없는 계약이라
+     * {@link CursorSlice}로 돌려준다 — Slice로 돌리면 두 번째 페이지에도 number=0,
+     * first=true가 실려 응답이 실제 위치를 잘못 설명한다.
      */
-    private Slice<UsedReview> toSlice(JPAQuery<UsedReview> query, UsedReviewCursor cursor, int size) {
-        List<UsedReview> content = query
+    private CursorSlice<UsedReview> toSlice(
+            JPAQuery<UsedReview> query, UsedReviewCursor cursor, int size) {
+        List<UsedReview> fetched = query
                 .where(afterCursor(cursor))
                 .orderBy(review.createdAt.desc(), review.usedReviewId.desc())
                 .limit(size + 1L)
                 .fetch();
 
-        boolean hasNext = content.size() > size;
-        if (hasNext) {
-            content = content.subList(0, size);
-        }
+        boolean hasNext = fetched.size() > size;
+        List<UsedReview> content = hasNext ? fetched.subList(0, size) : fetched;
+        UsedReview last = content.isEmpty() ? null : content.get(content.size() - 1);
+
         // 요청 sort가 아니라 실제로 적용한 정렬을 실어 보낸다.
-        return new SliceImpl<>(content, PageRequest.of(0, size, REVIEW_SORT), hasNext);
+        return CursorSlice.of(
+                content,
+                hasNext,
+                last == null ? null : last.getCreatedAt().toString(),
+                last == null ? null : last.getUsedReviewId(),
+                REVIEW_SORT);
     }
 
     /**

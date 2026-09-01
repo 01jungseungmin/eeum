@@ -27,7 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
@@ -186,7 +186,7 @@ class UsedProductInquiryRoomViewIntegrationTest extends IntegrationTestSupport {
         }
         SqlCaptureInspector.reset();
 
-        Slice<ChatRoomResponseDto> rooms =
+        CursorSlice<ChatRoomResponseDto> rooms =
                 chatRoomService.getMyRooms(buyerId, null, null, 20, false);
 
         assertThat(rooms.getContent()).hasSizeGreaterThanOrEqualTo(3);

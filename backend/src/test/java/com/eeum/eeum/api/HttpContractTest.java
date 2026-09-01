@@ -45,6 +45,7 @@ class HttpContractTest extends IntegrationTestSupport {
     private final CategoryRepository categoryRepository;
 
     private Long regionId;
+    private Long sellerId;
 
     @BeforeEach
     void setUp() {
@@ -55,6 +56,7 @@ class HttpContractTest extends IntegrationTestSupport {
         Category category = categoryRepository.save(
                 Category.createRoot(CategoryType.USED, "디지털기기", 1));
         regionId = region.getRegionId();
+        sellerId = seller.getAccountId();
 
         usedProductRepository.saveAndFlush(UsedProduct.create(
                 seller, category, region,
@@ -196,6 +198,93 @@ class HttpContractTest extends IntegrationTestSupport {
         assertThat(responseBody)
                 .as("예외: %s / 응답: %s", resolved(result), responseBody)
                 .containsPattern("\"createdAt\"\\s*:\\s*\"\\d{4}-\\d{2}-\\d{2}T");
+    }
+
+    // ===================== 커서 페이징 계약 =====================
+    //
+    // 커서 파라미터는 컨트롤러 앞단(파라미터 바인딩·@Positive/@Max·예외 매핑)에서 걸린다.
+    // 서비스 단위 테스트는 그 구간을 통과하지 않아 이 계약을 검증하지 못한다.
+
+    @Test
+    void 커서를_한쪽만_보내면_400으로_거절한다() throws Exception {
+        // 조용히 첫 페이지를 돌려주면 클라이언트는 다음 페이지를 받았다고 믿어
+        // 무한 스크롤이 같은 목록을 반복한다.
+        MvcResult valueOnly = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("cursorValue", "2026-09-01T10:00:00"))
+                .andReturn();
+        MvcResult idOnly = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("cursorId", "41"))
+                .andReturn();
+
+        assertThat(valueOnly.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(valueOnly), body(valueOnly))
+                .isEqualTo(400);
+        assertThat(idOnly.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(idOnly), body(idOnly))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 형식이_깨진_커서_값은_400으로_거절한다() throws Exception {
+        // 응답의 nextCursorValue를 그대로 되돌려보내는 계약이므로,
+        // 형식이 깨졌다는 것은 클라이언트가 값을 직접 만들었다는 뜻이다.
+        MvcResult result = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("cursorValue", "어제")
+                        .param("cursorId", "41"))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 커서_ID가_0이면_400으로_거절한다() throws Exception {
+        MvcResult result = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("cursorValue", "2026-09-01T10:00:00")
+                        .param("cursorId", "0"))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 허용_범위를_벗어난_size는_400으로_거절한다() throws Exception {
+        // 상한이 없으면 한 번의 요청이 목록 전체를 끌어온다.
+        MvcResult zero = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("size", "0"))
+                .andReturn();
+        MvcResult tooLarge = mockMvc.perform(get("/used/sellers/" + sellerId + "/reviews")
+                        .param("size", "51"))
+                .andReturn();
+
+        assertThat(zero.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(zero), body(zero))
+                .isEqualTo(400);
+        assertThat(tooLarge.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(tooLarge), body(tooLarge))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 커서_없는_첫_페이지_응답은_페이지_번호_대신_다음_커서를_담는다() throws Exception {
+        MvcResult result = mockMvc.perform(get("/used")
+                        .param("regionId", String.valueOf(regionId)))
+                .andReturn();
+
+        String responseBody = body(result);
+        assertThat(result.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(result), responseBody)
+                .isEqualTo(200);
+        // Slice로 돌리면 두 번째 페이지에도 number=0, first=true가 실려 위치를 잘못 설명한다.
+        assertThat(responseBody)
+                .contains("hasNext")
+                .contains("nextCursorValue")
+                .contains("nextCursorId")
+                .doesNotContain("\"first\"")
+                .doesNotContain("\"pageable\"");
     }
 
     // MockMvc가 붙잡은 실제 예외 — 500의 원인을 로그 없이 확정한다.
