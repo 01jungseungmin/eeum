@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedReview;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
+import com.eeum.eeum.domain.used.repository.UsedReviewCursor;
 import com.eeum.eeum.domain.used.repository.UsedReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ConflictException;
@@ -17,7 +18,6 @@ import com.eeum.eeum.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -117,14 +117,17 @@ public class UsedReviewService {
      * <p>정렬은 요청과 무관하게 리포지토리가 고정한다(작성 최신순 + PK tie-break).
      * 요청 sort를 그대로 쓰면 사용자가 순서를 바꿀 수 있어 페이지 경계가 흔들린다.
      * 적용된 정렬은 반환 Slice의 Pageable에 실려 온다.
-     */
-    /**
+     *
+     * <p>커서 페이징이다. 최신순 목록은 새 후기가 맨 앞에 꽂히므로, 페이지 번호로 읽으면
+     * 스크롤 도중 등록된 한 건에 목록 전체가 밀려 경계 항목이 중복되거나 누락된다.
+     *
      * @param viewerId 조회 주체. 비회원 조회에서는 null이다 — 자기 후기의 제목을 가리지 않기 위해 받는다.
+     * @param cursor   직전 페이지의 마지막 행. 첫 페이지면 null이다.
      */
     @Transactional(readOnly = true)
     public Slice<UsedReviewResponseDto> getSellerReviews(
-            Long sellerId, Long viewerId, Pageable pageable) {
-        return usedReviewRepository.findSellerReviews(sellerId, pageable)
+            Long sellerId, Long viewerId, UsedReviewCursor cursor, int size) {
+        return usedReviewRepository.findSellerReviews(sellerId, cursor, size)
                 .map(review -> UsedReviewResponseDto.from(review, viewerId));
     }
 
@@ -142,9 +145,10 @@ public class UsedReviewService {
     }
 
     @Transactional(readOnly = true)
-    public Slice<UsedReviewResponseDto> getMyReviews(Long reviewerId, Pageable pageable) {
+    public Slice<UsedReviewResponseDto> getMyReviews(
+            Long reviewerId, UsedReviewCursor cursor, int size) {
         // 조회 조건이 작성자로 좁혀져 있어 모든 행의 작성자가 곧 뷰어다.
-        return usedReviewRepository.findMyReviews(reviewerId, pageable)
+        return usedReviewRepository.findMyReviews(reviewerId, cursor, size)
                 .map(review -> UsedReviewResponseDto.from(review, reviewerId));
     }
 

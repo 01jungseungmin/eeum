@@ -1,7 +1,6 @@
 package com.eeum.eeum.domain.used.repository;
 
 import com.eeum.eeum.domain.used.entity.UsedReview;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 
 /**
@@ -12,9 +11,13 @@ import org.springframework.data.domain.Slice;
  */
 public interface UsedReviewRepositoryCustom {
 
-    Slice<UsedReview> findSellerReviews(Long sellerId, Pageable pageable);
+    /**
+     * @param cursor 직전 페이지의 마지막 행. 첫 페이지면 null이다.
+     * @param size   한 페이지 크기. 다음 페이지 여부 판정을 위해 내부적으로 한 건 더 읽는다.
+     */
+    Slice<UsedReview> findSellerReviews(Long sellerId, UsedReviewCursor cursor, int size);
 
-    Slice<UsedReview> findMyReviews(Long reviewerId, Pageable pageable);
+    Slice<UsedReview> findMyReviews(Long reviewerId, UsedReviewCursor cursor, int size);
 
     /**
      * 판매자 평판 집계 — 후기 수와 평균 별점.

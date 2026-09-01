@@ -188,6 +188,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // 실제 예약 상대가 달라지므로, 검증하지 않은 계정을 확정하지 않도록 막고 재시도하게 한다.
     USED_PRODUCT_BUYER_CHANGED("USED_016", "예약 상대가 변경되었습니다. 다시 시도해 주세요", HttpStatus.CONFLICT),
 
+    // 커서는 정렬 키 두 개(createdAt, usedReviewId)를 함께 받아야 한다. 하나만 오면 첫 페이지와
+    // 구분할 수 없어 무한 스크롤이 같은 목록을 반복한다 — 조용히 무시하지 않고 알린다.
+    USED_REVIEW_INVALID_CURSOR("USED_017", "후기 목록 커서는 작성일시와 후기 ID를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
     COMMUNITY_POST_ACCESS_DENIED("COMMUNITY_002", "게시글 접근 권한이 없습니다", HttpStatus.FORBIDDEN),

@@ -5,11 +5,11 @@ import com.eeum.eeum.domain.used.entity.QUsedProduct;
 import com.eeum.eeum.domain.used.entity.QUsedReview;
 import com.eeum.eeum.domain.used.entity.UsedReview;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
@@ -47,14 +47,14 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
      * 평판을 세탁할 수 있다. 비공개 게시글의 제목 노출은 응답 단계에서 가린다.
      */
     @Override
-    public Slice<UsedReview> findSellerReviews(Long sellerId, Pageable pageable) {
-        return toSlice(baseQuery().where(seller.accountId.eq(sellerId)), pageable);
+    public Slice<UsedReview> findSellerReviews(Long sellerId, UsedReviewCursor cursor, int size) {
+        return toSlice(baseQuery().where(seller.accountId.eq(sellerId)), cursor, size);
     }
 
     // 내가 쓴 후기. 게시글마다 판매자가 다르므로 판매자 fetch join이 특히 중요하다.
     @Override
-    public Slice<UsedReview> findMyReviews(Long reviewerId, Pageable pageable) {
-        return toSlice(baseQuery().where(reviewer.accountId.eq(reviewerId)), pageable);
+    public Slice<UsedReview> findMyReviews(Long reviewerId, UsedReviewCursor cursor, int size) {
+        return toSlice(baseQuery().where(reviewer.accountId.eq(reviewerId)), cursor, size);
     }
 
     /**
@@ -85,11 +85,20 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
         return summary != null ? summary : new UsedReviewSummary(0L, null);
     }
 
-    private Slice<UsedReview> toSlice(JPAQuery<UsedReview> query, Pageable pageable) {
-        int size = pageable.getPageSize();
+    /**
+     * 커서(keyset) 페이징. OFFSET을 쓰지 않는다.
+     *
+     * <p>최신순 목록은 새 행이 맨 앞에 꽂히므로 OFFSET은 페이지 사이 삽입 한 건에 통째로 밀린다 —
+     * 경계 항목이 다음 페이지에서 중복으로 나오거나(삽입), 건너뛰어진다(삭제).
+     * 커서는 "이 행 다음부터"를 가리켜 그 사이 변화와 무관하다.
+     *
+     * <p>페이지 번호는 의미가 없어 항상 0으로 채운다. 클라이언트는 받은 마지막 항목의
+     * {@code createdAt}과 {@code usedReviewId}를 다음 요청의 커서로 그대로 보내면 된다.
+     */
+    private Slice<UsedReview> toSlice(JPAQuery<UsedReview> query, UsedReviewCursor cursor, int size) {
         List<UsedReview> content = query
+                .where(afterCursor(cursor))
                 .orderBy(review.createdAt.desc(), review.usedReviewId.desc())
-                .offset(pageable.getOffset())
                 .limit(size + 1L)
                 .fetch();
 
@@ -98,7 +107,22 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
             content = content.subList(0, size);
         }
         // 요청 sort가 아니라 실제로 적용한 정렬을 실어 보낸다.
-        return new SliceImpl<>(
-                content, PageRequest.of(pageable.getPageNumber(), size, REVIEW_SORT), hasNext);
+        return new SliceImpl<>(content, PageRequest.of(0, size, REVIEW_SORT), hasNext);
+    }
+
+    /**
+     * 커서 이후 구간. 정렬이 {@code createdAt desc, usedReviewId desc}이므로
+     * "createdAt이 더 이르거나, 같으면 ID가 더 작은" 행들이다.
+     *
+     * <p>두 번째 항(동률에서 ID로 끊기)이 빠지면 같은 시각에 등록된 후기들이
+     * 페이지 경계에서 중복되거나 누락된다 — tie-break 정렬만으로는 막을 수 없다.
+     */
+    private BooleanExpression afterCursor(UsedReviewCursor cursor) {
+        if (cursor == null) {
+            return null;
+        }
+        return review.createdAt.lt(cursor.createdAt())
+                .or(review.createdAt.eq(cursor.createdAt())
+                        .and(review.usedReviewId.lt(cursor.usedReviewId())));
     }
 }

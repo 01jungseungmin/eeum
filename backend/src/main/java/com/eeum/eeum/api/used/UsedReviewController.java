@@ -5,6 +5,7 @@ import com.eeum.eeum.application.used.dto.request.UsedReviewUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedReviewSummaryResponseDto;
 import com.eeum.eeum.application.used.service.UsedReviewService;
+import com.eeum.eeum.domain.used.repository.UsedReviewCursor;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,16 +13,18 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
-import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
 
 @Tag(name = "22. Used Review", description = "중고거래 후기 API")
 @Validated
@@ -52,18 +55,29 @@ public class UsedReviewController {
     @GetMapping("/sellers/{sellerId}/reviews")
     @Operation(
             summary = "판매자가 받은 후기 목록",
-            description = "판매자 평판이므로 로그인 없이 볼 수 있습니다. 작성 최신순 무한 스크롤(Slice)입니다. " +
+            description = "판매자 평판이므로 로그인 없이 볼 수 있습니다. 작성 최신순 커서 페이징(Slice)입니다. " +
+                    "첫 페이지는 커서 없이 요청하고, 다음 페이지는 받은 마지막 항목의 createdAt과 " +
+                    "usedReviewId를 cursorCreatedAt·cursorId에 담아 보냅니다(둘 중 하나만 보내면 400). " +
+                    "페이지 번호를 쓰지 않는 이유는 스크롤 도중 새 후기가 등록되면 목록이 밀려 " +
+                    "경계 항목이 중복되거나 누락되기 때문입니다. " +
                     "게시글이 삭제·숨김된 후기도 그대로 보이며, 그 경우 usedProductVisible이 false이고 " +
-                    "게시글 제목은 비어 있습니다(단, 자기가 쓴 후기에는 제목이 그대로 보입니다)."
+                    "게시글 제목은 비어 있습니다. 단, 거래 당사자에게는 제목이 그대로 보입니다 — " +
+                    "후기를 쓴 본인과 그 게시글의 판매자(즉 자기 평판 목록을 보는 판매자 본인)입니다."
     )
     public ResponseEntity<ApiResponse<Slice<UsedReviewResponseDto>>> getSellerReviews(
             @Parameter(description = "판매자 계정 ID") @PathVariable @Positive Long sellerId,
-            @PageableDefault(size = 20) Pageable pageable
+            @Parameter(description = "직전 페이지 마지막 항목의 createdAt. 첫 페이지면 생략")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
+            @Parameter(description = "직전 페이지 마지막 항목의 usedReviewId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
+            @Parameter(description = "페이지 크기(최대 50)")
+            @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         // 비회원도 볼 수 있는 경로라 뷰어가 없을 수 있다.
         Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
-        return ResponseEntity.ok(ApiResponse.success(
-                usedReviewService.getSellerReviews(sellerId, viewerId, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(usedReviewService.getSellerReviews(
+                sellerId, viewerId, UsedReviewCursor.ofNullable(cursorCreatedAt, cursorId), size)));
     }
 
     @GetMapping("/sellers/{sellerId}/reviews/summary")
@@ -86,14 +100,23 @@ public class UsedReviewController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(
             summary = "내가 쓴 후기 목록",
-            description = "작성 최신순 무한 스크롤(Slice)입니다."
+            description = "작성 최신순 커서 페이징(Slice)입니다. 첫 페이지는 커서 없이 요청하고, " +
+                    "다음 페이지는 받은 마지막 항목의 createdAt과 usedReviewId를 " +
+                    "cursorCreatedAt·cursorId에 담아 보냅니다(둘 중 하나만 보내면 400). " +
+                    "내가 쓴 후기이므로 게시글이 삭제·숨김돼도 제목은 그대로 보입니다."
     )
     public ResponseEntity<ApiResponse<Slice<UsedReviewResponseDto>>> getMyReviews(
-            @PageableDefault(size = 20) Pageable pageable
+            @Parameter(description = "직전 페이지 마지막 항목의 createdAt. 첫 페이지면 생략")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
+            @Parameter(description = "직전 페이지 마지막 항목의 usedReviewId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
+            @Parameter(description = "페이지 크기(최대 50)")
+            @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         Long reviewerId = SecurityUtil.getCurrentAccountId();
-        return ResponseEntity.ok(ApiResponse.success(
-                usedReviewService.getMyReviews(reviewerId, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(usedReviewService.getMyReviews(
+                reviewerId, UsedReviewCursor.ofNullable(cursorCreatedAt, cursorId), size)));
     }
 
     @PatchMapping("/reviews/{usedReviewId}")
