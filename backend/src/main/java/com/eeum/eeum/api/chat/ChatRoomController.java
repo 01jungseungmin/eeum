@@ -111,7 +111,7 @@ public class ChatRoomController {
     @Operation(summary = "채팅방 상세", description = "참여자(ACTIVE) 목록을 포함한 채팅방 상세를 조회합니다.")
     @GetMapping("/{roomId}")
     public ResponseEntity<ApiResponse<ChatRoomDetailResponseDto>> getRoomDetail(
-            @PathVariable Long roomId
+            @PathVariable @Positive Long roomId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
@@ -126,7 +126,7 @@ public class ChatRoomController {
                     "신규 참여 / 재입장 모두 동일하게 200을 반환합니다."
     )
     @PostMapping("/{roomId}/participants/me")
-    public ResponseEntity<ApiResponse<Void>> joinRoom(@PathVariable Long roomId) {
+    public ResponseEntity<ApiResponse<Void>> joinRoom(@PathVariable @Positive Long roomId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         chatRoomService.joinRoom(accountId, roomId);
         return ResponseEntity.ok(ApiResponse.success());
@@ -135,7 +135,7 @@ public class ChatRoomController {
     @Operation(summary = "채팅방 참여자 초대", description = "GROUP 채팅방에 참여자를 초대하고 입장 시스템 메시지를 남깁니다.")
     @PostMapping("/{roomId}/participants")
     public ResponseEntity<ApiResponse<Void>> inviteParticipants(
-            @PathVariable Long roomId,
+            @PathVariable @Positive Long roomId,
             @RequestBody @Valid ParticipantInviteRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
@@ -149,7 +149,7 @@ public class ChatRoomController {
                     + "참여 상태는 유지되어 양쪽 모두 지난 대화를 계속 열람할 수 있습니다(목록 조회 시 includeClosed=true). "
                     + "이미 종료된 문의방에서는 다시 나갈 수 없습니다.")
     @PatchMapping("/{roomId}/leave")
-    public ResponseEntity<ApiResponse<Void>> leaveRoom(@PathVariable Long roomId) {
+    public ResponseEntity<ApiResponse<Void>> leaveRoom(@PathVariable @Positive Long roomId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         chatRoomService.leaveRoom(accountId, roomId);
         return ResponseEntity.ok(ApiResponse.success());
@@ -163,7 +163,7 @@ public class ChatRoomController {
                     "이미 종료된 방에 대한 재요청도 200을 반환합니다(멱등)."
     )
     @PatchMapping("/{roomId}/close")
-    public ResponseEntity<ApiResponse<Void>> closeRoom(@PathVariable Long roomId) {
+    public ResponseEntity<ApiResponse<Void>> closeRoom(@PathVariable @Positive Long roomId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         chatRoomService.closeRoom(accountId, roomId);
         return ResponseEntity.ok(ApiResponse.success());
@@ -171,7 +171,7 @@ public class ChatRoomController {
 
     @Operation(summary = "읽음 처리", description = "lastReadTime을 갱신하고 해당 방의 안 읽음 카운트를 0으로 리셋합니다.")
     @PatchMapping("/{roomId}/read")
-    public ResponseEntity<ApiResponse<Void>> markRoomAsRead(@PathVariable Long roomId) {
+    public ResponseEntity<ApiResponse<Void>> markRoomAsRead(@PathVariable @Positive Long roomId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         chatRoomService.markRoomAsRead(accountId, roomId);
         return ResponseEntity.ok(ApiResponse.success());

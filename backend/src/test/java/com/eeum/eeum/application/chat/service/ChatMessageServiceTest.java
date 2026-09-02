@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,6 +50,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +60,7 @@ class ChatMessageServiceTest {
     @InjectMocks
     private ChatMessageService chatMessageService;
 
+    @Mock private com.eeum.eeum.application.account.service.AccountWriteGuard accountWriteGuard;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
     @Mock private ChatRoomRepository chatRoomRepository;
@@ -132,6 +135,48 @@ class ChatMessageServiceTest {
         verify(outboxRecorder).record(
                 eq(com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher.CHAT_MESSAGE_SENT),
                 any(ChatMessageSentEvent.class));
+    }
+
+    @Test
+    void 텍스트_발송은_계정을_먼저_잠그고_방을_잠근다() {
+        // Given — 계정 행을 잠그지 않고 로딩된 엔티티에 assertWritable()만 하면,
+        // 탈퇴 트랜잭션과 겹쳤을 때 탈퇴 이전 상태를 읽은 발송이 탈퇴 커밋 뒤에 메시지를 남긴다.
+        // WebSocket 인터셉터의 사전 검증은 트랜잭션 밖이라 이 경쟁을 막지 못한다.
+        Long accountId = 1L;
+        Long roomId = 10L;
+        Account sender = createAccount(accountId, "홍길동");
+        ChatRoom room = createGroupRoom(roomId, sender);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
+        when(chatAccessHelper.verifyParticipant(accountId, roomId))
+                .thenReturn(ChatParticipant.create(room, sender));
+        when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        chatMessageService.sendMessage(accountId, roomId, createTextRequest("안녕하세요", null));
+
+        // Then — 순서가 뒤집히면 account → chat_room 전역 잠금 순서가 깨져 교착이 난다
+        InOrder inOrder = inOrder(accountWriteGuard, chatAccessHelper);
+        inOrder.verify(accountWriteGuard).lockActive(accountId);
+        inOrder.verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
+    }
+
+    @Test
+    void 이미지_발송도_계정을_먼저_잠근다() {
+        Long accountId = 1L;
+        Long roomId = 10L;
+        Account sender = createAccount(accountId, "홍길동");
+        ChatRoom room = createGroupRoom(roomId, sender);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
+        when(chatAccessHelper.verifyParticipant(accountId, roomId))
+                .thenReturn(ChatParticipant.create(room, sender));
+        when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        chatMessageService.sendImageMessage(
+                accountId, roomId, createImageRequest("https://img.test/1.jpg", null));
+
+        InOrder inOrder = inOrder(accountWriteGuard, chatAccessHelper);
+        inOrder.verify(accountWriteGuard).lockActive(accountId);
+        inOrder.verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
     }
 
     @Test
