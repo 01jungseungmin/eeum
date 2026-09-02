@@ -5,9 +5,12 @@ import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.favorite.dto.response.*;
 import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.eeum.eeum.common.util.SecurityUtil;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -91,16 +94,24 @@ public class FavoriteController {
     @Operation(
             summary = "내 찜 전체 목록",
             description = "내가 찜한 전체 목록을 최신순으로 반환합니다. refType 정보만 포함하는 경량 응답입니다. " +
-                    "무한 스크롤용 Slice 응답이라 전체 건수(totalElements)는 없습니다."
+                    "커서 무한 스크롤입니다. 첫 페이지는 커서 없이 요청하고, 다음 페이지는 직전 응답의 " +
+                    "nextCursorValue·nextCursorId를 cursorValue·cursorId에 그대로 담아 보냅니다" +
+                    "(둘 중 하나만 보내면 400). 다음 페이지가 없으면 nextCursor 값들은 null입니다. " +
+                    "페이지 번호를 쓰지 않는 이유는 목록을 보는 중에 찜을 토글하면 목록이 밀려 " +
+                    "경계 항목이 중복되거나 누락되기 때문입니다."
     )
     @GetMapping("/me/all")
-    public ResponseEntity<ApiResponse<Slice<FavoriteResponseDto>>> getMyFavorites(
-            @PageableDefault(size = 20, sort = "createdAt",
-                    direction = Sort.Direction.DESC) Pageable pageable
+    public ResponseEntity<ApiResponse<CursorSlice<FavoriteResponseDto>>> getMyFavorites(
+            @Parameter(description = "직전 응답의 nextCursorValue. 첫 페이지면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
+            @Parameter(description = "페이지 크기(최대 50)")
+            @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                favoriteService.getMyFavorites(accountId, pageable)));
+                favoriteService.getMyFavorites(accountId, cursorValue, cursorId, size)));
     }
 
     /**
@@ -118,7 +129,8 @@ public class FavoriteController {
     @SuppressWarnings("removal")   // 레거시 경로가 레거시 서비스 메서드를 부르는 것은 의도된 짝이다
     @Operation(
             summary = "[Deprecated] 내 찜 전체 목록 (번호 페이징)",
-            description = "GET /favorites/me/all로 대체되었습니다. 신규 경로는 무한 스크롤용 Slice 응답입니다. " +
+            description = "GET /favorites/me/all로 대체되었습니다. 신규 경로는 커서 무한 스크롤(CursorSlice) 응답이라 " +
+                    "page 대신 cursorValue·cursorId를 받습니다. " +
                     "이 경로는 기존 클라이언트 호환을 위해 한시적으로 유지되며 예고 후 제거됩니다."
     )
     @GetMapping("/me")
@@ -134,16 +146,24 @@ public class FavoriteController {
     @Operation(
             summary = "상점 찜 목록",
             description = "내가 찜한 상점 목록을 상점 상세 정보(평점, 썸네일 등)와 함께 반환합니다. " +
-                    "무한 스크롤용 Slice 응답이라 전체 건수(totalElements)는 없습니다."
+                    "커서 무한 스크롤입니다. 첫 페이지는 커서 없이 요청하고, 다음 페이지는 직전 응답의 " +
+                    "nextCursorValue·nextCursorId를 cursorValue·cursorId에 그대로 담아 보냅니다" +
+                    "(둘 중 하나만 보내면 400). 다음 페이지가 없으면 nextCursor 값들은 null입니다. " +
+                    "페이지 번호를 쓰지 않는 이유는 목록을 보는 중에 찜을 토글하면 목록이 밀려 " +
+                    "경계 항목이 중복되거나 누락되기 때문입니다."
     )
     @GetMapping("/me/store")
-    public ResponseEntity<ApiResponse<Slice<FavoriteStoreResponseDto>>> getMyFavoriteStores(
-            @PageableDefault(size = 20, sort = "createdAt",
-                    direction = Sort.Direction.DESC) Pageable pageable
+    public ResponseEntity<ApiResponse<CursorSlice<FavoriteStoreResponseDto>>> getMyFavoriteStores(
+            @Parameter(description = "직전 응답의 nextCursorValue. 첫 페이지면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
+            @Parameter(description = "페이지 크기(최대 50)")
+            @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                favoriteService.getMyFavoriteStores(accountId, pageable)));
+                favoriteService.getMyFavoriteStores(accountId, cursorValue, cursorId, size)));
     }
 
     /**
@@ -159,7 +179,8 @@ public class FavoriteController {
     @SuppressWarnings("removal")   // 레거시 경로가 레거시 서비스 메서드를 부르는 것은 의도된 짝이다
     @Operation(
             summary = "[Deprecated] 상점 찜 목록 (번호 페이징)",
-            description = "GET /favorites/me/store로 대체되었습니다. 신규 경로는 무한 스크롤용 Slice 응답입니다. " +
+            description = "GET /favorites/me/store로 대체되었습니다. 신규 경로는 커서 무한 스크롤(CursorSlice) 응답이라 " +
+                    "page 대신 cursorValue·cursorId를 받습니다. " +
                     "이 경로는 기존 클라이언트 호환을 위해 한시적으로 유지되며 예고 후 제거됩니다."
     )
     @GetMapping("/me/STORE")
@@ -175,16 +196,25 @@ public class FavoriteController {
     @Operation(
             summary = "중고 게시글 찜 목록",
             description = "내가 찜한 중고 게시글을 대표 사진·가격·거래 상태와 함께 반환합니다. " +
-                    "관리자가 숨긴 게시글은 목록에서 제외됩니다."
+                    "관리자가 숨긴 게시글은 목록에서 제외됩니다. " +
+                    "커서 무한 스크롤입니다. 첫 페이지는 커서 없이 요청하고, 다음 페이지는 직전 응답의 " +
+                    "nextCursorValue·nextCursorId를 cursorValue·cursorId에 그대로 담아 보냅니다" +
+                    "(둘 중 하나만 보내면 400). 다음 페이지가 없으면 nextCursor 값들은 null입니다. " +
+                    "페이지 번호를 쓰지 않는 이유는 목록을 보는 중에 찜을 토글하면 목록이 밀려 " +
+                    "경계 항목이 중복되거나 누락되기 때문입니다."
     )
     @GetMapping("/me/used")
-    public ResponseEntity<ApiResponse<Slice<FavoriteUsedProductResponseDto>>> getMyFavoriteUsedProducts(
-            @PageableDefault(size = 20, sort = "createdAt",
-                    direction = Sort.Direction.DESC) Pageable pageable
+    public ResponseEntity<ApiResponse<CursorSlice<FavoriteUsedProductResponseDto>>> getMyFavoriteUsedProducts(
+            @Parameter(description = "직전 응답의 nextCursorValue. 첫 페이지면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
+            @Parameter(description = "페이지 크기(최대 50)")
+            @RequestParam(defaultValue = "20") @Positive @Max(50) int size
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
-                favoriteService.getMyFavoriteUsedProducts(accountId, pageable)));
+                favoriteService.getMyFavoriteUsedProducts(accountId, cursorValue, cursorId, size)));
     }
 
     // ===================== 찜 여부 확인 =====================

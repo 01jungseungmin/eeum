@@ -76,7 +76,6 @@ class AccountTokenCleanupAfterCommitIntegrationTest extends IntegrationTestSuppo
         redisUtil.delete("reauth:" + id);
         redisUtil.delete("password-reset:" + id);
 
-        accountRepository.deleteAll();
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -89,10 +88,10 @@ class AccountTokenCleanupAfterCommitIntegrationTest extends IntegrationTestSuppo
         Long accountId = savedAccount.getAccountId();
 
         // Refresh Token, Password Reset Token 을 Redis에 직접 저장
-        String refreshToken = jwtProvider.generateRefreshToken(accountId);
+        String refreshToken = jwtProvider.generateRefreshToken(accountId, 0L);
         tokenService.saveRefreshToken(accountId, refreshToken);
 
-        String passwordResetToken = tokenService.generateAndSavePasswordResetToken(accountId);
+        String passwordResetToken = tokenService.generateAndSavePasswordResetToken(accountId, 0L);
 
         assertThat(redisUtil.hasKey("refresh:" + accountId)).isTrue();
         assertThat(redisUtil.hasKey("password-reset:" + accountId)).isTrue();
@@ -124,11 +123,11 @@ class AccountTokenCleanupAfterCommitIntegrationTest extends IntegrationTestSuppo
         // given
         Long accountId = savedAccount.getAccountId();
 
-        String refreshToken = jwtProvider.generateRefreshToken(accountId);
+        String refreshToken = jwtProvider.generateRefreshToken(accountId, 0L);
         tokenService.saveRefreshToken(accountId, refreshToken);
 
         // password-reset 토큰도 저장 (이 토큰과 다른 값을 전달해서 예외 유발)
-        tokenService.generateAndSavePasswordResetToken(accountId);
+        tokenService.generateAndSavePasswordResetToken(accountId, 0L);
 
         // 만료된/잘못된 토큰으로 생성 — 유효하지 않은 JWT 문자열 사용
         String invalidResetToken = "invalid.token.value";
@@ -155,10 +154,10 @@ class AccountTokenCleanupAfterCommitIntegrationTest extends IntegrationTestSuppo
         Long accountId = savedAccount.getAccountId();
 
         // Refresh Token, ReAuth Token Redis에 저장
-        String refreshToken = jwtProvider.generateRefreshToken(accountId);
+        String refreshToken = jwtProvider.generateRefreshToken(accountId, 0L);
         tokenService.saveRefreshToken(accountId, refreshToken);
 
-        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId);
+        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId, 0L);
 
         assertThat(redisUtil.hasKey("refresh:" + accountId)).isTrue();
         assertThat(redisUtil.hasKey("reauth:" + accountId)).isTrue();
@@ -190,10 +189,10 @@ class AccountTokenCleanupAfterCommitIntegrationTest extends IntegrationTestSuppo
         // given
         Long accountId = savedAccount.getAccountId();
 
-        String refreshToken = jwtProvider.generateRefreshToken(accountId);
+        String refreshToken = jwtProvider.generateRefreshToken(accountId, 0L);
         tokenService.saveRefreshToken(accountId, refreshToken);
 
-        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId);
+        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId, 0L);
 
         assertThat(redisUtil.hasKey("refresh:" + accountId)).isTrue();
         assertThat(redisUtil.hasKey("reauth:" + accountId)).isTrue();

@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UsedProductTest {
 
     private static final Long SELLER_ID = 1L;
+    private static final Long BUYER_ID = 2L;
 
     // ─────────────────── 생성 ───────────────────
 
@@ -99,7 +100,7 @@ class UsedProductTest {
     void 판매중이면_예약할_수_있다() {
         UsedProduct product = fixedPriceProduct();
 
-        product.reserve();
+        product.reserve(null);
 
         assertThat(product.getStatus()).isEqualTo(UsedProductStatus.RESERVED);
     }
@@ -107,9 +108,9 @@ class UsedProductTest {
     @Test
     void 예약중인_글은_다시_예약할_수_없다() {
         UsedProduct product = fixedPriceProduct();
-        product.reserve();
+        product.reserve(null);
 
-        assertThatThrownBy(product::reserve)
+        assertThatThrownBy(() -> product.reserve(null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_ALREADY_RESERVED);
@@ -118,7 +119,7 @@ class UsedProductTest {
     @Test
     void 예약을_취소하면_판매중으로_돌아간다() {
         UsedProduct product = fixedPriceProduct();
-        product.reserve();
+        product.reserve(null);
 
         product.cancelReservation();
 
@@ -141,7 +142,7 @@ class UsedProductTest {
         UsedProduct product = fixedPriceProduct();
 
         // when
-        product.markSold();
+        product.markSold(null);
 
         // then
         assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
@@ -150,9 +151,9 @@ class UsedProductTest {
     @Test
     void 예약중인_글도_거래를_완료할_수_있다() {
         UsedProduct product = fixedPriceProduct();
-        product.reserve();
+        product.reserve(null);
 
-        product.markSold();
+        product.markSold(null);
 
         assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
     }
@@ -160,11 +161,11 @@ class UsedProductTest {
     @Test
     void 판매완료된_글은_어떤_상태로도_되돌릴_수_없다() {
         UsedProduct sold = fixedPriceProduct();
-        sold.markSold();
+        sold.markSold(null);
 
-        assertSoldRejected(sold::reserve);
+        assertSoldRejected(() -> sold.reserve(null));
         assertSoldRejected(sold::cancelReservation);
-        assertSoldRejected(sold::markSold);
+        assertSoldRejected(() -> sold.markSold(null));
     }
 
     // ─────────────────── 노출 / 삭제 ───────────────────
@@ -173,7 +174,7 @@ class UsedProductTest {
     void 관리자_숨김은_거래_상태를_건드리지_않는다() {
         // given — 숨김과 거래 상태는 독립된 축이다
         UsedProduct product = fixedPriceProduct();
-        product.reserve();
+        product.reserve(null);
 
         // when
         product.hide();
@@ -190,7 +191,7 @@ class UsedProductTest {
     void 삭제하면_deletedAt이_남고_상태는_유지된다() {
         // given — 판매완료 글의 후기·채팅·신고 이력이 가리킬 대상을 남겨야 한다
         UsedProduct product = fixedPriceProduct();
-        product.markSold();
+        product.markSold(null);
 
         // when
         product.softDelete();
@@ -226,6 +227,119 @@ class UsedProductTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_PRICE);
+    }
+
+    // ─────────────────── 거래 상대 지정 ───────────────────
+
+    @Test
+    void 예약하면_지정한_구매자가_기록된다() {
+        UsedProduct product = fixedPriceProduct();
+
+        product.reserve(buyer());
+
+        assertThat(product.getBuyer()).isNotNull();
+        assertThat(product.getBuyer().getAccountId()).isEqualTo(BUYER_ID);
+    }
+
+    @Test
+    void 구매자_없이도_예약할_수_있다() {
+        // 상대 없이 "예약중"만 표시하는 흐름을 막지 않는다.
+        UsedProduct product = fixedPriceProduct();
+
+        product.reserve(null);
+
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.RESERVED);
+        assertThat(product.getBuyer()).isNull();
+    }
+
+    @Test
+    void 예약을_취소하면_지정했던_구매자도_함께_사라진다() {
+        // 남겨두면 취소된 거래의 상대가 후기 자격을 갖는다.
+        UsedProduct product = fixedPriceProduct();
+        product.reserve(buyer());
+
+        product.cancelReservation();
+
+        assertThat(product.getBuyer()).isNull();
+        assertThat(product.isPurchasedBy(BUYER_ID)).isFalse();
+    }
+
+    @Test
+    void 판매완료_시_구매자를_생략하면_예약_때_지정한_상대가_유지된다() {
+        // 예약 상대와 그대로 거래한 흐름에서 구매자가 사라지면 후기를 쓸 수 없다.
+        UsedProduct product = fixedPriceProduct();
+        product.reserve(buyer());
+
+        product.markSold(null);
+
+        assertThat(product.isPurchasedBy(BUYER_ID)).isTrue();
+    }
+
+    @Test
+    void 예약_없이_바로_판매완료해도_구매자를_지정할_수_있다() {
+        UsedProduct product = fixedPriceProduct();
+
+        product.markSold(buyer());
+
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
+        assertThat(product.isPurchasedBy(BUYER_ID)).isTrue();
+    }
+
+    @Test
+    void 구매자_없이_판매완료하면_후기_자격도_생기지_않는다() {
+        // 앱 밖에서 성사된 거래를 정리하는 경우. 후기는 상대가 지정된 거래에만 붙는다.
+        UsedProduct product = fixedPriceProduct();
+
+        product.markSold(null);
+
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
+        assertThat(product.getBuyer()).isNull();
+        assertThat(product.isPurchasedBy(BUYER_ID)).isFalse();
+    }
+
+    @Test
+    void 판매자_본인은_거래_상대가_될_수_없다() {
+        // 허용하면 자기 거래에 후기를 남기는 경로가 생긴다.
+        UsedProduct product = fixedPriceProduct();
+
+        assertThatThrownBy(() -> product.markSold(seller()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+    }
+
+    @Test
+    void 예약_단계에서도_판매자_본인_지정을_막는다() {
+        UsedProduct product = fixedPriceProduct();
+
+        assertThatThrownBy(() -> product.reserve(seller()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+    }
+
+    @Test
+    void 판매완료_전에는_구매자로_지정돼도_후기_자격이_없다() {
+        // isPurchasedBy는 SOLD를 함께 본다 — 예약 상태에서 후기가 열리면 안 된다.
+        UsedProduct product = fixedPriceProduct();
+        product.reserve(buyer());
+
+        assertThat(product.isPurchasedBy(BUYER_ID)).isFalse();
+    }
+
+    @Test
+    void 다른_사람은_구매자로_판정되지_않는다() {
+        UsedProduct product = fixedPriceProduct();
+        product.markSold(buyer());
+
+        assertThat(product.isPurchasedBy(999L)).isFalse();
+    }
+
+    private Account buyer() {
+        Account account = Account.createUser(
+                "buyer@test.com", "encoded-pw", "구매자", "구매자닉", "010-1111-1111");
+        ReflectionTestUtils.setField(account, "accountId", BUYER_ID);
+        return account;
     }
 
     private void assertSoldRejected(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {

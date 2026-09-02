@@ -11,17 +11,21 @@ import com.eeum.eeum.application.chat.service.ChatRoomService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.security.websocket.StompPrincipal;
+import com.eeum.eeum.exception.ErrorCode;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.util.stream.Collectors;
 
 /**
  * STOMP 수신 컨트롤러 — 브로커가 없는 인스턴스에서는 뜰 이유가 없다.
@@ -43,7 +47,7 @@ public class ChatWebSocketController {
     @MessageMapping("/chat/rooms/{roomId}/messages")
     public void sendMessage(
             @DestinationVariable Long roomId,
-            ChatMessageSendRequestDto request,
+            @Valid ChatMessageSendRequestDto request,
             Principal principal
     ) {
         Long accountId = resolveAccountId(principal);
@@ -60,7 +64,7 @@ public class ChatWebSocketController {
     @MessageMapping("/chat/rooms/{roomId}/messages/image")
     public void sendImageMessage(
             @DestinationVariable Long roomId,
-            ChatImageMessageSendRequestDto request,
+            @Valid ChatImageMessageSendRequestDto request,
             Principal principal
     ) {
         Long accountId = resolveAccountId(principal);
@@ -89,7 +93,7 @@ public class ChatWebSocketController {
     @MessageMapping("/chat/rooms/{roomId}/typing")
     public void sendTyping(
             @DestinationVariable Long roomId,
-            ChatTypingRequestDto request,
+            @Valid ChatTypingRequestDto request,
             Principal principal
     ) {
         Long accountId = resolveAccountId(principal);
@@ -105,6 +109,27 @@ public class ChatWebSocketController {
         messagingTemplate.convertAndSend("/sub/chat/rooms/" + roomId + "/typing", response);
         log.debug("WebSocket 타이핑 이벤트 브로드캐스트: roomId={}, accountId={}, typing={}",
                 roomId, accountId, request.isTyping());
+    }
+
+    /**
+     * payload Bean Validation 실패 — 클라이언트 잘못이므로 서버 오류로 뭉뚱그리지 않는다.
+     *
+     * <p>이 핸들러가 없으면 아래 {@code Exception} 핸들러가 잡아 INTERNAL_ERROR로 응답한다.
+     * 어떤 필드가 왜 틀렸는지 알 수 없어 클라이언트가 고칠 수 없다.
+     * 응답 형식은 REST의 {@code GlobalExceptionHandler.handleValidationException}과 맞춘다.
+     */
+    @MessageExceptionHandler(MethodArgumentNotValidException.class)
+    @SendToUser("/sub/errors")
+    public ApiResponse<Void> handleValidationException(MethodArgumentNotValidException e) {
+        // payload 자체를 변환하지 못하면 bindingResult가 없다
+        String errorMessage = e.getBindingResult() == null
+                ? "요청 값이 올바르지 않습니다."
+                : e.getBindingResult().getFieldErrors().stream()
+                        .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                        .collect(Collectors.joining(", "));
+
+        log.warn("WebSocket payload 검증 실패: {}", errorMessage);
+        return ApiResponse.fail(ErrorCode.VALIDATION_INVALID_INPUT.getCode(), errorMessage);
     }
 
     // BusinessException(비즈니스 오류) — 클라이언트에 구조화된 에러 전달

@@ -17,6 +17,7 @@ import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -33,12 +34,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * 신고 조치(숨김·삭제)와 같은 게시글에 대한 다른 쓰기의 경쟁을 실제 MySQL에서 검증한다.
@@ -74,6 +77,7 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
     private final PlatformTransactionManager transactionManager;
 
     private Long sellerId;
+    private Long buyerId;
     private Long productId;
 
     @BeforeEach
@@ -84,7 +88,10 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
                 "report-seller-" + tag + "@test.com", "encoded_pw", "판매자", "신고판매자" + tag, "010-2222-2222"));
         Account viewer = accountRepository.save(Account.createUser(
                 "report-viewer-" + tag + "@test.com", "encoded_pw", "찜한사람", "신고찜꾼" + tag, "010-1111-1111"));
+        Account buyer = accountRepository.save(Account.createUser(
+                "report-buyer-" + tag + "@test.com", "encoded_pw", "구매자", "신고구매자" + tag, "010-3333-3333"));
         sellerId = seller.getAccountId();
+        buyerId = buyer.getAccountId();
 
         Region region = regionRepository.save(
                 Region.create("1168" + tag, "서울특별시", "강남구", "역삼동", 3));
@@ -101,27 +108,39 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
 
     @AfterEach
     void tearDown() {
+        notificationRepository.deleteAll();
         favoriteRepository.deleteAll();
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        deleteAccountsAbsorbingLateNotifications();
     }
 
-    // 조치 알림은 @TransactionalEventListener(AFTER_COMMIT) + @Async라 테스트 본문이 끝난 뒤에
-    // 들어올 수 있다. notification은 account를 FK로 참조하므로, 늦게 도착한 알림이 하나라도
-    // 남아 있으면 계정 삭제가 막히고 다음 테스트가 엉뚱한 오류로 죽는다.
-    private void deleteAccountsAbsorbingLateNotifications() {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            notificationRepository.deleteAllInBatch();
-            try {
-                accountRepository.deleteAll();
-                return;
-            } catch (DataIntegrityViolationException retryable) {
-                sleepQuietly(100);
-            }
-        }
-        throw new IllegalStateException("비동기 알림이 계속 도착해 테스트 계정을 정리하지 못했다");
+    @Test
+    void 예약된_글을_관리자가_지우면_예약이_풀리고_구매자에게_알림이_간다() {
+        // given: 사용자 삭제 경로는 예약 중인 글의 삭제를 아예 막는다 — 상대가 거래를 기다리는데
+        // 글이 말없이 사라지면 이유를 알 수 없어서다. 관리자는 불법 게시글을 즉시 내려야 하므로
+        // 막을 수 없지만, 구매자가 겪는 상황은 똑같다. 정리하지 않으면 예약이 RESERVED로
+        // 영구히 남는다 — 삭제된 글은 상태 전이 경로가 걸러내 판매자도 취소할 수 없다.
+        reserveDirectly();
+
+        // when
+        inTransaction(() -> reportActionExecutor.execute(
+                ReportAction.DELETE_POST, productId, sellerId, "판매 금지 품목"));
+
+        // then: DB에 실제로 반영됐는지 본다
+        UsedProduct deleted = product();
+        assertThat(deleted.isDeleted()).isTrue();
+        assertThat(deleted.getStatus()).isEqualTo(UsedProductStatus.SELLING);
+        assertThat(deleted.getBuyer()).isNull();
+
+        // 알림은 AFTER_COMMIT @Async라 커밋 뒤에 도착한다.
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                assertThat(notificationRepository.findAll())
+                        .as("예약이 취소됐는데 구매자가 통보를 받지 못했다")
+                        .anySatisfy(notification -> {
+                            assertThat(notification.getAccount().getAccountId()).isEqualTo(buyerId);
+                            assertThat(notification.getTitle()).contains("예약이 취소");
+                        }));
     }
 
     // 신고 조치 실행은 호출자의 트랜잭션을 전제한다(@Transactional 없음).
@@ -250,6 +269,13 @@ class UsedProductReportActionConcurrencyIntegrationTest extends IntegrationTestS
 
     private Long inTransactionReturning(java.util.function.Supplier<Long> action) {
         return new TransactionTemplate(transactionManager).execute(status -> action.get());
+    }
+
+    // 신고 조치 경로를 거치지 않고 예약만 걸어둔다 — 검증 대상은 삭제 경로다.
+    private void reserveDirectly() {
+        UsedProduct product = usedProductRepository.findById(productId).orElseThrow();
+        product.reserve(accountRepository.findById(buyerId).orElseThrow());
+        usedProductRepository.saveAndFlush(product);
     }
 
     // 신고 조치 경로를 거치지 않고 초기 상태만 숨김으로 만든다.

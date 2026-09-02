@@ -26,7 +26,14 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uk_chat_room_active_ref", columnNames = {"active_ref_key"})
         },
         indexes = {
-                @Index(name = "idx_chat_room_ref", columnList = "ref_type, ref_id, is_active")
+                @Index(name = "idx_chat_room_ref", columnList = "ref_type, ref_id, is_active"),
+                // 지역 공개 방 탐색 — 지역·활성으로 좁히고 최근 대화순으로 읽는다.
+                // 없으면 chat_room 전체를 스캔한 뒤 정렬한다(EXPLAIN: type=ALL, Using filesort).
+                // 정렬 키(last_message_at, chat_room_id)를 뒤에 붙여야 커서 조건이 range로 풀리고
+                // 정렬도 인덱스가 처리한다(backward index scan).
+                // type은 넣지 않는다 — IN 조건을 정렬 키 앞에 두면 인덱스 정렬이 깨진다.
+                @Index(name = "idx_chat_room_public_list",
+                        columnList = "region_id, is_active, last_message_at, chat_room_id")
         }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -59,6 +66,16 @@ public class ChatRoom extends BaseEntity {
     @Column(name = "name", length = 100)
     private String name;
 
+    // 중고거래 1:1 방의 구매자. USED_PRODUCT 방에서만 채워지고 그 외 방에서는 항상 null이다.
+    // 판매자는 UsedProduct.seller로 결정되므로 따로 두지 않는다.
+    //
+    // FK로 걸지 않는다 — 같은 테이블의 refId와 같은 정책이다. 이 값은 생성 경로에서 조회·검증한
+    // 계정 ID만 들어오고, 참조 무결성보다 active_ref_key 생성식의 입력이라는 성격이 강하다.
+    // (계정은 물리 삭제되지 않으므로 FK를 걸어도 무방하다. 필요해지면 전환할 수 있다.)
+    // 아래 active_ref_key 생성식이 이 컬럼을 참조하므로 컬럼명을 바꾸면 DDL도 함께 바꿔야 한다.
+    @Column(name = "buyer_account_id")
+    private Long buyerAccountId;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
@@ -76,8 +93,13 @@ public class ChatRoom extends BaseEntity {
     //   ALTER TABLE chat_room DROP INDEX uk_chat_room_active_ref;
     //   ALTER TABLE chat_room DROP COLUMN active_ref_key;
     //   ALTER TABLE chat_room ADD COLUMN active_ref_key VARCHAR(80)
-    //       GENERATED ALWAYS AS (CASE WHEN is_active = 1 AND ref_type = 'STORE' AND ref_id IS NOT NULL
-    //                            THEN CONCAT(ref_type, ':', ref_id) END) STORED;
+    //       GENERATED ALWAYS AS (CASE
+    //           WHEN is_active = 1 AND ref_type = 'STORE' AND ref_id IS NOT NULL
+    //               THEN CONCAT(ref_type, ':', ref_id)
+    //           WHEN is_active = 1 AND ref_type = 'USED_PRODUCT' AND ref_id IS NOT NULL
+    //                AND buyer_account_id IS NOT NULL
+    //               THEN CONCAT(ref_type, ':', ref_id, ':', buyer_account_id)
+    //       END) STORED;
     //   ALTER TABLE chat_room ADD CONSTRAINT uk_chat_room_active_ref UNIQUE (active_ref_key);
     // 또한 최초 반영 시 이미 중복 ACTIVE 방이 있으면 유니크 인덱스 생성이 실패하고
     // ddl-auto=update는 이를 로그만 남기고 넘어가므로, 배포 전 아래로 중복을 정리해야 한다.
@@ -94,7 +116,12 @@ public class ChatRoom extends BaseEntity {
             // 사장이 보는 방과 고객이 유입되는 방이 갈린다. 가게당 ACTIVE 단톡방은 1개다.
             columnDefinition = "VARCHAR(80) GENERATED ALWAYS AS ("
                     + "CASE WHEN is_active = 1 AND ref_type = 'STORE' AND ref_id IS NOT NULL "
-                    + "THEN CONCAT(ref_type, ':', ref_id) END) STORED"
+                    + "THEN CONCAT(ref_type, ':', ref_id) "
+                    // 중고거래는 "상품 + 구매자"당 ACTIVE 방 1개다. 판매자는 상품에서 결정되므로 키에 넣지 않는다.
+                    + "WHEN is_active = 1 AND ref_type = 'USED_PRODUCT' AND ref_id IS NOT NULL "
+                    + "AND buyer_account_id IS NOT NULL "
+                    + "THEN CONCAT(ref_type, ':', ref_id, ':', buyer_account_id) "
+                    + "END) STORED"
     )
     private String activeRefKey;
 
@@ -108,6 +135,29 @@ public class ChatRoom extends BaseEntity {
     private Region region;
 
     // ===================== 정적 팩토리 메서드 =====================
+
+    /**
+     * 중고거래 1:1 문의방.
+     *
+     * <p>이름을 두지 않는다 — 상대와 상품이 방을 식별하므로 목록·상세에서 그 둘로 표시한다.
+     * 지역도 두지 않는다 — 공개 방 목록(GROUP/GROUP_STREET) 필터용 필드라 1:1 방과 무관하다.
+     *
+     * <p>{@code lastMessageAt}은 첫 메시지 전까지 null이다. 내 채팅방 목록은
+     * {@code lastMessageAt DESC NULLS LAST}라 대화 없는 방은 목록 맨 뒤에 놓인다.
+     */
+    public static ChatRoom createPrivateInquiry(
+            Account buyer,
+            Long usedProductId
+    ) {
+        ChatRoom room = new ChatRoom();
+        room.creator = buyer;
+        room.type = ChatRoomType.PRIVATE;
+        room.refType = ChatRoomRefType.USED_PRODUCT;
+        room.refId = usedProductId;
+        room.buyerAccountId = buyer.getAccountId();
+        room.isActive = true;
+        return room;
+    }
 
     public static ChatRoom createGroup(
             Account creator,
@@ -152,6 +202,11 @@ public class ChatRoom extends BaseEntity {
     // 가게 단톡방 여부 (종료 권한 판정에 사용)
     public boolean isStoreRoom() {
         return this.refType == ChatRoomRefType.STORE && this.refId != null;
+    }
+
+    // 중고거래 1:1 문의방 여부 (잠금 대상·종료 권한 판정에 사용)
+    public boolean isUsedProductRoom() {
+        return this.refType == ChatRoomRefType.USED_PRODUCT && this.refId != null;
     }
 
     // 채팅방 생성자 여부

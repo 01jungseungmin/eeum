@@ -18,10 +18,12 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
     // 본인 참여 여부 검증 (상태 무관 — 재입장 처리용)
     Optional<ChatParticipant> findByChatRoom_ChatroomIdAndAccount_AccountId(Long roomId, Long accountId);
 
-    // 참여 여부 + 방 활성 여부를 한 번에 검증 (WebSocket SUBSCRIBE/SEND).
+    // 참여 여부 + 방 활성 여부 + 요청자 계정 상태를 한 번에 검증 (WebSocket SUBSCRIBE/SEND).
     // 메시지 1건마다 호출되므로 엔티티 대신 스칼라 projection만 조회한다.
+    // 계정 상태를 같이 읽는 이유는 ChatAccessStatus 주석 참고 — 조인 하나로 별도 조회를 없앤다.
     @Query("""
-        SELECT new com.eeum.eeum.domain.chat.repository.ChatAccessStatus(p.status, p.chatRoom.isActive)
+        SELECT new com.eeum.eeum.domain.chat.repository.ChatAccessStatus(
+                p.status, p.chatRoom.isActive, p.account.status)
         FROM ChatParticipant p
         WHERE p.chatRoom.chatroomId = :roomId
           AND p.account.accountId = :accountId

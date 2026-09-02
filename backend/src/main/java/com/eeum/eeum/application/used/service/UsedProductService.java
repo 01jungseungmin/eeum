@@ -7,6 +7,8 @@ import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
+import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.application.account.service.AccountWriteGuard;
@@ -20,18 +22,23 @@ import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.category.repository.CategoryRepository;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.event.UsedProductSoldEvent;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.common.dto.response.CursorSlice;
+import com.eeum.eeum.domain.used.repository.UsedProductCursor;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductSearchCondition;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +47,9 @@ import org.springframework.data.domain.Slice;
 
 import java.util.ArrayList;
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -53,6 +62,8 @@ public class UsedProductService {
     private final EntityManager entityManager;
     private final AccountRepository accountRepository;
     private final AccountWriteGuard accountWriteGuard;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final CategoryRepository categoryRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final RegionRepository regionRepository;
@@ -83,16 +94,26 @@ public class UsedProductService {
         );
 
         // 등록 직후에는 사진이 없다 — 사진은 별도 엔드포인트로 올린다.
-        return UsedProductDetailResponseDto.from(usedProductRepository.save(product), List.of());
+        return UsedProductDetailResponseDto.from(
+                usedProductRepository.save(product), List.of(), sellerId);
     }
 
-    // 내 동네 중고 목록
+    /**
+     * 내 동네 중고 목록 — 커서 무한 스크롤.
+     *
+     * <p>페이지 번호를 쓰지 않는 이유는 새 글이 목록 맨 앞에 꽂혀, 스크롤 도중 등록된 한 건에
+     * 경계 항목이 중복되거나 누락되기 때문이다. {@code pageable}에서는 정렬과 크기만 쓴다.
+     */
     @Transactional(readOnly = true)
-    public Slice<UsedProductSummaryResponseDto> getRegionProducts(
+    public CursorSlice<UsedProductSummaryResponseDto> getRegionProducts(
             Long viewerId,
             UsedProductSearchRequestDto request,
+            String cursorValue,
+            Long cursorId,
             Pageable pageable
     ) {
+        // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
+        UsedProductCursor cursor = UsedProductCursor.ofNullable(cursorValue, cursorId);
         validatePriceRange(request.getMinPrice(), request.getMaxPrice());
 
         Long targetRegionId = resolveViewRegionId(viewerId, request.getRegionId());
@@ -108,7 +129,8 @@ public class UsedProductService {
                 request.getStatuses()
         );
 
-        Slice<UsedProduct> products = usedProductRepository.search(resolved, pageable);
+        CursorSlice<UsedProduct> products = usedProductRepository.search(
+                resolved, cursor, pageable.getPageSize(), pageable.getSort());
 
         Map<Long, String> thumbnails = findThumbnailUrls(products.getContent());
 
@@ -121,7 +143,7 @@ public class UsedProductService {
         UsedProduct product = getVisibleOrThrow(viewerId, usedProductId);
 
         return UsedProductDetailResponseDto.from(
-                product, usedProductImageService.getImages(usedProductId));
+                product, usedProductImageService.getImages(usedProductId), viewerId);
     }
 
     // 상세 조회 + 조회수 증가.
@@ -143,7 +165,7 @@ public class UsedProductService {
             entityManager.refresh(product);
         }
 
-        return UsedProductDetailResponseDto.from(product, images);
+        return UsedProductDetailResponseDto.from(product, images, viewerId);
     }
 
     // 최소 가격이 최대 가격보다 크면 결과가 반드시 빈다.
@@ -195,7 +217,112 @@ public class UsedProductService {
         usedProductRepository.flush();
 
         return UsedProductDetailResponseDto.from(
-                product, usedProductImageService.getImages(usedProductId));
+                product, usedProductImageService.getImages(usedProductId), sellerId);
+    }
+
+    // ===================== 거래 상태 =====================
+
+    /**
+     * 예약 처리. 구매자 지정은 선택이다 — 상대 없이 "예약중"만 표시하는 흐름을 막지 않는다.
+     *
+     * <p>잠금 순서는 수정·삭제와 같은 account → used_product다. 관리자 숨김·삭제 조치와
+     * 같은 행을 다투므로, 잠그지 않으면 사라진 글이 예약 상태로 되살아난다.
+     */
+    @Transactional
+    public UsedProductDetailResponseDto reserve(Long sellerId, Long usedProductId, Long buyerId) {
+        return changeTradeStatus(sellerId, usedProductId, buyerId,
+                (product, buyer) -> product.reserve(buyer));
+    }
+
+    @Transactional
+    public UsedProductDetailResponseDto cancelReservation(Long sellerId, Long usedProductId) {
+        return changeTradeStatus(sellerId, usedProductId, null,
+                (product, buyer) -> product.cancelReservation());
+    }
+
+    /**
+     * 판매완료 처리. 여기서 확정된 구매자가 후기 작성 자격의 근거가 된다.
+     *
+     * <p>구매자를 생략하면 예약 때 지정해 둔 상대를 그대로 유지한다.
+     * 앱 밖에서 성사된 거래는 구매자 없이 완료할 수 있고, 그 거래에는 후기가 붙지 않는다.
+     *
+     * <p><b>생략한 경우에도 그 상대를 검증한다.</b> 예약 이후 탈퇴·정지했을 수 있는데,
+     * 그대로 확정하면 비활성 계정이 거래 구매자이자 후기 자격자로 남고 판매완료 알림까지 간다.
+     * 검증 대상을 맞추기 위해 예약 상대를 미리 읽어 명시적으로 넘긴다.
+     */
+    @Transactional
+    public UsedProductDetailResponseDto markSold(Long sellerId, Long usedProductId, Long buyerId) {
+        // 잠금 없는 사전 읽기. 낡은 값은 상품을 잠근 뒤 아래에서 대조해 걸러낸다.
+        Long effectiveBuyerId = buyerId != null
+                ? buyerId
+                : usedProductRepository.findBuyerIdByUsedProductId(usedProductId).orElse(null);
+
+        return changeTradeStatus(sellerId, usedProductId, effectiveBuyerId,
+                (product, buyer) -> {
+                    if (buyerId == null) {
+                        assertReservedBuyerUnchanged(product, effectiveBuyerId);
+                    }
+
+                    product.markSold(buyer);
+
+                    // 후기를 쓸 상대가 있을 때만 알린다.
+                    Account confirmed = product.getBuyer();
+                    if (confirmed != null) {
+                        eventPublisher.publishEvent(new UsedProductSoldEvent(
+                                usedProductId, confirmed.getAccountId(), product.getTitle()));
+                    }
+                });
+    }
+
+    /**
+     * 사전 읽기 이후 예약 상대가 바뀌지 않았는지 확인한다.
+     *
+     * <p>잠금 순서(account → used_product) 때문에 구매자 ID를 상품보다 먼저 읽어야 하는데,
+     * 그 사이 다른 상태 전이가 예약 상대를 바꿀 수 있다. 그대로 진행하면
+     * <b>잠그지도 검증하지도 않은 계정</b>이 구매자로 확정된다. 막고 재시도하게 한다.
+     */
+    private void assertReservedBuyerUnchanged(UsedProduct product, Long expectedBuyerId) {
+        Long currentBuyerId = product.getBuyer() == null
+                ? null
+                : product.getBuyer().getAccountId();
+        if (!Objects.equals(currentBuyerId, expectedBuyerId)) {
+            throw new ConflictException(ErrorCode.USED_PRODUCT_BUYER_CHANGED);
+        }
+    }
+
+    // 상태 전이 3종의 공통 골격 — 잠금·소유권·구매자 조회가 같고 전이 규칙만 다르다.
+    // 전이 검증 자체는 엔티티가 한다(어느 경로로 불러도 같은 규칙이 적용되도록).
+    private UsedProductDetailResponseDto changeTradeStatus(
+            Long sellerId,
+            Long usedProductId,
+            Long buyerId,
+            BiConsumer<UsedProduct, Account> transition
+    ) {
+        // account → used_product 순서. 두 계정은 ID 오름차순으로 잠가
+        // 반대 방향 요청과 교착되지 않게 한다(문의방 생성과 같은 규약).
+        Account buyer = null;
+        if (buyerId == null) {
+            accountWriteGuard.lockActive(sellerId);
+        } else if (sellerId <= buyerId) {
+            accountWriteGuard.lockActive(sellerId);
+            buyer = lockAssignableBuyerOrThrow(buyerId);
+        } else {
+            buyer = lockAssignableBuyerOrThrow(buyerId);
+            accountWriteGuard.lockActive(sellerId);
+        }
+
+        UsedProduct product = getOwnedForUpdateOrThrow(sellerId, usedProductId);
+
+        if (buyer != null) {
+            assertInquiredThisProduct(usedProductId, buyerId);
+        }
+
+        transition.accept(product, buyer);
+
+        // 상태·구매자 변경을 먼저 반영해야 응답이 변경 전 값을 담지 않는다.
+        usedProductRepository.flush();
+        return UsedProductDetailResponseDto.from(
+                product, usedProductImageService.getImages(usedProductId), sellerId);
     }
 
     @Transactional
@@ -216,6 +343,51 @@ public class UsedProductService {
         // 찜을 함께 정리한다. 남겨두면 다른 사용자의 찜 목록에 사라진 글이 계속 남는다.
         // 같은 트랜잭션에서 처리해야 잠깐이라도 죽은 찜이 보이는 구간이 생기지 않는다.
         favoriteService.deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, usedProductId);
+
+        // 이 게시글을 가리키는 알림은 지우지 않는다. 후기 자격이 거래 사실 기준이라
+        // 후기 요청 알림은 글이 사라진 뒤에도 구매자가 후기를 쓰는 유일한 진입점이다.
+        // (NotificationService.deleteAllByRefTypeAndRefId를 여기에 배선하면 그 경로가 끊긴다.)
+    }
+
+    /**
+     * 구매자로 지정할 계정을 잠그고 사용 가능 상태를 확인한다.
+     *
+     * <p>상태를 보는 이유: 존재만 확인하면 탈퇴·정지·익명화된 계정도 구매자로 확정되고,
+     * 그 계정으로 후기 요청 알림과 푸시가 나간다. 다른 쓰기 경로가 모두 actor에게
+     * {@code AccountWriteGuard}를 적용하는데 이 참조만 예외였다.
+     *
+     * <p>잠그는 이유: 상태를 판정하기 때문이다. 잠그지 않으면 확인 직후 탈퇴가 커밋돼
+     * 탈퇴한 계정이 구매자로 확정될 수 있다(문의방 생성의 판매자 잠금과 같은 이유).
+     *
+     * <p>두 계정을 잠그므로 순환 대기가 문제가 되는데, 호출부({@code changeTradeStatus})가
+     * 판매자·구매자를 ID 오름차순으로 잠가 막는다 — 서로를 구매자로 지정하는 두 거래가
+     * 동시에 들어와도 잠금 순서가 하나다.
+     */
+    private Account lockAssignableBuyerOrThrow(Long buyerId) {
+        Account buyer = accountRepository.findByIdWithLock(buyerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+        if (!buyer.isActive()) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+        }
+        return buyer;
+    }
+
+    /**
+     * 이 상품으로 문의한 적이 있는 상대만 구매자로 지정할 수 있다.
+     *
+     * <p>존재하는 계정이기만 하면 지정할 수 있으면, 판매자가 아무 계정이나 구매자로 세워
+     * 후기 작성 권한과 판매완료 알림을 줄 수 있다. 지목당한 사람은 하지도 않은 거래의
+     * 후기 요청을 받는다.
+     *
+     * <p>실패 사유를 계정 상태와 구분하지 않는다 — 구분하면 판매자가 임의의 계정 ID로
+     * 다른 사용자의 상태를 떠볼 수 있다.
+     */
+    private void assertInquiredThisProduct(Long usedProductId, Long buyerId) {
+        boolean inquired = chatRoomRepository.existsByRefTypeAndRefIdAndBuyerAccountId(
+                ChatRoomRefType.USED_PRODUCT, usedProductId, buyerId);
+        if (!inquired) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_BUYER);
+        }
     }
 
     // ===================== 내부 헬퍼 =====================

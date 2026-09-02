@@ -101,7 +101,6 @@ class UsedProductFavoriteConcurrencyIntegrationTest extends IntegrationTestSuppo
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

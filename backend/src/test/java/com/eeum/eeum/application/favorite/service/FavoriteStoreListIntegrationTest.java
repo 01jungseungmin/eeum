@@ -20,7 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -69,16 +69,17 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
         favoriteRepository.deleteAll();
         storeRepository.deleteAll();
         ownerInfoRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test
     void 비공개_상점은_페이징_전에_걸러져_요청한_페이지_크기와_다음_페이지_판정이_유지된다() {
         // when: 노출 대상은 3곳뿐이다.
-        Slice<FavoriteStoreResponseDto> first =
-                favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(0, 2));
-        Slice<FavoriteStoreResponseDto> second =
-                favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(1, 2));
+        CursorSlice<FavoriteStoreResponseDto> first =
+                favoriteService.getMyFavoriteStores(viewer.getAccountId(), null, null, 2);
+        CursorSlice<FavoriteStoreResponseDto> second =
+                favoriteService.getMyFavoriteStores(
+                        viewer.getAccountId(),
+                        first.getNextCursorValue(), first.getNextCursorId(), 2);
 
         // then: 조회 후 걸렀다면 첫 페이지가 2건보다 적거나 hasNext 판정이 어긋난다.
         assertThat(first.getContent()).hasSize(2);
@@ -100,8 +101,8 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void 미승인_정지_탈퇴_상점은_목록에_나오지_않는다() {
-        Slice<FavoriteStoreResponseDto> result =
-                favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(0, 20));
+        CursorSlice<FavoriteStoreResponseDto> result =
+                favoriteService.getMyFavoriteStores(viewer.getAccountId(), null, null, 20);
 
         assertThat(result.getContent())
                 .extracting(FavoriteStoreResponseDto::getName)
@@ -114,7 +115,7 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
         SqlCaptureInspector.reset();
 
         // when
-        favoriteService.getMyFavoriteStores(viewer.getAccountId(), PageRequest.of(0, 20));
+        favoriteService.getMyFavoriteStores(viewer.getAccountId(), null, null, 20);
 
         // then
         assertThat(countQueries()).as("실행된 count 쿼리: %s", countQueries()).isEmpty();
@@ -136,13 +137,16 @@ class FavoriteStoreListIntegrationTest extends IntegrationTestSupport {
     void 찜한_상점이_없으면_실제_적용된_정렬을_담아_빈_목록을_반환한다() {
         favoriteRepository.deleteAll();
 
-        Slice<FavoriteStoreResponseDto> result = favoriteService.getMyFavoriteStores(
-                viewer.getAccountId(),
-                PageRequest.of(0, 20, org.springframework.data.domain.Sort.by("name")));
+        CursorSlice<FavoriteStoreResponseDto> result =
+                favoriteService.getMyFavoriteStores(viewer.getAccountId(), null, null, 20);
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.hasNext()).isFalse();
-        assertThat(result.getSort().getOrderFor("createdAt")).isNotNull();
+        // 빈 목록에서도 적용 정렬을 그대로 설명해야 한다. 커서는 비운다 —
+        // 남겨두면 클라이언트가 빈 페이지를 한 번 더 요청한다.
+        assertThat(result.getSort()).containsExactly("createdAt,DESC", "favoriteId,DESC");
+        assertThat(result.getNextCursorValue()).isNull();
+        assertThat(result.getNextCursorId()).isNull();
     }
 
     private List<String> countQueries() {

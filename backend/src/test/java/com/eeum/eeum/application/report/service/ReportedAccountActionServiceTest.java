@@ -34,6 +34,7 @@ class ReportedAccountActionServiceTest {
 
     @Mock private AccountRepository accountRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
 
     // 제재 자격 판정은 이 서비스가 지켜야 하는 계약 그 자체다.
     // Mock으로 두면 관리자·탈퇴·중복 정지 차단이 전부 무력화된 채 통과한다.
@@ -72,7 +73,36 @@ class ReportedAccountActionServiceTest {
         assertThat(result).isEqualTo(ACCOUNT_ID);
         assertThat(account.getStatus()).isEqualTo(AccountStatus.SUSPENDED);
         verify(accountRepository, never()).findById(ACCOUNT_ID);
-        verify(eventPublisher).publishEvent(isA(AccountTokenCleanupEvent.class));
+        // 직접 정지 API와 같은 범위로 회수해야 한다 — 한쪽만 Refresh만 지우면 경로에 따라 구멍이 생긴다
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.allTokens(ACCOUNT_ID));
+    }
+
+    @Test
+    void 작성자_정지는_예약_중인_중고_거래도_정리한다() {
+        // given — 정지되면 isPubliclyVisible()이 거짓이라 게시글이 전 화면에서 사라진다.
+        // 직접 정지 API와 같은 정리를 하지 않으면 경로에 따라 예약이 남는 구멍이 생긴다.
+        Account account = createAccount();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        service.apply(ReportAction.SUSPEND_AUTHOR, ACCOUNT_ID);
+
+        // then
+        verify(usedProductWithdrawalService).cancelReservationsForSellerInactivation(ACCOUNT_ID);
+    }
+
+    @Test
+    void 작성자_경고는_예약을_건드리지_않는다() {
+        // given — 경고는 계정을 비활성으로 만들지 않는다. 게시글도 그대로 보인다.
+        Account account = createAccount();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        // when
+        service.apply(ReportAction.WARN_AUTHOR, ACCOUNT_ID);
+
+        // then
+        verify(usedProductWithdrawalService, never())
+                .cancelReservationsForSellerInactivation(ACCOUNT_ID);
     }
 
     @Test

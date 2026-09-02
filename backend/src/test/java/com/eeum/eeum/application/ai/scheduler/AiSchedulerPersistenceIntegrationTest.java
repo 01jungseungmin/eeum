@@ -77,7 +77,6 @@ class AiSchedulerPersistenceIntegrationTest extends IntegrationTestSupport {
         aiChatMessageRepository.deleteAll();
         aiPlanSubscriptionRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     // ──────────────────── AiCleanupScheduler (@Modifying bulk delete) ────────────────────

@@ -58,6 +58,7 @@ public class AdminAccountService {
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final StoreApprovalMapper storeApprovalMapper;
     private final AccountWithdrawalProcessor accountWithdrawalProcessor;
+    private final com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
     private final AccountSanctionPolicy accountSanctionPolicy;
     private final SanctionHistoryService sanctionHistoryService;
     private final ApplicationEventPublisher eventPublisher;
@@ -109,14 +110,19 @@ public class AdminAccountService {
         accountSanctionPolicy.validateSuspendable(target);
 
         target.suspend();
+
+        // 정지되면 isPubliclyVisible()이 거짓이 되어 게시글이 전 화면에서 사라진다.
+        // 예약을 그대로 두면 구매자는 볼 수도 없는 글을 기다리게 된다 — 탈퇴와 같게 정리한다.
+        usedProductWithdrawalService.cancelReservationsForSellerInactivation(targetAccountId);
+
         sanctionHistoryService.recordDirectAccountAction(
                 targetAccountId,
                 SanctionAction.SUSPEND,
                 adminId
         );
 
-        // DB 커밋 성공 후 Refresh Token 삭제
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
+        // DB 커밋 성공 후 남은 토큰 회수 — Refresh만 지우면 재인증·비밀번호 재설정 토큰이 TTL 동안 살아남는다
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.allTokens(targetAccountId));
 
         log.info("회원 정지: adminId={}, targetId={}", adminId, targetAccountId);
     }
@@ -172,8 +178,8 @@ public class AdminAccountService {
         // 강제 탈퇴만 찜을 남겨두면 탈퇴자의 찜이 상점·게시글 favoriteCount에 계속 잡힌다.
         accountWithdrawalProcessor.process(target);
 
-        // DB 커밋 성공 후 Refresh Token 삭제
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(targetAccountId));
+        // DB 커밋 성공 후 남은 토큰 회수 — 정지와 같은 이유다
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.allTokens(targetAccountId));
 
         log.info("회원 강제 탈퇴 처리: adminId={}, targetId={}", adminId, targetAccountId);
     }

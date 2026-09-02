@@ -1,6 +1,11 @@
 package com.eeum.eeum.support;
 
+import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
@@ -49,6 +54,11 @@ import java.util.concurrent.atomic.AtomicReference;
 @ActiveProfiles("test")
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 public abstract class IntegrationTestSupport {
+
+    // 정리 전용 주입. 하위 클래스의 생성자 주입과 별개로 기반 클래스가 직접 들고 있어야
+    // 하위 클래스가 무엇을 주입받든 계정 정리가 항상 돈다.
+    @Autowired private AccountRepository accountCleanupRepository;
+    @Autowired private NotificationRepository notificationCleanupRepository;
 
     // root로 접속한다. 잠금 경쟁 테스트가 performance_schema·information_schema로
     // "실제로 잠금 대기에 들어갔는지"를 확인하는데, 일반 계정에는 그 권한이 없다.
@@ -123,6 +133,36 @@ public abstract class IntegrationTestSupport {
             }
         }
         return false;
+    }
+
+    /**
+     * 계정 정리 — <b>모든 통합 테스트에서 자동으로 실행된다. 하위 클래스는 계정을 직접 지우지 않는다.</b>
+     *
+     * <p>JUnit은 {@code @AfterEach}를 하위 → 상위 순서로 실행하므로, 하위 클래스가 자기 도메인 행을
+     * 먼저 지운 뒤 이 메서드가 마지막에 돈다.
+     *
+     * <p><b>왜 기반 클래스로 올렸나.</b> 여러 도메인이
+     * {@code @TransactionalEventListener(AFTER_COMMIT)} + {@code @Async}로 알림을 만든다.
+     * 그 INSERT는 테스트 본문이 끝난 뒤에 도착할 수 있고 notification이 account를 FK로 참조하므로,
+     * 한 건이라도 남아 있으면 계정 삭제가 막힌다. 그러면 공유 DB를 쓰는 다음 클래스가
+     * Duplicate entry 같은 엉뚱한 오류로 죽어 진짜 원인이 가려진다.
+     *
+     * <p>클래스마다 방어를 붙이는 방식으로는 알림을 발행하는 기능이 추가될 때마다 재발한다
+     * (실제로 세 번 재발했다). 계정을 지우는 경로를 하나로 만들어 잊을 수 없게 한다.
+     */
+    @AfterEach
+    void cleanupAccountsAbsorbingAsyncNotifications() {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            notificationCleanupRepository.deleteAllInBatch();
+            try {
+                accountCleanupRepository.deleteAll();
+                return;
+            } catch (DataIntegrityViolationException retryable) {
+                // 늦게 도착한 알림이 계정 삭제를 막았다. 다시 지우고 재시도한다.
+                sleepQuietly(100);
+            }
+        }
+        throw new IllegalStateException("비동기 알림이 계속 도착해 테스트 계정을 정리하지 못했다");
     }
 
     protected static void sleepQuietly(long millis) {

@@ -101,7 +101,6 @@ class ReportSnapshotPersistenceIntegrationTest extends IntegrationTestSupport {
         // 계정이 남은 채 다음 테스트가 같은 이메일로 다시 만들다 중복으로 죽는다.
         accountRegionRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

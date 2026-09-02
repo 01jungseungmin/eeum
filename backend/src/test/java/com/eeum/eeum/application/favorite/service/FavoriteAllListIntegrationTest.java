@@ -14,7 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.Sort;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
@@ -53,7 +53,6 @@ class FavoriteAllListIntegrationTest extends IntegrationTestSupport {
     @AfterEach
     void tearDown() {
         favoriteRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test
@@ -62,7 +61,7 @@ class FavoriteAllListIntegrationTest extends IntegrationTestSupport {
         SqlCaptureInspector.reset();
 
         // when
-        favoriteService.getMyFavorites(viewer.getAccountId(), PageRequest.of(0, 20));
+        favoriteService.getMyFavorites(viewer.getAccountId(), null, null, 20);
 
         // then
         assertThat(countQueries()).as("실행된 count 쿼리: %s", countQueries()).isEmpty();
@@ -71,10 +70,12 @@ class FavoriteAllListIntegrationTest extends IntegrationTestSupport {
     @Test
     void 무한_스크롤_목록은_다음_페이지_여부를_정확히_판정한다() {
         // when
-        Slice<FavoriteResponseDto> first =
-                favoriteService.getMyFavorites(viewer.getAccountId(), PageRequest.of(0, 2));
-        Slice<FavoriteResponseDto> second =
-                favoriteService.getMyFavorites(viewer.getAccountId(), PageRequest.of(1, 2));
+        CursorSlice<FavoriteResponseDto> first =
+                favoriteService.getMyFavorites(viewer.getAccountId(), null, null, 2);
+        CursorSlice<FavoriteResponseDto> second =
+                favoriteService.getMyFavorites(
+                        viewer.getAccountId(),
+                        first.getNextCursorValue(), first.getNextCursorId(), 2);
 
         // then
         assertThat(first.getContent()).hasSize(2);
@@ -96,23 +97,24 @@ class FavoriteAllListIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 요청한_정렬과_무관하게_찜_등록_최신순으로_고정한다() {
-        // given: 요청 sort를 그대로 두면 실제 순서와 응답 메타데이터가 달라진다.
-        Slice<FavoriteResponseDto> result = favoriteService.getMyFavorites(
-                viewer.getAccountId(), PageRequest.of(0, 20, Sort.by("refId")));
+    void 정렬은_찜_등록_최신순_PK_tie_break로_고정된다() {
+        // given: 커서 페이징은 정렬이 고정돼야 성립한다. 사용자가 순서를 바꿀 수 있으면
+        // 커서가 가리키는 경계의 의미가 달라진다.
+        CursorSlice<FavoriteResponseDto> result =
+                favoriteService.getMyFavorites(viewer.getAccountId(), null, null, 20);
 
-        // then: 마지막에 담은 찜이 먼저 온다
+        // then: 마지막에 담은 찜이 먼저 오고, 응답이 그 정렬을 그대로 설명한다
         assertThat(result.getContent())
                 .extracting(FavoriteResponseDto::getRefId)
                 .containsExactly(3L, 2L, 1L);
-        assertThat(result.getSort().getOrderFor("createdAt")).isNotNull();
+        assertThat(result.getSort()).containsExactly("createdAt,DESC", "favoriteId,DESC");
     }
 
     @Test
     void 두_경로가_같은_순서를_돌려준다() {
         // 레거시와 신규가 다른 순서를 주면 마이그레이션 중 목록이 흔들린다.
-        Slice<FavoriteResponseDto> sliced =
-                favoriteService.getMyFavorites(viewer.getAccountId(), PageRequest.of(0, 20));
+        CursorSlice<FavoriteResponseDto> sliced =
+                favoriteService.getMyFavorites(viewer.getAccountId(), null, null, 20);
         @SuppressWarnings("removal")
         Page<FavoriteResponseDto> paged =
                 favoriteService.getMyFavoritesPaged(viewer.getAccountId(), PageRequest.of(0, 20));

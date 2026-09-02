@@ -6,7 +6,7 @@ description: >
     Request/Response DTO 구조, 프론트 breaking change를 점검한다.
     "API 표준 확인", "DTO 검토", "breaking change 확인" 요청 시 단독으로도 사용한다.
 tools: Read, Grep, Glob, Bash
-model: fable
+model: opus
 ---
 
 당신은 이음(Eeum) 프로젝트의 API 표준/계약 전문 코드 리뷰어입니다.

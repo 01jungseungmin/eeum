@@ -47,7 +47,6 @@ class AccountOptimisticLockIntegrationTest extends IntegrationTestSupport {
 
     @AfterEach
     void tearDown() {
-        accountRepository.deleteAll();
     }
 
     @Test

@@ -127,7 +127,14 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - 사용자가 "결제·정산 전체 리뷰"를 요청하면 Git diff로 범위를 축소하지 않는다.
 
 ### 페이징 선택 기준
-- 무한 스크롤 (모바일 앱): `Slice<T>`
+- 무한 스크롤 (모바일 앱): `CursorSlice<T>` (`common/dto/response/CursorSlice`)
+  - 새 행이 목록 맨 앞에 꽂히는 정렬(최신순·최근 대화순)은 OFFSET 금지 — 페이지 사이 삽입
+    한 건에 목록이 통째로 밀려 경계 항목이 중복·누락된다
+  - 커서는 정렬 키를 전부 담는다. PK tie-break를 빼면 같은 값 구간에서 같은 결함이 재현된다
+  - 다음 커서(`nextCursorValue`/`nextCursorId`)는 서버가 만들어 응답에 싣고, 클라이언트는
+    그대로 되돌려보낸다. 한쪽만 보내거나 형식이 깨지면 400
+  - `Slice<T>`를 쓰지 않는다 — 페이지 번호가 없는데 `number=0`, `first=true`가 실려
+    응답이 실제 위치를 잘못 설명한다
 - 관리자 페이지 (번호 페이징): `Page<T>`
 
 ### 신규 도메인 단계별 개발
@@ -151,13 +158,15 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 
 ### 스케줄러 목록
 새 스케줄러 추가 전 반드시 기존 목록 확인 (위치: `application/{domain}/scheduler/`):
-- `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 물리 삭제
+- `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 **개인정보 파기(익명화)**. 계정 행은 남긴다 — 주문·결제·신고·후기 등 다수 테이블이 참조하고 일부는 보존 의무가 있어 물리 삭제할 수 없다. `Account.anonymize()`가 email·nickname·name·phone·password·FCM 토큰을 지우고 `anonymizedAt`을 남기며, 참조가 끊겨도 되는 자식(찜·활동지역·사업자정보·정산계좌)만 함께 삭제한다
 - `OrderExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 주문 만료 처리
 - `NotificationCleanupScheduler` — 매일 03:00 6개월 이전 알림 삭제 / 5분 주기 Redis unread 카운트 ↔ DB 정합성 보정
 - `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
 - `AiPlanExpirationScheduler` — 매일 03:30, 만료일 지난 AI 플랜 구독 비활성화 (이후 FREE 처리)
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
 - `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
+- `NotificationOutboxScheduler` — 1초 주기, `notification_outbox`의 대기 행을 처리해 알림 생성 (한 번에 100건, 재시도 5회 초과 시 FAILED) / 매일 04:20 완료분(24시간 경과) 정리. 알림 생성은 비동기 이벤트가 아니라 이 경로다 — 원 트랜잭션에서 outbox에 기록하고 여기서 꺼내 쓴다
+- `WebSocketSessionReconciliationScheduler` — 30초 주기, 붙어 있는 WebSocket 세션의 계정 상태·토큰 세대를 DB와 대조해 회수된 연결 종료. **분산 잠금을 걸지 않는다**(`@InstanceLocalSchedule`) — 세션은 JVM 안에만 있어 한 대만 돌면 나머지 인스턴스 세션이 방치된다
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:

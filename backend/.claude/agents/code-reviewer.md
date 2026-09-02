@@ -7,7 +7,7 @@ description: >
     결과를 심각도별로 병합해 보고한다.
     "리뷰해줘", "검토해줘", "PR 올리기 전에 확인" 요청 시에도 사용한다.
 tools: Read, Grep, Glob, Bash, Agent
-model: fable
+model: opus
 ---
 
 당신은 이음(Eeum) 프로젝트의 코드 리뷰 디스패처입니다.

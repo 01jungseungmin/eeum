@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.used;
 
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductTradePartnerRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
@@ -12,6 +13,7 @@ import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequ
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.common.dto.response.ApiResponse;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.DecimalMin;
@@ -53,10 +55,16 @@ public class UsedProductController {
             summary = "동네 중고 게시글 목록",
             description = "로그인 없이 조회할 수 있습니다. regionId를 지정하면 해당 동네를, " +
                     "생략하면 내가 선택한 동네를 조회합니다(비회원이거나 선택한 동네가 없으면 regionId가 필요합니다). " +
-                    "삭제되거나 숨김 처리된 게시글은 제외됩니다. 무한 스크롤용 Slice로 반환합니다. " +
-                    "정렬은 createdAt·price·favoriteCount·viewCount만 지원하며, 그 외 값은 무시하고 최신순으로 조회합니다."
+                    "삭제되거나 숨김 처리된 게시글은 제외됩니다. 커서 무한 스크롤(Slice)입니다 — " +
+                    "첫 페이지는 커서 없이 요청하고, 다음 페이지는 직전 응답의 nextCursorValue·nextCursorId를 " +
+                    "cursorValue·cursorId에 그대로 담아 보냅니다(page 파라미터는 무시됩니다). " +
+                    "다음 페이지가 없으면 nextCursor 값들은 null입니다. " +
+                    "정렬을 바꾸면 커서도 버리고 첫 페이지부터 다시 읽어야 합니다 — 값 형식이 맞지 않으면 400입니다. " +
+                    "정렬은 createdAt·price·favoriteCount·viewCount 중 하나만 지원하며(둘 이상 보내면 첫 번째만 적용), " +
+                    "그 외 값은 무시하고 최신순으로 조회합니다. 적용된 정렬은 응답 pageable.sort에 실려 옵니다. " +
+                    "가격순에서 가격제안(price null) 글은 맨 뒤에 오며, 그 구간의 커서는 cursorValue를 비우고 보냅니다."
     )
-    public ResponseEntity<ApiResponse<Slice<UsedProductSummaryResponseDto>>> getRegionProducts(
+    public ResponseEntity<ApiResponse<CursorSlice<UsedProductSummaryResponseDto>>> getRegionProducts(
             @Parameter(description = "거래 지역 ID. 생략 시 내가 선택한 동네")
             @RequestParam(required = false) @Positive Long regionId,
             @Parameter(description = "제목·본문 검색어")
@@ -79,6 +87,11 @@ public class UsedProductController {
             // 요소에 @NotNull이 없으면 ?status= 같은 빈 값이 null 원소로 변환돼
             // status IN (null)로 나가고, 잘못된 요청이 400 대신 조용히 0건으로 끝난다.
             @RequestParam(required = false) List<@NotNull UsedProductStatus> status,
+            @Parameter(description = "직전 응답의 nextCursorValue. "
+                    + "첫 페이지이거나 가격제안 글 구간이면 생략")
+            @RequestParam(required = false) String cursorValue,
+            @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
+            @RequestParam(required = false) @Positive Long cursorId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.
@@ -88,6 +101,8 @@ public class UsedProductController {
                         viewerId,
                         new UsedProductSearchRequestDto(
                                 regionId, keyword, categoryId, priceType, minPrice, maxPrice, status),
+                        cursorValue,
+                        cursorId,
                         pageable)));
     }
 
@@ -151,6 +166,58 @@ public class UsedProductController {
         Long sellerId = SecurityUtil.getCurrentAccountId();
         usedProductService.delete(sellerId, usedProductId);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // ===================== 거래 상태 =====================
+
+    @PostMapping("/{usedProductId}/reservation")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "예약 처리",
+            description = "판매중인 게시글을 예약중으로 바꿉니다. 작성자 본인만 가능합니다. " +
+                    "거래 상대(buyerId)는 선택이며, 지정하면 예약 취소 시 함께 해제됩니다."
+    )
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> reserve(
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @RequestBody(required = false) @Valid UsedProductTradePartnerRequestDto request
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(usedProductService.reserve(
+                sellerId, usedProductId, request == null ? null : request.getBuyerId())));
+    }
+
+    @DeleteMapping("/{usedProductId}/reservation")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "예약 취소",
+            description = "예약중인 게시글을 다시 판매중으로 되돌리고 지정했던 거래 상대를 해제합니다."
+    )
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> cancelReservation(
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                usedProductService.cancelReservation(sellerId, usedProductId)));
+    }
+
+    @PostMapping("/{usedProductId}/sold")
+    @PreAuthorize("isAuthenticated()")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "판매완료 처리",
+            description = "게시글을 판매완료로 바꿉니다. 예약을 거치지 않고 바로 완료할 수도 있습니다. " +
+                    "여기서 확정된 거래 상대만 후기를 남길 수 있습니다. " +
+                    "buyerId를 생략하면 예약 때 지정한 상대를 그대로 유지합니다."
+    )
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> markSold(
+            @Parameter(description = "게시글 ID") @PathVariable @Positive Long usedProductId,
+            @RequestBody(required = false) @Valid UsedProductTradePartnerRequestDto request
+    ) {
+        Long sellerId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(usedProductService.markSold(
+                sellerId, usedProductId, request == null ? null : request.getBuyerId())));
     }
 
     // ===================== 사진 =====================

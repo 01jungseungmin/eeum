@@ -22,7 +22,7 @@ import java.util.function.LongSupplier;
 @RequiredArgsConstructor
 public class ChatUnreadService {
 
-    // increment(ChatNotificationEventListener)와 resetRoom(ChatUnreadResetEventListener)이
+    // increment(ChatNotificationProcessor)와 resetRoom(ChatUnreadResetEventListener)이
     // 동일 키에 @Async로 경합할 수 있으므로 Lua 스크립트로 read-decrement-delete를 원자적으로 처리
     private static final DefaultRedisScript<Long> RESET_ROOM_SCRIPT = new DefaultRedisScript<>(
             """

@@ -12,7 +12,15 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter
-@Table(name = "chat_message")
+@Table(
+        name = "chat_message",
+        indexes = {
+                // 방 메시지 목록 — 방으로 좁히고 최신순으로 읽는다. 커서 조건과 정렬이
+                // 모두 이 인덱스로 풀린다. PK를 명시해야 같은 sent_at 구간의 정렬까지 인덱스가 맡는다.
+                @Index(name = "idx_chat_message_room_sent",
+                        columnList = "chat_room_id, sent_at, chat_message_id")
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ChatMessage extends BaseEntity {
 

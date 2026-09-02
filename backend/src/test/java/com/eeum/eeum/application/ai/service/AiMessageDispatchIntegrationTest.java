@@ -102,7 +102,6 @@ class AiMessageDispatchIntegrationTest extends IntegrationTestSupport {
         notificationSettingsRepository.deleteAll();
         favoriteRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     // ──────────────────── Helpers ────────────────────

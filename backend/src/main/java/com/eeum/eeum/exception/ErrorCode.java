@@ -181,6 +181,20 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_PRODUCT_REGION_REQUIRED("USED_012", "조회할 지역을 지정해 주세요", HttpStatus.BAD_REQUEST),
     USED_PRODUCT_NOT_HIDDEN("USED_013", "숨김 처리된 게시글이 아닙니다", HttpStatus.CONFLICT),
     USED_PRODUCT_INVALID_PRICE_RANGE("USED_014", "최소 가격이 최대 가격보다 클 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 본인 지정, 정지·탈퇴 계정, 문의한 적 없는 상대를 모두 이 코드로 묶는다.
+    // 사유를 나누면 판매자가 임의의 계정 ID로 다른 사용자의 상태를 떠볼 수 있다.
+    USED_PRODUCT_INVALID_BUYER("USED_015", "거래 상대로 지정할 수 없는 계정입니다", HttpStatus.BAD_REQUEST),
+    // 구매자를 생략한 판매완료 도중 예약 상대가 바뀐 경우. 잠그고 검증한 계정과
+    // 실제 예약 상대가 달라지므로, 검증하지 않은 계정을 확정하지 않도록 막고 재시도하게 한다.
+    USED_PRODUCT_BUYER_CHANGED("USED_016", "예약 상대가 변경되었습니다. 다시 시도해 주세요", HttpStatus.CONFLICT),
+
+    // 커서는 정렬 키 두 개(createdAt, usedReviewId)를 함께 받아야 한다. 하나만 오면 첫 페이지와
+    // 구분할 수 없어 무한 스크롤이 같은 목록을 반복한다 — 조용히 무시하지 않고 알린다.
+    USED_REVIEW_INVALID_CURSOR("USED_017", "후기 목록 커서는 작성일시와 후기 ID를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+
+    // 게시글 목록 커서. 정렬 키 값의 형식이 정렬 필드와 맞지 않을 때도 같은 코드를 쓴다 —
+    // 클라이언트가 할 일(커서를 응답 그대로 되돌려보내기)이 같아서다.
+    USED_PRODUCT_INVALID_CURSOR("USED_018", "게시글 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
@@ -211,6 +225,12 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CHAT_ROOM_CLOSE_DENIED("CHAT_013", "채팅방 종료 권한이 없습니다", HttpStatus.FORBIDDEN),
     CHAT_PARTICIPANT_DUPLICATE("CHAT_014", "이미 처리된 채팅방 참여 요청입니다", HttpStatus.CONFLICT),
     CHAT_INVALID_REF_ID("CHAT_015", "채팅방 참조 ID가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    CHAT_SELF_INQUIRY_NOT_ALLOWED("CHAT_016", "본인 게시글에는 문의할 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 커서는 방 ID가 있어야 성립한다. 시각만 오면 같은 시각 방들 사이에서 경계를 끊지 못한다.
+    CHAT_INVALID_CURSOR("CHAT_017", "채팅방 목록 커서는 채팅방 ID를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+    // 메시지 커서는 발신 시각과 메시지 ID를 함께 받아야 한다. 시각만 받으면 같은 시각에
+    // 도착한 메시지들 사이에서 경계를 끊지 못해 그 메시지들이 영구히 누락된다.
+    CHAT_MESSAGE_INVALID_CURSOR("CHAT_018", "메시지 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 리뷰 (REVIEW) =====================
     STORE_REVIEW_NOT_FOUND("REVIEW_001", "존재하지 않는 상점 리뷰입니다", HttpStatus.NOT_FOUND),
@@ -233,6 +253,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     FAVORITE_ACCESS_DENIED("FAVORITE_002", "찜 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     FAVORITE_ALREADY_EXISTS("FAVORITE_003", "이미 찜한 대상입니다", HttpStatus.CONFLICT),
     FAVORITE_INVALID_PERIOD("FAVORITE_004", "조회 시작일이 종료일보다 늦을 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 찜 목록 커서는 등록 시각과 찜 ID를 함께 받아야 한다. 시각만 받으면 같은 순간에 등록된
+    // 찜들 사이에서 경계를 끊지 못해 OFFSET과 같은 중복·누락이 재현된다.
+    FAVORITE_INVALID_CURSOR("FAVORITE_005", "찜 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 알림 (NOTIFICATION) =====================
     NOTIFICATION_NOT_FOUND("NOTIFICATION_001", "존재하지 않는 알림입니다", HttpStatus.NOT_FOUND),
