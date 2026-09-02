@@ -6,6 +6,8 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.List;
 
 /**
@@ -34,6 +38,7 @@ public class AccountWithdrawalProcessor {
     private final OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     private final FavoriteService favoriteService;
     private final UsedProductWithdrawalService usedProductWithdrawalService;
+    private final UsedProductRepository usedProductRepository;
 
     public void process(Account account) {
         Long accountId = account.getAccountId();
@@ -42,6 +47,11 @@ public class AccountWithdrawalProcessor {
         // 서로의 상점을 찜한 두 사장이 동시에 탈퇴하면, 각자 자기 상점을 잡고 상대 상점을
         // 기다리는 순환 교착이 난다(비활성화는 자기 상점, 찜 정리는 찜한 상점을 잠근다).
         lockStoresInIdOrder(accountId);
+
+        // 1-2. 중고 게시글도 같은 이유로 미리 확보한다. 예약 정리는 자기 글을, 찜 정리는
+        // 찜한 남의 글을 잠근다 — 두 단계로 나눠 잡으면 서로의 글을 찜한 두 판매자가
+        // 동시에 탈퇴할 때 각자 자기 글을 잡고 상대 글을 기다리는 순환 대기가 난다.
+        lockUsedProductsInIdOrder(accountId);
 
         // 2. 사장 계정이면 상점/상품/이벤트 상품 비활성화 — 탈퇴한 사장의 상점이
         // 사용자 화면에 계속 노출되고 주문·예약이 들어오는 것을 막는다.
@@ -62,6 +72,24 @@ public class AccountWithdrawalProcessor {
         // 앞 단계의 변경(탈퇴 상태, 사장 상점 비활성화)을 먼저 flush하지 않으면 그대로 유실된다.
         accountRepository.flush();
         favoriteService.deleteAllByAccountId(accountId);
+    }
+
+    /**
+     * 탈퇴 트랜잭션이 건드릴 중고 게시글 행(예약 중인 내 글 + 내가 찜한 글)을
+     * ID 오름차순으로 잠근다.
+     *
+     * <p>여기서 엔티티를 올려도 뒤따르는 {@code cancelReservationsForSellerInactivation}의
+     * "잠근 뒤 재확인"은 깨지지 않는다. 그 보증이 필요했던 이유는 <b>잠금 없이 읽은</b>
+     * 낡은 인스턴스를 재사용하는 것이었는데, 여기서는 FOR UPDATE로 읽으므로 그 순간부터
+     * 커밋 시점까지 아무도 그 행을 바꿀 수 없다.
+     */
+    private void lockUsedProductsInIdOrder(Long accountId) {
+        Set<Long> productIds = new TreeSet<>(
+                favoriteService.findFavoriteRefIds(accountId, FavoriteRefType.USED_PRODUCT));
+        productIds.addAll(usedProductRepository.findReservedProductIdsBySeller(
+                accountId, UsedProductStatus.RESERVED));
+
+        productIds.forEach(usedProductRepository::findByUsedProductIdForUpdate);
     }
 
     // 탈퇴 트랜잭션이 건드릴 상점 행(자기 상점 + 찜한 상점)을 ID 오름차순으로 잠근다.

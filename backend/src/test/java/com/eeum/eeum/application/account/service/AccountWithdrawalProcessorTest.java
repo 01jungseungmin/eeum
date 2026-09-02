@@ -2,6 +2,8 @@ package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.application.used.service.UsedProductWithdrawalService;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -41,6 +43,7 @@ class AccountWithdrawalProcessorTest {
     @Mock private OwnerStoreWithdrawalService ownerStoreWithdrawalService;
     @Mock private FavoriteService favoriteService;
     @Mock UsedProductWithdrawalService usedProductWithdrawalService;
+    @Mock private UsedProductRepository usedProductRepository;
 
     @InjectMocks
     private AccountWithdrawalProcessor accountWithdrawalProcessor;
@@ -124,6 +127,43 @@ class AccountWithdrawalProcessorTest {
         ArgumentCaptor<Long> lockedIds = ArgumentCaptor.forClass(Long.class);
         verify(storeRepository, times(3)).findByIdWithPessimisticLock(lockedIds.capture());
         assertThat(lockedIds.getAllValues()).containsExactly(10L, 20L, 30L);
+    }
+
+    @Test
+    void 건드릴_중고_게시글도_ID_오름차순으로_잠근다() {
+        // given — 예약 정리는 내 글을, 찜 정리는 내가 찜한 남의 글을 잠근다.
+        // 두 단계로 나눠 잡으면 서로의 글을 찜한 두 판매자가 동시에 탈퇴할 때
+        // 각자 자기 글을 잡고 상대 글을 기다리는 순환 대기가 난다.
+        Account account = givenUser();
+        when(favoriteService.findFavoriteRefIds(ACCOUNT_ID, FavoriteRefType.USED_PRODUCT))
+                .thenReturn(List.of(30L, 10L));
+        when(usedProductRepository.findReservedProductIdsBySeller(
+                ACCOUNT_ID, UsedProductStatus.RESERVED))
+                .thenReturn(List.of(20L));
+
+        // when
+        accountWithdrawalProcessor.process(account);
+
+        // then — 내 예약 글(20)과 찜한 글(30, 10)이 섞여도 오름차순이어야 한다
+        ArgumentCaptor<Long> lockedIds = ArgumentCaptor.forClass(Long.class);
+        verify(usedProductRepository, times(3))
+                .findByUsedProductIdForUpdate(lockedIds.capture());
+        assertThat(lockedIds.getAllValues()).containsExactly(10L, 20L, 30L);
+    }
+
+    @Test
+    void 같은_게시글이_예약과_찜에_동시에_있어도_한_번만_잠근다() {
+        // 중복 잠금은 교착을 만들지는 않지만 불필요한 쿼리다.
+        Account account = givenUser();
+        when(favoriteService.findFavoriteRefIds(ACCOUNT_ID, FavoriteRefType.USED_PRODUCT))
+                .thenReturn(List.of(10L));
+        when(usedProductRepository.findReservedProductIdsBySeller(
+                ACCOUNT_ID, UsedProductStatus.RESERVED))
+                .thenReturn(List.of(10L));
+
+        accountWithdrawalProcessor.process(account);
+
+        verify(usedProductRepository, times(1)).findByUsedProductIdForUpdate(10L);
     }
 
     private Account givenUser() {
