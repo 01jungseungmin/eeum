@@ -228,6 +228,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CHAT_SELF_INQUIRY_NOT_ALLOWED("CHAT_016", "본인 게시글에는 문의할 수 없습니다", HttpStatus.BAD_REQUEST),
     // 커서는 방 ID가 있어야 성립한다. 시각만 오면 같은 시각 방들 사이에서 경계를 끊지 못한다.
     CHAT_INVALID_CURSOR("CHAT_017", "채팅방 목록 커서는 채팅방 ID를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+    // 메시지 커서는 발신 시각과 메시지 ID를 함께 받아야 한다. 시각만 받으면 같은 시각에
+    // 도착한 메시지들 사이에서 경계를 끊지 못해 그 메시지들이 영구히 누락된다.
+    CHAT_MESSAGE_INVALID_CURSOR("CHAT_018", "메시지 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 리뷰 (REVIEW) =====================
     STORE_REVIEW_NOT_FOUND("REVIEW_001", "존재하지 않는 상점 리뷰입니다", HttpStatus.NOT_FOUND),
@@ -250,6 +253,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     FAVORITE_ACCESS_DENIED("FAVORITE_002", "찜 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     FAVORITE_ALREADY_EXISTS("FAVORITE_003", "이미 찜한 대상입니다", HttpStatus.CONFLICT),
     FAVORITE_INVALID_PERIOD("FAVORITE_004", "조회 시작일이 종료일보다 늦을 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 찜 목록 커서는 등록 시각과 찜 ID를 함께 받아야 한다. 시각만 받으면 같은 순간에 등록된
+    // 찜들 사이에서 경계를 끊지 못해 OFFSET과 같은 중복·누락이 재현된다.
+    FAVORITE_INVALID_CURSOR("FAVORITE_005", "찜 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 알림 (NOTIFICATION) =====================
     NOTIFICATION_NOT_FOUND("NOTIFICATION_001", "존재하지 않는 알림입니다", HttpStatus.NOT_FOUND),

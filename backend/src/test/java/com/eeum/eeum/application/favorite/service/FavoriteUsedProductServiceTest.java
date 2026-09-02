@@ -30,7 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -42,6 +42,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,6 +54,10 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class FavoriteUsedProductServiceTest {
+
+    // 리포지토리가 고정하는 정렬 — 응답 메타데이터의 근거다.
+    private static final Sort FAVORITE_SORT = Sort.by(
+            Sort.Order.desc("createdAt"), Sort.Order.desc("favoriteId"));
 
     private static final Long ACCOUNT_ID = 1L;
     private static final Long PRODUCT_ID = 10L;
@@ -251,8 +256,8 @@ class FavoriteUsedProductServiceTest {
                 .thenReturn(List.of(UsedProductImage.create(product(), "thumb.jpg", 1, true)));
 
         // when
-        Slice<FavoriteUsedProductResponseDto> result =
-                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, null, null, 20);
 
         // then
         assertThat(result.getContent()).hasSize(1);
@@ -272,8 +277,8 @@ class FavoriteUsedProductServiceTest {
                 .thenReturn(List.of());
 
         // when
-        Slice<FavoriteUsedProductResponseDto> result =
-                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, null, null, 20);
 
         // then — 리포지토리가 내려준 행 수가 그대로 유지된다
         assertThat(result.getContent()).hasSize(3);
@@ -286,8 +291,8 @@ class FavoriteUsedProductServiceTest {
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of());
 
-        Slice<FavoriteUsedProductResponseDto> result =
-                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, null, null, 20);
 
         assertThat(result.getContent().get(0).getThumbnailUrl()).isNull();
     }
@@ -296,8 +301,8 @@ class FavoriteUsedProductServiceTest {
     void 찜이_없으면_추가_조회_없이_빈_페이지를_반환한다() {
         givenFavoriteSlice();
 
-        Slice<FavoriteUsedProductResponseDto> result =
-                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, PageRequest.of(0, 20));
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, null, null, 20);
 
         assertThat(result.getContent()).isEmpty();
         verify(usedProductImageRepository, never())
@@ -306,18 +311,18 @@ class FavoriteUsedProductServiceTest {
 
     @Test
     void 빈_목록도_실제_적용된_정렬을_그대로_반환한다() {
-        // given — 리포지토리는 요청 sort를 무시하고 최신순으로 고정해 돌려준다.
-        // 빈 결과에서만 요청 pageable을 그대로 쓰면 메타데이터가 실제 정렬과 어긋난다.
-        Pageable applied = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("createdAt")));
-        when(favoriteRepository.findFavoriteUsedProducts(any(), any()))
-                .thenReturn(new SliceImpl<>(List.of(), applied, false));
+        // given — 빈 결과에서 썸네일 배치 조회만 건너뛰고, 정렬·커서는 리포지토리 판정을 쓴다.
+        // 여기서 다른 메타데이터를 만들어 내면 응답이 실제 정렬과 어긋난다.
+        when(favoriteRepository.findFavoriteUsedProducts(any(), any(), anyInt()))
+                .thenReturn(CursorSlice.of(List.of(), false, null, null, FAVORITE_SORT));
 
-        // when — 클라이언트는 가격순을 요청한다
-        Slice<FavoriteUsedProductResponseDto> result = favoriteService.getMyFavoriteUsedProducts(
-                ACCOUNT_ID, PageRequest.of(0, 20, Sort.by("price")));
+        // when
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(ACCOUNT_ID, null, null, 20);
 
         // then
-        assertThat(result.getSort()).isEqualTo(applied.getSort());
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getSort()).containsExactly("createdAt,DESC", "favoriteId,DESC");
     }
 
     @Test
@@ -418,8 +423,8 @@ class FavoriteUsedProductServiceTest {
     }
 
     private void givenFavoriteSlice(FavoriteUsedProductRow... rows) {
-        when(favoriteRepository.findFavoriteUsedProducts(any(), any()))
-                .thenReturn(new SliceImpl<>(List.of(rows)));
+        when(favoriteRepository.findFavoriteUsedProducts(any(), any(), anyInt()))
+                .thenReturn(CursorSlice.of(List.of(rows), false, null, null, FAVORITE_SORT));
     }
 
     private FavoriteUsedProductRow row(Long usedProductId) {

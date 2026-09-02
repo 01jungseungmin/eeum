@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -101,10 +101,11 @@ class FavoriteUsedProductListIntegrationTest extends IntegrationTestSupport {
         softDelete(productIds.get(2));
 
         // when: 조회 후 메모리에서 걸렀다면 첫 페이지는 0건, 두 번째 페이지는 1건이 된다.
-        Slice<FavoriteUsedProductResponseDto> first =
-                favoriteService.getMyFavoriteUsedProducts(viewerId, PageRequest.of(0, 2));
-        Slice<FavoriteUsedProductResponseDto> second =
-                favoriteService.getMyFavoriteUsedProducts(viewerId, PageRequest.of(1, 2));
+        CursorSlice<FavoriteUsedProductResponseDto> first =
+                favoriteService.getMyFavoriteUsedProducts(viewerId, null, null, 2);
+        CursorSlice<FavoriteUsedProductResponseDto> second =
+                favoriteService.getMyFavoriteUsedProducts(
+                        viewerId, first.getNextCursorValue(), first.getNextCursorId(), 2);
 
         // then: 노출 대상 3건이 요청한 size 2 기준으로 2건 + 1건으로 정확히 나뉜다.
         assertThat(first.getContent()).hasSize(2);
@@ -126,8 +127,8 @@ class FavoriteUsedProductListIntegrationTest extends IntegrationTestSupport {
         SqlCaptureInspector.reset();
 
         // when
-        Slice<FavoriteUsedProductResponseDto> result =
-                favoriteService.getMyFavoriteUsedProducts(viewerId, PageRequest.of(0, 6));
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(viewerId, null, null, 6);
         List<String> executedSql = SqlCaptureInspector.captured();
 
         // then: 목록 조회 1번 + 대표 사진 배치 조회 1번으로 고정된다.
@@ -221,8 +222,8 @@ class FavoriteUsedProductListIntegrationTest extends IntegrationTestSupport {
         accountRepository.saveAndFlush(seller);
 
         // when
-        Slice<FavoriteUsedProductResponseDto> result =
-                favoriteService.getMyFavoriteUsedProducts(viewerId, PageRequest.of(0, 20));
+        CursorSlice<FavoriteUsedProductResponseDto> result =
+                favoriteService.getMyFavoriteUsedProducts(viewerId, null, null, 20);
 
         // then: 판매자가 한 명이므로 전부 빠진다
         assertThat(result.getContent()).isEmpty();

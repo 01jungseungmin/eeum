@@ -2,6 +2,8 @@ package com.eeum.eeum.domain.favorite.repository;
 
 import com.eeum.eeum.domain.account.entity.QAccount;
 import com.eeum.eeum.domain.account.entity.QRegion;
+import com.eeum.eeum.common.dto.response.CursorSlice;
+import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.entity.QFavorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.store.entity.QStore;
@@ -39,6 +41,14 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     private final QStore store = QStore.store;
     private final QAccount account = QAccount.account;
     private final QAccount seller = new QAccount("seller");
+
+    /**
+     * 찜 목록 정렬 — 등록 최신순, 동률은 PK로 끊는다.
+     *
+     * <p>세 목록(전체·상점·중고)이 같은 정렬을 쓰므로 커서 규칙도 하나다.
+     */
+    private static final Sort FAVORITE_SORT = Sort.by(
+            Sort.Order.desc("createdAt"), Sort.Order.desc("favoriteId"));
 
     // 목록 화면 배치 조회 — 사용자가 찜한 refId Set 반환 IN절 한 번으로 N+1을 방지
 
@@ -103,7 +113,8 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     // 조회 후 메모리에서 거르면 요청한 size보다 적은 항목이 내려가고 hasNext 판정도 어긋난다.
     // region까지 조인해 목록 조립 중 LAZY 초기화(항목 수만큼 추가 SELECT)가 없다.
     @Override
-    public Slice<FavoriteUsedProductRow> findFavoriteUsedProducts(Long accountId, Pageable pageable) {
+    public CursorSlice<FavoriteUsedProductRow> findFavoriteUsedProducts(
+            Long accountId, FavoriteCursor cursor, int size) {
         List<FavoriteUsedProductRow> rows = new ArrayList<>(queryFactory
                 .select(Projections.constructor(
                         FavoriteUsedProductRow.class,
@@ -122,37 +133,85 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
                 .where(
                         favorite.account.accountId.eq(accountId),
                         favorite.refType.eq(FavoriteRefType.USED_PRODUCT),
-                        UsedProductVisibilityPredicate.publiclyVisible(usedProduct, seller)
+                        UsedProductVisibilityPredicate.publiclyVisible(usedProduct, seller),
+                        afterCursor(cursor)
                 )
                 // createdAt 동률 시 순서가 흔들려 페이지 경계에서 항목이 중복·유실되므로 PK로 tie-break
                 .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc())
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize() + 1L)   // +1건으로 다음 페이지 존재 여부 판정 (count 쿼리 불필요)
+                .limit(size + 1L)   // +1건으로 다음 페이지 존재 여부 판정 (count 쿼리 불필요)
                 .fetch());
 
-        boolean hasNext = rows.size() > pageable.getPageSize();
-        if (hasNext) {
-            rows.remove(rows.size() - 1);
-        }
-        // 요청 sort는 무시하고 최신순으로 고정한다. 요청받은 Pageable을 그대로 돌려주면
-        // 응답의 sort가 실제 적용된 정렬과 달라 클라이언트가 잘못된 순서를 전제하게 된다.
-        return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
+        return toCursorSlice(rows, size, FavoriteUsedProductRow::favoriteId,
+                FavoriteUsedProductRow::favoritedAt);
     }
 
     // 상점 찜 목록(무한 스크롤) — 중고 게시글 목록과 같은 limit + 1 방식이라 count 쿼리가 없다.
     // 전체 건수를 쓰지 않는 화면에서 count는 순수 비용이다.
     @Override
-    public Slice<FavoriteStoreRow> findFavoriteStoresSlice(Long accountId, Pageable pageable) {
+    public CursorSlice<FavoriteStoreRow> findFavoriteStoresSlice(
+            Long accountId, FavoriteCursor cursor, int size) {
         List<FavoriteStoreRow> rows = new ArrayList<>(favoriteStoreQuery(accountId)
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize() + 1L)   // +1건으로 다음 페이지 존재 여부 판정
+                .where(afterCursor(cursor))
+                .limit(size + 1L)   // +1건으로 다음 페이지 존재 여부 판정
                 .fetch());
 
-        boolean hasNext = rows.size() > pageable.getPageSize();
-        if (hasNext) {
-            rows.remove(rows.size() - 1);
+        return toCursorSlice(rows, size, FavoriteStoreRow::favoriteId, FavoriteStoreRow::favoritedAt);
+    }
+
+    /**
+     * 전체 찜 목록 — 상점·중고를 가리지 않고 내가 찜한 순서대로 읽는다.
+     *
+     * <p>타입별 목록과 달리 대상의 공개 여부로 거르지 않는다. 이 목록의 기준은
+     * "내가 찜한 것 전부"이고, 사라진 대상의 표시는 응답 조립 단계가 판단한다.
+     */
+    @Override
+    public CursorSlice<Favorite> findMyFavorites(Long accountId, FavoriteCursor cursor, int size) {
+        List<Favorite> rows = new ArrayList<>(queryFactory
+                .selectFrom(favorite)
+                .where(favorite.account.accountId.eq(accountId), afterCursor(cursor))
+                .orderBy(favorite.createdAt.desc(), favorite.favoriteId.desc())
+                .limit(size + 1L)
+                .fetch());
+
+        return toCursorSlice(rows, size, Favorite::getFavoriteId, Favorite::getCreatedAt);
+    }
+
+    /**
+     * 커서 이후 구간. 정렬이 {@code createdAt desc, favoriteId desc}이므로
+     * "더 이르게 찜했거나, 같은 시각이면 ID가 더 작은" 행들이다.
+     *
+     * <p>두 번째 항이 빠지면 같은 순간에 등록된 찜들 사이에서 경계를 끊지 못해
+     * OFFSET과 같은 중복·누락이 그대로 재현된다.
+     */
+    private com.querydsl.core.types.dsl.BooleanExpression afterCursor(FavoriteCursor cursor) {
+        if (cursor == null) {
+            return null;
         }
-        return new SliceImpl<>(rows, withAppliedSort(pageable), hasNext);
+        return favorite.createdAt.lt(cursor.createdAt())
+                .or(favorite.createdAt.eq(cursor.createdAt())
+                        .and(favorite.favoriteId.lt(cursor.favoriteId())));
+    }
+
+    /**
+     * 한 건 더 읽어 다음 페이지 여부를 판정하고, 마지막 행에서 다음 커서를 만든다.
+     *
+     * <p>커서를 서버가 만들어 응답에 싣는 이유는, 목록마다 행 타입이 달라도 클라이언트가
+     * 조립 규칙을 알 필요가 없게 하기 위해서다 — 받은 값을 그대로 되돌려보내면 된다.
+     */
+    private <T> CursorSlice<T> toCursorSlice(
+            List<T> fetched, int size,
+            java.util.function.Function<T, Long> idExtractor,
+            java.util.function.Function<T, LocalDateTime> createdAtExtractor) {
+        boolean hasNext = fetched.size() > size;
+        List<T> content = hasNext ? new ArrayList<>(fetched.subList(0, size)) : fetched;
+        T last = content.isEmpty() ? null : content.get(content.size() - 1);
+
+        return CursorSlice.of(
+                content,
+                hasNext,
+                last == null ? null : createdAtExtractor.apply(last).toString(),
+                last == null ? null : idExtractor.apply(last),
+                FAVORITE_SORT);
     }
 
     // 상점 찜 목록 — 공개 조건을 조인·where로 걸어 페이징과 count 이전에 적용한다.

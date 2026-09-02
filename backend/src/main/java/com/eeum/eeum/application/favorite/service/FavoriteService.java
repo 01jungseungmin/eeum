@@ -8,6 +8,8 @@ import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.favorite.entity.Favorite;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRefProjection;
+import com.eeum.eeum.common.dto.response.CursorSlice;
+import com.eeum.eeum.domain.favorite.repository.FavoriteCursor;
 import com.eeum.eeum.domain.favorite.repository.FavoriteRepository;
 import com.eeum.eeum.domain.favorite.repository.FavoriteStoreRow;
 import com.eeum.eeum.domain.favorite.repository.FavoriteUsedProductRow;
@@ -139,11 +141,13 @@ public class FavoriteService {
      * ({@code /me/store}, {@code /me/used})과 페이징 계약을 맞춘 것이기도 하다.
      */
     @Transactional(readOnly = true)
-    public Slice<FavoriteResponseDto> getMyFavorites(Long accountId, Pageable pageable) {
-        // 정렬은 찜 등록 최신순으로 고정한다. 요청 sort를 그대로 두면 실제 순서와
+    public CursorSlice<FavoriteResponseDto> getMyFavorites(
+            Long accountId, String cursorValue, Long cursorId, int size) {
+        // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
+        // 정렬은 찜 등록 최신순 + PK로 고정한다. 요청 sort를 그대로 두면 실제 순서와
         // 응답 메타데이터가 달라 클라이언트가 잘못된 순서를 전제하게 된다.
-        return favoriteRepository
-                .findSliceByAccount_AccountIdOrderByCreatedAtDesc(accountId, latestFirst(pageable))
+        FavoriteCursor cursor = FavoriteCursor.ofNullable(cursorValue, cursorId);
+        return favoriteRepository.findMyFavorites(accountId, cursor, size)
                 .map(FavoriteResponseDto::from);
     }
 
@@ -178,12 +182,15 @@ public class FavoriteService {
      * 조회 1번 + count 1번 + 대표 사진 1번 = 총 3 쿼리.
      */
     @Transactional(readOnly = true)
-    public Slice<FavoriteStoreResponseDto> getMyFavoriteStores(Long accountId, Pageable pageable) {
-        Slice<FavoriteStoreRow> rows = favoriteRepository.findFavoriteStoresSlice(accountId, pageable);
+    public CursorSlice<FavoriteStoreResponseDto> getMyFavoriteStores(
+            Long accountId, String cursorValue, Long cursorId, int size) {
+        FavoriteCursor cursor = FavoriteCursor.ofNullable(cursorValue, cursorId);
+        CursorSlice<FavoriteStoreRow> rows =
+                favoriteRepository.findFavoriteStoresSlice(accountId, cursor, size);
 
         if (rows.isEmpty()) {
-            // 썸네일 배치 조회만 건너뛴다. 정렬·다음 페이지 여부는 리포지토리 판정을 그대로 쓴다.
-            return new SliceImpl<>(List.of(), rows.getPageable(), rows.hasNext());
+            // 썸네일 배치 조회만 건너뛴다. 커서·다음 페이지 여부는 리포지토리 판정을 그대로 쓴다.
+            return rows.map(row -> null);
         }
         return rows.map(toStoreDto(resolveStoreThumbnails(rows.getContent())));
     }
@@ -235,15 +242,16 @@ public class FavoriteService {
      * 조회 1번(게시글·지역 조인 포함) + 대표 사진 1번 = 총 2 쿼리.
      */
     @Transactional(readOnly = true)
-    public Slice<FavoriteUsedProductResponseDto> getMyFavoriteUsedProducts(
-            Long accountId, Pageable pageable) {
+    public CursorSlice<FavoriteUsedProductResponseDto> getMyFavoriteUsedProducts(
+            Long accountId, String cursorValue, Long cursorId, int size) {
 
-        Slice<FavoriteUsedProductRow> rows =
-                favoriteRepository.findFavoriteUsedProducts(accountId, pageable);
+        FavoriteCursor cursor = FavoriteCursor.ofNullable(cursorValue, cursorId);
+        CursorSlice<FavoriteUsedProductRow> rows =
+                favoriteRepository.findFavoriteUsedProducts(accountId, cursor, size);
 
         if (rows.isEmpty()) {
-            // 요청 pageable을 그대로 돌려주면 실제 적용된 정렬(최신순 고정)과 메타데이터가 어긋난다.
-            return new SliceImpl<>(List.of(), rows.getPageable(), rows.hasNext());
+            // 썸네일 배치 조회만 건너뛴다. 커서·다음 페이지 여부는 리포지토리 판정을 그대로 쓴다.
+            return rows.map(row -> null);
         }
 
         List<Long> productIds = rows.getContent().stream()
