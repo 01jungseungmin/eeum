@@ -92,16 +92,19 @@ public class AccountWithdrawalProcessor {
         productIds.forEach(usedProductRepository::findByUsedProductIdForUpdate);
     }
 
-    // 탈퇴 트랜잭션이 건드릴 상점 행(자기 상점 + 찜한 상점)을 ID 오름차순으로 잠근다.
+    /**
+     * 탈퇴 트랜잭션이 건드릴 상점 행(자기 상점 + 찜한 상점)을 ID 오름차순으로 잠근다.
+     *
+     * <p>중고 게시글과 마찬가지로 <b>ID만 읽어</b> 잠금 순서를 정한다. 자기 상점을 엔티티로
+     * 먼저 읽으면 영속성 컨텍스트에 올라가고, 뒤이은 잠금 조회가 그 낡은 인스턴스를 돌려준다.
+     * Store에는 {@code @Version}이 있어 그 사이 다른 사용자의 찜으로 버전이 오르면
+     * 낡은 버전으로 flush하다 탈퇴 전체가 낙관적 잠금 예외로 실패한다.
+     */
     private void lockStoresInIdOrder(Long accountId) {
-        List<Long> storeIds = new ArrayList<>(
+        Set<Long> storeIds = new TreeSet<>(
                 favoriteService.findFavoriteRefIds(accountId, FavoriteRefType.STORE));
+        storeRepository.findStoreIdByAccountId(accountId).ifPresent(storeIds::add);
 
-        storeRepository.findByAccount_AccountId(accountId)
-                .map(Store::getStoreId)
-                .filter(ownStoreId -> !storeIds.contains(ownStoreId))
-                .ifPresent(storeIds::add);
-
-        storeIds.stream().sorted().forEach(storeRepository::findByIdWithPessimisticLock);
+        storeIds.forEach(storeRepository::findByIdWithPessimisticLock);
     }
 }

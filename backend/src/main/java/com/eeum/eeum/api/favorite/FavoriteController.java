@@ -129,7 +129,8 @@ public class FavoriteController {
     @SuppressWarnings("removal")   // 레거시 경로가 레거시 서비스 메서드를 부르는 것은 의도된 짝이다
     @Operation(
             summary = "[Deprecated] 내 찜 전체 목록 (번호 페이징)",
-            description = "GET /favorites/me/all로 대체되었습니다. 신규 경로는 무한 스크롤용 Slice 응답입니다. " +
+            description = "GET /favorites/me/all로 대체되었습니다. 신규 경로는 커서 무한 스크롤(CursorSlice) 응답이라 " +
+                    "page 대신 cursorValue·cursorId를 받습니다. " +
                     "이 경로는 기존 클라이언트 호환을 위해 한시적으로 유지되며 예고 후 제거됩니다."
     )
     @GetMapping("/me")
@@ -178,7 +179,8 @@ public class FavoriteController {
     @SuppressWarnings("removal")   // 레거시 경로가 레거시 서비스 메서드를 부르는 것은 의도된 짝이다
     @Operation(
             summary = "[Deprecated] 상점 찜 목록 (번호 페이징)",
-            description = "GET /favorites/me/store로 대체되었습니다. 신규 경로는 무한 스크롤용 Slice 응답입니다. " +
+            description = "GET /favorites/me/store로 대체되었습니다. 신규 경로는 커서 무한 스크롤(CursorSlice) 응답이라 " +
+                    "page 대신 cursorValue·cursorId를 받습니다. " +
                     "이 경로는 기존 클라이언트 호환을 위해 한시적으로 유지되며 예고 후 제거됩니다."
     )
     @GetMapping("/me/STORE")

@@ -85,6 +85,30 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = 'used_review'
   AND index_name = 'idx_used_review_reviewer';
 
+SELECT 'fk_used_review_product' AS object_name,
+       CASE WHEN COUNT(*) = 0 THEN 'TODO' ELSE 'DONE' END AS status
+FROM information_schema.table_constraints
+WHERE table_schema = DATABASE() AND table_name = 'used_review'
+  AND constraint_name = 'fk_used_review_product' AND constraint_type = 'FOREIGN KEY';
+
+SELECT 'fk_used_review_reviewer' AS object_name,
+       CASE WHEN COUNT(*) = 0 THEN 'TODO' ELSE 'DONE' END AS status
+FROM information_schema.table_constraints
+WHERE table_schema = DATABASE() AND table_name = 'used_review'
+  AND constraint_name = 'fk_used_review_reviewer' AND constraint_type = 'FOREIGN KEY';
+
+-- 컬럼 정의도 이름만이 아니라 실제 타입·NULL 허용으로 판정한다.
+SELECT 'used_review(columns)' AS object_name,
+       CASE
+           WHEN COUNT(*) = 0 THEN 'TODO'
+           WHEN COUNT(*) = 7 THEN 'DONE'
+           ELSE 'MISMATCH'
+       END AS status,
+       GROUP_CONCAT(CONCAT(column_name, ':', data_type) ORDER BY ordinal_position) AS actual,
+       'used_review_id:bigint, used_product_id:bigint, reviewer_account_id:bigint, rating:int, content:text, created_at:datetime, modified_at:datetime' AS expected
+FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'used_review';
+
 SELECT 'used_product.buyer_account_id' AS object_name,
        CASE
            WHEN COUNT(*) = 0 THEN 'TODO'
@@ -108,7 +132,10 @@ WHERE table_schema = DATABASE() AND table_name = 'used_product'
 -- STEP 2. 적용 — STEP 1이 TODO인 항목만 실행된다 (재실행해도 안전하다)
 -- ============================================================================
 
--- 2-1. 후기 테이블
+-- 2-1. 후기 테이블 — 제약을 테이블 생성에 묶지 않는다.
+--      ddl-auto가 테이블만 먼저 만들어 둔 환경에서는 CREATE TABLE IF NOT EXISTS가 통째로
+--      건너뛰어져, UNIQUE와 FK가 없는 상태가 그대로 남는다(STEP 1이 TODO라고 말해도
+--      STEP 2가 고칠 방법이 없다). 컬럼·UNIQUE·FK를 각각 판정하고 각각 추가한다.
 CREATE TABLE IF NOT EXISTS used_review (
     used_review_id      BIGINT      NOT NULL AUTO_INCREMENT,
     used_product_id     BIGINT      NOT NULL,
@@ -117,14 +144,41 @@ CREATE TABLE IF NOT EXISTS used_review (
     content             TEXT        NOT NULL,
     created_at          DATETIME(6) NOT NULL,
     modified_at         DATETIME(6) NOT NULL,
-    PRIMARY KEY (used_review_id),
-    CONSTRAINT uk_used_review_product_reviewer
-        UNIQUE (used_product_id, reviewer_account_id),
-    CONSTRAINT fk_used_review_product
-        FOREIGN KEY (used_product_id) REFERENCES used_product (used_product_id),
-    CONSTRAINT fk_used_review_reviewer
-        FOREIGN KEY (reviewer_account_id) REFERENCES account (account_id)
+    PRIMARY KEY (used_review_id)
 );
+
+-- UNIQUE를 걸기 전에 중복부터 확인한다. 0건이 아니면 여기서 멈추고 사람이 정리한다 —
+-- 중복이 있으면 아래 ADD CONSTRAINT가 실패하고, 원인을 모른 채 스크립트만 다시 돌리게 된다.
+SELECT used_product_id, reviewer_account_id, COUNT(*) AS duplicates
+FROM used_review
+GROUP BY used_product_id, reviewer_account_id
+HAVING COUNT(*) > 1;
+
+-- 한 거래에 작성자당 후기 1개. 앱의 존재 확인만으로는 동시 요청에 중복이 들어간다.
+SET @exists := (SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'used_review'
+                  AND index_name = 'uk_used_review_product_reviewer');
+SET @ddl := IF(@exists = 0,
+    'ALTER TABLE used_review ADD CONSTRAINT uk_used_review_product_reviewer UNIQUE (used_product_id, reviewer_account_id)',
+    'SELECT "uk_used_review_product_reviewer 이미 존재 — 건너뜀"');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE() AND table_name = 'used_review'
+                  AND constraint_name = 'fk_used_review_product' AND constraint_type = 'FOREIGN KEY');
+SET @ddl := IF(@exists = 0,
+    'ALTER TABLE used_review ADD CONSTRAINT fk_used_review_product FOREIGN KEY (used_product_id) REFERENCES used_product (used_product_id)',
+    'SELECT "fk_used_review_product 이미 존재 — 건너뜀"');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE() AND table_name = 'used_review'
+                  AND constraint_name = 'fk_used_review_reviewer' AND constraint_type = 'FOREIGN KEY');
+SET @ddl := IF(@exists = 0,
+    'ALTER TABLE used_review ADD CONSTRAINT fk_used_review_reviewer FOREIGN KEY (reviewer_account_id) REFERENCES account (account_id)',
+    'SELECT "fk_used_review_reviewer 이미 존재 — 건너뜀"');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 판매자별 후기 목록은 상품을 거쳐 판매자에 매달린다 — 조인 기준 컬럼을 잡아둔다.
 SET @exists := (SELECT COUNT(*) FROM information_schema.statistics

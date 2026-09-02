@@ -72,7 +72,7 @@ class AccountWithdrawalProcessorTest {
         when(owner.getRole()).thenReturn(AccountRole.ROLE_OWNER);
         when(favoriteService.findFavoriteRefIds(ACCOUNT_ID, FavoriteRefType.STORE))
                 .thenReturn(List.of());
-        when(storeRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(storeRepository.findStoreIdByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         // when
         accountWithdrawalProcessor.process(owner);
@@ -116,9 +116,9 @@ class AccountWithdrawalProcessorTest {
         when(favoriteService.findFavoriteRefIds(ACCOUNT_ID, FavoriteRefType.STORE))
                 .thenReturn(List.of(30L, 10L));
 
-        Store ownStore = mock(Store.class);
-        when(ownStore.getStoreId()).thenReturn(20L);
-        when(storeRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.of(ownStore));
+        // 엔티티가 아니라 ID만 읽는다 — 잠금 없이 올린 엔티티를 뒤에서 잠금 조회하면
+        // 1차 캐시의 낡은 인스턴스가 돌아오고, Store의 @Version 때문에 탈퇴가 통째로 실패한다.
+        when(storeRepository.findStoreIdByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(20L));
 
         // when
         accountWithdrawalProcessor.process(owner);
@@ -172,7 +172,7 @@ class AccountWithdrawalProcessorTest {
         when(account.getRole()).thenReturn(AccountRole.ROLE_USER);
         when(favoriteService.findFavoriteRefIds(ACCOUNT_ID, FavoriteRefType.STORE))
                 .thenReturn(List.of());
-        when(storeRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(storeRepository.findStoreIdByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
         return account;
     }
 }
