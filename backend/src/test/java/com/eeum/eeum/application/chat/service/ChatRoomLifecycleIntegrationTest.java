@@ -235,7 +235,7 @@ class ChatRoomLifecycleIntegrationTest extends IntegrationTestSupport {
 
         // then: 종료된 방의 메시지 조회도 여전히 가능해야 한다 (기록 보존의 실효성)
         assertThat(chatMessageService
-                .getMessages(customerId, firstRoomId, null, 20)
+                .getMessages(customerId, firstRoomId, null, null, 20)
                 .getContent()).isNotEmpty();
     }
 

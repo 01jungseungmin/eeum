@@ -85,11 +85,29 @@ class ChatMessageHttpContractTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 형식이_깨진_커서는_400으로_거절한다() {
-        MvcResult result = call(get("/chat/rooms/1/messages").param("cursor", "어제"));
+    void 형식이_깨진_커서_값은_400으로_거절한다() {
+        MvcResult result = call(get("/chat/rooms/1/messages")
+                .param("cursorValue", "어제")
+                .param("cursorId", "41"));
 
         assertThat(result.getResponse().getStatus())
                 .as("예외: %s / 응답: %s", resolved(result), body(result))
+                .isEqualTo(400);
+    }
+
+    @Test
+    void 메시지_커서를_한쪽만_보내면_400으로_거절한다() {
+        // 시각만 받으면 같은 시각에 저장된 메시지 사이에서 경계를 끊지 못한다.
+        // 조용히 첫 페이지를 돌려주면 화면에 같은 목록이 다시 쌓인다.
+        MvcResult valueOnly = call(get("/chat/rooms/1/messages")
+                .param("cursorValue", "2026-09-01T10:00:00"));
+        MvcResult idOnly = call(get("/chat/rooms/1/messages").param("cursorId", "41"));
+
+        assertThat(valueOnly.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(valueOnly), body(valueOnly))
+                .isEqualTo(400);
+        assertThat(idOnly.getResponse().getStatus())
+                .as("예외: %s / 응답: %s", resolved(idOnly), body(idOnly))
                 .isEqualTo(400);
     }
 

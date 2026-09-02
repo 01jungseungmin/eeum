@@ -14,12 +14,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long>,
     // 본인 메시지 검증용
     Optional<ChatMessage> findByChatmessageIdAndAccount_AccountId(Long messageId, Long accountId);
 
-    // 채팅방 메시지 목록 (최신순) — 첫 페이지용
+    // 관리자 대화 열람(번호 페이징) 전용. 사용자 목록은 findRoomMessages(커서)를 쓴다 —
+    // 시각 단독 정렬은 같은 시각 메시지의 순서를 보장하지 못한다.
     Page<ChatMessage> findAllByChatRoom_ChatroomIdOrderBySentAtDesc(Long roomId, Pageable pageable);
-
-    // 커서 페이징 (과거 메시지 로드) — sentAt 커서 이전 메시지
-    List<ChatMessage> findAllByChatRoom_ChatroomIdAndSentAtBeforeOrderBySentAtDesc(
-            Long roomId, LocalDateTime cursor, Pageable pageable);
 
     // 마지막 메시지 (목록 화면 미리보기 / 읽음 처리 시점 최신 messageId)
     Optional<ChatMessage> findFirstByChatRoom_ChatroomIdOrderBySentAtDesc(Long roomId);

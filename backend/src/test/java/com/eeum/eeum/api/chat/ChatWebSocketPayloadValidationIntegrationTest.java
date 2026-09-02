@@ -1,9 +1,12 @@
 package com.eeum.eeum.api.chat;
 
+import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.security.websocket.StompPrincipal;
 import com.eeum.eeum.support.IntegrationTestSupport;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.Message;
@@ -20,6 +23,7 @@ import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,9 +43,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatWebSocketPayloadValidationIntegrationTest extends IntegrationTestSupport {
 
     private static final long UNKNOWN_ROOM_ID = 987654L;
-    private static final long ACCOUNT_ID = 1L;
 
     private final SimpAnnotationMethodMessageHandler messageHandler;
+    private final AccountRepository accountRepository;
+
+    /**
+     * 실제로 존재하는 계정을 쓴다. 없는 계정을 넣으면 발송이 계정 관문(ACCOUNT_001)에서 먼저
+     * 끊겨, "페이로드 검증을 통과해 핸들러까지 갔다"는 이 테스트의 판정 근거가 사라진다.
+     * 메시지 발송은 계정을 먼저 잠그고 방을 잠근다(account → chat_room).
+     */
+    private Long accountId;
 
     @Qualifier("brokerChannel")
     private final AbstractSubscribableChannel brokerChannel;
@@ -60,6 +71,14 @@ class ChatWebSocketPayloadValidationIntegrationTest extends IntegrationTestSuppo
             return message;
         }
     };
+
+    @BeforeEach
+    void createSender() {
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        accountId = accountRepository.save(Account.createUser(
+                "ws-payload-" + tag + "@test.com", "encoded_pw", "발신자", "발신자" + tag,
+                "010-4444-5555")).getAccountId();
+    }
 
     @AfterEach
     void removeInterceptor() {
@@ -142,7 +161,7 @@ class ChatWebSocketPayloadValidationIntegrationTest extends IntegrationTestSuppo
         accessor.setSessionId("validation-test-session");
         accessor.setSessionAttributes(new HashMap<>()); // SimpAttributes가 요구한다
 
-        accessor.setUser(new StompPrincipal(ACCOUNT_ID));
+        accessor.setUser(new StompPrincipal(accountId));
         accessor.setContentType(MimeTypeUtils.APPLICATION_JSON);
         accessor.setLeaveMutable(true);
 

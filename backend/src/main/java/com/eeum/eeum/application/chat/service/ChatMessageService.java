@@ -16,6 +16,8 @@ import com.eeum.eeum.application.notification.service.NotificationOutboxDispatch
 import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.application.notification.service.NotificationOutboxRecorder;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
+import com.eeum.eeum.common.dto.response.CursorSlice;
+import com.eeum.eeum.domain.chat.repository.ChatMessageCursor;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
@@ -25,9 +27,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +35,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -131,22 +130,25 @@ public class ChatMessageService {
 
     // ===================== 조회 =====================
 
-    // 메시지 목록 (최신→과거) — 커서 기반 무한 스크롤
-    // cursor: 이전 페이지의 마지막 메시지 sentAt (null이면 첫 페이지)
+    /**
+     * 메시지 목록 (최신→과거) — 커서 무한 스크롤.
+     *
+     * <p>커서는 발신 시각과 메시지 ID를 함께 담는다. 예전에는 시각 하나였고 조건이
+     * {@code sentAt < cursor}라, 같은 시각에 저장된 메시지가 경계에 걸리면 나머지가
+     * 영구히 누락됐다.
+     *
+     * @param cursorValue 직전 응답의 {@code nextCursorValue}. 첫 페이지면 null이다.
+     * @param cursorId    직전 응답의 {@code nextCursorId}. 첫 페이지면 null이다.
+     */
     @Transactional(readOnly = true)
-    public Slice<ChatMessageResponseDto> getMessages(
-            Long accountId, Long roomId, LocalDateTime cursor, int size) {
+    public CursorSlice<ChatMessageResponseDto> getMessages(
+            Long accountId, Long roomId, String cursorValue, Long cursorId, int size) {
+        // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
+        ChatMessageCursor cursor = ChatMessageCursor.ofNullable(cursorValue, cursorId);
         chatAccessHelper.verifyParticipant(accountId, roomId);
-        PageRequest pageable = PageRequest.of(0, size + 1);
-        List<ChatMessage> raw = (cursor == null)
-                ? chatMessageRepository.findAllByChatRoom_ChatroomIdOrderBySentAtDesc(roomId, pageable).getContent()
-                : chatMessageRepository.findAllByChatRoom_ChatroomIdAndSentAtBeforeOrderBySentAtDesc(roomId, cursor, pageable);
-        boolean hasNext = raw.size() > size;
-        List<ChatMessageResponseDto> content = raw.stream()
-                .limit(size)
-                .map(ChatMessageResponseDto::from)
-                .toList();
-        return new SliceImpl<>(content, pageable, hasNext);
+
+        return chatMessageRepository.findRoomMessages(roomId, cursor, size)
+                .map(ChatMessageResponseDto::from);
     }
 
     // 전체 안 읽은 메시지 수 (Redis 우선, 캐시 미스 시 DB 합산)
