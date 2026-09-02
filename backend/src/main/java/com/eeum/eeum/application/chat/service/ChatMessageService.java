@@ -13,6 +13,7 @@ import com.eeum.eeum.domain.chat.entity.ChatRoom;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.application.notification.service.NotificationOutboxRecorder;
 import com.eeum.eeum.domain.chat.event.ChatMessageSentEvent;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
@@ -44,6 +45,7 @@ public class ChatMessageService {
 
     private static final int PREVIEW_MAX_LENGTH = 50;
 
+    private final AccountWriteGuard accountWriteGuard;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatRoomRepository chatRoomRepository;
@@ -61,6 +63,12 @@ public class ChatMessageService {
             Long accountId, Long roomId, ChatMessageSendRequestDto request) {
         checkIdempotency(accountId, roomId, request.getClientMessageId());
 
+        // 발신자 계정을 먼저 잠근다(account → chat_room, 프로젝트 전역 순서).
+        // 잠그지 않고 로딩된 엔티티에 assertWritable()만 호출하면, 탈퇴 트랜잭션과 겹쳤을 때
+        // 탈퇴 이전 상태를 읽은 이 트랜잭션이 탈퇴 커밋 뒤에 메시지를 남긴다.
+        // WebSocket 인터셉터의 사전 검증은 트랜잭션 밖이라 이 경쟁을 막지 못한다.
+        accountWriteGuard.lockActive(accountId);
+
         // 종료와 같은 방 행을 잠근 뒤 활성 상태를 확인한다.
         // 확인 후 종료가 끼어드는 check-then-act 경쟁을 DB 커밋까지 차단한다.
         ChatRoom room = chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId);
@@ -68,8 +76,8 @@ public class ChatMessageService {
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
         Account sender = participant.getAccount();
-        // 인터셉터를 거치지 않는 호출(테스트·향후 REST 경로)에서도 정지·탈퇴 계정의 발행을 막는다.
-        // 이 시점의 sender는 이미 로딩돼 있어 추가 조회가 없다.
+        // 위 lockActive가 계정 행을 잠그고 상태를 확인했다. 참여자를 통해 얻은 이 인스턴스가
+        // 같은 계정인지에 기대지 않고 한 번 더 본다 — 이미 로딩돼 있어 추가 조회가 없다.
         sender.assertWritable();
         // 첫 메시지 여부는 lastMessageAt을 갱신하기 전에 확정한다.
         // 이 방 행은 위에서 비관적 잠금으로 읽었으므로 스냅샷이 아니라 최신 커밋 값이고,
@@ -98,13 +106,16 @@ public class ChatMessageService {
             Long accountId, Long roomId, ChatImageMessageSendRequestDto request) {
         checkIdempotency(accountId, roomId, request.getClientMessageId());
 
+        // 텍스트 발송과 같은 순서로 잠근다 — account → chat_room.
+        accountWriteGuard.lockActive(accountId);
+
         ChatRoom room = chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId);
         chatAccessHelper.verifyRoomActive(room);
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
         Account sender = participant.getAccount();
-        // 인터셉터를 거치지 않는 호출(테스트·향후 REST 경로)에서도 정지·탈퇴 계정의 발행을 막는다.
-        // 이 시점의 sender는 이미 로딩돼 있어 추가 조회가 없다.
+        // 위 lockActive가 계정 행을 잠그고 상태를 확인했다. 참여자를 통해 얻은 이 인스턴스가
+        // 같은 계정인지에 기대지 않고 한 번 더 본다 — 이미 로딩돼 있어 추가 조회가 없다.
         sender.assertWritable();
         boolean firstMessage = room.getLastMessageAt() == null;
 
