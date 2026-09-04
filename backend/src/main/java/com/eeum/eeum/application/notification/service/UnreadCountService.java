@@ -1,41 +1,39 @@
 package com.eeum.eeum.application.notification.service;
 
 import com.eeum.eeum.application.notification.dto.response.UnreadCountResponseDto;
-import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.notification.enums.NotificationCategory;
-import com.eeum.eeum.domain.notification.repository.NotificationRepository;
-import com.eeum.eeum.exception.BusinessException;
-import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * unread 카운트 조회/갱신 전담 컴포넌트.
- * NotificationService에서 분리해 self-invocation 없이 프록시를 통해 호출되도록 하여
- * AFTER_COMMIT 호출도 REQUIRES_NEW 트랜잭션에서 Account 행 잠금을 획득한다.
+ * unread 카운트 조회/무효화 전담 — <b>Redis만 만진다.</b>
  *
- * Redis 키:
- * - unread:account:{accountId}  — 전체 미읽음 수
- * - unread:category:{accountId} — 카테고리별 미읽음 수 hash
- * 두 키는 DB 스냅샷을 기준으로 Lua에서 원자적으로 함께 교체한다.
+ * <p>DB를 읽어 캐시를 다시 쓰는 일은 {@link UnreadSnapshotRebuilder}에 있다.
+ * 트랜잭션이 필요한 쪽을 그쪽으로 몰아 두면, 캐시 히트로 끝나는 조회는
+ * EntityManager도 DB 커넥션도 건드리지 않는다. 알림 배지 조회는 웹 대시보드가
+ * 페이지마다 부르는 경로라 이 차이가 그대로 커넥션 풀 여유가 된다.
+ *
+ * <p>Redis 키:
+ * <ul>
+ *   <li>{@code unread:account:{accountId}} — 전체 미읽음 수</li>
+ *   <li>{@code unread:category:{accountId}} — 카테고리별 미읽음 수 hash</li>
+ * </ul>
+ * 두 키는 항상 같은 DB 스냅샷으로 함께 교체된다.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UnreadCountService {
 
-    private static final String UNREAD_KEY_PREFIX = "unread:account:";
-    private static final String CATEGORY_KEY_PREFIX = "unread:category:";
     @SuppressWarnings("rawtypes")
     private static final DefaultRedisScript<List> READ_UNREAD_SNAPSHOT = new DefaultRedisScript<>(
             "local total = redis.call('get', KEYS[1]) "
@@ -45,26 +43,18 @@ public class UnreadCountService {
                     + "for i = 1, #categories do table.insert(result, categories[i]) end "
                     + "return result",
             List.class);
-    private static final DefaultRedisScript<Long> REPLACE_UNREAD_SNAPSHOT = new DefaultRedisScript<>(
-            "redis.call('set', KEYS[1], ARGV[1]) "
-                    + "redis.call('del', KEYS[2]) "
-                    + "for i = 2, #ARGV, 2 do redis.call('hset', KEYS[2], ARGV[i], ARGV[i + 1]) end "
-                    + "return 1",
-            Long.class);
 
-    private final NotificationRepository notificationRepository;
-    private final AccountRepository accountRepository;
+    private final UnreadSnapshotRebuilder snapshotRebuilder;
     private final StringRedisTemplate redisTemplate;
 
     // ===================== 조회 =====================
 
     // 전체·카테고리 캐시가 모두 완성된 경우에만 캐시를 사용한다.
     // 하나라도 미스면 Account 행을 잠근 뒤 동일 DB 스냅샷으로 두 캐시를 함께 복구한다.
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UnreadCountResponseDto getUnreadCount(Long accountId) {
         List<?> cachedSnapshot = redisTemplate.execute(
                 READ_UNREAD_SNAPSHOT,
-                List.of(totalKey(accountId), categoryKey(accountId)));
+                List.of(UnreadCacheKeys.total(accountId), UnreadCacheKeys.category(accountId)));
         CachedUnreadSnapshot cached = parseCachedSnapshot(cachedSnapshot);
 
         if (cached != null && hasAllCategories(cached.categoryCounts())) {
@@ -72,7 +62,7 @@ public class UnreadCountService {
                     cached.total(), parseCategoryCounts(cached.categoryCounts()));
         }
 
-        return rebuildFromDbWithAccountLock(accountId);
+        return snapshotRebuilder.rebuild(accountId);
     }
 
     private CachedUnreadSnapshot parseCachedSnapshot(List<?> snapshot) {
@@ -80,7 +70,7 @@ public class UnreadCountService {
 
         try {
             long total = Long.parseLong(snapshot.get(0).toString());
-            Map<Object, Object> categoryCounts = new java.util.HashMap<>();
+            Map<Object, Object> categoryCounts = new HashMap<>();
             for (int i = 1; i < snapshot.size(); i += 2) {
                 categoryCounts.put(snapshot.get(i), snapshot.get(i + 1));
             }
@@ -107,63 +97,46 @@ public class UnreadCountService {
         return result;
     }
 
-    // ===================== 갱신 (변경 트랜잭션 커밋 후 호출 전제) =====================
+    // ===================== 갱신 =====================
 
-    // increment/decrement와 DB count SET을 혼용하면 afterCommit 실행 순서가 뒤집힐 때 캐시가 틀어진다.
+    // increment/decrement와 DB count SET을 혼용하면 실행 순서가 뒤집힐 때 캐시가 틀어진다.
     // 모든 변경 경로는 Account 행을 동일 mutex로 잠그고 현재 DB 상태로 전체 스냅샷을 재작성한다.
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void increment(Long accountId) {
-        rebuildFromDbWithAccountLock(accountId);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void decrement(Long accountId) {
-        rebuildFromDbWithAccountLock(accountId);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void clear(Long accountId) {
-        rebuildFromDbWithAccountLock(accountId);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UnreadCountResponseDto refreshFromDb(Long accountId) {
-        return rebuildFromDbWithAccountLock(accountId);
+        return snapshotRebuilder.rebuild(accountId);
     }
 
+    public void increment(Long accountId) {
+        snapshotRebuilder.rebuild(accountId);
+    }
+
+    public void decrement(Long accountId) {
+        snapshotRebuilder.rebuild(accountId);
+    }
+
+    public void clear(Long accountId) {
+        snapshotRebuilder.rebuild(accountId);
+    }
+
+    // ===================== 무효화 =====================
+
+    // 재계산을 다른 스레드로 넘기기 직전에 부른다. 캐시를 비워 두면 재계산이 폐기되거나
+    // 실패하더라도 다음 조회가 캐시 미스로 DB에서 정확한 값을 복구한다.
+    // 반대로 낡은 값을 그대로 두면 "완성됐지만 틀린" 스냅샷이라 조회가 계속 그것을 믿는다.
     public void invalidateSnapshot(Long accountId) {
-        redisTemplate.delete(List.of(totalKey(accountId), categoryKey(accountId)));
+        redisTemplate.delete(
+                List.of(UnreadCacheKeys.total(accountId), UnreadCacheKeys.category(accountId)));
     }
 
-    private UnreadCountResponseDto rebuildFromDbWithAccountLock(Long accountId) {
-        accountRepository.findByIdWithLock(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+    // 참여자 전원 무효화 — 계정 수만큼 왕복하지 않도록 키를 한 번에 넘긴다
+    public void invalidateSnapshots(List<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) return;
 
-        long dbCount = notificationRepository.countByAccount_AccountIdAndIsReadFalse(accountId);
-        Map<NotificationCategory, Long> categoryCounts = emptyCategoryCounts();
-        categoryCounts.putAll(notificationRepository.countUnreadByCategory(accountId));
-
-        List<String> snapshotArgs = new ArrayList<>();
-        snapshotArgs.add(String.valueOf(dbCount));
-        categoryCounts.forEach((category, count) -> {
-            snapshotArgs.add(category.name());
-            snapshotArgs.add(String.valueOf(count));
-        });
-        redisTemplate.execute(
-                REPLACE_UNREAD_SNAPSHOT,
-                List.of(totalKey(accountId), categoryKey(accountId)),
-                snapshotArgs.toArray());
-
-        log.debug("unread 캐시 동기화: accountId={}, count={}", accountId, dbCount);
-        return UnreadCountResponseDto.of(dbCount, categoryCounts);
-    }
-
-    private Map<NotificationCategory, Long> emptyCategoryCounts() {
-        Map<NotificationCategory, Long> counts = new EnumMap<>(NotificationCategory.class);
-        for (NotificationCategory category : NotificationCategory.values()) {
-            counts.put(category, 0L);
+        List<String> keys = new ArrayList<>(accountIds.size() * 2);
+        for (Long accountId : accountIds) {
+            keys.add(UnreadCacheKeys.total(accountId));
+            keys.add(UnreadCacheKeys.category(accountId));
         }
-        return counts;
+        redisTemplate.delete(keys);
     }
 
     private boolean hasAllCategories(Map<Object, Object> cached) {
@@ -172,14 +145,6 @@ public class UnreadCountService {
             if (!cached.containsKey(category.name())) return false;
         }
         return true;
-    }
-
-    private String totalKey(Long accountId) {
-        return UNREAD_KEY_PREFIX + accountId;
-    }
-
-    private String categoryKey(Long accountId) {
-        return CATEGORY_KEY_PREFIX + accountId;
     }
 
     private record CachedUnreadSnapshot(long total, Map<Object, Object> categoryCounts) {

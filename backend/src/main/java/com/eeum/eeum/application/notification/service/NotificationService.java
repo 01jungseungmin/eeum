@@ -16,7 +16,6 @@ import com.eeum.eeum.domain.notification.repository.NotificationSettingsReposito
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.infrastructure.push.PushMessage;
-import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.infrastructure.sse.SseEmitterManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,14 +44,14 @@ public class NotificationService {
     private final AccountRepository accountRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final UnreadCountService unreadCountService;
+    private final UnreadSyncExecutor unreadSyncExecutor;
     private final SseEmitterManager sseEmitterManager;
-    private final RealtimeRelayPublisher realtimeRelayPublisher;
 
     // ===================== SSE 구독 =====================
 
     // 클라이언트(웹)가 SSE 구독을 요청할 때 호출
-    // 연결 직후 현재 unread 카운트를 즉시 전송 — 카운트 조회는 UnreadCountService 프록시를 경유해
-    // readOnly 트랜잭션이 적용되고, emitter 생성 자체는 트랜잭션에 묶지 않는다
+    // 연결 직후 현재 unread 카운트를 즉시 전송한다. 캐시가 살아 있으면 조회는 Redis에서 끝나고
+    // DB 커넥션을 잡지 않는다 — 미스일 때만 UnreadSnapshotRebuilder가 트랜잭션을 연다
     public SseEmitter subscribe(Long accountId) {
         SseEmitter emitter = sseEmitterManager.subscribe(accountId);
         // 구독 직후 현재 카운트를 즉시 전달 (페이지 진입 시 배지 즉시 표시)
@@ -239,10 +238,10 @@ public class NotificationService {
         int updated = notificationRepository.markAsReadByAccountsAndTypeAndRef(
                 accountIds, type, refType, refId, LocalDateTime.now());
         if (updated > 0) {
-            runAfterCommit(() -> accountIds.forEach(accountId -> {
-                unreadCountService.refreshFromDb(accountId);
-                pushUnreadCount(accountId);
-            }));
+            runAfterCommit(() -> synchronizeUnread(
+                    () -> unreadCountService.invalidateSnapshots(accountIds),
+                    () -> unreadSyncExecutor.rebuildAndPushAll(accountIds),
+                    accountIds.size() + "개 계정"));
         }
         log.debug("참조 기준 일괄 읽음 처리: accounts={}, type={}, refType={}, refId={}, count={}",
                 accountIds.size(), type, refType, refId, updated);
@@ -277,30 +276,37 @@ public class NotificationService {
 
     // ===================== 내부 헬퍼 =====================
 
-    // 현재 unread 카운트(전체 + 카테고리별)를 SSE로 전송.
-    // 이 인스턴스에 커넥션이 없을 수 있으므로 Redis로 중계한다 — 알림은 아무 인스턴스에서나
-    // 발생하지만 SSE 커넥션은 실시간 인스턴스에만 있다. 연결 여부는 받는 쪽에서 판단한다.
-    private void pushUnreadCount(Long accountId) {
-        realtimeRelayPublisher.publishUnreadCount(
-                accountId, unreadCountService.getUnreadCount(accountId));
+    // 커밋 이후의 unread 동기화.
+    //
+    // 요청 스레드에서 하는 일은 Redis 키 삭제뿐이고, DB 재계산과 실시간 전송은 async로 넘긴다.
+    // afterCommit은 커밋을 수행한 그 요청 스레드에서 돌고 이 시점 바깥 커넥션은 아직 반납 전이라,
+    // 여기서 트랜잭션을 열면 한 요청이 커넥션을 2개 점유한다(자원 예산 문서 R2).
+    //
+    // 무효화를 먼저 하는 순서가 중요하다. async 작업은 큐 포화 시 폐기될 수 있는데,
+    // 캐시를 비워 두면 폐기되더라도 다음 조회가 미스로 DB에서 정확히 복구한다.
+    // 순서를 뒤집으면 "완성됐지만 낡은" 스냅샷이 남아 조회가 계속 그것을 믿는다.
+    private void synchronizeUnreadAfterCommit(Long accountId) {
+        runAfterCommit(() -> synchronizeUnread(
+                () -> unreadCountService.invalidateSnapshot(accountId),
+                () -> unreadSyncExecutor.rebuildAndPush(accountId),
+                "accountId=" + accountId));
     }
 
-    // DB 변경은 이미 커밋된 뒤이므로 Redis/SSE 실패를 API 실패로 전파하지 않는다.
-    // 동기화 실패 시 완성된 것처럼 보이는 오래된 캐시를 제거해 다음 조회가 DB에서 복구하도록 한다.
-    private void synchronizeUnreadAfterCommit(Long accountId) {
-        runAfterCommit(() -> {
-            try {
-                unreadCountService.refreshFromDb(accountId);
-                pushUnreadCount(accountId);
-            } catch (RuntimeException e) {
-                log.error("커밋 후 unread 동기화 실패: accountId={}", accountId, e);
-                try {
-                    unreadCountService.invalidateSnapshot(accountId);
-                } catch (RuntimeException invalidateError) {
-                    log.error("unread 캐시 무효화 실패: accountId={}", accountId, invalidateError);
-                }
-            }
-        });
+    // DB 변경은 이미 커밋된 뒤다. 여기서 예외가 새어 나가면 afterCommit을 실행한 요청이
+    // 커밋에 성공하고도 실패로 응답되므로, Redis 장애든 큐 거부든 전부 삼킨다.
+    private void synchronizeUnread(Runnable invalidate, Runnable submitRebuild, String target) {
+        try {
+            invalidate.run();
+        } catch (RuntimeException e) {
+            // 무효화가 실패하면 낡은 캐시가 남는다. 재계산은 그래도 제출한다 —
+            // 성공하면 그 낡은 값이 최신 스냅샷으로 덮이고, 실패해도 5분 주기 보정이 받는다.
+            log.error("커밋 후 unread 캐시 무효화 실패: {}", target, e);
+        }
+        try {
+            submitRebuild.run();
+        } catch (RuntimeException e) {
+            log.error("커밋 후 unread 재계산 제출 실패: {}", target, e);
+        }
     }
 
     private void publishPushEvent(Account account, NotificationCreateRequestDto request) {
