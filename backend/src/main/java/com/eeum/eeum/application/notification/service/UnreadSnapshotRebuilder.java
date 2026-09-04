@@ -49,7 +49,8 @@ public class UnreadSnapshotRebuilder {
         try {
             return Long.parseLong(value);
         } catch (NumberFormatException e) {
-            log.warn("unread 캐시 세대 형식 오류 — 0부터 다시 시작: accountId={}", accountId);
+            redisTemplate.delete(UnreadCacheKeys.generation(accountId));
+            log.warn("unread 캐시 세대 형식 오류 — 손상된 키를 삭제하고 0부터 다시 시작: accountId={}", accountId);
             return 0L;
         }
     }
