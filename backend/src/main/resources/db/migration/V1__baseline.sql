@@ -919,6 +919,7 @@ CREATE TABLE notification (
     created_at      DATETIME(6)  NOT NULL,
     modified_at     DATETIME(6)  NOT NULL,
     PRIMARY KEY (notification_id),
+    KEY idx_notification_account_read (account_id, is_read),
     CONSTRAINT fk_notification_account
         FOREIGN KEY (account_id) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

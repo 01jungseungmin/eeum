@@ -1,0 +1,208 @@
+package com.eeum.eeum.infrastructure.sse;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doAnswer;
+
+class SseEmitterManagerTest {
+
+    private SseEmitterManager sseEmitterManager;
+
+    private static final Long ACCOUNT_ID = 6L;
+
+    @BeforeEach
+    void setUp() {
+        sseEmitterManager = new SseEmitterManager();
+    }
+
+    @AfterEach
+    void tearDown() {
+        sseEmitterManager.destroy();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Long, SseEmitterManager.Connection> connections() {
+        return (Map<Long, SseEmitterManager.Connection>) ReflectionTestUtils.getField(
+                sseEmitterManager, "connections");
+    }
+
+    private SseEmitter registerMockEmitter(Long accountId) {
+        SseEmitter emitter = mock(SseEmitter.class);
+        connections().put(accountId, new SseEmitterManager.Connection(emitter, 0L, ""));
+        return emitter;
+    }
+
+    @Test
+    void 전송이_IOException으로_실패하면_emitter를_회수한다() throws Exception {
+        // given
+        SseEmitter emitter = registerMockEmitter(ACCOUNT_ID);
+        doThrow(new IOException("broken pipe"))
+                .when(emitter).send(any(SseEmitter.SseEventBuilder.class));
+
+        // when
+        sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 3));
+
+        // then: 죽은 연결을 맵에 남기면 이후 이벤트가 매번 그 소켓으로 향한다
+        await().untilAsserted(() -> assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isFalse());
+    }
+
+    // IOException만 잡던 시절에는 이 경로에서 예외가 전송 스레드로 빠져나가고
+    // emitter는 맵에 그대로 남았다. 이미 완료된 emitter에 보내면 실제로 이 예외가 난다.
+    @Test
+    void 전송이_IOException이_아닌_예외로_실패해도_emitter를_회수한다() throws Exception {
+        // given
+        SseEmitter emitter = registerMockEmitter(ACCOUNT_ID);
+        doThrow(new IllegalStateException("ResponseBodyEmitter has already completed"))
+                .when(emitter).send(any(SseEmitter.SseEventBuilder.class));
+
+        // when
+        sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 3));
+
+        // then
+        await().untilAsserted(() -> assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isFalse());
+    }
+
+    @Test
+    void 전송은_호출_스레드가_아닌_전용_풀에서_수행된다() throws Exception {
+        // given
+        SseEmitter emitter = registerMockEmitter(ACCOUNT_ID);
+
+        // when
+        sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 1));
+
+        // then: 호출부는 큐에 넣고 즉시 돌아가고, write는 sse-write 스레드에서 일어난다.
+        // 요청 스레드에서 직접 write하면 죽은 클라이언트의 TCP 재전송 타임아웃까지 묶인다.
+        verify(emitter, timeout(2_000)).send(any(SseEmitter.SseEventBuilder.class));
+    }
+
+    @Test
+    void 연결이_없는_계정에는_전송하지_않는다() {
+        // when & then
+        assertThatCode(() -> sseEmitterManager.sendUnreadCount(999L, Map.of("unreadCount", 1)))
+                .doesNotThrowAnyException();
+        assertThat(sseEmitterManager.isConnected(999L)).isFalse();
+    }
+
+    @Test
+    void 같은_계정이_재연결하면_이전_emitter를_완료하고_교체한다() {
+        // given
+        SseEmitter previous = registerMockEmitter(ACCOUNT_ID);
+
+        // when
+        SseEmitter current = sseEmitterManager.subscribe(ACCOUNT_ID);
+
+        // then
+        verify(previous).complete();
+        assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
+    }
+
+    // 이전 emitter 정리가 실패했다고 새 구독을 실패시키면, 맵에는 emitter가 남고
+    // 컨트롤러는 500을 응답한다 — 아무도 읽지 않는 고아 emitter가 생긴다.
+    @Test
+    void 이전_emitter_정리가_실패해도_구독은_성공한다() {
+        // given
+        SseEmitter previous = registerMockEmitter(ACCOUNT_ID);
+        doThrow(new IllegalStateException("already completed")).when(previous).complete();
+
+        // when & then
+        assertThatCode(() -> sseEmitterManager.subscribe(ACCOUNT_ID)).doesNotThrowAnyException();
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+    }
+
+    @Test
+    void 구독하면_해당_계정이_연결된_것으로_보인다() {
+        // when
+        SseEmitter emitter = sseEmitterManager.subscribe(ACCOUNT_ID);
+
+        // then
+        assertThat(emitter).isNotNull();
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+    }
+
+    @Test
+    void 이전_연결_정리가_재연결된_현재_연결의_인증정보를_지우지_않는다() {
+        // given: 이전 연결의 초기 unread 조회가 늦게 실패하는 동안 같은 계정이 재연결한 상황
+        SseEmitter previous = sseEmitterManager.subscribe(ACCOUNT_ID, 1L, "old-token");
+        SseEmitter current = sseEmitterManager.subscribe(ACCOUNT_ID, 2L, "new-token");
+
+        // when: 이전 요청이 자기 emitter만 정리한다
+        sseEmitterManager.closeIfCurrent(ACCOUNT_ID, previous);
+
+        // then: 새 연결과 그 인증 스냅샷은 함께 남아 reconciliation 대상이 된다
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+        assertThat(sseEmitterManager.connectedCredentials().get(ACCOUNT_ID))
+                .isEqualTo(new SseEmitterManager.ConnectionCredentials(2L, "new-token"));
+        assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
+    }
+
+    @Test
+    void 이전_연결의_자격증명으로는_재연결된_현재_연결을_종료하지_않는다() {
+        // given
+        sseEmitterManager.subscribe(ACCOUNT_ID, 1L, "old-token");
+        SseEmitter current = sseEmitterManager.subscribe(ACCOUNT_ID, 2L, "new-token");
+
+        // when
+        sseEmitterManager.closeIfCurrent(
+                ACCOUNT_ID, new SseEmitterManager.ConnectionCredentials(1L, "old-token"));
+
+        // then
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+        assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
+    }
+
+    @Test
+    void 이전_연결의_전송이_멈춰도_재연결된_연결의_unread는_즉시_전송한다() throws Exception {
+        // 이전 연결의 TCP write가 멈춘 뒤 재연결되면, unread 전송 상태도 연결별로 분리돼야 한다.
+        // accountId 하나로 in-flight를 공유하면 새 연결의 전송이 이전 연결의 write가 끝날 때까지 막힌다.
+        SseEmitter previous = registerMockEmitter(ACCOUNT_ID);
+        CountDownLatch previousWriteStarted = new CountDownLatch(1);
+        CountDownLatch releasePreviousWrite = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            previousWriteStarted.countDown();
+            releasePreviousWrite.await(2, TimeUnit.SECONDS);
+            return null;
+        }).when(previous).send(any(SseEmitter.SseEventBuilder.class));
+
+        try {
+            sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 1));
+            assertThat(previousWriteStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            SseEmitter current = registerMockEmitter(ACCOUNT_ID);
+            sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 2));
+
+            verify(current, timeout(500)).send(any(SseEmitter.SseEventBuilder.class));
+        } finally {
+            releasePreviousWrite.countDown();
+        }
+    }
+
+    @Test
+    void 종료시_열린_연결을_모두_정리한다() {
+        // given
+        SseEmitter emitter = registerMockEmitter(ACCOUNT_ID);
+
+        // when
+        sseEmitterManager.destroy();
+
+        // then: 정리하지 않으면 클라이언트가 응답 종료를 기다리다 재연결이 늦어진다
+        verify(emitter).complete();
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isFalse();
+    }
+}

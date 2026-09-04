@@ -15,7 +15,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -48,6 +50,32 @@ public class NotificationRepositoryImpl implements NotificationRepositoryCustom 
             Long count = row.get(notification.count());
             if (type == null || count == null) continue;
             result.merge(type.getCategory(), count, Long::sum);
+        }
+        return result;
+    }
+
+    @Override
+    public Map<Long, Long> countUnreadByAccountIds(Collection<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Tuple> rows = queryFactory
+                .select(notification.account.accountId, notification.count())
+                .from(notification)
+                .where(
+                        notification.account.accountId.in(accountIds),
+                        notification.isRead.isFalse()
+                )
+                .groupBy(notification.account.accountId)
+                .fetch();
+
+        Map<Long, Long> result = new HashMap<>();
+        for (Tuple row : rows) {
+            Long accountId = row.get(notification.account.accountId);
+            Long count = row.get(notification.count());
+            if (accountId == null || count == null) continue;
+            result.put(accountId, count);
         }
         return result;
     }

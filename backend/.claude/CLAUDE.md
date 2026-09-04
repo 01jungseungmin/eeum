@@ -60,7 +60,9 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 ### 절대 규칙
 - Location, Region, OrderItem을 제외한 모든 엔티티는 `BaseEntity` 상속 필수
 - Image 관련 모든 엔티티는 `ImageBase` 상속 필수
-- 읽기 전용 메서드는 `@Transactional(readOnly = true)` 필수
+- DB 조회만 수행하는 읽기 전용 Service 메서드는 `@Transactional(readOnly = true)` 필수
+- 단, WebSocket/SSE close, 외부 API 호출, 파일 I/O 등 장시간 I/O를 함께 수행하는 오케스트레이션 메서드 전체에는 트랜잭션을 걸지 않는다.
+  필요한 DB 조회 구간만 별도 read-only 트랜잭션으로 분리하거나, 조회 후 트랜잭션이 종료된 상태에서 I/O를 수행한다.
 - 가격 필드는 `BigDecimal` 사용
 - API 응답은 반드시 `ApiResponse<T>`로 래핑 (`common/dto/response/ApiResponse`)
 - URL은 kebab-case: `/used`, `/store-reviews`
@@ -90,6 +92,7 @@ throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
 - 쓰기: `@Transactional` (REQUIRED, 기본값)
 - 읽기: `@Transactional(readOnly = true)`
 - 감사 로그: `@Transactional(propagation = REQUIRES_NEW)` — 본 작업 실패해도 로그 기록
+- 장시간 I/O(WebSocket/SSE/외부 API)를 포함하는 오케스트레이션 메서드는 트랜잭션 밖에서 수행하고, DB 작업만 별도 트랜잭션 경계로 분리한다.
 
 ### Soft Delete vs Hard Delete
 Soft Delete (deletedAt 필드) 적용 대상:

@@ -33,6 +33,15 @@ public final class SecurityUtil {
         throw new BusinessException(ErrorCode.COMMON_UNAUTHORIZED);
     }
 
+    public static Long getCurrentTokenVersion() {
+        Authentication authentication = getAuthentication();
+        if (!isValidAuthentication(authentication)
+                || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new BusinessException(ErrorCode.COMMON_UNAUTHORIZED);
+        }
+        return userDetails.getTokenVersion();
+    }
+
     // 로그인 여부를 반환 비회원 접근이 허용되는 API에서 로그인 여부만 확인할 때 사용
 
     public static boolean isAuthenticated() {

@@ -7,6 +7,23 @@ spring:
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: eeum-pool
+      # Tomcat 워커는 200인데 커넥션은 이 수가 상한이다. 요청 하나가 커넥션 하나만
+      # 쓴다는 전제 위의 값이다 — afterCommit에서 REQUIRES_NEW를 여는 식으로 한 요청이
+      # 2개를 쥐기 시작하면 실효 동시성이 절반으로 떨어진다.
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      # 기본값 30초는 너무 길다. 풀이 고갈되면 요청 스레드 200개가 30초씩 묶여
+      # 서버가 꺼진 것처럼 보인다. 빨리 실패시켜 원인을 드러낸다.
+      connection-timeout: 5000
+      # MySQL wait_timeout(기본 28800s)과 프록시 idle cut보다 짧게 잡아,
+      # 이미 끊긴 커넥션을 풀에서 꺼내 쓰는 상황을 막는다.
+      max-lifetime: 1740000
+      keepalive-time: 300000
+      # 커넥션을 20초 넘게 쥐고 있으면 스택트레이스를 남긴다. 커넥션 이중 점유가
+      # 다시 들어와도 장애가 아니라 로그로 먼저 드러나게 하는 안전망이다.
+      leak-detection-threshold: 20000
 
   jpa:
     hibernate:
