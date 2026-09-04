@@ -157,6 +157,11 @@ public class UsedProduct extends BaseEntity {
     ) {
         validateCategory(category);
         validatePrice(priceType, price);
+
+        // 빈 문자열은 "없음"과 같은 뜻이지만 DB에는 NOT NULL 값으로 남는다. 정규화하지 않으면
+        // 검증은 통과한 뒤 flush 시점에 CHECK 제약이 터져 400 대신 500이 나간다.
+        tradeLocationName = blankToNull(tradeLocationName);
+        tradePlaceId = blankToNull(tradePlaceId);
         validateTradeLocation(tradeLocationName, tradeLatitude, tradeLongitude, tradePlaceId);
 
         UsedProduct product = new UsedProduct();
@@ -192,6 +197,10 @@ public class UsedProduct extends BaseEntity {
     ) {
         validateCategory(category);
         validatePrice(priceType, price);
+
+        // 생성 경로와 같은 이유로 정규화한다 — 수정으로 빈 문자열이 들어와도 결과는 같아야 한다.
+        tradeLocationName = blankToNull(tradeLocationName);
+        tradePlaceId = blankToNull(tradePlaceId);
         validateTradeLocation(tradeLocationName, tradeLatitude, tradeLongitude, tradePlaceId);
 
         this.category = category;
@@ -300,6 +309,12 @@ public class UsedProduct extends BaseEntity {
         if (category == null || category.getType() != CategoryType.USED) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
         }
+    }
+
+    // 빈 문자열·공백은 "지정하지 않음"으로 본다. DB CHECK는 NULL만 "없음"으로 취급하므로
+    // 여기서 맞춰두지 않으면 Java 검증과 DB 제약의 판정이 갈린다.
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value;
     }
 
     /**

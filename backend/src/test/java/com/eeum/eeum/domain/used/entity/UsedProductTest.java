@@ -159,6 +159,76 @@ class UsedProductTest {
     }
 
     @Test
+    void 빈_장소명만_보내면_장소_없음으로_저장된다() {
+        // given — 빈 문자열은 "지정하지 않음"과 같은 뜻이다. 그대로 두면 Java 검증은
+        // 통과하는데 DB CHECK는 NULL만 "없음"으로 봐서, flush 시점에 제약 위반이 난다.
+
+        // when
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "", null, null, null);
+
+        // then
+        assertThat(product.getTradeLocationName()).isNull();
+    }
+
+    @Test
+    void 공백_장소명만_보내도_장소_없음으로_저장된다() {
+        // when
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "   ", null, null, null);
+
+        // then
+        assertThat(product.getTradeLocationName()).isNull();
+    }
+
+    @Test
+    void 빈_장소_ID만_보내면_장소_없음으로_저장된다() {
+        // given — placeId도 같은 함정이다. 빈 문자열이 남으면 DB CHECK가
+        // trade_place_id IS NULL을 요구하는 분기에서 걸린다.
+
+        // when
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                null, null, null, "");
+
+        // then
+        assertThat(product.getTradePlaceId()).isNull();
+        assertThat(product.getTradeLocationName()).isNull();
+    }
+
+    @Test
+    void 수정에서도_빈_문자열은_장소_없음으로_정규화된다() {
+        // given — 생성만 고치고 수정을 두면 같은 값이 수정 경로로 들어온다
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "역삼동 주민센터 앞", 37.500123, 127.036456, "26338954");
+
+        // when
+        product.updateInfo(
+                category(CategoryType.USED), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "  ", null, null, "");
+
+        // then
+        assertThat(product.getTradeLocationName()).isNull();
+        assertThat(product.getTradePlaceId()).isNull();
+    }
+
+    @Test
+    void 빈_장소명에_좌표가_붙으면_여전히_400이다() {
+        // given — 정규화가 "이름 없이 좌표만" 케이스를 통과시키면 안 된다
+
+        // when & then
+        assertTradeLocationRejected("", 37.500123, 127.036456, null);
+    }
+
+    @Test
     void 장소_없이_카카오_장소_ID만_남기면_등록할_수_없다() {
         // given — 장소를 지운 뒤 ID만 남으면 어디를 가리키는지 알 수 없는 값이 된다
 

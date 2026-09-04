@@ -86,8 +86,8 @@ public class UsedTradeAppointment extends BaseEntity {
         appointment.placeName = placeName;
         appointment.latitude = latitude;
         appointment.longitude = longitude;
-        appointment.address = address;
-        appointment.placeId = placeId;
+        appointment.address = blankToNull(address);
+        appointment.placeId = blankToNull(placeId);
         return appointment;
     }
 
@@ -111,8 +111,13 @@ public class UsedTradeAppointment extends BaseEntity {
         this.placeName = placeName;
         this.latitude = latitude;
         this.longitude = longitude;
-        this.address = address;
-        this.placeId = placeId;
+        this.address = blankToNull(address);
+        this.placeId = blankToNull(placeId);
+    }
+
+    // 선택값의 빈 문자열은 "없음"으로 통일한다.
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value;
     }
 
     // 거래 당사자 여부 — 판매자와 구매자만 약속 장소를 보고 바꿀 수 있다.

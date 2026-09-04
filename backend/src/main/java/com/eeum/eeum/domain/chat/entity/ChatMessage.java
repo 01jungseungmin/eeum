@@ -120,8 +120,10 @@ public class ChatMessage extends BaseEntity {
         message.placeName = placeName;
         message.latitude = latitude;
         message.longitude = longitude;
-        message.address = address;
-        message.placeId = placeId;
+        // 선택값의 빈 문자열은 "없음"으로 통일한다. 저장해봐야 의미가 없고,
+        // 다른 타입의 위치 컬럼이 NULL이어야 한다는 규칙과 판정이 갈린다.
+        message.address = blankToNull(address);
+        message.placeId = blankToNull(placeId);
         return message;
     }
 
@@ -148,6 +150,10 @@ public class ChatMessage extends BaseEntity {
      * <p>프론트에서 카카오 검색 결과만 고르도록 막아도 API를 직접 호출하면 임의 좌표가
      * 들어온다. 클라이언트 제약은 UX일 뿐이므로 범위 검증은 서버가 맡는다.
      */
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value;
+    }
+
     private static void validateLocation(String placeName, Double latitude, Double longitude) {
         if (placeName == null || placeName.isBlank() || latitude == null || longitude == null) {
             throw new BusinessException(ErrorCode.CHAT_MESSAGE_INVALID_LOCATION);
