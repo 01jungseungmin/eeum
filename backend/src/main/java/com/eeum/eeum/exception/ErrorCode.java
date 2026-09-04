@@ -204,6 +204,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // 담는 값이라 이름과 좌표가 없으면 존재할 이유가 없다.
     USED_TRADE_APPOINTMENT_INVALID_PLACE("USED_020", "약속 장소는 장소명과 올바른 좌표가 필요합니다", HttpStatus.BAD_REQUEST),
     USED_TRADE_APPOINTMENT_INVALID_PARTY("USED_021", "약속 장소의 거래 당사자가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    USED_TRADE_APPOINTMENT_INVALID_TIME("USED_022", "약속 시간은 필수입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),

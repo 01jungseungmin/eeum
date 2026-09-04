@@ -680,7 +680,6 @@ CREATE TABLE used_review (
 -- 종료되면 같은 (상품, 구매자) 조합으로 방이 새로 생긴다. 방에 매달면 한 번
 -- 종료·재생성되는 순간 합의했던 약속이 끊긴다. 거래의 실제 식별자는 이 쌍이다.
 --
--- 약속 시각은 담지 않는다 — 지금 범위는 장소뿐이다.
 CREATE TABLE used_trade_appointment (
     used_trade_appointment_id BIGINT       NOT NULL AUTO_INCREMENT,
     used_product_id           BIGINT       NOT NULL,

@@ -9,6 +9,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * 최종 확정 거래 장소.
  *
@@ -19,7 +21,7 @@ import lombok.NoArgsConstructor;
  * 같은 (상품, 구매자) 조합으로 방이 새로 생긴다. 방에 매달면 한 번 종료·재생성되는
  * 순간 거래는 이어지는데 약속만 사라진다. 거래의 실제 식별자는 상품과 구매자 쌍이다.
  *
- * <p>약속 시각은 담지 않는다 — 지금 범위는 장소뿐이다.
+ * <p>양쪽이 합의한 장소와 약속 시각을 함께 보관한다.
  */
 @Entity
 @Getter
@@ -66,6 +68,9 @@ public class UsedTradeAppointment extends BaseEntity {
     @Column(name = "place_id", length = 50)
     private String placeId;
 
+    @Column(name = "appointment_at", nullable = false)
+    private LocalDateTime appointmentAt;
+
     // ===================== 정적 팩토리 메서드 =====================
 
     public static UsedTradeAppointment create(
@@ -75,10 +80,12 @@ public class UsedTradeAppointment extends BaseEntity {
             Double latitude,
             Double longitude,
             String address,
-            String placeId
+            String placeId,
+            LocalDateTime appointmentAt
     ) {
         validateBuyer(usedProduct, buyer);
         validatePlace(placeName, latitude, longitude);
+        validateAppointmentAt(appointmentAt);
 
         UsedTradeAppointment appointment = new UsedTradeAppointment();
         appointment.usedProduct = usedProduct;
@@ -88,6 +95,7 @@ public class UsedTradeAppointment extends BaseEntity {
         appointment.longitude = longitude;
         appointment.address = blankToNull(address);
         appointment.placeId = blankToNull(placeId);
+        appointment.appointmentAt = appointmentAt;
         return appointment;
     }
 
@@ -104,15 +112,18 @@ public class UsedTradeAppointment extends BaseEntity {
             Double latitude,
             Double longitude,
             String address,
-            String placeId
+            String placeId,
+            LocalDateTime appointmentAt
     ) {
         validatePlace(placeName, latitude, longitude);
+        validateAppointmentAt(appointmentAt);
 
         this.placeName = placeName;
         this.latitude = latitude;
         this.longitude = longitude;
         this.address = blankToNull(address);
         this.placeId = blankToNull(placeId);
+        this.appointmentAt = appointmentAt;
     }
 
     // 선택값의 빈 문자열은 "없음"으로 통일한다.
@@ -150,6 +161,12 @@ public class UsedTradeAppointment extends BaseEntity {
         }
         if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
             throw new BusinessException(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_PLACE);
+        }
+    }
+
+    private static void validateAppointmentAt(LocalDateTime appointmentAt) {
+        if (appointmentAt == null) {
+            throw new BusinessException(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_TIME);
         }
     }
 }

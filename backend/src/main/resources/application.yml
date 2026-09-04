@@ -3,7 +3,7 @@ spring:
     import: optional:file:../.env[.properties]
 
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/eeum}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/eeum?connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -58,6 +58,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 server:
   port: ${SERVER_PORT:8080}

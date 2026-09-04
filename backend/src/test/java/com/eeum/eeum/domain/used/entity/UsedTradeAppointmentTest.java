@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +29,7 @@ class UsedTradeAppointmentTest {
     private static final String PLACE_NAME = "역삼역 3번 출구";
     private static final double LATITUDE = 37.500622;
     private static final double LONGITUDE = 127.036456;
+    private static final LocalDateTime APPOINTMENT_AT = LocalDateTime.of(2026, 9, 5, 15, 0);
 
     // ─────────────────── 생성 ───────────────────
 
@@ -36,7 +38,7 @@ class UsedTradeAppointmentTest {
         // when
         UsedTradeAppointment appointment = UsedTradeAppointment.create(
                 product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE,
-                "서울 강남구 역삼동 823", "26338954");
+                "서울 강남구 역삼동 823", "26338954", APPOINTMENT_AT);
 
         // then
         assertThat(appointment.getPlaceName()).isEqualTo(PLACE_NAME);
@@ -44,6 +46,7 @@ class UsedTradeAppointmentTest {
         assertThat(appointment.getLongitude()).isEqualTo(LONGITUDE);
         assertThat(appointment.getAddress()).isEqualTo("서울 강남구 역삼동 823");
         assertThat(appointment.getPlaceId()).isEqualTo("26338954");
+        assertThat(appointment.getAppointmentAt()).isEqualTo(APPOINTMENT_AT);
     }
 
     @Test
@@ -52,7 +55,7 @@ class UsedTradeAppointmentTest {
 
         // when
         UsedTradeAppointment appointment = UsedTradeAppointment.create(
-                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null);
+                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null, APPOINTMENT_AT);
 
         // then
         assertThat(appointment.getAddress()).isNull();
@@ -90,7 +93,7 @@ class UsedTradeAppointmentTest {
 
         // when & then
         assertThatThrownBy(() -> UsedTradeAppointment.create(
-                product(), seller(), PLACE_NAME, LATITUDE, LONGITUDE, null, null))
+                product(), seller(), PLACE_NAME, LATITUDE, LONGITUDE, null, null, APPOINTMENT_AT))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_PARTY);
@@ -102,10 +105,11 @@ class UsedTradeAppointmentTest {
     void 재조율하면_기존_약속이_새_장소로_바뀐다() {
         // given — 거래당 한 건이므로 새 행을 만들지 않고 이 행을 고친다
         UsedTradeAppointment appointment = UsedTradeAppointment.create(
-                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, "옛 주소", "26338954");
+                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, "옛 주소", "26338954", APPOINTMENT_AT);
 
         // when
-        appointment.relocate("선릉역 1번 출구", 37.504503, 127.048933, null, null);
+        LocalDateTime rescheduledAt = APPOINTMENT_AT.plusDays(1);
+        appointment.relocate("선릉역 1번 출구", 37.504503, 127.048933, null, null, rescheduledAt);
 
         // then
         assertThat(appointment.getPlaceName()).isEqualTo("선릉역 1번 출구");
@@ -114,16 +118,17 @@ class UsedTradeAppointmentTest {
         // 옛 주소·장소 ID가 남으면 새 장소와 어긋난 값이 함께 내려간다
         assertThat(appointment.getAddress()).isNull();
         assertThat(appointment.getPlaceId()).isNull();
+        assertThat(appointment.getAppointmentAt()).isEqualTo(rescheduledAt);
     }
 
     @Test
     void 재조율에서도_빈_장소는_막는다() {
         // given — 생성만 막고 재조율을 열어두면 같은 값이 수정 경로로 들어온다
         UsedTradeAppointment appointment = UsedTradeAppointment.create(
-                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null);
+                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null, APPOINTMENT_AT);
 
         // when & then
-        assertThatThrownBy(() -> appointment.relocate(null, LATITUDE, LONGITUDE, null, null))
+        assertThatThrownBy(() -> appointment.relocate(null, LATITUDE, LONGITUDE, null, null, APPOINTMENT_AT))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_PLACE);
@@ -135,7 +140,7 @@ class UsedTradeAppointmentTest {
     void 판매자와_구매자만_거래_당사자다() {
         // given
         UsedTradeAppointment appointment = UsedTradeAppointment.create(
-                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null);
+                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null, APPOINTMENT_AT);
 
         // when & then
         assertThat(appointment.isPartyOf(SELLER_ID)).isTrue();
@@ -147,10 +152,31 @@ class UsedTradeAppointmentTest {
 
     private void assertPlaceRejected(String placeName, Double latitude, Double longitude) {
         assertThatThrownBy(() -> UsedTradeAppointment.create(
-                product(), buyer(), placeName, latitude, longitude, null, null))
+                product(), buyer(), placeName, latitude, longitude, null, null, APPOINTMENT_AT))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_PLACE);
+    }
+
+    @Test
+    void 약속_시간이_없으면_약속을_만들_수_없다() {
+        assertThatThrownBy(() -> UsedTradeAppointment.create(
+                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_TIME);
+    }
+
+    @Test
+    void 재조율에서_약속_시간을_비울_수_없다() {
+        UsedTradeAppointment appointment = UsedTradeAppointment.create(
+                product(), buyer(), PLACE_NAME, LATITUDE, LONGITUDE, null, null, APPOINTMENT_AT);
+
+        assertThatThrownBy(() -> appointment.relocate(
+                PLACE_NAME, LATITUDE, LONGITUDE, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_TRADE_APPOINTMENT_INVALID_TIME);
     }
 
     private UsedProduct product() {
