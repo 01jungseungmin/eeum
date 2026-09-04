@@ -73,7 +73,7 @@ public class WebSocketSessionReconciliationScheduler {
             SseEmitterManager.ConnectionCredentials sseConnection = sseConnections.get(state.accountId());
             if (sseConnection != null && (!state.isUsable(sseConnection.tokenVersion())
                     || tokenService.isFingerprintBlacklisted(sseConnection.tokenFingerprint()))) {
-                sseEmitterManager.closeAll(state.accountId());
+                sseEmitterManager.closeIfCurrent(state.accountId(), sseConnection);
             }
         }
 
@@ -84,6 +84,7 @@ public class WebSocketSessionReconciliationScheduler {
                         accountId, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED));
         sseConnections.keySet().stream()
                 .filter(accountId -> states.stream().noneMatch(s -> s.accountId().equals(accountId)))
-                .forEach(sseEmitterManager::closeAll);
+                .forEach(accountId -> sseEmitterManager.closeIfCurrent(
+                        accountId, sseConnections.get(accountId)));
     }
 }

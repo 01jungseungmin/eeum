@@ -114,7 +114,8 @@ class WebSocketSessionReconciliationSchedulerTest {
         scheduler.closeRevokedSessions();
 
         // Then
-        verify(sseEmitterManager).closeAll(1L);
+        verify(sseEmitterManager).closeIfCurrent(
+                1L, new SseEmitterManager.ConnectionCredentials(2L, "revoked-fingerprint"));
     }
 
     @Test
