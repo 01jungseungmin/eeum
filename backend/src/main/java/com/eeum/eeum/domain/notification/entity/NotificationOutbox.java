@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 
@@ -48,8 +49,11 @@ public class NotificationOutbox extends BaseEntity {
 
     // 이벤트를 JSON으로 담는다. 엔티티가 아니라 스칼라만 담은 이벤트여야 한다 —
     // 지연 로딩 프록시나 순환 참조가 섞이면 직렬화가 깨진다.
+    //
+    // length를 주지 않으면 @Lob은 CLOB 기본 길이(255)로 해석돼 MySQL tinytext가 된다.
+    // 이벤트 JSON이 255바이트에서 잘리고, LONGTEXT로 만든 스키마와는 ddl-auto=validate가 어긋난다.
     @Lob
-    @Column(name = "payload", nullable = false)
+    @Column(name = "payload", nullable = false, length = Length.LONG32)
     private String payload;
 
     @Enumerated(EnumType.STRING)
