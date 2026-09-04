@@ -196,6 +196,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // 클라이언트가 할 일(커서를 응답 그대로 되돌려보내기)이 같아서다.
     USED_PRODUCT_INVALID_CURSOR("USED_018", "게시글 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
+    // 장소명·위도·경도는 셋 다 있거나 셋 다 없어야 한다. 부분 입력은 지도에 그릴 수도,
+    // 이름만 보여줄 수도 없는 반쪽 데이터가 되므로 저장 전에 막는다.
+    USED_PRODUCT_INVALID_TRADE_LOCATION("USED_019", "거래 장소는 장소명과 좌표를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
     COMMUNITY_POST_ACCESS_DENIED("COMMUNITY_002", "게시글 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
@@ -231,6 +235,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // 메시지 커서는 발신 시각과 메시지 ID를 함께 받아야 한다. 시각만 받으면 같은 시각에
     // 도착한 메시지들 사이에서 경계를 끊지 못해 그 메시지들이 영구히 누락된다.
     CHAT_MESSAGE_INVALID_CURSOR("CHAT_018", "메시지 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+
+    // 프론트에서 카카오 검색 결과만 고르게 막아도 API 직접 호출로 임의 좌표가 들어온다.
+    // 필수값과 좌표 범위는 서버가 반드시 확인한다.
+    CHAT_MESSAGE_INVALID_LOCATION("CHAT_019", "위치 메시지는 장소명과 올바른 좌표를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 리뷰 (REVIEW) =====================
     STORE_REVIEW_NOT_FOUND("REVIEW_001", "존재하지 않는 상점 리뷰입니다", HttpStatus.NOT_FOUND),

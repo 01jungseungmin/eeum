@@ -73,6 +73,26 @@ public class UsedProduct extends BaseEntity {
     @Column(name = "price", precision = 10, scale = 2)
     private BigDecimal price;
 
+    // ===== 공개용 "대략" 거래 장소 =====
+    // 목록·상세로 누구에게나 노출된다. 정확한 주소는 담지 않는다 — 실제 약속 장소는
+    // 채팅에서 당사자끼리 정한다. 여기 들어오는 값은 "○○동 주민센터 앞" 같은 공개 장소다.
+    //
+    // 셋 다 null이어도 된다. 그 경우 region이 "동네만 지정"을 담당한다.
+
+    // 표시용 장소명
+    @Column(name = "trade_location_name", length = 255)
+    private String tradeLocationName;
+
+    @Column(name = "trade_latitude")
+    private Double tradeLatitude;
+
+    @Column(name = "trade_longitude")
+    private Double tradeLongitude;
+
+    // 카카오 장소 ID. 지도에서 직접 찍은 핀은 값이 없다.
+    @Column(name = "trade_place_id", length = 50)
+    private String tradePlaceId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private UsedProductStatus status;
@@ -105,6 +125,10 @@ public class UsedProduct extends BaseEntity {
 
     // ===================== 정적 팩토리 메서드 =====================
 
+    /**
+     * 거래 장소 없이 등록한다. 이 경우 region이 "동네만 지정"을 담당한다 —
+     * 장소 지정은 선택이므로 아래 전체 인자 버전과 나란히 정식 경로다.
+     */
     public static UsedProduct create(
             Account seller,
             Category category,
@@ -114,8 +138,26 @@ public class UsedProduct extends BaseEntity {
             UsedProductPriceType priceType,
             BigDecimal price
     ) {
+        return create(seller, category, region, title, content, priceType, price,
+                null, null, null, null);
+    }
+
+    public static UsedProduct create(
+            Account seller,
+            Category category,
+            Region region,
+            String title,
+            String content,
+            UsedProductPriceType priceType,
+            BigDecimal price,
+            String tradeLocationName,
+            Double tradeLatitude,
+            Double tradeLongitude,
+            String tradePlaceId
+    ) {
         validateCategory(category);
         validatePrice(priceType, price);
+        validateTradeLocation(tradeLocationName, tradeLatitude, tradeLongitude, tradePlaceId);
 
         UsedProduct product = new UsedProduct();
         product.seller = seller;
@@ -125,6 +167,10 @@ public class UsedProduct extends BaseEntity {
         product.content = content;
         product.priceType = priceType;
         product.price = price;
+        product.tradeLocationName = tradeLocationName;
+        product.tradeLatitude = tradeLatitude;
+        product.tradeLongitude = tradeLongitude;
+        product.tradePlaceId = tradePlaceId;
         product.status = UsedProductStatus.SELLING;
         product.hidden = false;
         product.viewCount = 0;
@@ -132,22 +178,31 @@ public class UsedProduct extends BaseEntity {
         return product;
     }
 
-    // 게시글 내용 수정
+    // 게시글 내용 수정. 거래 장소도 함께 바꾼다 — 셋을 비워 보내면 장소 지정이 해제된다.
     public void updateInfo(
             Category category,
             String title,
             String content,
             UsedProductPriceType priceType,
-            BigDecimal price
+            BigDecimal price,
+            String tradeLocationName,
+            Double tradeLatitude,
+            Double tradeLongitude,
+            String tradePlaceId
     ) {
         validateCategory(category);
         validatePrice(priceType, price);
+        validateTradeLocation(tradeLocationName, tradeLatitude, tradeLongitude, tradePlaceId);
 
         this.category = category;
         this.title = title;
         this.content = content;
         this.priceType = priceType;
         this.price = price;
+        this.tradeLocationName = tradeLocationName;
+        this.tradeLatitude = tradeLatitude;
+        this.tradeLongitude = tradeLongitude;
+        this.tradePlaceId = tradePlaceId;
     }
 
     // ===================== 거래 상태 =====================
@@ -244,6 +299,42 @@ public class UsedProduct extends BaseEntity {
         // 서비스에만 두면 다른 생성 경로가 생겼을 때 STORE 카테고리가 그대로 들어온다.
         if (category == null || category.getType() != CategoryType.USED) {
             throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_CATEGORY);
+        }
+    }
+
+    /**
+     * 거래 장소의 정합성 강제.
+     *
+     * <p>장소명·위도·경도는 <b>셋 다 있거나 셋 다 없다.</b> 부분 입력은 지도에 그릴 수도,
+     * 이름만 보여줄 수도 없는 반쪽 데이터가 된다.
+     *
+     * <p>{@code placeId}는 카카오 검색을 거치지 않고 지도에서 직접 찍은 핀이면 없으므로
+     * 있어도 되고 없어도 된다. 다만 장소 자체가 없는데 장소 ID만 남는 것은 막는다.
+     *
+     * <p>좌표 범위는 서버가 확인한다 — 프론트에서 검색 결과만 고르게 막아도 API를
+     * 직접 호출하면 임의 좌표가 들어온다.
+     */
+    private static void validateTradeLocation(
+            String name,
+            Double latitude,
+            Double longitude,
+            String placeId
+    ) {
+        boolean hasName = name != null && !name.isBlank();
+        boolean allPresent = hasName && latitude != null && longitude != null;
+        boolean allAbsent = !hasName && latitude == null && longitude == null;
+
+        if (!allPresent && !allAbsent) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_TRADE_LOCATION);
+        }
+        if (allAbsent) {
+            if (placeId != null && !placeId.isBlank()) {
+                throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_TRADE_LOCATION);
+            }
+            return;
+        }
+        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+            throw new BusinessException(ErrorCode.USED_PRODUCT_INVALID_TRADE_LOCATION);
         }
     }
 

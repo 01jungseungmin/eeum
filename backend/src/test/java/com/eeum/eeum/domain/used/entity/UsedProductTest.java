@@ -94,6 +94,138 @@ class UsedProductTest {
         assertPriceRejected(UsedProductPriceType.NEGOTIABLE, BigDecimal.ZERO);
     }
 
+    // ─────────────────── 거래 장소 ───────────────────
+
+    @Test
+    void 거래_장소를_지정하지_않아도_등록된다() {
+        // given — "동네만 지정"하고 올리는 글은 정식 경로다. 위치는 region이 담당한다.
+
+        // when
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                null, null, null, null);
+
+        // then
+        assertThat(product.getTradeLocationName()).isNull();
+        assertThat(product.getTradeLatitude()).isNull();
+        assertThat(product.getTradeLongitude()).isNull();
+        assertThat(product.getTradePlaceId()).isNull();
+    }
+
+    @Test
+    void 장소명과_좌표를_함께_보내면_등록된다() {
+        // given — 카카오 장소 ID는 지도에서 직접 찍은 핀이면 없으므로 생략할 수 있다
+
+        // when
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "역삼동 주민센터 앞", 37.500123, 127.036456, null);
+
+        // then
+        assertThat(product.getTradeLocationName()).isEqualTo("역삼동 주민센터 앞");
+        assertThat(product.getTradeLatitude()).isEqualTo(37.500123);
+        assertThat(product.getTradeLongitude()).isEqualTo(127.036456);
+    }
+
+    @Test
+    void 장소명만_보내고_좌표를_빼면_등록할_수_없다() {
+        // given — 이름만 있으면 지도에 그릴 수 없는 반쪽 데이터가 된다
+
+        // when & then
+        assertTradeLocationRejected("역삼동 주민센터 앞", null, null, null);
+    }
+
+    @Test
+    void 좌표만_보내고_장소명을_빼면_등록할_수_없다() {
+        // given — 좌표만 있으면 목록에 보여줄 이름이 없다
+
+        // when & then
+        assertTradeLocationRejected(null, 37.500123, 127.036456, null);
+    }
+
+    @Test
+    void 위도만_보내고_경도를_빼면_등록할_수_없다() {
+        assertTradeLocationRejected("역삼동 주민센터 앞", 37.500123, null, null);
+    }
+
+    @Test
+    void 공백_장소명은_이름이_없는_것으로_보고_막는다() {
+        // given — 공백만 보내고 좌표를 채우면 이름 없는 핀이 저장된다
+
+        // when & then
+        assertTradeLocationRejected("   ", 37.500123, 127.036456, null);
+    }
+
+    @Test
+    void 장소_없이_카카오_장소_ID만_남기면_등록할_수_없다() {
+        // given — 장소를 지운 뒤 ID만 남으면 어디를 가리키는지 알 수 없는 값이 된다
+
+        // when & then
+        assertTradeLocationRejected(null, null, null, "26338954");
+    }
+
+    @Test
+    void 위도가_범위를_벗어나면_등록할_수_없다() {
+        // given — 프론트에서 검색 결과만 고르게 막아도 API 직접 호출로 임의 좌표가 들어온다
+
+        // when & then
+        assertTradeLocationRejected("역삼동 주민센터 앞", 91.0, 127.036456, null);
+    }
+
+    @Test
+    void 경도가_범위를_벗어나면_등록할_수_없다() {
+        assertTradeLocationRejected("역삼동 주민센터 앞", 37.500123, 180.1, null);
+    }
+
+    @Test
+    void 수정에서_장소를_비우면_지정이_해제된다() {
+        // given
+        UsedProduct product = UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "역삼동 주민센터 앞", 37.500123, 127.036456, "26338954");
+
+        // when
+        product.updateInfo(
+                category(CategoryType.USED), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                null, null, null, null);
+
+        // then
+        assertThat(product.getTradeLocationName()).isNull();
+        assertThat(product.getTradeLatitude()).isNull();
+        assertThat(product.getTradeLongitude()).isNull();
+        assertThat(product.getTradePlaceId()).isNull();
+    }
+
+    @Test
+    void 수정에서도_부분_입력은_막는다() {
+        // given — 생성만 막고 수정을 열어두면 같은 반쪽 데이터가 수정 경로로 들어온다
+        UsedProduct product = fixedPriceProduct();
+
+        // when & then
+        assertThatThrownBy(() -> product.updateInfo(
+                category(CategoryType.USED), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                "역삼동 주민센터 앞", null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_TRADE_LOCATION);
+    }
+
+    private void assertTradeLocationRejected(
+            String name, Double latitude, Double longitude, String placeId) {
+        assertThatThrownBy(() -> UsedProduct.create(
+                seller(), category(CategoryType.USED), region(), "제목", "본문",
+                UsedProductPriceType.FIXED, new BigDecimal("10000"),
+                name, latitude, longitude, placeId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USED_PRODUCT_INVALID_TRADE_LOCATION);
+    }
+
     // ─────────────────── 거래 상태 전이 ───────────────────
 
     @Test

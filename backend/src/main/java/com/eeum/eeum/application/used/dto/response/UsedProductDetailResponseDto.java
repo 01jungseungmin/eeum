@@ -53,6 +53,21 @@ public class UsedProductDetailResponseDto {
     @Schema(description = "거래 상태")
     private UsedProductStatus status;
 
+    // 공개되는 "대략" 위치다. 정확한 약속 장소는 여기가 아니라 채팅에서 정한다.
+    // 장소를 지정하지 않은 글은 넷 다 null이고, 클라이언트는 regionName만으로 표시한다.
+
+    @Schema(description = "거래 장소명. 지정하지 않았으면 null", example = "역삼동 주민센터 앞")
+    private String tradeLocationName;
+
+    @Schema(description = "거래 장소 위도. 지정하지 않았으면 null", example = "37.500123")
+    private Double tradeLatitude;
+
+    @Schema(description = "거래 장소 경도. 지정하지 않았으면 null", example = "127.036456")
+    private Double tradeLongitude;
+
+    @Schema(description = "카카오 장소 ID. 검색을 거치지 않았으면 null", example = "26338954")
+    private String tradePlaceId;
+
     /**
      * 지정된 거래 상대. <b>판매자와 그 상대에게만</b> 내려간다 — 제3자에게는 null이다.
      *
@@ -114,6 +129,10 @@ public class UsedProductDetailResponseDto {
                 .priceType(product.getPriceType())
                 .price(product.getPrice())
                 .status(product.getStatus())
+                .tradeLocationName(product.getTradeLocationName())
+                .tradeLatitude(product.getTradeLatitude())
+                .tradeLongitude(product.getTradeLongitude())
+                .tradePlaceId(product.getTradePlaceId())
                 .hidden(product.isHidden())
                 .viewCount(product.getViewCount())
                 .favoriteCount(product.getFavoriteCount())

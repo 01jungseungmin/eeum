@@ -602,6 +602,14 @@ CREATE TABLE used_product (
     content          TEXT          NOT NULL,
     price_type       ENUM('FIXED','FREE','NEGOTIABLE')   NOT NULL,
     price            DECIMAL(10,2) NULL,
+    -- 공개되는 "대략" 위치다. 정확한 주소는 담지 않는다 — 확정 장소는 채팅에서 정한다.
+    -- 이름·위도·경도는 셋 다 있거나 셋 다 없다 (UsedProduct.validateTradeLocation).
+    -- 장소를 비우면 region_id가 "동네만 지정"을 담당한다.
+    trade_location_name VARCHAR(255) NULL,
+    trade_latitude   DOUBLE        NULL,
+    trade_longitude  DOUBLE        NULL,
+    -- 카카오 장소 ID. 지도에서 직접 찍은 핀은 값이 없으므로 nullable이다.
+    trade_place_id   VARCHAR(50)   NULL,
     status           ENUM('RESERVED','SELLING','SOLD')   NOT NULL,
     buyer_account_id BIGINT        NULL,
     is_hidden        BIT(1)        NOT NULL,
@@ -621,7 +629,15 @@ CREATE TABLE used_product (
     CONSTRAINT fk_used_product_region
         FOREIGN KEY (region_id) REFERENCES region(region_id),
     CONSTRAINT fk_used_product_buyer
-        FOREIGN KEY (buyer_account_id) REFERENCES account(account_id)
+        FOREIGN KEY (buyer_account_id) REFERENCES account(account_id),
+    -- 장소명·좌표는 전부 있거나 전부 없다. place_id는 셋이 있을 때만 허용한다.
+    CONSTRAINT chk_used_product_trade_location CHECK (
+        (trade_location_name IS NOT NULL
+            AND trade_latitude IS NOT NULL AND trade_longitude IS NOT NULL)
+        OR (trade_location_name IS NULL
+            AND trade_latitude IS NULL AND trade_longitude IS NULL
+            AND trade_place_id IS NULL)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE used_product_image (
@@ -807,7 +823,14 @@ CREATE TABLE chat_message (
     account_id      BIGINT        NOT NULL,
     content         TEXT          NULL,
     image_url       VARCHAR(500)  NULL,
-    message_type    ENUM('IMAGE','SYSTEM','TEXT')   NOT NULL,
+    message_type    ENUM('IMAGE','LOCATION','SYSTEM','TEXT')   NOT NULL,
+    -- LOCATION 메시지 전용. 채팅은 참여자에게만 보이므로 글과 달리 정확한 주소를 담는다.
+    -- 필수/배타 규칙은 ChatMessage의 타입별 정적 팩토리가 강제한다 (아래 CHECK는 보조).
+    place_name      VARCHAR(255)  NULL,
+    address         VARCHAR(255)  NULL,
+    latitude        DOUBLE        NULL,
+    longitude       DOUBLE        NULL,
+    place_id        VARCHAR(50)   NULL,
     deleted_at      DATETIME(6)   NULL,
     sent_at         DATETIME(6)   NOT NULL,
     created_at      DATETIME(6)   NOT NULL,
@@ -817,7 +840,15 @@ CREATE TABLE chat_message (
     CONSTRAINT fk_chat_message_room
         FOREIGN KEY (chat_room_id) REFERENCES chat_room(chat_room_id),
     CONSTRAINT fk_chat_message_account
-        FOREIGN KEY (account_id) REFERENCES account(account_id)
+        FOREIGN KEY (account_id) REFERENCES account(account_id),
+    -- LOCATION은 장소명·좌표가 반드시 있고, 그 밖의 타입은 위치 컬럼이 비어 있어야 한다.
+    CONSTRAINT chk_chat_message_location CHECK (
+        (message_type = 'LOCATION'
+            AND place_name IS NOT NULL AND latitude IS NOT NULL AND longitude IS NOT NULL)
+        OR (message_type <> 'LOCATION'
+            AND place_name IS NULL AND address IS NULL
+            AND latitude IS NULL AND longitude IS NULL AND place_id IS NULL)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================================================

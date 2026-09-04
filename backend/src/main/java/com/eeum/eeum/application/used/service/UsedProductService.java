@@ -90,7 +90,11 @@ public class UsedProductService {
                 request.getTitle(),
                 request.getContent(),
                 request.getPriceType(),
-                request.getPrice()
+                request.getPrice(),
+                request.getTradeLocationName(),
+                request.getTradeLatitude(),
+                request.getTradeLongitude(),
+                request.getTradePlaceId()
         );
 
         // 등록 직후에는 사진이 없다 — 사진은 별도 엔드포인트로 올린다.
@@ -210,7 +214,11 @@ public class UsedProductService {
                 request.getTitle(),
                 request.getContent(),
                 request.getPriceType(),
-                request.getPrice()
+                request.getPrice(),
+                request.getTradeLocationName(),
+                request.getTradeLatitude(),
+                request.getTradeLongitude(),
+                request.getTradePlaceId()
         );
 
         // modifiedAt은 flush 시점에 채워진다. 먼저 반영하지 않으면 응답에 수정 전 값이 담긴다.
