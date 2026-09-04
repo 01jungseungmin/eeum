@@ -673,6 +673,36 @@ CREATE TABLE used_review (
         FOREIGN KEY (reviewer_account_id) REFERENCES account(account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 최종 확정 거래 장소. 채팅에서 오간 LOCATION 메시지는 "제안"이고,
+-- 그중 양쪽이 합의한 하나가 여기 남는다. 거래(상품 × 구매자)당 한 건이다.
+--
+-- 키를 chat_room_id로 잡지 않는다 — ChatRoom은 deactivate()로 종료할 수 있고,
+-- 종료되면 같은 (상품, 구매자) 조합으로 방이 새로 생긴다. 방에 매달면 한 번
+-- 종료·재생성되는 순간 합의했던 약속이 끊긴다. 거래의 실제 식별자는 이 쌍이다.
+--
+-- 약속 시각은 담지 않는다 — 지금 범위는 장소뿐이다.
+CREATE TABLE used_trade_appointment (
+    used_trade_appointment_id BIGINT       NOT NULL AUTO_INCREMENT,
+    used_product_id           BIGINT       NOT NULL,
+    buyer_account_id          BIGINT       NOT NULL,
+    place_name                VARCHAR(255) NOT NULL,
+    -- 카카오 장소 검색을 거치지 않고 지도에서 직접 찍은 핀은 주소·장소 ID가 없다.
+    address                   VARCHAR(255) NULL,
+    latitude                  DOUBLE       NOT NULL,
+    longitude                 DOUBLE       NOT NULL,
+    place_id                  VARCHAR(50)  NULL,
+    created_at                DATETIME(6)  NOT NULL,
+    modified_at               DATETIME(6)  NOT NULL,
+    PRIMARY KEY (used_trade_appointment_id),
+    -- 재조율은 새 행이 아니라 기존 행 갱신이다. 거래당 확정 장소는 언제나 하나다.
+    CONSTRAINT uk_used_trade_appointment_trade
+        UNIQUE (used_product_id, buyer_account_id),
+    CONSTRAINT fk_used_trade_appointment_product
+        FOREIGN KEY (used_product_id) REFERENCES used_product(used_product_id),
+    CONSTRAINT fk_used_trade_appointment_buyer
+        FOREIGN KEY (buyer_account_id) REFERENCES account(account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =========================================================
 -- Community
 -- =========================================================
