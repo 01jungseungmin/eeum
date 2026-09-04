@@ -8,7 +8,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -16,6 +15,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 // 계정별 SSE 연결과 전송 큐를 관리한다.
 @Slf4j
@@ -41,9 +42,6 @@ public class SseEmitterManager implements DisposableBean {
                 return thread;
             },
             new ThreadPoolExecutor.AbortPolicy());
-
-    private final Map<Long, Object> pendingUnreadPayloads = new ConcurrentHashMap<>();
-    private final Set<Long> unreadWritesInFlight = ConcurrentHashMap.newKeySet();
 
     // 하트비트는 "언제 보낼지"만 정한다. 실제 write는 writeExecutor로 넘겨,
     // 죽은 연결 하나가 나머지 전원의 하트비트를 막지 못하게 한다.
@@ -110,9 +108,11 @@ public class SseEmitterManager implements DisposableBean {
 
     // 최신 unread payload만 남기고 계정별로 직렬 전송한다.
     public void sendUnreadCount(Long accountId, Object payload) {
-        if (!connections.containsKey(accountId)) return;
-        pendingUnreadPayloads.put(accountId, payload);
-        scheduleUnreadWrite(accountId);
+        Connection connection = connections.get(accountId);
+        if (connection == null) return;
+
+        connection.pendingUnreadPayload().set(payload);
+        scheduleUnreadWrite(accountId, connection);
     }
 
     // 해당 계정의 SSE 연결 여부 — 미연결이면 호출자가 payload 조회(DB 쿼리)를 생략할 수 있다
@@ -140,7 +140,14 @@ public class SseEmitterManager implements DisposableBean {
     public void closeAll(Long accountId) {
         Connection connection = connections.remove(accountId);
         if (connection != null) {
-            clearAccountState(accountId);
+            completeQuietly(accountId, connection.emitter());
+        }
+    }
+
+    public void closeIfCurrent(Long accountId, ConnectionCredentials credentials) {
+        Connection connection = connections.get(accountId);
+        if (connection != null && connection.credentials().equals(credentials)
+                && connections.remove(accountId, connection)) {
             completeQuietly(accountId, connection.emitter());
         }
     }
@@ -166,28 +173,28 @@ public class SseEmitterManager implements DisposableBean {
         }
     }
 
-    private void scheduleUnreadWrite(Long accountId) {
-        if (!unreadWritesInFlight.add(accountId)) {
+    private void scheduleUnreadWrite(Long accountId, Connection connection) {
+        if (!connection.unreadWriteInFlight().compareAndSet(false, true)) {
             return;
         }
         try {
-            writeExecutor.execute(() -> flushUnreadCount(accountId));
+            writeExecutor.execute(() -> flushUnreadCount(accountId, connection));
         } catch (RejectedExecutionException e) {
-            unreadWritesInFlight.remove(accountId);
-            pendingUnreadPayloads.remove(accountId);
+            connection.unreadWriteInFlight().set(false);
+            connection.pendingUnreadPayload().set(null);
             log.warn("SSE unread 전송 큐 포화 — 최신 배지를 건너뛴다: accountId={}", accountId);
         }
     }
 
-    private void flushUnreadCount(Long accountId) {
+    private void flushUnreadCount(Long accountId, Connection connection) {
         try {
             while (true) {
-                Object payload = pendingUnreadPayloads.remove(accountId);
-                if (payload == null) {
+                if (connections.get(accountId) != connection) {
                     return;
                 }
-                Connection connection = connections.get(accountId);
-                if (connection == null) {
+
+                Object payload = connection.pendingUnreadPayload().getAndSet(null);
+                if (payload == null) {
                     return;
                 }
                 try {
@@ -198,9 +205,10 @@ public class SseEmitterManager implements DisposableBean {
                 }
             }
         } finally {
-            unreadWritesInFlight.remove(accountId);
-            if (pendingUnreadPayloads.containsKey(accountId) && connections.containsKey(accountId)) {
-                scheduleUnreadWrite(accountId);
+            connection.unreadWriteInFlight().set(false);
+            if (connections.get(accountId) == connection
+                    && connection.pendingUnreadPayload().get() != null) {
+                scheduleUnreadWrite(accountId, connection);
             }
         }
     }
@@ -229,14 +237,7 @@ public class SseEmitterManager implements DisposableBean {
     }
 
     private void removeConnection(Long accountId, Connection connection) {
-        if (connections.remove(accountId, connection)) {
-            clearAccountState(accountId);
-        }
-    }
-
-    private void clearAccountState(Long accountId) {
-        pendingUnreadPayloads.remove(accountId);
-        unreadWritesInFlight.remove(accountId);
+        connections.remove(accountId, connection);
     }
 
     // 재기동 시 열린 연결을 정리한다. 정리하지 않으면 클라이언트가 응답이 끝나기를
@@ -247,13 +248,33 @@ public class SseEmitterManager implements DisposableBean {
         writeExecutor.shutdown();
         connections.forEach((accountId, connection) -> completeQuietly(accountId, connection.emitter()));
         connections.clear();
-        pendingUnreadPayloads.clear();
-        unreadWritesInFlight.clear();
     }
 
-    record Connection(SseEmitter emitter, ConnectionCredentials credentials) {
+    static final class Connection {
+        private final SseEmitter emitter;
+        private final ConnectionCredentials credentials;
+        private final AtomicReference<Object> pendingUnreadPayload = new AtomicReference<>();
+        private final AtomicBoolean unreadWriteInFlight = new AtomicBoolean();
+
         Connection(SseEmitter emitter, long tokenVersion, String tokenFingerprint) {
-            this(emitter, new ConnectionCredentials(tokenVersion, tokenFingerprint));
+            this.emitter = emitter;
+            this.credentials = new ConnectionCredentials(tokenVersion, tokenFingerprint);
+        }
+
+        SseEmitter emitter() {
+            return emitter;
+        }
+
+        ConnectionCredentials credentials() {
+            return credentials;
+        }
+
+        AtomicReference<Object> pendingUnreadPayload() {
+            return pendingUnreadPayload;
+        }
+
+        AtomicBoolean unreadWriteInFlight() {
+            return unreadWriteInFlight;
         }
     }
 

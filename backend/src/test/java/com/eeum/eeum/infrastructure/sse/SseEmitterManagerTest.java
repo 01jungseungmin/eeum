@@ -8,6 +8,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -17,6 +19,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doAnswer;
 
 class SseEmitterManagerTest {
 
@@ -147,6 +150,47 @@ class SseEmitterManagerTest {
         assertThat(sseEmitterManager.connectedCredentials().get(ACCOUNT_ID))
                 .isEqualTo(new SseEmitterManager.ConnectionCredentials(2L, "new-token"));
         assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
+    }
+
+    @Test
+    void 이전_연결의_자격증명으로는_재연결된_현재_연결을_종료하지_않는다() {
+        // given
+        sseEmitterManager.subscribe(ACCOUNT_ID, 1L, "old-token");
+        SseEmitter current = sseEmitterManager.subscribe(ACCOUNT_ID, 2L, "new-token");
+
+        // when
+        sseEmitterManager.closeIfCurrent(
+                ACCOUNT_ID, new SseEmitterManager.ConnectionCredentials(1L, "old-token"));
+
+        // then
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+        assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
+    }
+
+    @Test
+    void 이전_연결의_전송이_멈춰도_재연결된_연결의_unread는_즉시_전송한다() throws Exception {
+        // 이전 연결의 TCP write가 멈춘 뒤 재연결되면, unread 전송 상태도 연결별로 분리돼야 한다.
+        // accountId 하나로 in-flight를 공유하면 새 연결의 전송이 이전 연결의 write가 끝날 때까지 막힌다.
+        SseEmitter previous = registerMockEmitter(ACCOUNT_ID);
+        CountDownLatch previousWriteStarted = new CountDownLatch(1);
+        CountDownLatch releasePreviousWrite = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            previousWriteStarted.countDown();
+            releasePreviousWrite.await(2, TimeUnit.SECONDS);
+            return null;
+        }).when(previous).send(any(SseEmitter.SseEventBuilder.class));
+
+        try {
+            sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 1));
+            assertThat(previousWriteStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            SseEmitter current = registerMockEmitter(ACCOUNT_ID);
+            sseEmitterManager.sendUnreadCount(ACCOUNT_ID, Map.of("unreadCount", 2));
+
+            verify(current, timeout(500)).send(any(SseEmitter.SseEventBuilder.class));
+        } finally {
+            releasePreviousWrite.countDown();
+        }
     }
 
     @Test
