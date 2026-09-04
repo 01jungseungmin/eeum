@@ -13,9 +13,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // cleanupOldNotifications  : 매일 새벽 3시 — 6개월 이전 알림 물리 삭제
 // recalculateUnreadCounts  : 5분마다 — Redis unread 캐시 ↔ DB 정합성 보정
@@ -64,7 +65,7 @@ public class NotificationCleanupScheduler {
     @Scheduled(fixedRate = 300_000)
     @SchedulerLock(name = "recalculateUnreadCounts", lockAtMostFor = "PT10M", lockAtLeastFor = "PT2M")
     public void recalculateUnreadCounts() {
-        List<Long> batch = new ArrayList<>(RECONCILE_BATCH);
+        Set<Long> batch = new LinkedHashSet<>(RECONCILE_BATCH);
         int mismatchCount = 0;
 
         try (Cursor<String> cursor = redisTemplate.scan(
@@ -88,7 +89,7 @@ public class NotificationCleanupScheduler {
     }
 
     // 캐시값과 DB값을 비교해 어긋난 계정만 재계산한다.
-    private int reconcileBatch(List<Long> accountIds) {
+    private int reconcileBatch(Set<Long> accountIds) {
         if (accountIds.isEmpty()) {
             return 0;
         }
@@ -96,9 +97,10 @@ public class NotificationCleanupScheduler {
         Map<Long, Long> dbCounts;
         List<String> cachedValues;
         try {
-            dbCounts = notificationRepository.countUnreadByAccountIds(accountIds);
+            List<Long> orderedAccountIds = List.copyOf(accountIds);
+            dbCounts = notificationRepository.countUnreadByAccountIds(orderedAccountIds);
             cachedValues = redisTemplate.opsForValue().multiGet(
-                    accountIds.stream().map(id -> UNREAD_KEY_PREFIX + id).toList());
+                    orderedAccountIds.stream().map(id -> UNREAD_KEY_PREFIX + id).toList());
         } catch (Exception e) {
             log.warn("[UnreadReconcile] 배치 집계 실패 — 이번 주기 건너뜀: size={}, error={}",
                     accountIds.size(), e.getMessage());
@@ -106,8 +108,9 @@ public class NotificationCleanupScheduler {
         }
 
         int corrected = 0;
-        for (int i = 0; i < accountIds.size(); i++) {
-            Long accountId = accountIds.get(i);
+        List<Long> orderedAccountIds = List.copyOf(accountIds);
+        for (int i = 0; i < orderedAccountIds.size(); i++) {
+            Long accountId = orderedAccountIds.get(i);
             // 스캔 이후 키가 지워졌으면 보정할 대상이 아니다 — 다음 조회가 DB에서 복구한다.
             String cached = cachedValues == null || i >= cachedValues.size() ? null : cachedValues.get(i);
             if (cached == null) {
