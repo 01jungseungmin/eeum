@@ -16,6 +16,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UnreadSnapshotRebuilder {
 
+    private static final DefaultRedisScript<Long> DELETE_IF_VALUE_MATCHES =
+            new DefaultRedisScript<>(
+                    "if redis.call('get', KEYS[1]) == ARGV[1] then "
+                            + "return redis.call('del', KEYS[1]) "
+                            + "else return 0 end",
+                    Long.class
+            );
+
     private static final DefaultRedisScript<Long> REPLACE_IF_CURRENT_GENERATION = new DefaultRedisScript<>(
             "local current = redis.call('get', KEYS[3]) "
                     + "if current and tonumber(current) ~= tonumber(ARGV[1]) then return 0 end "
@@ -42,16 +50,36 @@ public class UnreadSnapshotRebuilder {
     }
 
     private long currentGeneration(Long accountId) {
-        String value = redisTemplate.opsForValue().get(UnreadCacheKeys.generation(accountId));
-        if (value == null) {
-            return 0L;
-        }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException e) {
-            redisTemplate.delete(UnreadCacheKeys.generation(accountId));
-            log.warn("unread 캐시 세대 형식 오류 — 손상된 키를 삭제하고 0부터 다시 시작: accountId={}", accountId);
-            return 0L;
+        String key = UnreadCacheKeys.generation(accountId);
+
+        while (true) {
+            String value = redisTemplate.opsForValue().get(key);
+
+            if (value == null) {
+                return 0L;
+            }
+
+            try {
+                return Long.parseLong(value);
+
+            } catch (NumberFormatException e) {
+                Long deleted = redisTemplate.execute(
+                        DELETE_IF_VALUE_MATCHES,
+                        List.of(key),
+                        value
+                );
+
+                if (deleted != null && deleted == 1L) {
+                    log.warn(
+                            "unread 캐시 세대 형식 오류 — 손상된 키 제거: accountId={}, value={}",
+                            accountId,
+                            value
+                    );
+                }
+
+                // 삭제 여부와 관계없이 다시 읽는다.
+                // 그 사이 다른 요청이 정상 generation을 만들었을 수 있다.
+            }
         }
     }
 
