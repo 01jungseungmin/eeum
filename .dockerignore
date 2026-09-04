@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.env
+**/.gradle
+**/build
+**/out
+backend/src/main/resources/firebase
+frontend-app
+frontend-web
+docs
+dummy.sql
+init.sql
