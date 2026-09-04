@@ -62,3 +62,5 @@ logs/
 # Docker
 # ========================
 docker/data/
+
+secrets/firebase-service-account.json
