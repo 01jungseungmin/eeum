@@ -690,7 +690,6 @@ CREATE TABLE used_trade_appointment (
     latitude                  DOUBLE       NOT NULL,
     longitude                 DOUBLE       NOT NULL,
     place_id                  VARCHAR(50)  NULL,
-    appointment_at            DATETIME(6)  NOT NULL,
     created_at                DATETIME(6)  NOT NULL,
     modified_at               DATETIME(6)  NOT NULL,
     PRIMARY KEY (used_trade_appointment_id),
