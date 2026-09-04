@@ -8,6 +8,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -17,6 +21,7 @@ public class TokenService {
     // Redis 키 prefix
     private static final String REFRESH_TOKEN_PREFIX = "refresh:";
     private static final String BLACKLIST_PREFIX = "blacklist:access:";
+    private static final String BLACKLIST_FINGERPRINT_PREFIX = "blacklist:access:fingerprint:";
     private static final String REAUTH_TOKEN_PREFIX = "reauth:";
     private static final String PASSWORD_RESET_TOKEN_PREFIX = "password-reset:";
 
@@ -80,11 +85,27 @@ public class TokenService {
             return;
         }
 
-        redisUtil.set(accessTokenBlacklistKey(accessToken), "logout", remainingSeconds); //Access Token을 블랙리스트로 Redis에 저장
+        redisUtil.set(accessTokenBlacklistKey(accessToken), "logout", remainingSeconds);
+        redisUtil.set(accessTokenFingerprintBlacklistKey(accessTokenFingerprint(accessToken)), "logout", remainingSeconds);
     }
 
     public boolean isBlacklisted(String accessToken) { //Access Token이 블랙리스트에 있는지 확인하는 메서드
         return redisUtil.hasKey(accessTokenBlacklistKey(accessToken)); //Redis에 해당 key가 있는지 확인 -> 존재 시 로그아웃된 Access Token
+    }
+
+    public boolean isFingerprintBlacklisted(String fingerprint) {
+        return fingerprint != null && !fingerprint.isBlank()
+                && redisUtil.hasKey(accessTokenFingerprintBlacklistKey(fingerprint));
+    }
+
+    public String accessTokenFingerprint(String accessToken) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(accessToken.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256을 사용할 수 없습니다.", e);
+        }
     }
 
     // ===================== ReAuth Token =====================
@@ -206,5 +227,9 @@ public class TokenService {
 
     private String accessTokenBlacklistKey(String accessToken) {
         return BLACKLIST_PREFIX + accessToken;
+    }
+
+    private String accessTokenFingerprintBlacklistKey(String fingerprint) {
+        return BLACKLIST_FINGERPRINT_PREFIX + fingerprint;
     }
 }

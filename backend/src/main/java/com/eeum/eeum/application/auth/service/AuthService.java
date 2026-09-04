@@ -16,6 +16,7 @@ import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
+import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -67,6 +68,7 @@ public class AuthService {
     private final RateLimitService rateLimitService;
     private final RedisLockService redisLockService;
     private final ApplicationEventPublisher eventPublisher;
+    private final RealtimeRelayPublisher realtimeRelayPublisher;
 
     // ===================== 이메일 인증 =====================
 
@@ -390,6 +392,8 @@ public class AuthService {
                     return null;
                 }
         );
+
+        realtimeRelayPublisher.publishSessionTermination(refreshAccountId);
 
         log.info("로그아웃 완료: accountId={}", refreshAccountId);
     }

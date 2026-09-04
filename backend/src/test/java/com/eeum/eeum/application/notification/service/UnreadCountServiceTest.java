@@ -136,22 +136,28 @@ class UnreadCountServiceTest {
 
     @Test
     void 무효화는_전체와_카테고리_키를_함께_지운다() {
+        when(redisTemplate.execute(any(DefaultRedisScript.class), any(List.class))).thenReturn(1L);
+
         // when
         unreadCountService.invalidateSnapshot(ACCOUNT_ID);
 
-        // then: 한쪽만 남으면 조회가 미완성 캐시를 완성된 것으로 오해한다
-        verify(redisTemplate).delete(List.of(TOTAL_KEY, CATEGORY_KEY));
+        // then: 세대를 올리고 두 캐시 키를 원자적으로 비운다
+        verify(redisTemplate).execute(any(DefaultRedisScript.class),
+                eq(List.of(TOTAL_KEY, CATEGORY_KEY, "unread:generation:" + ACCOUNT_ID)));
     }
 
     @Test
     void 여러_계정_무효화는_키를_한_번에_넘긴다() {
+        when(redisTemplate.execute(any(DefaultRedisScript.class), any(List.class))).thenReturn(1L, 2L);
+
         // when
         unreadCountService.invalidateSnapshots(List.of(6L, 7L));
 
-        // then: 계정 수만큼 Redis를 왕복하지 않는다
-        verify(redisTemplate).delete(List.of(
-                "unread:account:6", "unread:category:6",
-                "unread:account:7", "unread:category:7"));
+        // then: 각 계정의 세대를 올려 이전 비동기 결과를 무효화한다
+        verify(redisTemplate).execute(any(DefaultRedisScript.class),
+                eq(List.of("unread:account:6", "unread:category:6", "unread:generation:6")));
+        verify(redisTemplate).execute(any(DefaultRedisScript.class),
+                eq(List.of("unread:account:7", "unread:category:7", "unread:generation:7")));
     }
 
     @Test
@@ -160,6 +166,6 @@ class UnreadCountServiceTest {
         unreadCountService.invalidateSnapshots(List.of());
 
         // then
-        verify(redisTemplate, never()).delete(any(List.class));
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), any(List.class));
     }
 }

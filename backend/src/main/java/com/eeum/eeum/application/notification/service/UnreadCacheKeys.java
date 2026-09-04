@@ -11,6 +11,7 @@ final class UnreadCacheKeys {
 
     private static final String TOTAL_PREFIX = "unread:account:";
     private static final String CATEGORY_PREFIX = "unread:category:";
+    private static final String GENERATION_PREFIX = "unread:generation:";
 
     private UnreadCacheKeys() {
     }
@@ -21,5 +22,9 @@ final class UnreadCacheKeys {
 
     static String category(Long accountId) {
         return CATEGORY_PREFIX + accountId;
+    }
+
+    static String generation(Long accountId) {
+        return GENERATION_PREFIX + accountId;
     }
 }

@@ -1,8 +1,10 @@
 package com.eeum.eeum.application.account.scheduler;
 
+import com.eeum.eeum.application.auth.service.TokenService;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountAuthState;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.infrastructure.sse.SseEmitterManager;
 import com.eeum.eeum.security.websocket.WebSocketSessionRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,12 +36,15 @@ class WebSocketSessionReconciliationSchedulerTest {
     @InjectMocks WebSocketSessionReconciliationScheduler scheduler;
 
     @Mock WebSocketSessionRegistry sessionRegistry;
+    @Mock SseEmitterManager sseEmitterManager;
     @Mock AccountRepository accountRepository;
+    @Mock TokenService tokenService;
 
     @Test
     void 정지된_계정의_연결을_끊는다() {
         // Given: 제재 시 종료 신호가 유실된 상태를 가정한다
         when(sessionRegistry.connectedTokenVersions()).thenReturn(Map.of(1L, 0L));
+        when(sseEmitterManager.connectedTokenVersions()).thenReturn(Map.of());
         when(accountRepository.findAuthStates(anyCollection()))
                 .thenReturn(List.of(new AccountAuthState(1L, AccountStatus.SUSPENDED, 0L)));
 
@@ -55,6 +60,7 @@ class WebSocketSessionReconciliationSchedulerTest {
         // Given: 비밀번호 재설정·사장 승인은 계정을 ACTIVE로 남긴다.
         //        상태만 비교하면 회수된 토큰으로 연결된 세션이 그대로 살아남는다.
         when(sessionRegistry.connectedTokenVersions()).thenReturn(Map.of(1L, 3L));
+        when(sseEmitterManager.connectedTokenVersions()).thenReturn(Map.of());
         when(accountRepository.findAuthStates(anyCollection()))
                 .thenReturn(List.of(new AccountAuthState(1L, AccountStatus.ACTIVE, 4L)));
 
@@ -69,6 +75,7 @@ class WebSocketSessionReconciliationSchedulerTest {
     void 정상_연결은_건드리지_않는다() {
         // Given
         when(sessionRegistry.connectedTokenVersions()).thenReturn(Map.of(1L, 2L));
+        when(sseEmitterManager.connectedTokenVersions()).thenReturn(Map.of());
         when(accountRepository.findAuthStates(anyCollection()))
                 .thenReturn(List.of(new AccountAuthState(1L, AccountStatus.ACTIVE, 2L)));
 
@@ -83,6 +90,7 @@ class WebSocketSessionReconciliationSchedulerTest {
     void 조회되지_않는_계정의_연결도_끊는다() {
         // Given: 계정이 사라졌으면 붙어 있을 이유가 없다
         when(sessionRegistry.connectedTokenVersions()).thenReturn(Map.of(99L, 0L));
+        when(sseEmitterManager.connectedTokenVersions()).thenReturn(Map.of());
         when(accountRepository.findAuthStates(anyCollection())).thenReturn(List.of());
 
         // When
@@ -96,6 +104,7 @@ class WebSocketSessionReconciliationSchedulerTest {
     void 붙어_있는_연결이_없으면_조회하지_않는다() {
         // Given: 스케줄러 스레드는 기본 1개다 — 할 일이 없으면 쿼리도 돌리지 않는다
         when(sessionRegistry.connectedTokenVersions()).thenReturn(Map.of());
+        when(sseEmitterManager.connectedTokenVersions()).thenReturn(Map.of());
 
         // When
         scheduler.closeRevokedSessions();

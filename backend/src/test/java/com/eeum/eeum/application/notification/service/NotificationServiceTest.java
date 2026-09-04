@@ -95,7 +95,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNotNull();
         verify(notificationRepository).save(any());
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
         verify(eventPublisher).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -154,7 +154,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNull();
         verify(notificationRepository, never()).save(any());
-        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
         verify(eventPublisher, never()).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -175,7 +175,7 @@ class NotificationServiceTest {
 
         // then
         verify(notification).markAsRead();
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
         verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
@@ -193,7 +193,7 @@ class NotificationServiceTest {
 
         // then
         verify(notification, never()).markAsRead();
-        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
         verify(unreadCountService, never()).invalidateSnapshot(anyLong());
     }
 
@@ -208,7 +208,7 @@ class NotificationServiceTest {
         notificationService.markAllAsRead(ACCOUNT_ID);
 
         // then
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
         verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
@@ -226,7 +226,7 @@ class NotificationServiceTest {
         // then
         verify(notificationRepository).markAsReadByAccountIdAndTypes(
                 eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class));
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
         verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
@@ -241,7 +241,7 @@ class NotificationServiceTest {
         notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.REVIEW);
 
         // then
-        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
         verify(unreadCountService, never()).invalidateSnapshot(anyLong());
     }
 
@@ -259,7 +259,7 @@ class NotificationServiceTest {
         assertThatCode(() -> notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER))
                 .doesNotThrowAnyException();
         // 무효화가 실패해도 재계산은 제출한다 — 성공하면 낡은 캐시가 최신 스냅샷으로 덮인다
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
     }
 
     @Test
@@ -276,7 +276,7 @@ class NotificationServiceTest {
         // 이후 조회가 계속 틀린 값을 돌려준다
         InOrder inOrder = inOrder(unreadCountService, unreadSyncExecutor);
         inOrder.verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
-        inOrder.verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        inOrder.verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
     }
 
     @Test
@@ -292,7 +292,7 @@ class NotificationServiceTest {
         // 아직 반납 전이다. 여기서 DB를 다시 읽으면 한 요청이 커넥션 2개를 점유한다(R2).
         verify(unreadCountService, never()).refreshFromDb(anyLong());
         verify(unreadCountService, never()).getUnreadCount(anyLong());
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
     }
 
     @Test
@@ -313,7 +313,7 @@ class NotificationServiceTest {
         verify(notificationRepository).markAsReadByAccountAndTypeAndRef(
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class));
-        verify(unreadSyncExecutor).rebuildAndPush(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
         verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
@@ -330,7 +330,7 @@ class NotificationServiceTest {
                 ACCOUNT_ID, NotificationType.CHAT_MESSAGE, NotificationRefType.CHAT_ROOM, roomId);
 
         // then
-        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
         verify(unreadCountService, never()).invalidateSnapshot(anyLong());
     }
 }

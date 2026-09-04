@@ -10,6 +10,7 @@ import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.security.jwt.JwtProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +50,7 @@ class AuthServiceTokenCleanupTest {
     @Mock JwtProvider jwtProvider;
     @Mock RedisLockService redisLockService;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock RealtimeRelayPublisher realtimeRelayPublisher;
 
     // 나머지 의존성 — 이 테스트에서 호출되지 않으므로 Mock만 선언
     @Mock com.eeum.eeum.domain.account.repository.OwnerInfoRepository ownerInfoRepository;

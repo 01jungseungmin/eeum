@@ -52,8 +52,8 @@ public class NotificationService {
     // 클라이언트(웹)가 SSE 구독을 요청할 때 호출
     // 연결 직후 현재 unread 카운트를 즉시 전송한다. 캐시가 살아 있으면 조회는 Redis에서 끝나고
     // DB 커넥션을 잡지 않는다 — 미스일 때만 UnreadSnapshotRebuilder가 트랜잭션을 연다
-    public SseEmitter subscribe(Long accountId) {
-        SseEmitter emitter = sseEmitterManager.subscribe(accountId);
+    public SseEmitter subscribe(Long accountId, Long tokenVersion, String tokenFingerprint) {
+        SseEmitter emitter = sseEmitterManager.subscribe(accountId, tokenVersion, tokenFingerprint);
         // 구독 직후 현재 카운트를 즉시 전달 (페이지 진입 시 배지 즉시 표시)
         sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
         return emitter;
@@ -238,10 +238,7 @@ public class NotificationService {
         int updated = notificationRepository.markAsReadByAccountsAndTypeAndRef(
                 accountIds, type, refType, refId, LocalDateTime.now());
         if (updated > 0) {
-            runAfterCommit(() -> synchronizeUnread(
-                    () -> unreadCountService.invalidateSnapshots(accountIds),
-                    () -> unreadSyncExecutor.rebuildAndPushAll(accountIds),
-                    accountIds.size() + "개 계정"));
+            runAfterCommit(() -> synchronizeUnread(accountIds));
         }
         log.debug("참조 기준 일괄 읽음 처리: accounts={}, type={}, refType={}, refId={}, count={}",
                 accountIds.size(), type, refType, refId, updated);
@@ -286,26 +283,26 @@ public class NotificationService {
     // 캐시를 비워 두면 폐기되더라도 다음 조회가 미스로 DB에서 정확히 복구한다.
     // 순서를 뒤집으면 "완성됐지만 낡은" 스냅샷이 남아 조회가 계속 그것을 믿는다.
     private void synchronizeUnreadAfterCommit(Long accountId) {
-        runAfterCommit(() -> synchronizeUnread(
-                () -> unreadCountService.invalidateSnapshot(accountId),
-                () -> unreadSyncExecutor.rebuildAndPush(accountId),
-                "accountId=" + accountId));
+        runAfterCommit(() -> synchronizeUnread(accountId));
     }
 
     // DB 변경은 이미 커밋된 뒤다. 여기서 예외가 새어 나가면 afterCommit을 실행한 요청이
     // 커밋에 성공하고도 실패로 응답되므로, Redis 장애든 큐 거부든 전부 삼킨다.
-    private void synchronizeUnread(Runnable invalidate, Runnable submitRebuild, String target) {
+    private void synchronizeUnread(Long accountId) {
         try {
-            invalidate.run();
+            long generation = unreadCountService.invalidateSnapshot(accountId);
+            unreadSyncExecutor.rebuildAndPush(accountId, generation);
         } catch (RuntimeException e) {
-            // 무효화가 실패하면 낡은 캐시가 남는다. 재계산은 그래도 제출한다 —
-            // 성공하면 그 낡은 값이 최신 스냅샷으로 덮이고, 실패해도 5분 주기 보정이 받는다.
-            log.error("커밋 후 unread 캐시 무효화 실패: {}", target, e);
+            log.error("커밋 후 unread 동기화 제출 실패: accountId={}", accountId, e);
         }
+    }
+
+    private void synchronizeUnread(List<Long> accountIds) {
         try {
-            submitRebuild.run();
+            Map<Long, Long> generations = unreadCountService.invalidateSnapshots(accountIds);
+            unreadSyncExecutor.rebuildAndPushAll(generations);
         } catch (RuntimeException e) {
-            log.error("커밋 후 unread 재계산 제출 실패: {}", target, e);
+            log.error("커밋 후 unread 동기화 제출 실패: accounts={}", accountIds.size(), e);
         }
     }
 

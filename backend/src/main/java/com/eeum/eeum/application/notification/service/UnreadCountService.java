@@ -8,7 +8,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +42,12 @@ public class UnreadCountService {
                     + "for i = 1, #categories do table.insert(result, categories[i]) end "
                     + "return result",
             List.class);
+
+    private static final DefaultRedisScript<Long> INVALIDATE_SNAPSHOT = new DefaultRedisScript<>(
+            "local generation = redis.call('incr', KEYS[3]) "
+                    + "redis.call('del', KEYS[1], KEYS[2]) "
+                    + "return generation",
+            Long.class);
 
     private final UnreadSnapshotRebuilder snapshotRebuilder;
     private final StringRedisTemplate redisTemplate;
@@ -105,6 +110,10 @@ public class UnreadCountService {
         return snapshotRebuilder.rebuild(accountId);
     }
 
+    public UnreadSnapshotRebuilder.RebuildResult refreshFromDb(Long accountId, long generation) {
+        return snapshotRebuilder.rebuild(accountId, generation);
+    }
+
     public void increment(Long accountId) {
         snapshotRebuilder.rebuild(accountId);
     }
@@ -122,21 +131,28 @@ public class UnreadCountService {
     // 재계산을 다른 스레드로 넘기기 직전에 부른다. 캐시를 비워 두면 재계산이 폐기되거나
     // 실패하더라도 다음 조회가 캐시 미스로 DB에서 정확한 값을 복구한다.
     // 반대로 낡은 값을 그대로 두면 "완성됐지만 틀린" 스냅샷이라 조회가 계속 그것을 믿는다.
-    public void invalidateSnapshot(Long accountId) {
-        redisTemplate.delete(
-                List.of(UnreadCacheKeys.total(accountId), UnreadCacheKeys.category(accountId)));
+    public long invalidateSnapshot(Long accountId) {
+        Long generation = redisTemplate.execute(
+                INVALIDATE_SNAPSHOT,
+                List.of(
+                        UnreadCacheKeys.total(accountId),
+                        UnreadCacheKeys.category(accountId),
+                        UnreadCacheKeys.generation(accountId)));
+        if (generation == null) {
+            throw new IllegalStateException("unread 캐시 무효화 세대를 만들지 못했습니다.");
+        }
+        return generation;
     }
 
     // 참여자 전원 무효화 — 계정 수만큼 왕복하지 않도록 키를 한 번에 넘긴다
-    public void invalidateSnapshots(List<Long> accountIds) {
-        if (accountIds == null || accountIds.isEmpty()) return;
+    public Map<Long, Long> invalidateSnapshots(List<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) return Map.of();
 
-        List<String> keys = new ArrayList<>(accountIds.size() * 2);
+        Map<Long, Long> generations = new HashMap<>();
         for (Long accountId : accountIds) {
-            keys.add(UnreadCacheKeys.total(accountId));
-            keys.add(UnreadCacheKeys.category(accountId));
+            generations.put(accountId, invalidateSnapshot(accountId));
         }
-        redisTemplate.delete(keys);
+        return generations;
     }
 
     private boolean hasAllCategories(Map<Object, Object> cached) {
