@@ -10,8 +10,10 @@ import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -43,12 +45,33 @@ public class RealtimeRelaySubscriber {
 
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
+        // 기본값은 SimpleAsyncTaskExecutor다 — 수신 메시지 하나마다 스레드를 새로 만든다.
+        // 실시간 이벤트는 알림이 몰릴 때 같이 몰리므로 그 지점에서 스레드가 무제한으로 늘어난다.
+        container.setTaskExecutor(relayDispatchExecutor());
+        // 구독 태스크는 Redis 커넥션에 붙어 계속 살아 있는 장기 작업이라 위 풀에 태우면
+        // 스레드 하나를 영구 점유한다. 별도 executor로 분리한다.
+        container.setSubscriptionExecutor(new SimpleAsyncTaskExecutor("relay-subscribe-"));
         container.addMessageListener(stompListener(), new ChannelTopic(RealtimeRelayChannels.STOMP));
         container.addMessageListener(unreadListener(), new ChannelTopic(RealtimeRelayChannels.SSE_UNREAD));
         container.addMessageListener(
                 sessionTerminationListener(),
                 new ChannelTopic(RealtimeRelayChannels.SESSION_TERMINATION));
         return container;
+    }
+
+    // 수신 처리는 짧다 — SSE 전송은 SseEmitterManager가 자기 풀로 넘기고,
+    // STOMP는 인메모리 브로커로 넘긴다. 그래서 작은 고정 풀로 충분하다.
+    private ThreadPoolTaskExecutor relayDispatchExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("relay-");
+        executor.setRejectedExecutionHandler((task, poolExecutor) ->
+                log.warn("실시간 중계 큐 포화 — 수신 처리를 건너뛴다. active={}, queued={}",
+                        poolExecutor.getActiveCount(), poolExecutor.getQueue().size()));
+        executor.initialize();
+        return executor;
     }
 
     private MessageListener stompListener() {
