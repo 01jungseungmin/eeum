@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -28,6 +29,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -258,8 +260,23 @@ class NotificationServiceTest {
         // 이 시점 DB 변경은 이미 커밋됐으므로 예외가 새어 나가면 성공한 요청이 실패로 응답된다.
         assertThatCode(() -> notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER))
                 .doesNotThrowAnyException();
-        // 무효화가 실패해도 재계산은 제출한다 — 성공하면 낡은 캐시가 최신 스냅샷으로 덮인다
-        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
+        // 무효화되지 않은 캐시를 재계산 결과로 덮으면 낡은 값이 다시 살아날 수 있으므로 제출하지 않는다.
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
+    }
+
+    @Test
+    void 구독_초기_unread_조회가_실패하면_방금_등록한_emitter를_회수한다() {
+        // given: emitter 등록 뒤 Redis/DB 초기 unread 조회가 실패하는 상황
+        SseEmitter emitter = mock(SseEmitter.class);
+        when(sseEmitterManager.subscribe(ACCOUNT_ID, 2L, "fingerprint")).thenReturn(emitter);
+        when(unreadCountService.getUnreadCount(ACCOUNT_ID))
+                .thenThrow(new IllegalStateException("redis unavailable"));
+
+        // when & then: 응답으로 반환되지 않은 emitter가 manager에 남아 heartbeat를 받으면 안 된다.
+        assertThatThrownBy(() -> notificationService.subscribe(ACCOUNT_ID, 2L, "fingerprint"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("redis unavailable");
+        verify(sseEmitterManager).closeIfCurrent(ACCOUNT_ID, emitter);
     }
 
     @Test

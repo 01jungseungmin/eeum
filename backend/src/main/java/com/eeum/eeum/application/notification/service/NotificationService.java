@@ -54,9 +54,14 @@ public class NotificationService {
     // DB 커넥션을 잡지 않는다 — 미스일 때만 UnreadSnapshotRebuilder가 트랜잭션을 연다
     public SseEmitter subscribe(Long accountId, Long tokenVersion, String tokenFingerprint) {
         SseEmitter emitter = sseEmitterManager.subscribe(accountId, tokenVersion, tokenFingerprint);
-        // 구독 직후 현재 카운트를 즉시 전달 (페이지 진입 시 배지 즉시 표시)
-        sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
-        return emitter;
+        try {
+            // 구독 직후 현재 카운트를 즉시 전달 (페이지 진입 시 배지 즉시 표시)
+            sseEmitterManager.sendUnreadCount(accountId, unreadCountService.getUnreadCount(accountId));
+            return emitter;
+        } catch (RuntimeException e) {
+            sseEmitterManager.closeIfCurrent(accountId, emitter);
+            throw e;
+        }
     }
 
     // ===================== 알림 생성 (다른 도메인 서비스에서 호출) =====================

@@ -35,13 +35,14 @@ class SseEmitterManagerTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<Long, SseEmitter> emitters() {
-        return (Map<Long, SseEmitter>) ReflectionTestUtils.getField(sseEmitterManager, "emitters");
+    private Map<Long, SseEmitterManager.Connection> connections() {
+        return (Map<Long, SseEmitterManager.Connection>) ReflectionTestUtils.getField(
+                sseEmitterManager, "connections");
     }
 
     private SseEmitter registerMockEmitter(Long accountId) {
         SseEmitter emitter = mock(SseEmitter.class);
-        emitters().put(accountId, emitter);
+        connections().put(accountId, new SseEmitterManager.Connection(emitter, 0L, ""));
         return emitter;
     }
 
@@ -106,7 +107,7 @@ class SseEmitterManagerTest {
 
         // then
         verify(previous).complete();
-        assertThat(emitters().get(ACCOUNT_ID)).isSameAs(current);
+        assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
     }
 
     // 이전 emitter 정리가 실패했다고 새 구독을 실패시키면, 맵에는 emitter가 남고
@@ -130,6 +131,22 @@ class SseEmitterManagerTest {
         // then
         assertThat(emitter).isNotNull();
         assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+    }
+
+    @Test
+    void 이전_연결_정리가_재연결된_현재_연결의_인증정보를_지우지_않는다() {
+        // given: 이전 연결의 초기 unread 조회가 늦게 실패하는 동안 같은 계정이 재연결한 상황
+        SseEmitter previous = sseEmitterManager.subscribe(ACCOUNT_ID, 1L, "old-token");
+        SseEmitter current = sseEmitterManager.subscribe(ACCOUNT_ID, 2L, "new-token");
+
+        // when: 이전 요청이 자기 emitter만 정리한다
+        sseEmitterManager.closeIfCurrent(ACCOUNT_ID, previous);
+
+        // then: 새 연결과 그 인증 스냅샷은 함께 남아 reconciliation 대상이 된다
+        assertThat(sseEmitterManager.isConnected(ACCOUNT_ID)).isTrue();
+        assertThat(sseEmitterManager.connectedCredentials().get(ACCOUNT_ID))
+                .isEqualTo(new SseEmitterManager.ConnectionCredentials(2L, "new-token"));
+        assertThat(connections().get(ACCOUNT_ID).emitter()).isSameAs(current);
     }
 
     @Test

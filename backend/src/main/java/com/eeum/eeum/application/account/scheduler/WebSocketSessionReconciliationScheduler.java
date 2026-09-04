@@ -54,7 +54,8 @@ public class WebSocketSessionReconciliationScheduler {
     @InstanceLocalSchedule
     public void closeRevokedSessions() {
         Map<Long, Long> webSocketConnections = sessionRegistry.connectedTokenVersions();
-        Map<Long, Long> sseConnections = sseEmitterManager.connectedTokenVersions();
+        Map<Long, SseEmitterManager.ConnectionCredentials> sseConnections =
+                sseEmitterManager.connectedCredentials();
         if (webSocketConnections.isEmpty() && sseConnections.isEmpty()) {
             return;
         }
@@ -69,9 +70,9 @@ public class WebSocketSessionReconciliationScheduler {
                 sessionRegistry.closeAll(state.accountId(), WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
             }
 
-            Long sseVersion = sseConnections.get(state.accountId());
-            if (sseVersion != null && (!state.isUsable(sseVersion)
-                    || tokenService.isFingerprintBlacklisted(sseEmitterManager.tokenFingerprint(state.accountId())))) {
+            SseEmitterManager.ConnectionCredentials sseConnection = sseConnections.get(state.accountId());
+            if (sseConnection != null && (!state.isUsable(sseConnection.tokenVersion())
+                    || tokenService.isFingerprintBlacklisted(sseConnection.tokenFingerprint()))) {
                 sseEmitterManager.closeAll(state.accountId());
             }
         }
