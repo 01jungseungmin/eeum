@@ -7,6 +7,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -15,27 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-/**
- * SSE(Server-Sent Events) 연결 관리.
- *
- * <p>연결은 계정 단위로 1개만 유지한다. 동일 계정이 재연결하면 기존 emitter를 대체한다.
- *
- * <p><b>모든 소켓 write는 이 클래스의 전용 풀에서만 일어난다.</b>
- * {@code SseEmitter.send()}는 블로킹 소켓 write다. 클라이언트가 TCP FIN 없이 사라지면
- * (모바일 네트워크 단절, 앱 백그라운드, 프록시 idle cut) 송신 버퍼가 찬 뒤 TCP 재전송
- * 타임아웃까지 스레드가 묶이고, {@code ResponseBodyEmitter.send()}는 {@code synchronized}라
- * 같은 emitter를 만지는 다른 스레드도 함께 묶인다. 호출부는 Tomcat 요청 스레드이거나
- * Redis 리스너 스레드라 거기서 묶이면 요청 처리와 실시간 중계가 통째로 멈춘다.
- * 그래서 호출부는 전송을 <b>큐에 넣고 즉시 돌아간다.</b>
- *
- * <p>풀이 포화되면 전송을 버린다. 못 보낸 배지는 다음 이벤트나 클라이언트의 재조회로
- * 복구되지만, 호출부를 붙잡으면 그 스레드가 수 분간 묶인다. 버리는 쪽이 싸다.
- *
- * <p>하트비트를 주기적으로 보내는 이유는 두 가지다. (1) 죽은 연결을 타임아웃(30분)까지
- * 기다리지 않고 몇 초 안에 감지해 회수한다. (2) 리버스 프록시의 idle timeout에 걸려
- * 연결이 조용히 끊기는 것을 막는다. 하트비트는 SSE 주석(`:`)이라 클라이언트 이벤트
- * 핸들러에 잡히지 않는다.
- */
+// 계정별 SSE 연결과 전송 큐를 관리한다.
 @Slf4j
 @Component
 public class SseEmitterManager implements DisposableBean {
@@ -57,8 +38,12 @@ public class SseEmitterManager implements DisposableBean {
                 thread.setDaemon(true);
                 return thread;
             },
-            (task, executor) -> log.warn("SSE 전송 큐 포화 — 전송을 건너뛴다. active={}, queued={}",
-                    executor.getActiveCount(), executor.getQueue().size()));
+            new ThreadPoolExecutor.AbortPolicy());
+
+    private final Map<Long, Object> pendingUnreadPayloads = new ConcurrentHashMap<>();
+    private final Set<Long> unreadWritesInFlight = ConcurrentHashMap.newKeySet();
+    private final Map<Long, Long> tokenVersions = new ConcurrentHashMap<>();
+    private final Map<Long, String> tokenFingerprints = new ConcurrentHashMap<>();
 
     // 하트비트는 "언제 보낼지"만 정한다. 실제 write는 writeExecutor로 넘겨,
     // 죽은 연결 하나가 나머지 전원의 하트비트를 막지 못하게 한다.
@@ -79,14 +64,12 @@ public class SseEmitterManager implements DisposableBean {
 
     // ===================== 연결 =====================
 
-    /**
-     * 클라이언트가 SSE 구독을 시작할 때 호출. 기존 연결이 있으면 완료 처리 후 새 emitter로 교체한다.
-     *
-     * <p>이 메서드는 예외를 던지지 않는다. emitter를 맵에 넣은 뒤 예외가 새어 나가면
-     * 컨트롤러는 500을 응답하는데 맵에는 아무도 읽지 않는 emitter가 남고,
-     * 그 emitter는 완료된 적이 없어 onCompletion/onError도 돌지 않는다(고아 emitter).
-     */
+    // 기존 연결은 교체하고 새 emitter를 반환한다.
     public SseEmitter subscribe(Long accountId) {
+        return subscribe(accountId, 0L, "");
+    }
+
+    public SseEmitter subscribe(Long accountId, Long tokenVersion, String tokenFingerprint) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
 
         // 콜백을 먼저 건다 — 맵에 넣은 뒤에 걸면 그 사이 종료된 연결이 회수되지 않는다.
@@ -94,20 +77,22 @@ public class SseEmitterManager implements DisposableBean {
         // 재연결로 교체된 새 emitter가 지워져(기존 emitter의 onCompletion이 늦게 실행되는 경우)
         // 연결은 살아있는데 unread 이벤트를 못 받는 상태가 된다.
         emitter.onCompletion(() -> {
-            emitters.remove(accountId, emitter);
+            removeConnection(accountId, emitter);
             log.debug("SSE 연결 종료: accountId={}", accountId);
         });
         emitter.onTimeout(() -> {
-            emitters.remove(accountId, emitter);
+            removeConnection(accountId, emitter);
             log.debug("SSE 연결 타임아웃: accountId={}", accountId);
             completeQuietly(accountId, emitter);
         });
         emitter.onError(e -> {
-            emitters.remove(accountId, emitter);
+            removeConnection(accountId, emitter);
             log.debug("SSE 연결 에러: accountId={}, error={}", accountId, e.getMessage());
         });
 
         SseEmitter previous = emitters.put(accountId, emitter);
+        tokenVersions.put(accountId, tokenVersion == null ? 0L : tokenVersion);
+        tokenFingerprints.put(accountId, tokenFingerprint == null ? "" : tokenFingerprint);
         if (previous != null) {
             completeQuietly(accountId, previous);
         }
@@ -121,22 +106,35 @@ public class SseEmitterManager implements DisposableBean {
 
     // ===================== 이벤트 전송 =====================
 
-    /**
-     * 안 읽은 알림 수를 해당 계정의 SSE 채널로 전송. 연결된 emitter가 없으면 스킵한다.
-     *
-     * <p>큐에 넣고 즉시 반환한다 — 호출부(Redis 리스너 스레드)를 소켓 write에 묶지 않는다.
-     */
+    // 최신 unread payload만 남기고 계정별로 직렬 전송한다.
     public void sendUnreadCount(Long accountId, Object payload) {
-        SseEmitter emitter = emitters.get(accountId);
-        if (emitter == null) return;
-
-        enqueue(accountId, emitter,
-                SseEmitter.event().name("unread-count").data(payload), "unread-count");
+        if (!emitters.containsKey(accountId)) return;
+        pendingUnreadPayloads.put(accountId, payload);
+        scheduleUnreadWrite(accountId);
     }
 
     // 해당 계정의 SSE 연결 여부 — 미연결이면 호출자가 payload 조회(DB 쿼리)를 생략할 수 있다
     public boolean isConnected(Long accountId) {
         return emitters.containsKey(accountId);
+    }
+
+    public Map<Long, Long> connectedTokenVersions() {
+        return Map.copyOf(tokenVersions);
+    }
+
+    public String tokenFingerprint(Long accountId) {
+        return tokenFingerprints.get(accountId);
+    }
+
+    public void closeAll(Long accountId) {
+        SseEmitter emitter = emitters.remove(accountId);
+        tokenVersions.remove(accountId);
+        tokenFingerprints.remove(accountId);
+        pendingUnreadPayloads.remove(accountId);
+        unreadWritesInFlight.remove(accountId);
+        if (emitter != null) {
+            completeQuietly(accountId, emitter);
+        }
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -156,8 +154,46 @@ public class SseEmitterManager implements DisposableBean {
         try {
             writeExecutor.execute(() -> write(accountId, emitter, event, what));
         } catch (RejectedExecutionException e) {
-            // 종료 중이면 여기로 온다. 전송 하나 때문에 호출부를 실패시키지 않는다.
-            log.debug("SSE 전송 거부: accountId={}, event={}", accountId, what);
+            log.warn("SSE 전송 큐 포화 — 전송을 건너뛴다: accountId={}, event={}", accountId, what);
+        }
+    }
+
+    private void scheduleUnreadWrite(Long accountId) {
+        if (!unreadWritesInFlight.add(accountId)) {
+            return;
+        }
+        try {
+            writeExecutor.execute(() -> flushUnreadCount(accountId));
+        } catch (RejectedExecutionException e) {
+            unreadWritesInFlight.remove(accountId);
+            pendingUnreadPayloads.remove(accountId);
+            log.warn("SSE unread 전송 큐 포화 — 최신 배지를 건너뛴다: accountId={}", accountId);
+        }
+    }
+
+    private void flushUnreadCount(Long accountId) {
+        try {
+            while (true) {
+                Object payload = pendingUnreadPayloads.remove(accountId);
+                if (payload == null) {
+                    return;
+                }
+                SseEmitter emitter = emitters.get(accountId);
+                if (emitter == null) {
+                    return;
+                }
+                try {
+                    emitter.send(SseEmitter.event().name("unread-count").data(payload));
+                } catch (Exception e) {
+                    removeConnection(accountId, emitter);
+                    return;
+                }
+            }
+        } finally {
+            unreadWritesInFlight.remove(accountId);
+            if (pendingUnreadPayloads.containsKey(accountId) && emitters.containsKey(accountId)) {
+                scheduleUnreadWrite(accountId);
+            }
         }
     }
 
@@ -167,7 +203,7 @@ public class SseEmitterManager implements DisposableBean {
         try {
             emitter.send(event);
         } catch (Exception e) {
-            emitters.remove(accountId, emitter);
+            removeConnection(accountId, emitter);
             log.debug("SSE 전송 실패 — emitter 제거: accountId={}, event={}, error={}",
                     accountId, what, e.getMessage());
         }
@@ -181,6 +217,15 @@ public class SseEmitterManager implements DisposableBean {
         }
     }
 
+    private void removeConnection(Long accountId, SseEmitter emitter) {
+        if (emitters.remove(accountId, emitter)) {
+            tokenVersions.remove(accountId);
+            tokenFingerprints.remove(accountId);
+            pendingUnreadPayloads.remove(accountId);
+            unreadWritesInFlight.remove(accountId);
+        }
+    }
+
     // 재기동 시 열린 연결을 정리한다. 정리하지 않으면 클라이언트가 응답이 끝나기를
     // 기다리다 프록시 타임아웃까지 재연결을 시작하지 않는다.
     @Override
@@ -189,5 +234,9 @@ public class SseEmitterManager implements DisposableBean {
         writeExecutor.shutdown();
         emitters.forEach(this::completeQuietly);
         emitters.clear();
+        tokenVersions.clear();
+        tokenFingerprints.clear();
+        pendingUnreadPayloads.clear();
+        unreadWritesInFlight.clear();
     }
 }
