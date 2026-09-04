@@ -48,9 +48,7 @@ public class AccountMapper {
                 .status(account.getStatus().name())
                 .provider(account.getProvider().name())
                 .primaryRegionId(account.getPrimaryRegionId())
-                .regions(regions.stream()
-                        .map(region -> accountRegionMapper.toRegionDto(region, account))
-                        .toList())
+                .regions(accountRegionMapper.toRegionDtos(regions, account))
                 .createdAt(account.getCreatedAt())
                 .build();
     }
@@ -71,9 +69,7 @@ public class AccountMapper {
                 .status(account.getStatus().name())
                 .provider(account.getProvider().name())
                 .emailVerified(account.isEmailVerified())
-                .regions(regions.stream()
-                        .map(region -> accountRegionMapper.toRegionDto(region, account))
-                        .toList())
+                .regions(accountRegionMapper.toRegionDtos(regions, account))
                 .ownerInfo(ownerInfo != null ? ownerApplicationMapper.toOwnerApplicationDetailResponseDto(ownerInfo) : null)
                 .createdAt(account.getCreatedAt())
                 .deletedAt(account.getDeletedAt())

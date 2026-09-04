@@ -95,11 +95,11 @@ throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
 Soft Delete (deletedAt 필드) 적용 대상:
 - `Account` — 탈퇴 후 30일 유예, `AccountCleanupScheduler`가 처리
 - `ChatMessage`
-- `Category`
 - `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
 - `UsedProduct` — 판매완료 글에 후기·채팅·신고 이력이 매달려 물리 삭제 시 참조가 끊김
 
-그 외 엔티티는 Hard Delete (즉시 물리 삭제)
+그 외 엔티티는 Hard Delete (즉시 물리 삭제).
+`Category`는 Soft Delete 대상이 아니다 — `deletedAt` 없이 `isActive` 토글로 노출만 끊는다.
 
 ### 동시성 제어
 재고 차감, 주문 생성, 예약 처리는 `RedisLockService` 사용 필수:
