@@ -18,9 +18,28 @@ module.exports = {
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         LSApplicationQueriesSchemes: [
+          // 소셜 로그인
           "kakaokompassauth",
+          "kakaolink",
           "naversearchapp",
-          "naversearchthirdlogin"
+          "naversearchthirdlogin",
+          // 결제 앱 전환. 여기 없는 스킴은 iOS가 canOpenURL을 막아
+          // "앱이 설치되어 있지 않다"로 잘못 처리된다.
+          "kakaotalk",
+          "supertoss",
+          "payco",
+          "lpayapp",
+          "ispmobile",
+          "kftc-bankpay",
+          "citispay",
+          "shinhan-sr-ansimclick",
+          "kb-acp",
+          "mpocket.online.ansimclick",
+          "hdcardappcardansimclick",
+          "nhallonepayansimclick",
+          "cloudpay",
+          "hanawalletmembers",
+          "lottesmartpay"
         ]
       }
     },
