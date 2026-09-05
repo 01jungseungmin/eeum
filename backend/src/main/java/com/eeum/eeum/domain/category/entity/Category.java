@@ -10,8 +10,9 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "category",
+        // type 단독 인덱스는 두지 않는다 — 아래 uk_category_type_parent_scope_name의
+        // 선행 컬럼이 type이라 그 유니크 인덱스가 그대로 대신한다.
         indexes = {
-                @Index(name = "idx_category_type", columnList = "type"),
                 @Index(name = "idx_category_parent_id", columnList = "parent_id")
         },
         // 같은 부모 아래 같은 이름을 DB에서 유일하게 보장한다.

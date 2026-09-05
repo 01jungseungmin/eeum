@@ -1,0 +1,4 @@
+interface:
+  display_name: "버그 원인·해결 설명"
+  short_description: "프로젝트 버그의 원인과 해결 과정을 이해하기 쉽게 정리합니다"
+  default_prompt: "Use $bug-explainer to explain what problem occurred, why it happened, how it was fixed, and what changed after the fix."

@@ -6,7 +6,10 @@ import com.eeum.eeum.domain.notification.enums.NotificationRefType;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.event.ReportActionNotificationEvent;
+import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.enums.UsedProductStatus;
+import com.eeum.eeum.domain.used.event.UsedProductReservationCancelledEvent;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -68,10 +71,25 @@ public class UsedProductReportActionExecutor implements ReportTargetActionExecut
         return product.getSeller().getAccountId();
     }
 
+    /**
+     * 게시글 삭제.
+     *
+     * <p><b>예약을 먼저 정리한다.</b> 사용자 삭제 경로는 예약 중인 글의 삭제를 아예 막는다
+     * ({@code UsedProductService.delete}) — 상대가 거래를 기다리는데 글이 말없이 사라지면
+     * 이유를 알 수 없기 때문이다. 관리자 조치는 불법 게시글을 즉시 내려야 하므로 막을 수 없지만,
+     * 구매자가 겪는 상황은 똑같다. 그래서 차단 대신 예약을 취소하고 상대에게 알린다.
+     *
+     * <p>정리하지 않으면 예약이 RESERVED로 <b>영구히</b> 남는다. 삭제된 글은 상태 전이 경로가
+     * 걸러내므로({@code getOwnedForUpdateOrThrow}) 판매자도 그 예약을 취소할 수 없다.
+     *
+     * <p>판매자 탈퇴·정지 경로({@code UsedProductWithdrawalService})와 같은 이벤트를 쓴다.
+     * 알림 문구가 사유를 단정하지 않아 관리자 삭제에도 그대로 맞는다.
+     */
     private Long deleteProduct(Long usedProductId) {
         UsedProduct product = getProductForUpdate(usedProductId);
         Long sellerAccountId = product.getSeller().getAccountId();
 
+        cancelReservationIfAny(product);
         product.softDelete();
 
         // 사용자가 지우든 관리자가 지우든 결과는 같아야 한다 —
@@ -94,6 +112,22 @@ public class UsedProductReportActionExecutor implements ReportTargetActionExecut
      * <p>이 경로는 상품을 수정하지 않고 대상 계정만 찾는다. 실제 변경은
      * {@code ReportedAccountActionService}가 계정을 잠근 뒤 수행하므로 여기서 잠글 이유가 없다.
      */
+    // 상대 없는 "예약중"도 되돌린다 — 통보만 상대가 있을 때 한다.
+    private void cancelReservationIfAny(UsedProduct product) {
+        if (product.getStatus() != UsedProductStatus.RESERVED) {
+            return;
+        }
+
+        Account buyer = product.getBuyer();
+        product.cancelReservation();
+        if (buyer == null) {
+            return;
+        }
+
+        eventPublisher.publishEvent(new UsedProductReservationCancelledEvent(
+                product.getUsedProductId(), buyer.getAccountId(), product.getTitle()));
+    }
+
     private Long resolveSellerAccountId(Long usedProductId, Long storedSellerAccountId) {
         if (storedSellerAccountId != null) {
             return storedSellerAccountId;

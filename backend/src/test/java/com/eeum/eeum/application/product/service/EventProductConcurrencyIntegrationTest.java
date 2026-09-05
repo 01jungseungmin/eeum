@@ -127,7 +127,6 @@ class EventProductConcurrencyIntegrationTest extends IntegrationTestSupport {
         productRepository.deleteAll();
         productCategoryRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

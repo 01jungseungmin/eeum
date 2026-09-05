@@ -25,8 +25,10 @@ public class Store extends BaseEntity {
     @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name="category_id",nullable = true)
+    // 한 카테고리를 여러 상점이 공유한다 — @OneToOne으로 두면 Hibernate가 category_id에
+    // UNIQUE를 만들어 같은 업종의 두 번째 상점 등록이 막힌다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
     private Category category;
 
     @ManyToOne(fetch = FetchType.LAZY)

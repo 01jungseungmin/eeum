@@ -19,11 +19,19 @@ import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
+import com.eeum.eeum.application.chat.dto.response.UsedProductChatSummaryDto;
+import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.entity.UsedProductImage;
+import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.domain.chat.enums.ChatRoomRefType;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.domain.chat.enums.ParticipantStatus;
 import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
+import com.eeum.eeum.common.dto.response.CursorSlice;
+import com.eeum.eeum.domain.chat.repository.ChatRoomCursor;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -40,7 +48,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +57,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -73,8 +81,121 @@ public class ChatRoomService {
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final StoreRepository storeRepository;
+    private final UsedProductRepository usedProductRepository;
+    private final UsedProductImageRepository usedProductImageRepository;
+    private final AccountWriteGuard accountWriteGuard;
 
     // ===================== 채팅방 생성 =====================
+
+    /**
+     * 중고거래 1:1 문의방 생성 (구매자가 시작).
+     *
+     * <p><b>멱등하다.</b> 같은 상품에 이미 활성 문의방이 있으면 새로 만들지 않고 그 방을 돌려준다.
+     * 구매자가 "채팅하기"를 여러 번 눌러도 방이 늘어나지 않는다. 가게 단톡방(createGroupRoom)이
+     * 중복을 409로 막는 것과 의도적으로 다르다 — 그쪽은 사장이 명시적으로 개설하는 행위라
+     * 이미 있다는 사실을 알려야 하지만, 여기서는 대화 진입이 목적이라 기존 방으로 들여보내는 것이 맞다.
+     *
+     * <p>잠금 순서는 프로젝트 전역 규약을 따른다: <b>account → used_product → chat_room</b>.
+     * 직렬화는 상품 행 잠금이 담당하고, uk_chat_room_active_ref가 최종 방어선이다.
+     *
+     * <p>가게 단톡방과 달리 <b>Redis 락을 쓰지 않는다.</b> RedisLockService는 대기 없이 즉시
+     * 실패하므로, 구매자가 "채팅하기"를 연타하면 두 번째 요청이 기존 방을 받는 대신
+     * LOCK_ACQUIRE_FAILED로 떨어져 멱등 계약이 깨진다. 상품 행 잠금은 대기하므로
+     * 두 번째 요청은 첫 트랜잭션 커밋을 기다렸다가 기존 방을 그대로 돌려받는다.
+     */
+    public ChatRoomResponseDto createUsedProductInquiry(Long buyerId, Long usedProductId) {
+        try {
+            return createInquiryRoom(buyerId, usedProductId);
+        } catch (InquiryRoomRaceException race) {
+            // 위 트랜잭션은 유니크 위반으로 이미 롤백됐다. 같은 트랜잭션에서 재조회하면
+            // rollback-only 상태라 읽을 수 없으므로, 새 트랜잭션에서 먼저 커밋된 방을 읽는다.
+            return withTx(() -> findActiveInquiryRoom(usedProductId, buyerId)
+                    .map(room -> toResponseDto(room, buyerId))
+                    .orElseThrow(() -> new ConflictException(ErrorCode.CHAT_ROOM_ALREADY_EXISTS)));
+        }
+    }
+
+    private ChatRoomResponseDto createInquiryRoom(Long buyerId, Long usedProductId) {
+        return withTx(() -> {
+            // 1) 잠금 순서를 정하기 위해 판매자 ID를 먼저 읽는다(잠금 없음).
+            //    낡은 값이어도 안전하다 — 잠근 뒤 상품과 판매자 상태를 다시 확인한다.
+            Long sellerId = usedProductRepository.findSellerIdByUsedProductId(usedProductId)
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+
+            // 2) account → used_product 순서로 잠근다(CLAUDE.md 전역 순서).
+            //    두 계정은 ID 오름차순으로 잠가 반대 방향 요청과 교착되지 않게 한다.
+            //
+            //    판매자까지 잠그는 이유: isPubliclyVisible()이 seller.isActive()를 본다.
+            //    판매자 행을 잠그지 않으면 "공개 상태" 판정 직후 탈퇴가 커밋돼,
+            //    탈퇴 정리가 끝난 뒤에 그 판매자가 참여자인 ACTIVE 방이 생긴다.
+            //    탈퇴 처리는 RESERVED 상품만 잠그므로 SELLING 상품으로는 두 경로가 겹치지 않는다.
+            Account buyer;
+            Account seller;
+            if (buyerId <= sellerId) {
+                buyer = accountWriteGuard.lockActive(buyerId);
+                seller = lockSeller(sellerId);
+            } else {
+                seller = lockSeller(sellerId);
+                buyer = accountWriteGuard.lockActive(buyerId);
+            }
+
+            // 3) 상품 잠금 후 상태 재검증. 잠그지 않으면 삭제·숨김 조치와 겹쳐 사라진 글에 방이 붙는다.
+            //    판매자를 먼저 잠갔으므로 아래 product.getSeller()는 같은 영속성 컨텍스트의
+            //    잠긴 인스턴스로 해석된다 — isPubliclyVisible()이 낡은 상태를 보지 않는다.
+            UsedProduct product = usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+
+            if (product.isOwnedBy(buyerId)) {
+                throw new BadRequestException(ErrorCode.CHAT_SELF_INQUIRY_NOT_ALLOWED);
+            }
+
+            // 판매자 상태는 잠근 엔티티로 직접 본다. isPubliclyVisible()에 맡기면
+            // 영속성 컨텍스트 동일성에 기대는 셈이라, 의도를 코드로 드러낸다.
+            if (!seller.isActive()) {
+                throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+            }
+
+            // 삭제·숨김·판매자 탈퇴 글에는 새 방을 만들지 않는다. 비공개 사유는 드러내지 않는다.
+            if (!product.isPubliclyVisible()) {
+                throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+            }
+
+            // 3) 조회는 지역 인증 없이 열어두지만, 실제 거래 행동인 문의 시작은 인증을 요구한다.
+            verifyInquiryRegion(buyerId);
+
+            // 4) 기존 활성 방이 있으면 그대로 돌려준다.
+            Optional<ChatRoom> existing = findActiveInquiryRoom(usedProductId, buyerId);
+            if (existing.isPresent()) {
+                log.info("중고 문의방 이미 존재 → 기존 방 반환: roomId={}, usedProductId={}, buyerId={}",
+                        existing.get().getChatroomId(), usedProductId, buyerId);
+                return toResponseDto(existing.get(), buyerId);
+            }
+
+            ChatRoom room = ChatRoom.createPrivateInquiry(buyer, usedProductId);
+            saveInquiryRoomOrSignalRace(room, usedProductId, buyerId);
+
+            // 5) 참여자는 구매자와 판매자 둘뿐이다. 이후 입장·초대는 verifyGroupRoom이 막는다.
+            saveParticipantOrThrowOnDuplicate(room, buyer);
+            saveParticipantOrThrowOnDuplicate(room, product.getSeller());
+
+            log.info("중고 문의방 생성: roomId={}, usedProductId={}, buyerId={}, sellerId={}",
+                    room.getChatroomId(), usedProductId, buyerId,
+                    product.getSeller().getAccountId());
+            return toResponseDto(room, buyerId);
+        });
+    }
+
+    /**
+     * 판매자 계정 잠금 — 상태 판정은 호출부가 한다.
+     *
+     * <p>{@code accountWriteGuard.lockActive}를 쓰지 않는 이유는 오류 계약이 다르기 때문이다.
+     * 판매자가 탈퇴·정지라는 사실을 구매자에게 알리면 안 된다(비공개 사유 비노출 정책).
+     * 여기서는 잠그기만 하고, 호출부가 USED_PRODUCT_NOT_FOUND로 바꿔 던진다.
+     */
+    private Account lockSeller(Long sellerId) {
+        return accountRepository.findByIdWithLock(sellerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+    }
 
     // GROUP(단톡방) 채팅방 생성 + 참여자 일괄 초대
     // 락 획득 후 트랜잭션 시작 → 커밋 완료 후 락 해제 (가게 단톡방 중복 생성 방지)
@@ -121,7 +242,7 @@ public class ChatRoomService {
             }
 
             saveAndBroadcastSystemMessage(room, creator,
-                    String.format("%s님이 채팅방을 개설했습니다.", creator.getName()));
+                    String.format("%s님이 채팅방을 개설했습니다.", creator.getDisplayName()));
             log.info("그룹 채팅방 생성: roomId={}, creator={}, 초대={}명",
                     room.getChatroomId(), accountId, invitees.size());
             return toResponseDto(room, accountId);
@@ -141,13 +262,18 @@ public class ChatRoomService {
 
     // ===================== 조회 =====================
 
-    // 내 채팅방 목록 (lastMessageAt 내림차순, unreadCount 포함) — 무한 스크롤
+    // 내 채팅방 목록 (lastMessageAt 내림차순, unreadCount 포함) — 커서 무한 스크롤.
+    // 페이지 번호를 쓰지 않는 이유는 메시지 한 번에 그 방이 맨 앞으로 올라와 목록이 밀리기 때문이다.
     // 배치 쿼리 3개로 N+1 제거: 참여자 수, 최신 메시지, Redis unread
     // includeClosed=true면 종료된 방까지 반환한다 — 종료 시 참여자를 LEFT로 바꾸지 않으므로
     // 대화 기록은 DB에 남아 있고, 이 플래그가 유일한 열람 경로다 (응답의 active로 구분).
     @Transactional(readOnly = true)
-    public Slice<ChatRoomResponseDto> getMyRooms(Long accountId, Pageable pageable, boolean includeClosed) {
-        Slice<ChatRoom> rooms = chatRoomRepository.findMyRooms(accountId, pageable, includeClosed);
+    public CursorSlice<ChatRoomResponseDto> getMyRooms(
+            Long accountId, String cursorValue, Long cursorRoomId,
+            int size, boolean includeClosed) {
+        // 커서 조립은 여기서 한다 — 컨트롤러가 리포지토리 패키지를 참조하지 않도록(LayerRuleTest).
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorValue, cursorRoomId);
+        CursorSlice<ChatRoom> rooms = chatRoomRepository.findMyRooms(accountId, cursor, size, includeClosed);
         if (rooms.isEmpty()) {
             return rooms.map(room -> ChatRoomResponseDto.of(room, null, 0L, 0L));
         }
@@ -168,13 +294,18 @@ public class ChatRoomService {
                         (a, b) -> a.getSentAt().isAfter(b.getSentAt()) ? a : b
                 ));
 
+        // 중고 문의방은 이름이 없어 상품 요약이 없으면 목록에서 방을 구분할 수 없다.
+        // 방마다 조회하면 페이지 크기만큼 쿼리가 나가므로 배치로 한 번에 읽는다(상품 1 + 대표사진 1).
+        Map<Long, UsedProductChatSummaryDto> usedProducts = resolveUsedProductSummaries(rooms.getContent());
+
         return rooms.map(room -> {
             long participantCount = participantCounts.getOrDefault(room.getChatroomId(), 0L);
             long unread = resolveRoomUnread(room, accountId);
             String preview = Optional.ofNullable(latestMessages.get(room.getChatroomId()))
                     .map(ChatMessagePreview::of)
                     .orElse(null);
-            return ChatRoomResponseDto.of(room, preview, unread, participantCount);
+            return ChatRoomResponseDto.of(room, preview, unread, participantCount,
+                    usedProducts.get(room.getChatroomId()));
         });
     }
 
@@ -190,7 +321,7 @@ public class ChatRoomService {
                 .map(ChatParticipantResponseDto::from)
                 .toList();
 
-        return ChatRoomDetailResponseDto.of(room, participants);
+        return ChatRoomDetailResponseDto.of(room, participants, resolveUsedProductSummary(room));
     }
 
     // ===================== 참여자 관리 =====================
@@ -226,7 +357,7 @@ public class ChatRoomService {
             }
 
             saveAndBroadcastSystemMessage(room, account,
-                    String.format("%s님이 입장했습니다.", account.getName()));
+                    String.format("%s님이 입장했습니다.", account.getDisplayName()));
             eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
             log.info("채팅방 직접 입장: roomId={}, accountId={}", roomId, accountId);
         });
@@ -261,10 +392,10 @@ public class ChatRoomService {
                         .orElse(null);
                 if (existing == null) {
                     saveParticipantOrThrowOnDuplicate(room, invitee);
-                    joinedNames.add(invitee.getName());
+                    joinedNames.add(invitee.getDisplayName());
                 } else if (!existing.isActive()) {
                     existing.rejoin();
-                    joinedNames.add(invitee.getName());
+                    joinedNames.add(invitee.getDisplayName());
                 }
             }
 
@@ -286,12 +417,34 @@ public class ChatRoomService {
         withLockAndTx(roomStateLockKey(target), () -> {
             ChatRoom room = lockRoomState(target);
             ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
+
+            // PRIVATE 문의방은 참여자가 둘뿐이라 한 명이 나가면 대화가 성립하지 않는다.
+            // 나간 사람만 LEFT로 바꾸면 방은 ACTIVE로 남아, 다시 문의해도 들어갈 수 없는
+            // 그 방의 roomId를 돌려받는다. 방 자체를 종료한다.
+            //
+            // 참여자는 건드리지 않는다. 내 채팅방 목록이 참여자 ACTIVE를 조건으로 걸기 때문에,
+            // 나간 쪽을 LEFT로 바꾸면 includeClosed=true로도 지난 대화를 볼 수 없고
+            // 메시지 조회도 막힌다. 종료된 방은 발행이 막히므로(verifyActiveRoomParticipant)
+            // 참여자를 남겨둬도 다시 말을 걸 수는 없다.
+            //
+            // 방이 종료되면 active_ref_key가 NULL이 되어 UNIQUE가 풀리므로
+            // 같은 상품에 다시 문의하면 새 방이 만들어진다.
+            if (room.getType() == ChatRoomType.PRIVATE) {
+                chatAccessHelper.verifyRoomActive(room);
+                eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
+                String actorName = participant.getAccount().getDisplayName();
+                closeRoomInternal(roomId, () -> getAccount(accountId), accountId,
+                        String.format("%s님이 나갔습니다.", actorName));
+                log.info("PRIVATE 문의방 퇴장 → 방 종료: roomId={}, accountId={}", roomId, accountId);
+                return;
+            }
+
             participant.leave();
             eventPublisher.publishEvent(new ChatRoomReadEvent(accountId, roomId));
 
             Account actor = participant.getAccount();
             saveAndBroadcastSystemMessage(room, actor,
-                    String.format("%s님이 나갔습니다.", actor.getName()));
+                    String.format("%s님이 나갔습니다.", actor.getDisplayName()));
 
             long activeCount = chatParticipantRepository
                     .countByChatRoom_ChatroomIdAndStatus(roomId, ParticipantStatus.ACTIVE);
@@ -368,6 +521,8 @@ public class ChatRoomService {
 
     // 방 상태 변경 락 키 — 생성/입장/초대/퇴장/종료가 모두 이 키 하나로 직렬화된다.
     // 가게 단톡방은 생성(chatRoomStore)과 같은 키여야 "종료 ↔ 재생성" 레이스를 막을 수 있다.
+    // 중고 문의방은 별도 키를 두지 않는다 — 생성과 상태 변경이 모두 상품 행을 잠그므로
+    // DB 레벨에서 이미 직렬화된다(lockRoomState 참고).
     private String roomStateLockKey(ChatRoom room) {
         return room.isStoreRoom()
                 ? LockKeys.chatRoomStore(room.getRefId())
@@ -428,7 +583,8 @@ public class ChatRoomService {
     @Transactional(readOnly = true)
     public String verifyParticipantAndGetNickname(Long accountId, Long roomId) {
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
-        return participant.getAccount().getNickname();
+        // 표시명 경로를 한 곳으로 모은다 — nickname이 비어도 null이 나가지 않는다
+        return participant.getAccount().getDisplayName();
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -466,12 +622,58 @@ public class ChatRoomService {
                         ChatRoomRefType.STORE, storeId);
     }
 
+    private Optional<ChatRoom> findActiveInquiryRoom(Long usedProductId, Long buyerId) {
+        return chatRoomRepository
+                .findFirstByRefTypeAndRefIdAndBuyerAccountIdAndIsActiveTrueOrderByChatroomIdDesc(
+                        ChatRoomRefType.USED_PRODUCT, usedProductId, buyerId);
+    }
+
+    /**
+     * 문의방 저장. 유니크 위반은 실패가 아니라 "누군가 방금 같은 방을 만들었다"는 뜻이다.
+     *
+     * <p>Redis lease(5초)가 만료된 상태에서는 동시 요청 둘이 모두 기존 방 조회를 지나칠 수 있다.
+     * 그때 409를 돌려주면 구매자는 채팅에 들어가지 못하고 재시도해야 한다. 대신 신호만 올려
+     * 트랜잭션을 롤백시키고, 호출부가 새 트랜잭션에서 먼저 커밋된 방을 읽어 그 방으로 들여보낸다.
+     * 유니크 충돌 경로에서도 멱등 계약이 유지된다.
+     */
+    private void saveInquiryRoomOrSignalRace(ChatRoom room, Long usedProductId, Long buyerId) {
+        try {
+            chatRoomRepository.saveAndFlush(room);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("중고 문의방 동시 생성 감지 — 기존 방으로 합류: usedProductId={}, buyerId={}",
+                    usedProductId, buyerId);
+            throw new InquiryRoomRaceException();
+        }
+    }
+
+    // 문의방 동시 생성 신호 — 트랜잭션 롤백과 재조회를 위한 내부 전용 예외다.
+    // GlobalExceptionHandler까지 올라가지 않는다(createUsedProductInquiry가 잡는다).
+    private static class InquiryRoomRaceException extends RuntimeException {
+        InquiryRoomRaceException() {
+            super(null, null, false, false);
+        }
+    }
+
+    // 문의 시작은 GPS 인증된 활동 지역을 요구한다. 상품 조회는 인증 없이 열어둔다 —
+    // 둘러보기는 막지 않고 실제 거래 행동에서만 지역을 확인한다는 정책이다.
+    private void verifyInquiryRegion(Long buyerId) {
+        boolean verified = accountRegionRepository.findByAccount_AccountId(buyerId).stream()
+                .anyMatch(AccountRegion::isVerified);
+        if (!verified) {
+            throw new ForbiddenException(ErrorCode.REGION_ACCESS_REQUIRED);
+        }
+    }
+
     // 잠금 순서는 항상 Store → ChatRoom으로 고정한다.
     // 가게행은 종료/재생성 사이의 안정적인 mutex이고, 방행은 메시지 쓰기와 상태 변경을 직렬화한다.
     private ChatRoom lockRoomState(ChatRoom target) {
         if (target.isStoreRoom()) {
             storeRepository.findByIdWithPessimisticLock(target.getRefId())
                     .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND));
+        } else if (target.isUsedProductRoom()) {
+            // 문의방 생성이 상품을 잠그므로 상태 변경도 같은 행을 잠가야 순서가 맞는다.
+            // 삭제된 상품의 방도 종료·퇴장은 가능해야 하므로 여기서 상태는 검증하지 않는다.
+            usedProductRepository.findByUsedProductIdForUpdate(target.getRefId());
         }
         return chatAccessHelper.getRoomWithPessimisticLockOrThrow(target.getChatroomId());
     }
@@ -522,11 +724,13 @@ public class ChatRoomService {
 
     // 지역 내 공개 채팅방 목록 (GROUP/GROUP_STREET) — 입장 전 탐색용, 무한 스크롤
     @Transactional(readOnly = true)
-    public Slice<ChatRoomPublicResponseDto> getPublicRooms(Long accountId, Pageable pageable) {
+    public CursorSlice<ChatRoomPublicResponseDto> getPublicRooms(
+            Long accountId, String cursorValue, Long cursorRoomId, int size) {
+        ChatRoomCursor cursor = ChatRoomCursor.ofNullable(cursorValue, cursorRoomId);
         Account account = getAccount(accountId);
         Region region = getRegionOrThrow(account);
 
-        Slice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), pageable);
+        CursorSlice<ChatRoom> rooms = chatRoomRepository.findPublicRooms(region.getRegionId(), cursor, size);
         if (rooms.isEmpty()) {
             return rooms.map(r -> ChatRoomPublicResponseDto.of(r, 0L, false));
         }
@@ -623,7 +827,58 @@ public class ChatRoomService {
                 .countByChatRoom_ChatroomIdAndStatus(room.getChatroomId(), ParticipantStatus.ACTIVE);
         long unread = resolveRoomUnread(room, accountId);
         String preview = buildPreview(room.getChatroomId());
-        return ChatRoomResponseDto.of(room, preview, unread, participantCount);
+        return ChatRoomResponseDto.of(room, preview, unread, participantCount,
+                resolveUsedProductSummary(room));
+    }
+
+    /**
+     * 중고 문의방들의 상품 요약을 한 번에 읽는다. 반환 키는 roomId다.
+     *
+     * <p>삭제된 게시글도 그대로 담는다 — 기존 대화는 유지하는 정책이라 프론트가
+     * {@code deleted}로 "삭제된 게시글입니다"를 표시해야 하고, 여기서 빼면 그 표시가 불가능해진다.
+     */
+    private Map<Long, UsedProductChatSummaryDto> resolveUsedProductSummaries(List<ChatRoom> rooms) {
+        List<ChatRoom> inquiryRooms = rooms.stream()
+                .filter(ChatRoom::isUsedProductRoom)
+                .toList();
+        if (inquiryRooms.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> productIds = inquiryRooms.stream().map(ChatRoom::getRefId).distinct().toList();
+        // 판매자를 함께 읽는다 — 요약의 visible 판정이 판매자 상태를 보므로
+        // 그냥 findAllById로 읽으면 게시글 수만큼 select가 더 나간다.
+        Map<Long, UsedProduct> products = usedProductRepository.findAllWithSellerByIdIn(productIds)
+                .stream()
+                .collect(Collectors.toMap(UsedProduct::getUsedProductId, product -> product));
+        Map<Long, String> thumbnails = usedProductImageRepository
+                .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
+                .collect(Collectors.toMap(
+                        image -> image.getUsedProduct().getUsedProductId(),
+                        UsedProductImage::getImageUrl,
+                        (first, second) -> first));
+
+        Map<Long, UsedProductChatSummaryDto> byRoomId = new HashMap<>();
+        for (ChatRoom room : inquiryRooms) {
+            UsedProduct product = products.get(room.getRefId());
+            if (product == null) {
+                // 물리 삭제된 상품(정상 경로에서는 soft delete만 쓴다). 방은 남기고 요약만 비운다.
+                continue;
+            }
+            byRoomId.put(room.getChatroomId(),
+                    UsedProductChatSummaryDto.of(product, thumbnails.get(product.getUsedProductId())));
+        }
+        return byRoomId;
+    }
+
+    private UsedProductChatSummaryDto resolveUsedProductSummary(ChatRoom room) {
+        // 중고 방이 아니면 조회할 것도 없다. 먼저 걸러야 하는 이유가 하나 더 있다 —
+        // 빈 결과는 Map.of()이고 불변 맵은 get(null)에 NPE를 던지므로,
+        // ID가 아직 없는 방(저장 전)이 들어오면 조회 자체가 터진다.
+        if (!room.isUsedProductRoom()) {
+            return null;
+        }
+        return resolveUsedProductSummaries(List.of(room)).get(room.getChatroomId());
     }
 
     // 종료된 방은 항상 0 — 읽어서 회수할 수단이 없으므로 배지를 남기지 않는다

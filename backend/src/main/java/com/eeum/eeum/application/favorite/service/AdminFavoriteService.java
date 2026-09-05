@@ -57,9 +57,20 @@ public class AdminFavoriteService {
                 .collect(Collectors.toList());
     }
 
-    // favoriteCount 정합성 재계산 — 장애·대량 삭제·수동 DB 수정으로 favorite 테이블 실제 수와
-    // 대상 컬럼이 어긋났을 때 사용한다. refType을 주면 그 타입만, 생략하면 전체를 맞춘다.
-    // 타입별로 단일 UPDATE ... SELECT로 처리 — N번 쿼리 없이 전체 동기화.
+    /**
+     * favoriteCount 정합성 재계산 — 장애·대량 삭제·수동 DB 수정으로 favorite 테이블 실제 수와
+     * 대상 컬럼이 어긋났을 때 사용한다. refType을 주면 그 타입만, 생략하면 전체를 맞춘다.
+     * 타입별로 단일 UPDATE ... SELECT로 처리한다 — N번 쿼리 없이 전체 동기화.
+     *
+     * <p><b>실시간 찜 쓰기와 격리되지 않는다.</b> 재계산이 도는 동안 들어온 등록·해제·탈퇴의
+     * 증감이 과거 시점 count로 덮일 수 있다. 이는 알려진 한계이고, 운영 절차로 다룬다 —
+     * 찜 쓰기가 한산한 시간대에 실행한다(Swagger 설명에 명시).
+     *
+     * <p>잠금을 도입하지 않은 이유: 재계산은 드물게 쓰는 보정 도구인데, 배타 잠금을 두면
+     * 가장 잦은 쓰기인 찜 토글이 상시로 그 잠금을 획득해야 한다. 드문 작업 때문에 상시 경로에
+     * 비용을 얹는 교환이 맞지 않는다. 어긋난 값이 남으면 다시 실행하면 된다 —
+     * 이 API 자체가 그 목적의 도구다.
+     */
     @Transactional
     public FavoriteRecalculateResponseDto recalculateFavoriteCounts(FavoriteRefType refType) {
         Map<FavoriteRefType, Integer> updatedRows = new EnumMap<>(FavoriteRefType.class);

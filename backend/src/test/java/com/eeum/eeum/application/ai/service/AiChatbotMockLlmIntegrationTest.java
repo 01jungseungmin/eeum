@@ -75,7 +75,6 @@ class AiChatbotMockLlmIntegrationTest extends IntegrationTestSupport {
         aiUsageLogRepository.deleteAll();
         aiPlanSubscriptionRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     private void subscribeBasic() {

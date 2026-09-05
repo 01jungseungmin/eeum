@@ -117,7 +117,6 @@ class ReservationConcurrencyIntegrationTest extends IntegrationTestSupport {
         storeBusinessHourRepository.deleteAll();
         storeRepository.deleteAll();
         notificationRepository.deleteAll(); // account FK 참조 → account 삭제 전 먼저 정리
-        accountRepository.deleteAll();
     }
 
     // ──────────────── 시나리오 1: configureTablesInternal dirty-marking ────────────────

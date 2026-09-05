@@ -5,6 +5,7 @@ import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.account.repository.RegionRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -43,6 +44,7 @@ class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
     private final UsedProductService usedProductService;
     private final UsedProductRepository usedProductRepository;
     private final AccountRepository accountRepository;
+    private final NotificationRepository notificationRepository;
     private final RegionRepository regionRepository;
     private final CategoryRepository categoryRepository;
     private final PlatformTransactionManager transactionManager;
@@ -52,11 +54,11 @@ class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
     @BeforeEach
     void setUp() {
         Account seller = accountRepository.save(Account.createUser(
-                "seller@test.com", "encoded_pw", "판매자", "판매자닉", "010-2222-2222"));
+                "dyn-seller-" + java.util.UUID.randomUUID().toString().substring(0, 8) + "@test.com", "encoded_pw", "판매자", "판매자닉" + java.util.UUID.randomUUID().toString().substring(0, 8), "010-2222-2222"));
         Region region = regionRepository.save(
-                Region.create("1168010100", "서울특별시", "강남구", "역삼동", 3));
+                Region.create("11680" + java.util.UUID.randomUUID().toString().substring(0, 5), "서울특별시", "강남구", "역삼동", 3));
         Category category = categoryRepository.save(
-                Category.createRoot(CategoryType.USED, "디지털기기", 1));
+                Category.createRoot(CategoryType.USED, "디지털기기" + java.util.UUID.randomUUID().toString().substring(0, 8), 1));
 
         UsedProduct product = UsedProduct.create(
                 seller, category, region,
@@ -71,7 +73,6 @@ class UsedProductDynamicUpdateIntegrationTest extends IntegrationTestSupport {
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

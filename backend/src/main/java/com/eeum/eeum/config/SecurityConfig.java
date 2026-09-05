@@ -70,7 +70,7 @@ public class SecurityConfig {
     };
 
     private static final String[] ACTUATOR_PATHS = {
-            "/actuator/health"
+            "/actuator/health/**"
     };
 
     //JWT 필터 없이 통과 (STOMP CONNECT 단계에서 인증 처리)

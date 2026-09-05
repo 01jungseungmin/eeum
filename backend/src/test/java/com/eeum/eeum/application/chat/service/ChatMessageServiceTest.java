@@ -18,6 +18,7 @@ import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.exception.BadRequestException;
+import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
@@ -25,10 +26,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
+import com.eeum.eeum.common.dto.response.CursorSlice;
+import com.eeum.eeum.domain.chat.repository.ChatMessageCursor;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -45,10 +50,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,12 +65,14 @@ class ChatMessageServiceTest {
     @InjectMocks
     private ChatMessageService chatMessageService;
 
+    @Mock private com.eeum.eeum.application.account.service.AccountWriteGuard accountWriteGuard;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private ChatAccessHelper chatAccessHelper;
     @Mock private ChatUnreadService chatUnreadService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.notification.service.NotificationOutboxRecorder outboxRecorder;
     @Mock private StringRedisTemplate redisTemplate;
     @SuppressWarnings("unchecked")
     @Mock private ValueOperations<String, String> valueOps;
@@ -127,7 +136,52 @@ class ChatMessageServiceTest {
         verify(chatMessageRepository).save(any(ChatMessage.class));
         // room.updateLastMessageAt()는 엔티티 직접 호출 — repository 검증 없음
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
-        verify(eventPublisher).publishEvent(any(ChatMessageSentEvent.class));
+        // 알림은 이벤트가 아니라 outbox로 남긴다 — 비동기 풀이 포화돼도 유실되지 않는다
+        verify(outboxRecorder).record(
+                eq(com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher.CHAT_MESSAGE_SENT),
+                any(ChatMessageSentEvent.class));
+    }
+
+    @Test
+    void 텍스트_발송은_계정을_먼저_잠그고_방을_잠근다() {
+        // Given — 계정 행을 잠그지 않고 로딩된 엔티티에 assertWritable()만 하면,
+        // 탈퇴 트랜잭션과 겹쳤을 때 탈퇴 이전 상태를 읽은 발송이 탈퇴 커밋 뒤에 메시지를 남긴다.
+        // WebSocket 인터셉터의 사전 검증은 트랜잭션 밖이라 이 경쟁을 막지 못한다.
+        Long accountId = 1L;
+        Long roomId = 10L;
+        Account sender = createAccount(accountId, "홍길동");
+        ChatRoom room = createGroupRoom(roomId, sender);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
+        when(chatAccessHelper.verifyParticipant(accountId, roomId))
+                .thenReturn(ChatParticipant.create(room, sender));
+        when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        chatMessageService.sendMessage(accountId, roomId, createTextRequest("안녕하세요", null));
+
+        // Then — 순서가 뒤집히면 account → chat_room 전역 잠금 순서가 깨져 교착이 난다
+        InOrder inOrder = inOrder(accountWriteGuard, chatAccessHelper);
+        inOrder.verify(accountWriteGuard).lockActive(accountId);
+        inOrder.verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
+    }
+
+    @Test
+    void 이미지_발송도_계정을_먼저_잠근다() {
+        Long accountId = 1L;
+        Long roomId = 10L;
+        Account sender = createAccount(accountId, "홍길동");
+        ChatRoom room = createGroupRoom(roomId, sender);
+        when(chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId)).thenReturn(room);
+        when(chatAccessHelper.verifyParticipant(accountId, roomId))
+                .thenReturn(ChatParticipant.create(room, sender));
+        when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        chatMessageService.sendImageMessage(
+                accountId, roomId, createImageRequest("https://img.test/1.jpg", null));
+
+        InOrder inOrder = inOrder(accountWriteGuard, chatAccessHelper);
+        inOrder.verify(accountWriteGuard).lockActive(accountId);
+        inOrder.verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
     }
 
     @Test
@@ -237,7 +291,10 @@ class ChatMessageServiceTest {
         verify(chatAccessHelper).getRoomWithPessimisticLockOrThrow(roomId);
         verify(chatMessageRepository).save(any(ChatMessage.class));
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
-        verify(eventPublisher).publishEvent(any(ChatMessageSentEvent.class));
+        // 알림은 이벤트가 아니라 outbox로 남긴다 — 비동기 풀이 포화돼도 유실되지 않는다
+        verify(outboxRecorder).record(
+                eq(com.eeum.eeum.application.notification.service.NotificationOutboxDispatcher.CHAT_MESSAGE_SENT),
+                any(ChatMessageSentEvent.class));
     }
 
     @Test
@@ -310,12 +367,13 @@ class ChatMessageServiceTest {
         ChatMessage message = ChatMessage.text(room, sender, "안녕하세요");
 
         when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
-        when(chatMessageRepository.findAllByChatRoom_ChatroomIdOrderBySentAtDesc(
-                eq(roomId), any(PageRequest.class)))
-                .thenReturn(new PageImpl<>(List.of(message)));
+        when(chatMessageRepository.findRoomMessages(eq(roomId), isNull(), eq(size)))
+                .thenReturn(CursorSlice.of(List.of(message), false, null, null,
+                        Sort.by(Sort.Order.desc("sentAt"), Sort.Order.desc("chatMessageId"))));
 
         // When
-        Slice<ChatMessageResponseDto> result = chatMessageService.getMessages(accountId, roomId, null, size);
+        CursorSlice<ChatMessageResponseDto> result =
+                chatMessageService.getMessages(accountId, roomId, null, null, size);
 
         // Then
         assertThat(result.getContent()).hasSize(1);
@@ -328,22 +386,35 @@ class ChatMessageServiceTest {
         Long accountId = 1L;
         Long roomId = 10L;
         int size = 20;
-        LocalDateTime cursor = LocalDateTime.now().minusMinutes(10);
+        LocalDateTime cursorSentAt = LocalDateTime.now().minusMinutes(10);
         Account sender = createAccount(accountId, "홍길동");
         ChatRoom room = createGroupRoom(roomId, sender);
         ChatParticipant participant = ChatParticipant.create(room, sender);
         ChatMessage message = ChatMessage.text(room, sender, "이전 메시지");
 
         when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
-        when(chatMessageRepository.findAllByChatRoom_ChatroomIdAndSentAtBeforeOrderBySentAtDesc(
-                eq(roomId), eq(cursor), any(PageRequest.class)))
-                .thenReturn(List.of(message));
+        when(chatMessageRepository.findRoomMessages(
+                eq(roomId), eq(new ChatMessageCursor(cursorSentAt, 41L)), eq(size)))
+                .thenReturn(CursorSlice.of(List.of(message), false, null, null,
+                        Sort.by(Sort.Order.desc("sentAt"), Sort.Order.desc("chatMessageId"))));
 
-        // When
-        Slice<ChatMessageResponseDto> result = chatMessageService.getMessages(accountId, roomId, cursor, size);
+        // When — 클라이언트는 직전 응답의 커서를 그대로 되돌려보낸다
+        CursorSlice<ChatMessageResponseDto> result = chatMessageService.getMessages(
+                accountId, roomId, cursorSentAt.toString(), 41L, size);
 
         // Then
         assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
+    void 메시지_목록_커서를_한쪽만_보내면_거절한다() {
+        // 조용히 첫 페이지를 돌려주면 클라이언트는 과거 메시지를 받았다고 믿는데
+        // 화면에는 같은 목록이 다시 쌓인다.
+        assertThatThrownBy(() -> chatMessageService.getMessages(
+                1L, 10L, LocalDateTime.now().toString(), null, 20))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CHAT_MESSAGE_INVALID_CURSOR);
     }
 
     @Test
@@ -356,7 +427,7 @@ class ChatMessageServiceTest {
                 .when(chatAccessHelper).verifyParticipant(accountId, roomId);
 
         // When & Then
-        assertThatThrownBy(() -> chatMessageService.getMessages(accountId, roomId, null, 20))
+        assertThatThrownBy(() -> chatMessageService.getMessages(accountId, roomId, null, null, 20))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_NOT_PARTICIPANT);

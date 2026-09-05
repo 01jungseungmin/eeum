@@ -95,18 +95,6 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
         usedProductRepository.deleteAll();
         categoryRepository.deleteAll();
         regionRepository.deleteAll();
-        // 신고 조치는 AFTER_COMMIT + @Async로 알림을 남긴다. notification이 account를 FK로
-        // 참조하므로, 늦게 도착한 알림이 남아 있으면 계정 삭제가 막힌다.
-        for (int attempt = 0; attempt < 20; attempt++) {
-            notificationRepository.deleteAllInBatch();
-            try {
-                accountRepository.deleteAll();
-                return;
-            } catch (DataIntegrityViolationException retryable) {
-                sleepQuietly(100);
-            }
-        }
-        throw new IllegalStateException("비동기 알림이 계속 도착해 테스트 계정을 정리하지 못했다");
     }
 
     @Test

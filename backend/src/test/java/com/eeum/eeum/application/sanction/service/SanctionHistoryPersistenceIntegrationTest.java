@@ -75,7 +75,6 @@ class SanctionHistoryPersistenceIntegrationTest extends IntegrationTestSupport {
     void tearDown() {
         sanctionHistoryRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

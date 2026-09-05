@@ -108,7 +108,6 @@ class AiConversionTrackingListenerIntegrationTest extends IntegrationTestSupport
         aiGeneratedMessageRepository.deleteAll();
         orderRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     private OrderPaidEvent orderPaidEvent() {

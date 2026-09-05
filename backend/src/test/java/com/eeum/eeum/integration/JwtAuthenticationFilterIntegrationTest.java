@@ -74,7 +74,6 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
                 redisUtil.delete("refresh:" + id);
             }
         }
-        accountRepository.deleteAll();
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -85,7 +84,8 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
     void ACTIVE_계정_유효_토큰_요청_200() {
         String accessToken = jwtProvider.generateAccessToken(
                 activeAccount.getAccountId(),
-                activeAccount.getRole().name()
+                activeAccount.getRole().name(),
+                0L
         );
 
         HttpStatusCode status = getMyPageStatus(accessToken);
@@ -104,7 +104,8 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
     void SUSPENDED_계정_유효_토큰_요청_401() {
         String accessToken = jwtProvider.generateAccessToken(
                 suspendedAccount.getAccountId(),
-                suspendedAccount.getRole().name()
+                suspendedAccount.getRole().name(),
+                0L
         );
 
         HttpStatusCode status = getMyPageStatus(accessToken);
@@ -122,7 +123,8 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
     void WITHDRAWN_계정_유효_토큰_요청_401() {
         String accessToken = jwtProvider.generateAccessToken(
                 withdrawnAccount.getAccountId(),
-                withdrawnAccount.getRole().name()
+                withdrawnAccount.getRole().name(),
+                0L
         );
 
         HttpStatusCode status = getMyPageStatus(accessToken);
@@ -140,7 +142,8 @@ class JwtAuthenticationFilterIntegrationTest extends IntegrationTestSupport {
     void 블랙리스트_토큰_요청_401() {
         String accessToken = jwtProvider.generateAccessToken(
                 activeAccount.getAccountId(),
-                activeAccount.getRole().name()
+                activeAccount.getRole().name(),
+                0L
         );
 
         // 블랙리스트 등록

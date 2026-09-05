@@ -10,6 +10,7 @@ import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResp
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.security.jwt.JwtProvider;
 import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -47,6 +48,7 @@ public class AccountService {
     private final AccountRegionRepository accountRegionRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    private final JwtProvider jwtProvider;
     private final AccountWithdrawalProcessor accountWithdrawalProcessor;
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
@@ -87,13 +89,27 @@ public class AccountService {
 
     // ===================== 비밀번호 변경 =====================
 
+    /**
+     * 재인증 토큰이 현재 세대인지 확인한다.
+     *
+     * <p>Redis 저장값 확인만으로는 부족하다. 제재 시 토큰 삭제는 비동기 풀을 타므로 유실될 수 있고,
+     * 그러면 "정지 전에 받은 재인증 토큰 → 재활성화 → 비밀번호 변경·탈퇴" 경로가 열린다.
+     * 세대는 제재와 같은 트랜잭션에서 오르므로 그 경로와 무관하다.
+     */
+    private void assertReAuthTokenCurrent(Account account, String reAuthToken) {
+        if (!account.isTokenVersionCurrent(jwtProvider.getTokenVersion(reAuthToken))) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN);
+        }
+    }
+
     @Transactional
     public void changePassword(Long accountId, ChangePasswordRequestDto request) {
         // 1. ReAuth 토큰 검증
         // TokenService 내부에서 현재 accountId와 토큰 accountId 일치 여부까지 확인
-        tokenService.validateReAuthToken(accountId, request.getReAuthToken());
+        tokenService.consumeReAuthToken(accountId, request.getReAuthToken());
 
         Account account = getActiveAccount(accountId);
+        assertReAuthTokenCurrent(account, request.getReAuthToken());
 
         // 2. OAuth 계정은 로컬 비밀번호 변경 불가
         if (account.isOAuthAccount()) {
@@ -110,7 +126,7 @@ public class AccountService {
 
         // 5. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 reauth/refresh 토큰이 유지되어 사용자가 재시도 가능
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
 
         log.info("비밀번호 변경 완료: accountId={}", accountId);
     }
@@ -120,12 +136,13 @@ public class AccountService {
     @Transactional
     public void withdraw(Long accountId, WithdrawRequestDto request) {
         // 1. ReAuth 토큰 검증
-        tokenService.validateReAuthToken(accountId, request.getReAuthToken());
+        tokenService.consumeReAuthToken(accountId, request.getReAuthToken());
 
         // 2. 활성 회원 조회 — 탈퇴는 계정 행을 잠근다.
         // 잠그지 않으면 탈퇴 정리(찜 삭제·카운트 감소)와 같은 사용자의 다른 쓰기 요청이 겹쳐
         // 카운터가 이중 감소하거나, 정리가 끝난 뒤 찜·게시글이 다시 생성될 수 있다.
         Account account = getActiveAccountWithLock(accountId);
+        assertReAuthTokenCurrent(account, request.getReAuthToken());
 
         // 3. 상점 잠금 선점 → 사장 상점 비활성화 → 탈퇴 → 찜 정리.
         // 관리자 강제 탈퇴와 같은 절차를 써야 한쪽만 고쳐져 어긋나지 않는다.
@@ -133,7 +150,7 @@ public class AccountService {
 
         // 4. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 계정은 ACTIVE 상태이고 토큰도 유지
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
 
         log.info("회원 탈퇴 처리 완료: accountId={}", accountId);
     }

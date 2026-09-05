@@ -33,6 +33,11 @@ public class UsedProductSummaryResponseDto {
     @Schema(description = "거래 희망 동네")
     private String regionName;
 
+    // 좌표는 일부러 뺐다. 목록은 지도를 그리지 않는데 좌표까지 내리면
+    // 지도를 쓰지 않는 화면에까지 위치가 새어 나간다. 좌표가 필요하면 상세를 조회한다.
+    @Schema(description = "거래 장소명. 지정하지 않았으면 null", example = "역삼동 주민센터 앞")
+    private String tradeLocationName;
+
     @Schema(description = "카테고리 이름")
     private String categoryName;
 
@@ -41,6 +46,10 @@ public class UsedProductSummaryResponseDto {
 
     @Schema(description = "찜 수")
     private int favoriteCount;
+
+    // 조회수순 정렬의 커서 값이 된다 — 응답에 없으면 클라이언트가 다음 페이지를 요청할 수 없다.
+    @Schema(description = "조회수")
+    private int viewCount;
 
     @Schema(description = "작성일시")
     private LocalDateTime createdAt;
@@ -53,9 +62,11 @@ public class UsedProductSummaryResponseDto {
                 .price(product.getPrice())
                 .status(product.getStatus())
                 .regionName(product.getRegion().getDong())
+                .tradeLocationName(product.getTradeLocationName())
                 .categoryName(product.getCategory().getName())
                 .thumbnailUrl(thumbnailUrl)
                 .favoriteCount(product.getFavoriteCount())
+                .viewCount(product.getViewCount())
                 .createdAt(product.getCreatedAt())
                 .build();
     }

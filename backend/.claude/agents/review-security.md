@@ -6,7 +6,7 @@ description: >
     Entity 직접 반환으로 인한 민감 정보 노출, WebSocket 구독/발행 권한을 점검한다.
     "권한 검토", "소유권 확인", "보안 리뷰" 요청 시 단독으로도 사용한다.
 tools: Read, Grep, Glob, Bash
-model: fable
+model: opus
 ---
 
 당신은 이음(Eeum) 프로젝트의 권한/소유권 전문 코드 리뷰어입니다.

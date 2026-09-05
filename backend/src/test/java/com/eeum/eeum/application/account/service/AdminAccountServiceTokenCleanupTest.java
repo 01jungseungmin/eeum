@@ -59,11 +59,12 @@ class AdminAccountServiceTokenCleanupTest {
     // 제재 자격 판정은 Mock으로 두면 관리자 대상 차단·중복 정지 차단이 무력화된다.
     @Spy AccountSanctionPolicy accountSanctionPolicy = new AccountSanctionPolicy();
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.eeum.eeum.application.used.service.UsedProductWithdrawalService usedProductWithdrawalService;
 
     // ─────────────────── suspendAccount ───────────────────
 
     @Test
-    void suspendAccount_성공_시_이벤트로_refresh_토큰_정리() {
+    void suspendAccount_성공_시_이벤트로_남은_토큰_전부_정리() {
         // given
         Long adminId = 0L;
         Long targetId = 1L;
@@ -77,7 +78,7 @@ class AdminAccountServiceTokenCleanupTest {
 
         // then
         verify(target).suspend();
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(targetId));
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.allTokens(targetId));
     }
 
     @Test
@@ -149,13 +150,13 @@ class AdminAccountServiceTokenCleanupTest {
 
         // then
         verify(accountWithdrawalProcessor).process(target);
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(targetId));
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.allTokens(targetId));
     }
 
     // ─────────────────── forceDeleteAccount ───────────────────
 
     @Test
-    void forceDeleteAccount_성공_시_이벤트로_refresh_토큰_정리() {
+    void forceDeleteAccount_성공_시_이벤트로_남은_토큰_전부_정리() {
         // given
         Long targetId = 2L;
         Account target = mock(Account.class);
@@ -166,7 +167,7 @@ class AdminAccountServiceTokenCleanupTest {
         adminAccountService.forceDeleteAccount(0L, targetId);
 
         // then
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(targetId));
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.allTokens(targetId));
     }
 
     @Test

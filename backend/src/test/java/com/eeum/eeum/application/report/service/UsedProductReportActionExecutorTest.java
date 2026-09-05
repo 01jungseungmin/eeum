@@ -11,6 +11,7 @@ import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.report.event.ReportActionNotificationEvent;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
+import com.eeum.eeum.domain.used.event.UsedProductReservationCancelledEvent;
 import com.eeum.eeum.domain.used.enums.UsedProductPriceType;
 import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
@@ -40,6 +41,7 @@ class UsedProductReportActionExecutorTest {
 
     private static final Long PRODUCT_ID = 10L;
     private static final Long SELLER_ID = 1L;
+    private static final Long BUYER_ID = 2L;
 
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private ReportedAccountActionService reportedAccountActionService;
@@ -61,7 +63,7 @@ class UsedProductReportActionExecutorTest {
     void 숨김_조치는_노출만_막고_거래_상태는_건드리지_않는다() {
         // given — 숨김은 노출 정책이고 예약·판매완료는 거래 사실이다
         UsedProduct product = product();
-        product.reserve();
+        product.reserve(null);
         givenProductForUpdate(product);
 
         // when
@@ -88,6 +90,74 @@ class UsedProductReportActionExecutorTest {
         assertThat(product.isDeleted()).isTrue();
         verify(favoriteService).deleteAllByRefTypeAndRefId(FavoriteRefType.USED_PRODUCT, PRODUCT_ID);
         verify(usedProductRepository, never()).delete(any());
+    }
+
+    @Test
+    void 삭제_조치는_예약을_취소하고_상대에게_알린다() {
+        // given — 사용자 삭제 경로는 예약 중인 글의 삭제를 아예 막는다(상대가 기다리고 있어서).
+        // 관리자는 막을 수 없으니 대신 예약을 정리해야 한다. 그냥 지우면 예약이 RESERVED로
+        // 영구히 남고(삭제된 글은 상태 전이 경로가 걸러낸다) 구매자는 통보도 못 받는다.
+        UsedProduct product = product();
+        Account buyer = buyer();
+        product.reserve(buyer);
+        givenProductForUpdate(product);
+
+        // when
+        executor.execute(ReportAction.DELETE_POST, PRODUCT_ID, null, "판매 금지 품목");
+
+        // then
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SELLING);
+        assertThat(product.getBuyer()).isNull();
+        assertThat(product.isDeleted()).isTrue();
+
+        UsedProductReservationCancelledEvent cancelled = capturedCancellation();
+        assertThat(cancelled.usedProductId()).isEqualTo(PRODUCT_ID);
+        assertThat(cancelled.buyerAccountId()).isEqualTo(BUYER_ID);
+        assertThat(cancelled.productTitle()).isEqualTo("자전거 팝니다");
+    }
+
+    @Test
+    void 상대가_지정되지_않은_예약은_되돌리되_통보하지_않는다() {
+        // 상대 없이 "예약중"만 표시한 글이다 — 통보할 사람이 없다.
+        UsedProduct product = product();
+        product.reserve(null);
+        givenProductForUpdate(product);
+
+        executor.execute(ReportAction.DELETE_POST, PRODUCT_ID, null, "판매 금지 품목");
+
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SELLING);
+        verify(eventPublisher, never())
+                .publishEvent(any(UsedProductReservationCancelledEvent.class));
+    }
+
+    @Test
+    void 판매완료_글은_삭제해도_거래_사실을_되돌리지_않는다() {
+        // 판매완료는 노출 정책이 아니라 일어난 거래다. 되돌리면 구매자의 후기 자격이 사라진다.
+        UsedProduct product = product();
+        product.markSold(buyer());
+        givenProductForUpdate(product);
+
+        executor.execute(ReportAction.DELETE_POST, PRODUCT_ID, null, "판매 금지 품목");
+
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.SOLD);
+        assertThat(product.getBuyer()).isNotNull();
+        verify(eventPublisher, never())
+                .publishEvent(any(UsedProductReservationCancelledEvent.class));
+    }
+
+    @Test
+    void 숨김_조치는_예약을_건드리지_않는다() {
+        // 숨김은 되돌릴 수 있는 노출 정책이고 판매자에게 알림도 간다 — 거래를 깰 이유가 없다.
+        UsedProduct product = product();
+        product.reserve(buyer());
+        givenProductForUpdate(product);
+
+        executor.execute(ReportAction.HIDE_POST, PRODUCT_ID, null, "부적절한 게시물");
+
+        assertThat(product.getStatus()).isEqualTo(UsedProductStatus.RESERVED);
+        assertThat(product.getBuyer()).isNotNull();
+        verify(eventPublisher, never())
+                .publishEvent(any(UsedProductReservationCancelledEvent.class));
     }
 
     // ─────────────────── 계정 조치 ───────────────────
@@ -200,6 +270,24 @@ class UsedProductReportActionExecutorTest {
     private void givenProductForUpdate(UsedProduct product) {
         when(usedProductRepository.findByUsedProductIdForUpdate(PRODUCT_ID))
                 .thenReturn(Optional.of(product));
+    }
+
+    private Account buyer() {
+        Account buyer = Account.createUser(
+                "buyer@test.com", "encoded-pw", "구매자", "구매자닉", "010-1111-1111");
+        ReflectionTestUtils.setField(buyer, "accountId", BUYER_ID);
+        return buyer;
+    }
+
+    // 신고 조치 알림과 예약 취소 알림이 같은 publisher로 나가므로 타입으로 골라낸다.
+    private UsedProductReservationCancelledEvent capturedCancellation() {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.atLeastOnce()).publishEvent(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(UsedProductReservationCancelledEvent.class::isInstance)
+                .map(UsedProductReservationCancelledEvent.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("예약 취소 이벤트가 발행되지 않았다"));
     }
 
     private UsedProduct product() {

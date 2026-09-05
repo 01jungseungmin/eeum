@@ -44,6 +44,9 @@ public class ChatNotificationProcessor {
         String content = String.format("%s: %s", event.senderName(), event.preview());
         String linkUrl = "/chat/rooms/" + event.roomId();
 
+        // 타입은 수신자와 무관하므로 루프 밖에서 한 번만 판정한다 (첫 문의 판정에 count 쿼리가 붙는다).
+        NotificationType type = resolveType(room, event);
+
         for (Long recipientId : recipientIds) {
             if (recipientId.equals(event.senderAccountId())) {
                 continue;
@@ -52,7 +55,7 @@ public class ChatNotificationProcessor {
             chatUnreadService.increment(recipientId, event.roomId());
             notificationService.createNotification(NotificationCreateRequestDto.builder()
                     .accountId(recipientId)
-                    .type(NotificationType.CHAT_MESSAGE)
+                    .type(type)
                     .title(title)
                     .content(content)
                     .refType(NotificationRefType.CHAT_ROOM)
@@ -60,5 +63,32 @@ public class ChatNotificationProcessor {
                     .linkUrl(linkUrl)
                     .build());
         }
+    }
+
+    /**
+     * 알림 타입 판정.
+     *
+     * <p>중고 문의방의 <b>첫 메시지를 구매자가 보낸 경우</b>만 {@code USED_PRODUCT_INQUIRY}다.
+     * 판매자에게 "문의가 들어왔다"를 알리는 것이 이 타입의 의미이므로, 이후 대화와
+     * 판매자가 먼저 말을 건 경우는 일반 채팅 알림으로 둔다.
+     *
+     * <p>중복 억제는 하지 않는다 — 기존 채팅 알림이 메시지마다 알림을 만드는 정책이고,
+     * 중고만 다르게 하면 같은 채팅인데 알림 동작이 갈린다. 억제가 필요하면 채팅 전체 정책으로 다룬다.
+     *
+     * <p>첫 메시지 여부는 이벤트가 싣고 온다 — 추가 조회가 없다.
+     */
+    private NotificationType resolveType(ChatRoom room, ChatMessageSentEvent event) {
+        if (!room.isUsedProductRoom()) {
+            return NotificationType.CHAT_MESSAGE;
+        }
+        boolean sentByBuyer = room.getBuyerAccountId() != null
+                && room.getBuyerAccountId().equals(event.senderAccountId());
+        if (!sentByBuyer) {
+            return NotificationType.CHAT_MESSAGE;
+        }
+        // 여기서 세지 않는다. AFTER_COMMIT + @Async라 첫 메시지의 리스너가 돌기 전에
+        // 두 번째 메시지가 커밋되면 둘 다 2를 세어 문의 알림이 사라진다.
+        // 방 행을 잠근 발송 트랜잭션에서 확정한 값을 그대로 쓴다.
+        return event.firstMessage() ? NotificationType.USED_PRODUCT_INQUIRY : NotificationType.CHAT_MESSAGE;
     }
 }

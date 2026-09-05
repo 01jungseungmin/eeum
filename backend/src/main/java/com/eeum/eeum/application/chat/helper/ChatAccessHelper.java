@@ -60,6 +60,9 @@ public class ChatAccessHelper {
         if (!status.isActiveParticipant()) {
             throw new ForbiddenException(ErrorCode.CHAT_NOT_PARTICIPANT);
         }
+        // 정지·탈퇴는 이미 열린 WebSocket 연결을 끊지 않는다. REST는 요청마다 필터가 계정을 다시 읽지만
+        // /ws는 그 필터를 타지 않으므로, 여기서 매번 확인하지 않으면 남은 토큰 수명 동안 발행이 계속된다.
+        status.accountStatus().assertWritable();
         if (!status.roomActive()) {
             throw new BadRequestException(ErrorCode.CHAT_ROOM_INACTIVE);
         }

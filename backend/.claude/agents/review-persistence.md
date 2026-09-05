@@ -6,7 +6,7 @@ description: >
     N+1, @Modifying/bulk 쿼리, QueryDSL 필터 누락을 점검한다.
     "엔티티 검토", "쿼리 확인", "N+1 확인" 요청 시 단독으로도 사용한다.
 tools: Read, Grep, Glob, Bash
-model: fable
+model: opus
 ---
 
 당신은 이음(Eeum) 프로젝트의 엔티티/쿼리 전문 코드 리뷰어입니다.

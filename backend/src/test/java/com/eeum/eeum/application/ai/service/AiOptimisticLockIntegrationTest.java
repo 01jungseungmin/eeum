@@ -71,7 +71,6 @@ class AiOptimisticLockIntegrationTest extends IntegrationTestSupport {
         aiExposureStatusRepository.deleteAll();
         aiGeneratedMessageRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     private TransactionTemplate requiresNew() {

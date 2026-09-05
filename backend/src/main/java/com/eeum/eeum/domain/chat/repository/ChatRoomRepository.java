@@ -22,6 +22,16 @@ public interface ChatRoomRepository
     // 정렬 없는 단건 조회는 2건 이상일 때 IncorrectResultSizeDataAccessException으로 500을 유발한다.
     // type을 조건에 넣지 않는다 — 조회 기준과 유니크 제약(uk_chat_room_active_ref)을 일치시켜야
     // 생성 시 멱등 반환하는 방과 상점 화면이 노출하는 방이 갈리지 않는다.
+    // 활성 중고 문의방 조회 — 상품 + 구매자당 1개. 종료된 방은 제외한다(uk_chat_room_active_ref와 같은 기준).
+    // 구매자 지정 자격 확인 — 이 상품으로 문의한 적이 있는지.
+    // isActive를 보지 않는다. PRIVATE 문의방은 한쪽이 나가면 종료되므로, 활성 방만 세면
+    // 거래를 마치고 방을 나간 상대를 판매자가 구매자로 지정할 수 없게 된다.
+    boolean existsByRefTypeAndRefIdAndBuyerAccountId(
+            ChatRoomRefType refType, Long refId, Long buyerAccountId);
+
+    Optional<ChatRoom> findFirstByRefTypeAndRefIdAndBuyerAccountIdAndIsActiveTrueOrderByChatroomIdDesc(
+            ChatRoomRefType refType, Long refId, Long buyerAccountId);
+
     Optional<ChatRoom> findFirstByRefTypeAndRefIdAndIsActiveTrueOrderByChatroomIdDesc(
             ChatRoomRefType refType, Long refId);
 

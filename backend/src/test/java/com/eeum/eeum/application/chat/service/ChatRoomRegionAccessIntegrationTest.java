@@ -94,7 +94,6 @@ class ChatRoomRegionAccessIntegrationTest extends IntegrationTestSupport {
         chatRoomRepository.deleteAll();
         storeRepository.deleteAll();
         accountRegionRepository.deleteAll();
-        accountRepository.deleteAll();
         regionRepository.deleteAll();
     }
 

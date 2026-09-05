@@ -8,6 +8,7 @@ public final class RealtimeRelayChannels {
 
     public static final String STOMP = "realtime:stomp";
     public static final String SSE_UNREAD = "realtime:sse-unread";
+    public static final String SESSION_TERMINATION = "realtime:session-termination";
 
     private RealtimeRelayChannels() {
     }

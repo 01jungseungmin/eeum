@@ -24,8 +24,9 @@ import lombok.NoArgsConstructor;
                         columnNames = {"account_id", "target_type", "target_id"}
                 )
         },
+        // account_id 단독 인덱스는 두지 않는다 — 위 uk_report_reporter_target의
+        // 선행 컬럼이 account_id라 그 유니크 인덱스가 그대로 대신한다.
         indexes = {
-                @Index(name = "idx_report_reporter", columnList = "account_id"),
                 @Index(name = "idx_report_status", columnList = "status"),
                 @Index(name = "idx_report_target", columnList = "target_type, target_id")
         }

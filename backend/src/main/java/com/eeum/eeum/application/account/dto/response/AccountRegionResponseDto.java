@@ -26,6 +26,18 @@ public class AccountRegionResponseDto {
     @Schema(description = "행정동", example = "역삼동")
     private String dong;
 
+    // 글쓰기 화면에서 지도를 열 때의 초기 중심·반경이다.
+    // 좌표는 location 테이블에서 오는데 아직 등록되지 않은 지역이 있을 수 있어 null이 가능하다.
+    // 클라이언트는 null이면 자체 기본 중심으로 대체한다.
+    @Schema(description = "지역 중심 위도. 좌표가 등록되지 않은 지역이면 null", example = "37.500123")
+    private Double latitude;
+
+    @Schema(description = "지역 중심 경도. 좌표가 등록되지 않은 지역이면 null", example = "127.036456")
+    private Double longitude;
+
+    @Schema(description = "지역 반경(미터). 지도 반경 표시에 쓴다", example = "3000")
+    private Integer radius;
+
     @Schema(description = "대표 지역 여부", example = "true")
     private Boolean isPrimary;
 

@@ -49,7 +49,6 @@ class StoreCounterVersionIntegrationTest extends IntegrationTestSupport {
     @AfterEach
     void tearDown() {
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.chat.helper;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.ChatParticipant;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
@@ -12,6 +13,7 @@ import com.eeum.eeum.domain.chat.repository.ChatMessageRepository;
 import com.eeum.eeum.domain.chat.repository.ChatParticipantRepository;
 import com.eeum.eeum.domain.chat.repository.ChatRoomRepository;
 import com.eeum.eeum.exception.BadRequestException;
+import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.exception.NotFoundException;
@@ -101,7 +103,7 @@ class ChatAccessHelperTest {
         Long roomId = 10L;
 
         when(chatParticipantRepository.findAccessStatus(roomId, accountId))
-                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.ACTIVE, true)));
+                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.ACTIVE, true, AccountStatus.ACTIVE)));
 
         // When & Then
         assertThatCode(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
@@ -116,7 +118,7 @@ class ChatAccessHelperTest {
         Long roomId = 10L;
 
         when(chatParticipantRepository.findAccessStatus(roomId, accountId))
-                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.ACTIVE, false)));
+                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.ACTIVE, false, AccountStatus.ACTIVE)));
 
         // When & Then
         assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
@@ -148,13 +150,49 @@ class ChatAccessHelperTest {
         Long roomId = 10L;
 
         when(chatParticipantRepository.findAccessStatus(roomId, accountId))
-                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.LEFT, true)));
+                .thenReturn(Optional.of(new ChatAccessStatus(ParticipantStatus.LEFT, true, AccountStatus.ACTIVE)));
 
         // When & Then
         assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_NOT_PARTICIPANT);
+    }
+
+    @Test
+    void 정지된_계정은_활성방_참여자여도_발행이_거부된다() {
+        // Given: 정지·탈퇴는 이미 발급된 Access Token을 무효화하지 않는다.
+        //        REST는 요청마다 필터가 계정을 다시 읽지만 /ws는 그 필터를 건너뛰므로
+        //        여기서 확인하지 않으면 토큰 남은 수명(30분) 동안 발행이 계속된다.
+        Long accountId = 1L;
+        Long roomId = 10L;
+
+        when(chatParticipantRepository.findAccessStatus(roomId, accountId))
+                .thenReturn(Optional.of(new ChatAccessStatus(
+                        ParticipantStatus.ACTIVE, true, AccountStatus.SUSPENDED)));
+
+        // When & Then
+        assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_SUSPENDED);
+    }
+
+    @Test
+    void 탈퇴한_계정은_활성방_참여자여도_발행이_거부된다() {
+        // Given: 탈퇴 처리는 ChatParticipant를 건드리지 않아 참여자 레코드가 ACTIVE로 남는다
+        Long accountId = 1L;
+        Long roomId = 10L;
+
+        when(chatParticipantRepository.findAccessStatus(roomId, accountId))
+                .thenReturn(Optional.of(new ChatAccessStatus(
+                        ParticipantStatus.ACTIVE, true, AccountStatus.WITHDRAWN)));
+
+        // When & Then
+        assertThatThrownBy(() -> chatAccessHelper.verifyActiveRoomParticipant(accountId, roomId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_WITHDRAWN);
     }
 
     // ===================== verifyParticipant =====================

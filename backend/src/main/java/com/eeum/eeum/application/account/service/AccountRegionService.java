@@ -40,10 +40,13 @@ public class AccountRegionService {
     @Transactional(readOnly = true)
     public List<AccountRegionResponseDto> getRegions(Long accountId) {
         Account account = getAccount(accountId);
-        return accountRegionRepository.findByAccount_AccountId(accountId)
-                .stream()
-                .map(ar -> accountRegionMapper.toRegionDto(ar,account))
-                .toList();
+        return accountRegionMapper.toRegionDtos(
+                accountRegionRepository.findByAccount_AccountId(accountId), account);
+    }
+
+    // 좌표가 등록되지 않은 지역은 null이 그대로 응답에 실린다 — 조회를 실패시키지 않는다.
+    private Location findLocation(Long regionId) {
+        return locationRepository.findByRegion_RegionId(regionId).orElse(null);
     }
 
     // ===================== 활동 지역 등록 =====================
@@ -71,7 +74,7 @@ public class AccountRegionService {
         accountRegionRepository.save(accountRegion);
 
         log.info("활동 지역 등록: accountId={}, regionId={}", accountId, region.getRegionId());
-        return accountRegionMapper.toRegionDto(accountRegion,account);
+        return accountRegionMapper.toRegionDto(accountRegion, account, findLocation(region.getRegionId()));
     }
 
     // ===================== GPS 인증 =====================
@@ -105,7 +108,8 @@ public class AccountRegionService {
         }
 
         log.info("활동 지역 GPS 인증 완료: accountId={}, accountRegionId={}", accountId, accountRegionId);
-        return accountRegionMapper.toRegionDto(accountRegion,account);
+        // 거리 검증에 쓴 location을 그대로 넘긴다 — 같은 행을 다시 조회할 이유가 없다.
+        return accountRegionMapper.toRegionDto(accountRegion, account, location);
     }
 
     // ===================== 특정 지역 조회 =====================
@@ -114,7 +118,8 @@ public class AccountRegionService {
         Account account = getAccount(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
 
-        return accountRegionMapper.toRegionDto(accountRegion,account);
+        return accountRegionMapper.toRegionDto(
+                accountRegion, account, findLocation(accountRegion.getRegionId()));
     }
 
     // ===================== 대표 지역 설정 =====================
