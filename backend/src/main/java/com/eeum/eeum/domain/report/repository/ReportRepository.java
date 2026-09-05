@@ -28,6 +28,11 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     @EntityGraph(attributePaths = {"reporter"})
     Slice<Report> findByReporter_AccountId(Long accountId, Pageable pageable);
 
+    // 내 신고 상세 — 소유자까지 조건에 넣어 조회한다.
+    // 먼저 찾고 소유권을 따로 검사하면 남의 신고는 403, 없는 신고는 404가 되어
+    // 임의의 reportId로 존재 여부를 알아낼 수 있다.
+    Optional<Report> findByReportIdAndReporter_AccountId(Long reportId, Long accountId);
+
     @EntityGraph(attributePaths = {"reporter"})
     Page<Report> findByStatus(ReportStatus status, Pageable pageable);
 

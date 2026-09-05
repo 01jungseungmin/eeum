@@ -1,10 +1,11 @@
 package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
-import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
+import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -27,6 +28,7 @@ public class UsedProductImageService {
     /** 게시글당 사진 상한. {@code IMAGE_LIMIT_EXCEEDED} 메시지와 맞춘 값이다. */
     private static final int MAX_IMAGE_COUNT = 10;
 
+    private final AccountWriteGuard accountWriteGuard;
     private final UsedProductRepository usedProductRepository;
     private final UsedProductImageRepository usedProductImageRepository;
 
@@ -34,7 +36,7 @@ public class UsedProductImageService {
     public List<UsedProductImageResponseDto> addImages(
             Long sellerId,
             Long usedProductId,
-            ImageUploadListRequestDto request
+            UsedProductImageUploadListRequestDto request
     ) {
         UsedProduct product = getOwnedOrThrow(sellerId, usedProductId);
 
@@ -113,10 +115,27 @@ public class UsedProductImageService {
 
     // ===================== 내부 헬퍼 =====================
 
+    // 사진 추가·삭제·대표 변경은 모두 이 메서드를 거치는 쓰기 경로다.
+    // 부모 게시글을 먼저 잠그지 않으면 동시 요청이 각자 "현재 사진 수"·"현재 대표"를 읽고 진행해
+    // 10장 초과, 순서 중복, 대표 복수·부재가 생긴다.
+    // 잠금 순서는 게시글 삭제·찜과 같은 used_product → 하위 테이블이다.
+    // 잠금 조회에는 삭제 필터가 없으므로 여기서 거른다.
     private UsedProduct getOwnedOrThrow(Long sellerId, Long usedProductId) {
+        // 잠금 순서 account → used_product → image의 첫 단계.
+        // 탈퇴 처리가 지나간 뒤 살아 있는 토큰으로 사진이 추가되는 것을 막는다.
+        accountWriteGuard.lockActive(sellerId);
+
         UsedProduct product = usedProductRepository
-                .findByUsedProductIdAndDeletedAtIsNull(usedProductId)
+                .findByUsedProductIdForUpdate(usedProductId)
+                .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+
+        // 비공개 글(숨김·판매자 탈퇴)은 비소유자에게 없는 것으로 응답한다.
+        // 상세 조회는 404인데 사진 변경만 403이면 그 차이로 존재가 드러난다.
+        // 공개 글의 403은 유지한다 — 존재가 이미 공개라 404로 바꾸면 정상적인 권한 오류를 가린다.
+        if (!product.isPubliclyVisible() && !product.isOwnedBy(sellerId)) {
+            throw new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND);
+        }
 
         if (!product.isOwnedBy(sellerId)) {
             throw new ForbiddenException(ErrorCode.USED_PRODUCT_ACCESS_DENIED);

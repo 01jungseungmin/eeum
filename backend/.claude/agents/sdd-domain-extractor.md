@@ -25,7 +25,7 @@ SDD 원문은 `../docs/sdd/full.md`에 있고, 도메인 매핑은 `../docs/sdd/
 * store
 * order-payment
 * reservation
-* used-product
+* used
 * community
 * chat
 * notification

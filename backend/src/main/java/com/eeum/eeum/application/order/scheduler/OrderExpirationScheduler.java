@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.order.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.application.order.service.OrderService;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
@@ -24,6 +25,7 @@ public class OrderExpirationScheduler {
     private final OrderService orderService;
 
     @Scheduled(fixedDelay = 60_000)
+    @SchedulerLock(name = "expirePaymentPendingOrders", lockAtMostFor = "PT5M", lockAtLeastFor = "PT30S")
     public void expirePaymentPendingOrders() {
         LocalDateTime threshold = LocalDateTime.now()
                 .minusMinutes(PAYMENT_PENDING_EXPIRE_MINUTES);

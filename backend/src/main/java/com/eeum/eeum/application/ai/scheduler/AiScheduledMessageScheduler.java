@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.ai.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.application.ai.service.AiMessageDispatchService;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -41,6 +42,7 @@ public class AiScheduledMessageScheduler {
     private final RedisLockService redisLockService;
 
     @Scheduled(fixedDelay = 60_000)
+    @SchedulerLock(name = "dispatchScheduledMessages", lockAtMostFor = "PT5M", lockAtLeastFor = "PT30S")
     public void dispatchScheduledMessages() {
         try {
             redisLockService.executeWithLock(LockKeys.aiScheduledMessageJob(), JOB_LOCK_LEASE, this::processBatch);

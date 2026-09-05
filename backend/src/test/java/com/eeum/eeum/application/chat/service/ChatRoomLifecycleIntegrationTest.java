@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.chat.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
@@ -24,21 +26,10 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
+import com.eeum.eeum.common.dto.response.CursorSlice;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -65,33 +56,11 @@ import static org.awaitility.Awaitility.await;
  *   <li>MySQL 생성 컬럼 기반 유니크(uk_chat_room_active_ref)가 실제 DDL로 반영되는지</li>
  * </ol>
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class ChatRoomLifecycleIntegrationTest {
+class ChatRoomLifecycleIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
 
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
 
     private final ChatRoomService chatRoomService;
     private final ChatMessageService chatMessageService;
@@ -140,7 +109,6 @@ class ChatRoomLifecycleIntegrationTest {
         chatRoomRepository.deleteAll();
         storeRepository.deleteAll();
         notificationRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     // ──────────────── 픽스처 ────────────────
@@ -226,10 +194,10 @@ class ChatRoomLifecycleIntegrationTest {
                 .getRoomId();
 
         // when
-        Slice<ChatRoomResponseDto> ownerRooms =
-                chatRoomService.getMyRooms(ownerAccountId, PageRequest.of(0, 20), false);
-        Slice<ChatRoomResponseDto> customerRooms =
-                chatRoomService.getMyRooms(customerId, PageRequest.of(0, 20), false);
+        CursorSlice<ChatRoomResponseDto> ownerRooms =
+                chatRoomService.getMyRooms(ownerAccountId, null, null, 20, false);
+        CursorSlice<ChatRoomResponseDto> customerRooms =
+                chatRoomService.getMyRooms(customerId, null, null, 20, false);
 
         // then: 종료된 방은 목록에서 사라지고 새 방만 남는다 — 사용자는 옛 방으로 되돌아갈 수 없다
         assertThat(ownerRooms.getContent()).extracting(ChatRoomResponseDto::getRoomId)
@@ -252,8 +220,8 @@ class ChatRoomLifecycleIntegrationTest {
                 .getRoomId();
 
         // when: 종료된 방까지 포함해 조회
-        Slice<ChatRoomResponseDto> withClosed =
-                chatRoomService.getMyRooms(customerId, PageRequest.of(0, 20), true);
+        CursorSlice<ChatRoomResponseDto> withClosed =
+                chatRoomService.getMyRooms(customerId, null, null, 20, true);
 
         // then: 종료 시 참여자를 LEFT로 바꾸지 않으므로 지난 방도 조회된다 — active 값으로 구분 가능
         assertThat(withClosed.getContent()).extracting(ChatRoomResponseDto::getRoomId)
@@ -267,7 +235,7 @@ class ChatRoomLifecycleIntegrationTest {
 
         // then: 종료된 방의 메시지 조회도 여전히 가능해야 한다 (기록 보존의 실효성)
         assertThat(chatMessageService
-                .getMessages(customerId, firstRoomId, null, 20)
+                .getMessages(customerId, firstRoomId, null, null, 20)
                 .getContent()).isNotEmpty();
     }
 

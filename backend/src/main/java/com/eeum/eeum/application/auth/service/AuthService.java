@@ -16,6 +16,7 @@ import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
+import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -67,6 +68,7 @@ public class AuthService {
     private final RateLimitService rateLimitService;
     private final RedisLockService redisLockService;
     private final ApplicationEventPublisher eventPublisher;
+    private final RealtimeRelayPublisher realtimeRelayPublisher;
 
     // ===================== 이메일 인증 =====================
 
@@ -324,7 +326,15 @@ public class AuthService {
 
     // ===================== 토큰 재발급 =====================
 
-    // DB 쓰기 없음. Redis lock으로 logout과의 경쟁 조건(validate → save 사이 logout 개입) 방지
+    /**
+     * Refresh Token 재발급.
+     *
+     * <p>Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
+     *
+     * <p>제재와의 경쟁은 잠금이 아니라 <b>토큰 세대</b>로 푼다. 여기서 계정을 읽어 세대 N을
+     * 확인한 뒤 정지가 커밋돼 세대가 N+1이 되더라도, 이 요청이 발급하는 토큰은 N을 실은 채
+     * 나가므로 다음 검증에서 걸린다. 행 잠금으로 직렬화할 필요가 없다.
+     */
     public TokenResponseDto reissue(ReissueRequestDto request) {
         // JWT 기본 형식/타입만 lock 밖에서 먼저 검증 (빠른 실패)
         if (!jwtProvider.isValid(request.getRefreshToken()) || !jwtProvider.isRefreshToken(request.getRefreshToken())) {
@@ -342,6 +352,13 @@ public class AuthService {
                     Account account = accountRepository.findById(validatedId)
                             .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
                     validateAccountStatus(account);
+
+                    // 회수된 세대의 토큰이면 Redis에 남아 있어도 재발급하지 않는다.
+                    if (!account.isTokenVersionCurrent(
+                            jwtProvider.getTokenVersion(request.getRefreshToken()))) {
+                        throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+                    }
+
                     return issueTokens(account);
                 }
         );
@@ -376,6 +393,8 @@ public class AuthService {
                 }
         );
 
+        realtimeRelayPublisher.publishSessionTermination(refreshAccountId);
+
         log.info("로그아웃 완료: accountId={}", refreshAccountId);
     }
 
@@ -385,6 +404,11 @@ public class AuthService {
     public void sendPasswordResetEmail(PasswordResetRequestDto request) {
         Account account = accountRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        // 정지·탈퇴 계정은 재설정해도 로그인할 수 없다. 탈퇴 취소는 관리자만 할 수 있어
+        // 비밀번호를 되찾아야 할 이유도 없다. 익명화 전(30일)이면 메일이 실제 수신함에 도착하므로
+        // 발송 단계에서 막는다.
+        account.assertWritable();
 
         // OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
         if (account.isOAuthAccount()) {
@@ -404,7 +428,9 @@ public class AuthService {
     @Transactional
     public void resetPassword(PasswordNewRequestDto request) {
 
-        // 1. 비밀번호가 다른지 검증
+        // 1. 비밀번호가 다른지 검증 — 반드시 토큰 소비(2번)보다 앞에 있어야 한다.
+        //    뒤로 옮기면 확인란 오타 한 번에 재설정 토큰이 소비돼 사용자가 메일부터 다시 받아야 한다.
+        //    형식 위반(8자·영문·숫자·특수문자)은 컨트롤러 @Valid가 서비스 진입 전에 거른다.
         if (!request.getNewPassword().equals(request.getNewPasswordConfirm())) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
@@ -414,23 +440,35 @@ public class AuthService {
         // - type == PASSWORD_RESET
         // - Redis 저장값과 일치 여부 확인
         // - 검증 성공 시 Redis에서 삭제
-        Long accountId = tokenService.validatePasswordResetToken(request.getPasswordResetToken());
+        Long accountId = tokenService.consumePasswordResetToken(request.getPasswordResetToken());
 
         // 3. 회원 조회
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        // 4. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
+        // 4. 정지·탈퇴 계정은 비밀번호를 바꿔주지 않는다.
+        //    발송 시점에는 활성이었어도 토큰 유효 시간 안에 정지될 수 있어 여기서 다시 본다.
+        account.assertWritable();
+
+        //    회수된 세대의 토큰이면 거부한다. Redis 삭제는 비동기라 유실될 수 있어,
+        //    "정지 전에 받은 재설정 토큰 → 재활성화 → 비밀번호 변경" 경로가 열린다.
+        if (!account.isTokenVersionCurrent(
+                jwtProvider.getTokenVersion(request.getPasswordResetToken()))) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_RESET_TOKEN);
+        }
+
+        // 5. OAuth 계정은 로컬 비밀번호 재설정을 허용하지 않음
         if (account.isOAuthAccount()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_PASSWORD);
         }
 
-        // 5. 비밀번호 변경
+        // 6. 비밀번호 변경
         account.changePassword(passwordEncoder.encode(request.getNewPassword()));
 
-        // 6. DB 커밋 성공 후 Refresh Token + Password Reset Token 삭제
-        // DB 롤백 시 password-reset token이 유지되어 재시도 가능
-        eventPublisher.publishEvent(AccountTokenCleanupEvent.passwordResetAndRefresh(accountId));
+        // 7. DB 커밋 성공 후 Refresh Token 삭제 — 기존 세션을 끊어 새 비밀번호로 다시 로그인하게 한다.
+        // Password Reset Token은 2번에서 이미 소비됐다. 롤백돼도 되살아나지 않으므로
+        // 재설정이 실패하면 메일을 다시 받아야 한다 — 일회용 보장을 위해 감수한 대가다.
+        eventPublisher.publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
 
         log.info("비밀번호 재설정 완료: accountId={}", accountId);
     }
@@ -449,7 +487,8 @@ public class AuthService {
         emailService.verifyPasswordResetCode(request.getEmail(), request.getCode());
 
         // 2. 검증 성공 후 JWT password reset token 발급
-        return tokenService.generateAndSavePasswordResetToken(account.getAccountId());
+        return tokenService.generateAndSavePasswordResetToken(
+                account.getAccountId(), account.getTokenVersion());
     }
 
     // ===================== 재인증 =====================
@@ -467,7 +506,8 @@ public class AuthService {
             validateOAuthReAuth(account, request);
         }
 
-        String reAuthToken = tokenService.generateAndSaveReAuthToken(accountId);
+        String reAuthToken = tokenService.generateAndSaveReAuthToken(
+                accountId, account.getTokenVersion());
 
         return ReAuthResponseDto.builder()
                 .reAuthToken(reAuthToken)
@@ -543,12 +583,16 @@ public class AuthService {
     }
 
     private TokenResponseDto issueTokens(Account account) {
+        // 발급 시점의 세대를 박는다. 발급 도중 제재가 커밋돼 세대가 오르면
+        // 이 토큰은 낡은 세대를 실은 채로 나가 검증에서 걸린다 — 잠금 없이 경쟁이 해소된다.
         String accessToken = jwtProvider.generateAccessToken(
                 account.getAccountId(),
-                account.getRole().name()
+                account.getRole().name(),
+                account.getTokenVersion()
         );
 
-        String refreshToken = jwtProvider.generateRefreshToken(account.getAccountId());
+        String refreshToken = jwtProvider.generateRefreshToken(
+                account.getAccountId(), account.getTokenVersion());
 
         tokenService.saveRefreshToken(account.getAccountId(), refreshToken);
 

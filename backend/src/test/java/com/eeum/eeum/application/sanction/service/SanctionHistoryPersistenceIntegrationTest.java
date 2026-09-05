@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.sanction.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.account.service.AdminAccountService;
 import com.eeum.eeum.application.store.service.AdminStoreService;
 import com.eeum.eeum.EeumApplication;
@@ -19,42 +21,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest(classes = EeumApplication.class)
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
+@SpringBootTest(classes = EeumApplication.class)
 @RequiredArgsConstructor
-class SanctionHistoryPersistenceIntegrationTest {
+class SanctionHistoryPersistenceIntegrationTest extends IntegrationTestSupport {
 
     private static final Long ADMIN_ID = 999L;
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-    }
 
     private final AdminAccountService adminAccountService;
     private final AdminStoreService adminStoreService;
@@ -97,7 +75,6 @@ class SanctionHistoryPersistenceIntegrationTest {
     void tearDown() {
         sanctionHistoryRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     @Test

@@ -16,10 +16,12 @@ import com.eeum.eeum.domain.notification.repository.NotificationSettingsReposito
 import com.eeum.eeum.infrastructure.sse.SseEmitterManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -27,9 +29,12 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -48,13 +53,13 @@ class NotificationServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private UnreadCountService unreadCountService;
     @Mock private SseEmitterManager sseEmitterManager;
+    @Mock private UnreadSyncExecutor unreadSyncExecutor;
 
     private static final Long ACCOUNT_ID = 6L;
 
     private void stubUnreadCount() {
         UnreadCountResponseDto snapshot = UnreadCountResponseDto.of(1L, Map.of());
         lenient().when(unreadCountService.getUnreadCount(ACCOUNT_ID)).thenReturn(snapshot);
-        lenient().when(unreadCountService.refreshFromDb(ACCOUNT_ID)).thenReturn(snapshot);
     }
 
     private Account stubAccount(String fcmToken) {
@@ -92,7 +97,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNotNull();
         verify(notificationRepository).save(any());
-        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
         verify(eventPublisher).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -102,7 +107,6 @@ class NotificationServiceTest {
         stubUnreadCount();
         stubAccount("valid-token");
         when(settingsRepository.findByAccount_AccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         NotificationResponseDto result = notificationService.createNotificationWithoutPush(request());
@@ -110,7 +114,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNotNull();
         verify(notificationRepository).save(any());
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
         verify(eventPublisher, never()).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -152,7 +156,7 @@ class NotificationServiceTest {
         // then
         assertThat(result).isNull();
         verify(notificationRepository, never()).save(any());
-        verify(unreadCountService, never()).refreshFromDb(anyLong());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
         verify(eventPublisher, never()).publishEvent(any(NotificationPushEvent.class));
     }
 
@@ -167,15 +171,14 @@ class NotificationServiceTest {
         when(notification.isUnread()).thenReturn(true);
         when(notificationRepository.findByNotificationIdAndAccount_AccountId(notificationId, ACCOUNT_ID))
                 .thenReturn(Optional.of(notification));
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markAsRead(ACCOUNT_ID, notificationId);
 
         // then
         verify(notification).markAsRead();
-        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
+        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
     @Test
@@ -192,8 +195,8 @@ class NotificationServiceTest {
 
         // then
         verify(notification, never()).markAsRead();
-        verify(unreadCountService, never()).refreshFromDb(anyLong());
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
+        verify(unreadCountService, never()).invalidateSnapshot(anyLong());
     }
 
     @Test
@@ -202,14 +205,13 @@ class NotificationServiceTest {
         stubUnreadCount();
         when(notificationRepository.markAllAsReadByAccountId(eq(ACCOUNT_ID), any(LocalDateTime.class)))
                 .thenReturn(5);
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markAllAsRead(ACCOUNT_ID);
 
         // then
-        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
+        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
     @Test
@@ -219,7 +221,6 @@ class NotificationServiceTest {
         when(notificationRepository.markAsReadByAccountIdAndTypes(
                 eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class)))
                 .thenReturn(4);
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER);
@@ -227,8 +228,8 @@ class NotificationServiceTest {
         // then
         verify(notificationRepository).markAsReadByAccountIdAndTypes(
                 eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class));
-        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
+        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
     @Test
@@ -242,24 +243,73 @@ class NotificationServiceTest {
         notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.REVIEW);
 
         // then
-        verify(unreadCountService, never()).refreshFromDb(anyLong());
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
+        verify(unreadCountService, never()).invalidateSnapshot(anyLong());
     }
 
     @Test
     void 커밋_후_unread_동기화가_실패해도_성공한_읽음_처리를_실패로_바꾸지_않는다() {
+        // given: 커밋 직후 Redis가 죽어 무효화가 실패하는 상황
+        when(notificationRepository.markAsReadByAccountIdAndTypes(
+                eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class)))
+                .thenReturn(2);
+        doThrow(new IllegalStateException("redis unavailable"))
+                .when(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
+
+        // when & then: 단위 테스트에서는 활성 트랜잭션이 없어 afterCommit 작업이 즉시 실행된다.
+        // 이 시점 DB 변경은 이미 커밋됐으므로 예외가 새어 나가면 성공한 요청이 실패로 응답된다.
+        assertThatCode(() -> notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER))
+                .doesNotThrowAnyException();
+        // 무효화되지 않은 캐시를 재계산 결과로 덮으면 낡은 값이 다시 살아날 수 있으므로 제출하지 않는다.
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
+    }
+
+    @Test
+    void 구독_초기_unread_조회가_실패하면_방금_등록한_emitter를_회수한다() {
+        // given: emitter 등록 뒤 Redis/DB 초기 unread 조회가 실패하는 상황
+        SseEmitter emitter = mock(SseEmitter.class);
+        when(sseEmitterManager.subscribe(ACCOUNT_ID, 2L, "fingerprint")).thenReturn(emitter);
+        when(unreadCountService.getUnreadCount(ACCOUNT_ID))
+                .thenThrow(new IllegalStateException("redis unavailable"));
+
+        // when & then: 응답으로 반환되지 않은 emitter가 manager에 남아 heartbeat를 받으면 안 된다.
+        assertThatThrownBy(() -> notificationService.subscribe(ACCOUNT_ID, 2L, "fingerprint"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("redis unavailable");
+        verify(sseEmitterManager).closeIfCurrent(ACCOUNT_ID, emitter);
+    }
+
+    @Test
+    void 커밋_후_동기화는_캐시를_먼저_비우고_재계산을_넘긴다() {
         // given
         when(notificationRepository.markAsReadByAccountIdAndTypes(
                 eq(ACCOUNT_ID), eq(NotificationCategory.ORDER.getTypes()), any(LocalDateTime.class)))
                 .thenReturn(2);
-        when(unreadCountService.refreshFromDb(ACCOUNT_ID))
-                .thenThrow(new IllegalStateException("redis unavailable"));
 
-        // when & then: 단위 테스트에서는 활성 트랜잭션이 없어 afterCommit 작업이 즉시 실행된다.
-        assertThatCode(() -> notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER))
-                .doesNotThrowAnyException();
-        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        // when
+        notificationService.markCategoryAsRead(ACCOUNT_ID, NotificationCategory.ORDER);
+
+        // then: 순서가 뒤집히면 재계산이 폐기됐을 때 "완성됐지만 낡은" 캐시가 남아
+        // 이후 조회가 계속 틀린 값을 돌려준다
+        InOrder inOrder = inOrder(unreadCountService, unreadSyncExecutor);
+        inOrder.verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
+        inOrder.verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
+    }
+
+    @Test
+    void 커밋_후_동기화는_요청_스레드에서_DB를_다시_읽지_않는다() {
+        // given
+        when(notificationRepository.markAllAsReadByAccountId(eq(ACCOUNT_ID), any(LocalDateTime.class)))
+                .thenReturn(3);
+
+        // when
+        notificationService.markAllAsRead(ACCOUNT_ID);
+
+        // then: afterCommit은 커밋을 수행한 요청 스레드에서 돌고 그 시점 바깥 커넥션은
+        // 아직 반납 전이다. 여기서 DB를 다시 읽으면 한 요청이 커넥션 2개를 점유한다(R2).
+        verify(unreadCountService, never()).refreshFromDb(anyLong());
+        verify(unreadCountService, never()).getUnreadCount(anyLong());
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
     }
 
     @Test
@@ -271,7 +321,6 @@ class NotificationServiceTest {
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class)))
                 .thenReturn(3);
-        when(sseEmitterManager.isConnected(ACCOUNT_ID)).thenReturn(true);
 
         // when
         notificationService.markAsReadByRef(
@@ -281,8 +330,8 @@ class NotificationServiceTest {
         verify(notificationRepository).markAsReadByAccountAndTypeAndRef(
                 eq(ACCOUNT_ID), eq(NotificationType.CHAT_MESSAGE),
                 eq(NotificationRefType.CHAT_ROOM), eq(roomId), any(LocalDateTime.class));
-        verify(unreadCountService).refreshFromDb(ACCOUNT_ID);
-        verify(sseEmitterManager).sendUnreadCount(eq(ACCOUNT_ID), any(UnreadCountResponseDto.class));
+        verify(unreadSyncExecutor).rebuildAndPush(eq(ACCOUNT_ID), anyLong());
+        verify(unreadCountService).invalidateSnapshot(ACCOUNT_ID);
     }
 
     @Test
@@ -298,7 +347,7 @@ class NotificationServiceTest {
                 ACCOUNT_ID, NotificationType.CHAT_MESSAGE, NotificationRefType.CHAT_ROOM, roomId);
 
         // then
-        verify(unreadCountService, never()).refreshFromDb(anyLong());
-        verify(sseEmitterManager, never()).sendUnreadCount(anyLong(), any());
+        verify(unreadSyncExecutor, never()).rebuildAndPush(anyLong(), anyLong());
+        verify(unreadCountService, never()).invalidateSnapshot(anyLong());
     }
 }

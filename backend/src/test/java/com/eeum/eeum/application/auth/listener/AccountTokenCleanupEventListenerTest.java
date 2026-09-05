@@ -18,7 +18,6 @@ class AccountTokenCleanupEventListenerTest {
 
     @Mock TokenService tokenService;
     @Mock StringRedisTemplate redisTemplate;
-
     // ─────────────────── refreshOnly 이벤트 ───────────────────
 
     @Test
@@ -32,43 +31,25 @@ class AccountTokenCleanupEventListenerTest {
 
         // then
         verify(tokenService).deleteRefreshToken(accountId);
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(tokenService, never()).deleteReAuthToken(any());
         verify(tokenService, never()).deletePasswordResetToken(any());
         verify(redisTemplate, never()).delete(anyString());
     }
 
-    // ─────────────────── reAuthAndRefresh 이벤트 ───────────────────
+    // ─────────────────── allTokens 이벤트 (계정 제재) ───────────────────
 
     @Test
-    void reAuthAndRefresh_이벤트_수신_시_deleteRefreshToken과_consumeReAuthToken_호출() {
-        // given
+    void allTokens_이벤트_수신_시_refresh_reauth_passwordReset_토큰을_모두_삭제() {
+        // given: 정지·강제 탈퇴에서 Refresh만 지우면 재인증·비밀번호 재설정 토큰이 TTL 동안 살아남는다
         Long accountId = 2L;
-        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.reAuthAndRefresh(accountId);
+        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.allTokens(accountId);
 
         // when
         listener.onAccountTokenCleanup(event);
 
         // then
         verify(tokenService).deleteRefreshToken(accountId);
-        verify(tokenService).consumeReAuthToken(accountId);
-        verify(tokenService, never()).deletePasswordResetToken(any());
-        verify(redisTemplate, never()).delete(anyString());
-    }
-
-    // ─────────────────── passwordResetAndRefresh 이벤트 ───────────────────
-
-    @Test
-    void passwordResetAndRefresh_이벤트_수신_시_deleteRefreshToken과_deletePasswordResetToken_호출() {
-        // given
-        Long accountId = 3L;
-        AccountTokenCleanupEvent event = AccountTokenCleanupEvent.passwordResetAndRefresh(accountId);
-
-        // when
-        listener.onAccountTokenCleanup(event);
-
-        // then
-        verify(tokenService).deleteRefreshToken(accountId);
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(tokenService).deleteReAuthToken(accountId);
         verify(tokenService).deletePasswordResetToken(accountId);
         verify(redisTemplate, never()).delete(anyString());
     }
@@ -87,7 +68,7 @@ class AccountTokenCleanupEventListenerTest {
         // then: "oauth:temp:{tempToken}" 키 삭제, tokenService 호출 없음
         verify(redisTemplate).delete("oauth:temp:" + tempToken);
         verify(tokenService, never()).deleteRefreshToken(any());
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(tokenService, never()).deleteReAuthToken(any());
         verify(tokenService, never()).deletePasswordResetToken(any());
     }
 

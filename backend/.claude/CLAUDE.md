@@ -60,10 +60,12 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 ### 절대 규칙
 - Location, Region, OrderItem을 제외한 모든 엔티티는 `BaseEntity` 상속 필수
 - Image 관련 모든 엔티티는 `ImageBase` 상속 필수
-- 읽기 전용 메서드는 `@Transactional(readOnly = true)` 필수
+- DB 조회만 수행하는 읽기 전용 Service 메서드는 `@Transactional(readOnly = true)` 필수
+- 단, WebSocket/SSE close, 외부 API 호출, 파일 I/O 등 장시간 I/O를 함께 수행하는 오케스트레이션 메서드 전체에는 트랜잭션을 걸지 않는다.
+  필요한 DB 조회 구간만 별도 read-only 트랜잭션으로 분리하거나, 조회 후 트랜잭션이 종료된 상태에서 I/O를 수행한다.
 - 가격 필드는 `BigDecimal` 사용
 - API 응답은 반드시 `ApiResponse<T>`로 래핑 (`common/dto/response/ApiResponse`)
-- URL은 kebab-case: `/used-products`, `/store-reviews`
+- URL은 kebab-case: `/used`, `/store-reviews`
 - FCM 직접 호출 금지 — 항상 도메인 이벤트 경유
 - 로깅은 SLF4J 사용 — `System.out.println` 금지
 - Soft Delete 대상 외 엔티티에 `deletedAt` 추가 금지
@@ -90,16 +92,17 @@ throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
 - 쓰기: `@Transactional` (REQUIRED, 기본값)
 - 읽기: `@Transactional(readOnly = true)`
 - 감사 로그: `@Transactional(propagation = REQUIRES_NEW)` — 본 작업 실패해도 로그 기록
+- 장시간 I/O(WebSocket/SSE/외부 API)를 포함하는 오케스트레이션 메서드는 트랜잭션 밖에서 수행하고, DB 작업만 별도 트랜잭션 경계로 분리한다.
 
 ### Soft Delete vs Hard Delete
 Soft Delete (deletedAt 필드) 적용 대상:
 - `Account` — 탈퇴 후 30일 유예, `AccountCleanupScheduler`가 처리
 - `ChatMessage`
-- `Category`
 - `CommunityComment` — `isDeleted` tombstone으로 댓글·대댓글 스레드 문맥 유지
 - `UsedProduct` — 판매완료 글에 후기·채팅·신고 이력이 매달려 물리 삭제 시 참조가 끊김
 
-그 외 엔티티는 Hard Delete (즉시 물리 삭제)
+그 외 엔티티는 Hard Delete (즉시 물리 삭제).
+`Category`는 Soft Delete 대상이 아니다 — `deletedAt` 없이 `isActive` 토글로 노출만 끊는다.
 
 ### 동시성 제어
 재고 차감, 주문 생성, 예약 처리는 `RedisLockService` 사용 필수:
@@ -107,6 +110,12 @@ Soft Delete (deletedAt 필드) 적용 대상:
 // LockKeys에 정의된 패턴 사용
 redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 ```
+
+중고거래·찜·회원 탈퇴 연계 쓰기는 기본적으로
+`Account → Store/UsedProduct → Favorite/UsedProductImage` 순서로 잠근다.
+여러 대상 행을 잠그면 ID 오름차순처럼 하나의 전역 순서를 사용한다. 상세 공개 정책,
+카운터, 페이징, 운영 DDL과 필수 경쟁 시나리오는
+`.claude/skills/references/used-favorite-review.md`를 따른다.
 
 ### 멱등성 처리
 - PortOne Webhook: Redis + DB Unique 제약으로 중복 처리 방지
@@ -121,8 +130,23 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - 사용자가 "결제·정산 전체 리뷰"를 요청하면 Git diff로 범위를 축소하지 않는다.
 
 ### 페이징 선택 기준
-- 무한 스크롤 (모바일 앱): `Slice<T>`
+- 무한 스크롤 (모바일 앱): `CursorSlice<T>` (`common/dto/response/CursorSlice`)
+  - 새 행이 목록 맨 앞에 꽂히는 정렬(최신순·최근 대화순)은 OFFSET 금지 — 페이지 사이 삽입
+    한 건에 목록이 통째로 밀려 경계 항목이 중복·누락된다
+  - 커서는 정렬 키를 전부 담는다. PK tie-break를 빼면 같은 값 구간에서 같은 결함이 재현된다
+  - 다음 커서(`nextCursorValue`/`nextCursorId`)는 서버가 만들어 응답에 싣고, 클라이언트는
+    그대로 되돌려보낸다. 한쪽만 보내거나 형식이 깨지면 400
+  - `Slice<T>`를 쓰지 않는다 — 페이지 번호가 없는데 `number=0`, `first=true`가 실려
+    응답이 실제 위치를 잘못 설명한다
 - 관리자 페이지 (번호 페이징): `Page<T>`
+
+### 신규 도메인 단계별 개발
+- 신규 도메인이나 큰 기능 확장은 `.claude/skills/references/domain-development-workflow.md`의
+  Gate 1~7을 순서대로 적용한다.
+- 정책 결정 → Domain/Persistence → Application/Transaction → API/DTO → 교차 도메인·운영 →
+  테스트 → 최종 전체 리뷰 순서를 지키고, 이전 Gate의 위반을 다음 단계로 넘기지 않는다.
+- 완성 구현에서 공개 범위, 권한, 상태 전이, 삭제, 외부 계약처럼 결과를 바꾸는 정책이 미정이면
+  TODO나 임의 값으로 진행하지 않고 사용자 결정을 받는다.
 
 ### 테스트 작성 규칙
 - JUnit5 + Mockito + AssertJ 조합 (Spring Boot test starter에 포함)
@@ -137,13 +161,15 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 
 ### 스케줄러 목록
 새 스케줄러 추가 전 반드시 기존 목록 확인 (위치: `application/{domain}/scheduler/`):
-- `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 물리 삭제
+- `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 **개인정보 파기(익명화)**. 계정 행은 남긴다 — 주문·결제·신고·후기 등 다수 테이블이 참조하고 일부는 보존 의무가 있어 물리 삭제할 수 없다. `Account.anonymize()`가 email·nickname·name·phone·password·FCM 토큰을 지우고 `anonymizedAt`을 남기며, 참조가 끊겨도 되는 자식(찜·활동지역·사업자정보·정산계좌)만 함께 삭제한다
 - `OrderExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 주문 만료 처리
 - `NotificationCleanupScheduler` — 매일 03:00 6개월 이전 알림 삭제 / 5분 주기 Redis unread 카운트 ↔ DB 정합성 보정
 - `AiScheduledMessageScheduler` — 1분 주기, scheduledAt 경과한 AI 예약 메시지 발송 (최대 50건/회, 재시도 3회 초과 시 FAILED)
 - `AiPlanExpirationScheduler` — 매일 03:30, 만료일 지난 AI 플랜 구독 비활성화 (이후 FREE 처리)
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
 - `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
+- `NotificationOutboxScheduler` — 1초 주기, `notification_outbox`의 대기 행을 처리해 알림 생성 (한 번에 100건, 재시도 5회 초과 시 FAILED) / 매일 04:20 완료분(24시간 경과) 정리. 알림 생성은 비동기 이벤트가 아니라 이 경로다 — 원 트랜잭션에서 outbox에 기록하고 여기서 꺼내 쓴다
+- `WebSocketSessionReconciliationScheduler` — 30초 주기, 붙어 있는 WebSocket 세션의 계정 상태·토큰 세대를 DB와 대조해 회수된 연결 종료. **분산 잠금을 걸지 않는다**(`@InstanceLocalSchedule`) — 세션은 JVM 안에만 있어 한 대만 돌면 나머지 인스턴스 세션이 방치된다
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:

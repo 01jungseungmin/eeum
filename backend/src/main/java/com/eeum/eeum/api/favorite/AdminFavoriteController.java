@@ -1,5 +1,6 @@
 package com.eeum.eeum.api.favorite;
 
+import com.eeum.eeum.application.favorite.dto.response.FavoriteRecalculateResponseDto;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteStatResponseDto;
 import com.eeum.eeum.application.favorite.service.AdminFavoriteService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -31,17 +32,24 @@ public class AdminFavoriteController {
     private final AdminFavoriteService adminFavoriteService;
 
     @Operation(
-            summary = "Store.favoriteCount 정합성 재계산",
+            summary = "favoriteCount 정합성 재계산",
             description = """
-                    favorite 테이블 실제 row 수를 기준으로 모든 상점의 favoriteCount를 재계산합니다.
-                    장애 복구, 대량 삭제, 수동 DB 수정 후 정합성이 어긋났을 때 사용하세요.
-                    단일 UPDATE ... SELECT로 처리되므로 N번 쿼리 없이 전체 동기화됩니다.
+                    favorite 테이블 실제 row 수를 기준으로 대상의 favoriteCount를 재계산합니다.
+                    refType을 지정하면 해당 타입만, 생략하면 상점·중고 게시글 전체를 재계산합니다.
+
+                    ⚠️ 찜 쓰기가 한산한 시간대에 실행하세요.
+                    재계산은 타입별 단일 UPDATE로 도는데, 그 사이에 들어온 찜 등록·해제·회원 탈퇴의
+                    증감이 과거 시점 count로 덮일 수 있습니다. 잠금으로 막지 않는 이유는,
+                    드물게 쓰는 이 보정 작업 때문에 가장 잦은 쓰기인 찜 토글에 상시 비용을 얹게 되기 때문입니다.
+                    어긋난 값이 남으면 다시 실행하면 됩니다 — 이 API 자체가 그 목적의 도구입니다.
                     """
     )
     @PostMapping("/recalculate")
-    public ResponseEntity<ApiResponse<Integer>> recalculateFavoriteCounts() {
-        int updated = adminFavoriteService.recalculateFavoriteCounts();
-        return ResponseEntity.ok(ApiResponse.success(updated));
+    public ResponseEntity<ApiResponse<FavoriteRecalculateResponseDto>> recalculateFavoriteCounts(
+            @RequestParam(required = false) FavoriteRefType refType
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminFavoriteService.recalculateFavoriteCounts(refType)));
     }
 
     @Operation(

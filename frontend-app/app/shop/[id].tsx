@@ -77,8 +77,8 @@ export default function ShopDetailScreen() {
         // 💡 이벤트 상품 데이터 세팅
         setEventProducts(eventRes?.data || eventRes || []);
 
-        if (checkRes?.data?.data) setIsFavorited(checkRes.data.data.favorited);
-        if (countRes?.data) setFavoriteCount(countRes.data.data);
+        if (checkRes) setIsFavorited(checkRes.favorited);
+        if (countRes != null) setFavoriteCount(countRes);
 
         setShopNotices(Array.isArray(noticesRes) ? noticesRes : (noticesRes?.content ?? []));
 
@@ -137,10 +137,13 @@ export default function ShopDetailScreen() {
 
   const handleToggleFavorite = async () => {
     try {
-      const res = await favoriteApi.toggleFavorite('STORE', shopIdNum);
-      const { favorited, favoriteCount: newCount } = res.data.data;
+      const { favorited, favoriteCount: newCount } = await favoriteApi.toggleFavorite('STORE', shopIdNum);
       setIsFavorited(favorited);
-      setFavoriteCount(newCount);
+
+      // 비공개 대상 해제 시 서버가 favoriteCount를 주지 않는다. 그때는 직접 보정한다.
+      setFavoriteCount(prev =>
+        newCount ?? Math.max(0, prev + (favorited ? 1 : -1))
+      );
     } catch (error) {
       Alert.alert("알림", "찜 상태를 변경할 수 없습니다.");
     }

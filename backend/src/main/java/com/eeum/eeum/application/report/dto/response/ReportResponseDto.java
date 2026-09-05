@@ -14,7 +14,12 @@ import java.time.LocalDateTime;
 
 @Getter
 @Builder
-@Schema(description = "신고 응답")
+@Schema(description = """
+        신고 응답.
+
+        목록 조회(GET /admin/reports)와 상세 조회(GET /admin/reports/{reportId})가 이 스키마를 공유하지만
+        채워지는 범위가 다르다.
+        """)
 public class ReportResponseDto {
 
     @Schema(description = "신고 ID")
@@ -35,16 +40,16 @@ public class ReportResponseDto {
     @Schema(description = "신고자 ID")
     private Long reporterId;
 
-    @Schema(description = "신고자 이름")
+    @Schema(description = "신고자 이름. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final String reporterName;
 
-    @Schema(description = "신고자 닉네임")
+    @Schema(description = "신고자 닉네임. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final String reporterNickname;
 
-    @Schema(description = "신고자 이메일")
+    @Schema(description = "신고자 이메일. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final String reporterEmail;
 
-    @Schema(description = "신고 대상 상세 정보")
+    @Schema(description = "신고 대상 상세 정보. 목록 응답에서는 항상 null — 상세에서만 채워진다", nullable = true)
     private final ReportTargetSnapshotDto target;
 
     @Schema(description = "작성일시")

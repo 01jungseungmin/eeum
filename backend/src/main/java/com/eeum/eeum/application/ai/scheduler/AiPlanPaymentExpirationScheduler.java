@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.ai.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.eeum.eeum.application.ai.service.AiPlanPaymentFailureRecorder;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -31,6 +32,7 @@ public class AiPlanPaymentExpirationScheduler {
     private final RedisLockService redisLockService;
 
     @Scheduled(fixedDelay = 60_000)
+    @SchedulerLock(name = "expirePendingPayments", lockAtMostFor = "PT5M", lockAtLeastFor = "PT30S")
     public void expirePendingPayments() {
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(PAYMENT_PENDING_EXPIRE_MINUTES);
         List<AiPlanPayment> pendingPayments =

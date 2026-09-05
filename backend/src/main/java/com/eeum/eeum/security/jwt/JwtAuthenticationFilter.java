@@ -76,6 +76,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         return;
                     }
 
+                    // 회수된 토큰. Redis 블랙리스트는 로그아웃한 토큰만 담고, 제재·비밀번호 재설정으로
+                    // 회수한 토큰은 계정에 남긴 무효화 시각으로 걸러야 한다.
+                    if (!userDetails.isTokenVersionCurrent(jwtProvider.getTokenVersion(token))) {
+                        log.debug("회수된 세대의 토큰: accountId={}", accountId);
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,

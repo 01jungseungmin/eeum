@@ -7,7 +7,7 @@ import com.eeum.eeum.application.community.dto.response.CommunityPostSummaryResp
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
-import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -43,7 +43,7 @@ public class CommunityPostService {
     private final CommunityPostDeletionProcessor postDeletionProcessor;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
-    private final AccountRegionRepository accountRegionRepository;
+    private final PrimaryRegionResolver primaryRegionResolver;
 
     @Transactional(readOnly = true)
     public Page<CommunityPostSummaryResponseDto> getPosts(Long accountId, Pageable pageable) {
@@ -192,22 +192,7 @@ public class CommunityPostService {
     }
 
     private Region getPrimaryRegion(Account account) {
-        Long primaryAccountRegionId = account.getPrimaryRegionId();
-
-        if (primaryAccountRegionId == null) throw new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND);
-
-        AccountRegion accountRegion = accountRegionRepository
-                .findByAccountRegionIdAndAccount_AccountId(
-                        primaryAccountRegionId,
-                        account.getAccountId()
-                )
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_PRIMARY_REGION_NOT_FOUND));
-
-        if (!accountRegion.isVerified()) {
-            throw new BusinessException(ErrorCode.REGION_NOT_VERIFIED);
-        }
-
-        return accountRegion.getRegion();
+        return primaryRegionResolver.resolve(account);
     }
 
     private void validateOwner(CommunityPost post, Long accountId) {
@@ -216,11 +201,13 @@ public class CommunityPostService {
         }
     }
 
+    // 다른 동네 글은 없는 것으로 응답한다.
+    // 403을 주면 없는 글(404)과 구분되어, ID를 넣어보는 것만으로 타 지역 글의 존재를 알 수 있다.
     private void validateSameRegion(CommunityPost post, Account account) {
         Region myRegion = getPrimaryRegion(account);
 
         if (!post.getRegion().getRegionId().equals(myRegion.getRegionId())) {
-            throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
+            throw new NotFoundException(ErrorCode.COMMUNITY_POST_NOT_FOUND);
         }
     }
 }

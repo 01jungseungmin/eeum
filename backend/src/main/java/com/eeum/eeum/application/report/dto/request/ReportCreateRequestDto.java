@@ -5,6 +5,7 @@ import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 
@@ -17,6 +18,7 @@ public class ReportCreateRequestDto {
     private ReportTargetType targetType;
 
     @NotNull
+    @Positive
     @Schema(description = "신고 대상 ID", example = "1")
     private Long targetId;
 

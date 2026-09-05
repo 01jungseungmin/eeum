@@ -206,10 +206,31 @@ public class OwnerApprovalService {
 
     @Transactional
     public void requestReview(Long accountId) {
-        OwnerInfo ownerInfo = getOwnerInfo(accountId);
+        // 잠금 순서 account → owner_info. 관리자 승인/거절(AdminAccountService)과 같은 순서다.
+        // 잠그지 않고 읽으면 PENDING을 본 뒤 관리자 승인이 ROLE_OWNER + APPROVED를 커밋하고,
+        // 이 트랜잭션이 나중에 flush하며 상태를 PENDING으로 되돌린다. OwnerInfo에는 @Version이
+        // 없어 dirty checking이 행 전체를 덮어쓰므로 ROLE_OWNER + PENDING이 그대로 남는다.
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (ownerInfo.getApprovalStatus() == ApprovalStatus.APPROVED) {
+        // 상태 판정은 assertWritable()에 맡긴다. !isActive()를 한 덩어리로 묶으면
+        // 정지·탈퇴 계정까지 "가입 미완료"로 응답해 공개 오류 계약이 어긋난다.
+        account.assertWritable();
+
+        // 잠금을 잡은 뒤 읽는다. getOwnerInfo()로 먼저 읽으면 그 인스턴스가 영속성 컨텍스트에
+        // 남아 잠금 조회가 DB 최신 행 대신 1차 캐시를 돌려주고, 재조회의 의미가 사라진다.
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
+
+        if (ownerInfo.isApproved()) {
             throw new BusinessException(ErrorCode.OWNER_ALREADY_APPROVED);
+        }
+
+        // 재신청은 미접수·거절 상태에서만 허용한다. 이미 접수된 건을 다시 접수하면
+        // 신청 시각이 갱신돼 대기열 순서가 밀리고, 관리자 알림이 요청 횟수만큼 재발행된다.
+        // 승인·거절과 정확히 같은 판별식을 반대로 쓴다 — 심사 대기 중이면 재접수 금지.
+        if (ownerInfo.isAwaitingReview()) {
+            throw new BusinessException(ErrorCode.OWNER_REVIEW_ALREADY_REQUESTED);
         }
 
         Store store = getStore(accountId);

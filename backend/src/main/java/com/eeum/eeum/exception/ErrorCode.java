@@ -58,12 +58,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_PRIMARY_REGION_NOT_FOUND("ACCOUNT_013","대표 지역이 없습니다.",HttpStatus.NOT_FOUND),
     ACCOUNT_ALREADY_SUSPENDED("ACCOUNT_014", "이미 정지된 회원입니다", HttpStatus.CONFLICT),
     ACCOUNT_NOT_SUSPENDED("ACCOUNT_015", "정지 상태가 아닌 회원입니다", HttpStatus.CONFLICT),
+    ACCOUNT_SIGNUP_INCOMPLETE("ACCOUNT_016", "회원가입이 완료되지 않은 계정입니다", HttpStatus.FORBIDDEN),
+    ACCOUNT_ALREADY_ANONYMIZED("ACCOUNT_017", "개인정보가 파기된 계정은 복구할 수 없습니다", HttpStatus.CONFLICT),
+    ACCOUNT_ADMIN_SANCTION_NOT_ALLOWED("ACCOUNT_018", "관리자 계정에는 제재를 적용할 수 없습니다", HttpStatus.FORBIDDEN),
 
     // ===================== 사장 추가정보 기입 =====================
     OWNER_ALREADY_APPROVED( "OWNER_001","이미 승인된 사장 계정입니다.",HttpStatus.CONFLICT),
     OWNER_REVIEW_ALREADY_REQUESTED("OWNER_002","이미 입점 심사 요청이 접수되었습니다.",HttpStatus.CONFLICT),
     OWNER_CHECKLIST_NOT_COMPLETED( "OWNER_003","입점 심사 필수 항목을 모두 완료해야 합니다.",HttpStatus.BAD_REQUEST),
     OWNER_INFO_NOT_FOUND( "OWNER_004","사장 신청 정보를 찾을 수 없습니다.",HttpStatus.NOT_FOUND),
+    OWNER_REVIEW_NOT_PENDING("OWNER_005","심사 대기 중인 신청이 아닙니다.",HttpStatus.CONFLICT),
 
     // ===================== 사업자 인증 (BUSINESST) =====================
     BUSINESS_VERIFY_FAILED("BUSINESS_001", "사업자등록정보 검증에 실패했습니다.", HttpStatus.BAD_REQUEST),
@@ -175,6 +179,32 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     USED_PRODUCT_INVALID_PRICE("USED_010", "거래 유형과 가격이 맞지 않습니다", HttpStatus.BAD_REQUEST),
     USED_PRODUCT_DELETE_NOT_ALLOWED("USED_011", "예약 중인 게시글은 삭제할 수 없습니다", HttpStatus.CONFLICT),
     USED_PRODUCT_REGION_REQUIRED("USED_012", "조회할 지역을 지정해 주세요", HttpStatus.BAD_REQUEST),
+    USED_PRODUCT_NOT_HIDDEN("USED_013", "숨김 처리된 게시글이 아닙니다", HttpStatus.CONFLICT),
+    USED_PRODUCT_INVALID_PRICE_RANGE("USED_014", "최소 가격이 최대 가격보다 클 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 본인 지정, 정지·탈퇴 계정, 문의한 적 없는 상대를 모두 이 코드로 묶는다.
+    // 사유를 나누면 판매자가 임의의 계정 ID로 다른 사용자의 상태를 떠볼 수 있다.
+    USED_PRODUCT_INVALID_BUYER("USED_015", "거래 상대로 지정할 수 없는 계정입니다", HttpStatus.BAD_REQUEST),
+    // 구매자를 생략한 판매완료 도중 예약 상대가 바뀐 경우. 잠그고 검증한 계정과
+    // 실제 예약 상대가 달라지므로, 검증하지 않은 계정을 확정하지 않도록 막고 재시도하게 한다.
+    USED_PRODUCT_BUYER_CHANGED("USED_016", "예약 상대가 변경되었습니다. 다시 시도해 주세요", HttpStatus.CONFLICT),
+
+    // 커서는 정렬 키 두 개(createdAt, usedReviewId)를 함께 받아야 한다. 하나만 오면 첫 페이지와
+    // 구분할 수 없어 무한 스크롤이 같은 목록을 반복한다 — 조용히 무시하지 않고 알린다.
+    USED_REVIEW_INVALID_CURSOR("USED_017", "후기 목록 커서는 작성일시와 후기 ID를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+
+    // 게시글 목록 커서. 정렬 키 값의 형식이 정렬 필드와 맞지 않을 때도 같은 코드를 쓴다 —
+    // 클라이언트가 할 일(커서를 응답 그대로 되돌려보내기)이 같아서다.
+    USED_PRODUCT_INVALID_CURSOR("USED_018", "게시글 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+
+    // 장소명·위도·경도는 셋 다 있거나 셋 다 없어야 한다. 부분 입력은 지도에 그릴 수도,
+    // 이름만 보여줄 수도 없는 반쪽 데이터가 되므로 저장 전에 막는다.
+    USED_PRODUCT_INVALID_TRADE_LOCATION("USED_019", "거래 장소는 장소명과 좌표를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+
+    // 확정 장소는 게시글의 대략 위치와 달리 비워둘 수 없다 — "여기서 만나기로 했다"를
+    // 담는 값이라 이름과 좌표가 없으면 존재할 이유가 없다.
+    USED_TRADE_APPOINTMENT_INVALID_PLACE("USED_020", "약속 장소는 장소명과 올바른 좌표가 필요합니다", HttpStatus.BAD_REQUEST),
+    USED_TRADE_APPOINTMENT_INVALID_PARTY("USED_021", "약속 장소의 거래 당사자가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    USED_TRADE_APPOINTMENT_INVALID_TIME("USED_022", "약속 시간은 필수입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 커뮤니티 (COMMUNITY) =====================
     COMMUNITY_POST_NOT_FOUND("COMMUNITY_001", "존재하지 않는 게시글입니다", HttpStatus.NOT_FOUND),
@@ -205,6 +235,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     CHAT_ROOM_CLOSE_DENIED("CHAT_013", "채팅방 종료 권한이 없습니다", HttpStatus.FORBIDDEN),
     CHAT_PARTICIPANT_DUPLICATE("CHAT_014", "이미 처리된 채팅방 참여 요청입니다", HttpStatus.CONFLICT),
     CHAT_INVALID_REF_ID("CHAT_015", "채팅방 참조 ID가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    CHAT_SELF_INQUIRY_NOT_ALLOWED("CHAT_016", "본인 게시글에는 문의할 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 커서는 방 ID가 있어야 성립한다. 시각만 오면 같은 시각 방들 사이에서 경계를 끊지 못한다.
+    CHAT_INVALID_CURSOR("CHAT_017", "채팅방 목록 커서는 채팅방 ID를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
+    // 메시지 커서는 발신 시각과 메시지 ID를 함께 받아야 한다. 시각만 받으면 같은 시각에
+    // 도착한 메시지들 사이에서 경계를 끊지 못해 그 메시지들이 영구히 누락된다.
+    CHAT_MESSAGE_INVALID_CURSOR("CHAT_018", "메시지 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+
+    // 프론트에서 카카오 검색 결과만 고르게 막아도 API 직접 호출로 임의 좌표가 들어온다.
+    // 필수값과 좌표 범위는 서버가 반드시 확인한다.
+    CHAT_MESSAGE_INVALID_LOCATION("CHAT_019", "위치 메시지는 장소명과 올바른 좌표를 함께 보내야 합니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 리뷰 (REVIEW) =====================
     STORE_REVIEW_NOT_FOUND("REVIEW_001", "존재하지 않는 상점 리뷰입니다", HttpStatus.NOT_FOUND),
@@ -226,6 +266,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     FAVORITE_NOT_FOUND("FAVORITE_001", "존재하지 않는 찜 정보입니다", HttpStatus.NOT_FOUND),
     FAVORITE_ACCESS_DENIED("FAVORITE_002", "찜 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
     FAVORITE_ALREADY_EXISTS("FAVORITE_003", "이미 찜한 대상입니다", HttpStatus.CONFLICT),
+    FAVORITE_INVALID_PERIOD("FAVORITE_004", "조회 시작일이 종료일보다 늦을 수 없습니다", HttpStatus.BAD_REQUEST),
+    // 찜 목록 커서는 등록 시각과 찜 ID를 함께 받아야 한다. 시각만 받으면 같은 순간에 등록된
+    // 찜들 사이에서 경계를 끊지 못해 OFFSET과 같은 중복·누락이 재현된다.
+    FAVORITE_INVALID_CURSOR("FAVORITE_005", "찜 목록 커서 값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 알림 (NOTIFICATION) =====================
     NOTIFICATION_NOT_FOUND("NOTIFICATION_001", "존재하지 않는 알림입니다", HttpStatus.NOT_FOUND),

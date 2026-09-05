@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.ai.dto.request.AiLocalMatchConditionRequestDto;
 import com.eeum.eeum.application.ai.dto.request.AiOwnerMetricInputRequestDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -28,19 +30,8 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -57,33 +48,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * - 여러 계정(주문 고객/찜 고객)의 실데이터 기반 대상 고객수 집계 쿼리
  * - AiPlanPaymentFailureRecorder의 REQUIRES_NEW 분리 커밋이 호출부 롤백에도 살아남는지
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class AiExposureAndMetricPersistenceIntegrationTest {
+class AiExposureAndMetricPersistenceIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
 
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
 
     private final AiExposureCommandExecutor aiExposureCommandExecutor;
     private final AiOwnerMetricCommandExecutor aiOwnerMetricCommandExecutor;
@@ -133,7 +102,6 @@ class AiExposureAndMetricPersistenceIntegrationTest {
         favoriteRepository.deleteAll();
         orderRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     // ──────────────────── AiExposureCommandExecutor ────────────────────

@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.notification.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.notification.dto.request.NotificationSettingsUpdateRequestDto;
 import com.eeum.eeum.application.notification.dto.response.UnreadCountResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -14,19 +16,8 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,33 +29,11 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class NotificationConcurrencyIntegrationTest {
+class NotificationConcurrencyIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
 
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
 
     private final NotificationSettingsService settingsService;
     private final UnreadCountService unreadCountService;
@@ -88,7 +57,6 @@ class NotificationConcurrencyIntegrationTest {
         Long accountId = account != null ? account.getAccountId() : null;
         notificationRepository.deleteAll();
         settingsRepository.deleteAll();
-        accountRepository.deleteAll();
         if (accountId != null) {
             redisTemplate.delete("unread:account:" + accountId);
             redisTemplate.delete("unread:category:" + accountId);
@@ -143,12 +111,13 @@ class NotificationConcurrencyIntegrationTest {
 
         List<Runnable> callbacks = new ArrayList<>();
         for (int i = 0; i < 12; i++) {
-            callbacks.add(switch (i % 4) {
+            Runnable callback = switch (i % 4)  {
                 case 0 -> () -> unreadCountService.increment(accountId);
                 case 1 -> () -> unreadCountService.decrement(accountId);
                 case 2 -> () -> unreadCountService.clear(accountId);
                 default -> () -> unreadCountService.refreshFromDb(accountId);
-            });
+            };
+            callbacks.add(callback);
         }
 
         ConcurrentLinkedQueue<Throwable> failures = runConcurrently(callbacks);

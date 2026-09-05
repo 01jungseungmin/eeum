@@ -23,11 +23,23 @@ public class ChatRoomDetailResponseDto {
     private final int participantCount;
     private final List<ChatParticipantResponseDto> participants;
 
+    @Schema(description = "중고 문의방이면 대상 게시글 요약. 그 외 방에서는 null")
+    private final UsedProductChatSummaryDto usedProduct;
+
     public static ChatRoomDetailResponseDto of(
             ChatRoom room,
             List<ChatParticipantResponseDto> participants
     ) {
+        return of(room, participants, null);
+    }
+
+    public static ChatRoomDetailResponseDto of(
+            ChatRoom room,
+            List<ChatParticipantResponseDto> participants,
+            UsedProductChatSummaryDto usedProduct
+    ) {
         return ChatRoomDetailResponseDto.builder()
+                .usedProduct(usedProduct)
                 .roomId(room.getChatroomId())
                 .type(room.getType())
                 .name(room.getName())

@@ -35,7 +35,6 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
 
     List<EventProduct> findByProduct_Store_StoreId(Long storeId);
 
-    void deleteByProduct_ProductId(Long productId);
 
 
     // 특정 상품의 현재 진행 중인 이벤트 조회.
@@ -95,9 +94,16 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
     @Query("select ep from EventProduct ep where ep.eventProductId = :eventProductId")
     Optional<EventProduct> findByIdWithPessimisticLock(@Param("eventProductId") Long eventProductId);
 
-    // 만료 시각이 지난 ACTIVE 이벤트 상품을 일괄 ENDED 처리 (스케줄러 전용)
+    // 만료 시각이 지난 ACTIVE 이벤트 상품을 일괄 ENDED 처리 (스케줄러 전용).
+    // version도 함께 올린다 — 올리지 않으면 만료 전에 EventProduct를 읽어둔 요청이
+    // 나중에 저장할 때 낙관적 락에 걸리지 않아 ENDED가 ACTIVE로 되돌아간다.
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE EventProduct ep SET ep.status = :ended WHERE ep.status = :active AND ep.endAt <= :now")
+    @Query("""
+        UPDATE EventProduct ep
+        SET ep.status = :ended,
+            ep.version = ep.version + 1
+        WHERE ep.status = :active AND ep.endAt <= :now
+        """)
     int bulkEndExpiredEvents(
             @Param("active") EventProductStatus active,
             @Param("ended") EventProductStatus ended,

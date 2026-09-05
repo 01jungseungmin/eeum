@@ -194,4 +194,19 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
         ).asc();
     }
 
+
+    // 공개 노출 가능한 상점인지 — 찜 등록·공개 카운트에서 사용한다.
+    @Override
+    public boolean isPubliclyVisible(Long storeId) {
+        Integer found = queryFactory
+                .selectOne()
+                .from(store)
+                .join(store.account, account)
+                .where(
+                        store.storeId.eq(storeId),
+                        StoreVisibilityPredicate.publiclyVisible(store, account))
+                .fetchFirst();
+
+        return found != null;
+    }
 }

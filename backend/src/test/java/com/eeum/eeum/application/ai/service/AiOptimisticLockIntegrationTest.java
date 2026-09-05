@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.ai.dto.request.AiLocalMatchConditionRequestDto;
 import com.eeum.eeum.application.ai.scheduler.AiScheduledMessageProcessor;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -18,21 +20,10 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.OptimisticLockingFailureException;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.LocalDateTime;
 
@@ -47,33 +38,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 바깥 TX가 엔티티를 읽은 뒤, 안쪽 TX(다른 요청 역할)가 먼저 커밋해 version을 올리면
  * 바깥 TX의 커밋은 OptimisticLockingFailureException으로 거부되어야 한다.
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class AiOptimisticLockIntegrationTest {
+class AiOptimisticLockIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
 
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
 
     private final AiExposureCommandExecutor aiExposureCommandExecutor;
     private final AiScheduledMessageProcessor aiScheduledMessageProcessor;
@@ -102,7 +71,6 @@ class AiOptimisticLockIntegrationTest {
         aiExposureStatusRepository.deleteAll();
         aiGeneratedMessageRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     private TransactionTemplate requiresNew() {

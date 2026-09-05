@@ -5,5 +5,6 @@ public enum ReportTargetType {
     STORE_REVIEW,
     COMMUNITY_POST,
     COMMUNITY_COMMENT,
-    ACCOUNT
+    ACCOUNT,
+    USED_PRODUCT
 }

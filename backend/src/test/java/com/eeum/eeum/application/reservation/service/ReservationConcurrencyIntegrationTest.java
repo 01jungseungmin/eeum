@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.reservation.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
@@ -23,18 +25,7 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -57,33 +48,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       실제로 작동해 두 요청 중 하나만 성공하는지 검증</li>
  * </ol>
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class ReservationConcurrencyIntegrationTest {
+class ReservationConcurrencyIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
 
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
 
     private final VisitReservationService visitReservationService;
     private final StoreTableService storeTableService;
@@ -148,7 +117,6 @@ class ReservationConcurrencyIntegrationTest {
         storeBusinessHourRepository.deleteAll();
         storeRepository.deleteAll();
         notificationRepository.deleteAll(); // account FK 참조 → account 삭제 전 먼저 정리
-        accountRepository.deleteAll();
     }
 
     // ──────────────── 시나리오 1: configureTablesInternal dirty-marking ────────────────

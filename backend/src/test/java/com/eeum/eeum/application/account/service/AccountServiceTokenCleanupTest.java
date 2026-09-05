@@ -5,16 +5,19 @@ import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +29,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,10 +46,11 @@ class AccountServiceTokenCleanupTest {
     @Mock AccountRegionRepository accountRegionRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock TokenService tokenService;
-    @Mock OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    @Mock com.eeum.eeum.security.jwt.JwtProvider jwtProvider;
     @Mock AccountMapper accountMapper;
     @Mock OwnerApplicationMapper ownerApplicationMapper;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock AccountWithdrawalProcessor accountWithdrawalProcessor;
 
     // ─────────────────── changePassword ───────────────────
 
@@ -62,8 +68,9 @@ class AccountServiceTokenCleanupTest {
         when(request.getNewPassword()).thenReturn(newPass);
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(false);
         when(account.getPassword()).thenReturn("encodedCurrent");
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
@@ -75,8 +82,8 @@ class AccountServiceTokenCleanupTest {
 
         // then: tokenService 직접 호출 없이 이벤트만 발행
         verify(account).changePassword("encodedNew");
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
+        verify(tokenService, never()).deleteReAuthToken(any());
         verify(tokenService, never()).deleteRefreshToken(any());
     }
 
@@ -90,8 +97,9 @@ class AccountServiceTokenCleanupTest {
         // getNewPassword()는 비밀번호 불일치 분기에서 호출되지 않음 — stub 불필요
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(false);
         when(account.getPassword()).thenReturn("encoded");
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
@@ -115,7 +123,10 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("reauth");
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(true);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
+        doThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN)).when(account).assertWritable();
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
         // when & then
@@ -127,92 +138,84 @@ class AccountServiceTokenCleanupTest {
     // ─────────────────── withdraw ───────────────────
 
     @Test
-    void withdraw_성공_시_이벤트로_reAuth_refresh_토큰_정리() {
+    void withdraw_성공_시_이벤트로_refresh_토큰_정리() {
         // given
         Long accountId = 1L;
-        WithdrawRequestDto request = mock(WithdrawRequestDto.class);
-        when(request.getReAuthToken()).thenReturn("reauth");
-
-        Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(account.getRole()).thenReturn(AccountRole.ROLE_USER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        Account account = givenActiveAccount(accountId);
 
         // when
-        accountService.withdraw(accountId, request);
+        accountService.withdraw(accountId, withdrawRequest());
 
         // then
-        verify(account).withdraw();
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
-        verify(tokenService, never()).consumeReAuthToken(any());
+        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
+        verify(tokenService, never()).deleteReAuthToken(any());
         verify(tokenService, never()).deleteRefreshToken(any());
+    }
+
+    @Test
+    void withdraw는_공통_탈퇴_절차에_위임하고_그_뒤에_토큰을_정리한다() {
+        // given — 상점 비활성화·탈퇴 처리·찜 정리는 관리자 강제 탈퇴와 같은 절차를 써야 한다.
+        // 두 경로에 따로 적어두면 한쪽만 고쳐져 찜 카운트가 남는 식으로 어긋난다.
+        Long accountId = 1L;
+        Account account = givenActiveAccount(accountId);
+
+        // when
+        accountService.withdraw(accountId, withdrawRequest());
+
+        // then — 토큰 정리 이벤트는 뒷정리가 끝난 뒤에 발행돼야 롤백 시 토큰이 살아남는다
+        InOrder inOrder = inOrder(accountWithdrawalProcessor, eventPublisher);
+        inOrder.verify(accountWithdrawalProcessor).process(account);
+        inOrder.verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
     }
 
     @Test
     void withdraw_탈퇴_계정_접근_시_이벤트_미발행() {
         // given
         Long accountId = 1L;
-        WithdrawRequestDto request = mock(WithdrawRequestDto.class);
-        when(request.getReAuthToken()).thenReturn("reauth");
-
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
+        doThrow(new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN)).when(account).assertWritable();
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
 
         // when & then
-        assertThatThrownBy(() -> accountService.withdraw(accountId, request))
+        assertThatThrownBy(() -> accountService.withdraw(accountId, withdrawRequest()))
                 .isInstanceOf(BusinessException.class);
 
         // DB 롤백 시나리오: 계정은 ACTIVE, 토큰은 유지되어야 함
         verify(eventPublisher, never()).publishEvent(any());
-        verify(account, never()).withdraw();
+        verify(accountWithdrawalProcessor, never()).process(any());
     }
 
     @Test
-    void withdraw_ROLE_OWNER_계정_탈퇴_시_deactivateForWithdrawal_호출_후_이벤트_발행() {
+    void withdraw_뒷정리_실패_시_이벤트_미발행() {
         // given
         Long accountId = 5L;
-        WithdrawRequestDto request = mock(WithdrawRequestDto.class);
-        when(request.getReAuthToken()).thenReturn("reauth");
-
-        Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(account.getRole()).thenReturn(AccountRole.ROLE_OWNER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        // when
-        accountService.withdraw(accountId, request);
-
-        // then: deactivateForWithdrawal 먼저 호출, 그 다음 withdraw 및 이벤트 발행
-        verify(ownerStoreWithdrawalService).deactivateForWithdrawal(accountId);
-        verify(account).withdraw();
-        verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.reAuthAndRefresh(accountId));
-    }
-
-    @Test
-    void withdraw_ROLE_OWNER_deactivateForWithdrawal_예외_시_withdraw_미호출_이벤트_미발행() {
-        // given
-        Long accountId = 5L;
-        WithdrawRequestDto request = mock(WithdrawRequestDto.class);
-        when(request.getReAuthToken()).thenReturn("reauth");
-
-        Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
-        when(account.getRole()).thenReturn(AccountRole.ROLE_OWNER);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
+        Account account = givenActiveAccount(accountId);
         doThrow(new RuntimeException("상점 비활성화 실패"))
-                .when(ownerStoreWithdrawalService).deactivateForWithdrawal(accountId);
+                .when(accountWithdrawalProcessor).process(account);
 
         // when & then
-        assertThatThrownBy(() -> accountService.withdraw(accountId, request))
+        assertThatThrownBy(() -> accountService.withdraw(accountId, withdrawRequest()))
                 .isInstanceOf(RuntimeException.class);
 
-        verify(account, never()).withdraw();
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    private Account givenActiveAccount(Long accountId) {
+        Account account = mock(Account.class);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        return account;
+    }
+
+    private WithdrawRequestDto withdrawRequest() {
+        WithdrawRequestDto request = mock(WithdrawRequestDto.class);
+        when(request.getReAuthToken()).thenReturn("reauth");
+        return request;
     }
 
     // ─────────────────── changePassword - reAuthToken 실패 guard ───────────────────
@@ -225,7 +228,7 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("invalid-reauth");
 
         doThrow(new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN))
-                .when(tokenService).validateReAuthToken(accountId, "invalid-reauth");
+                .when(tokenService).consumeReAuthToken(accountId, "invalid-reauth");
 
         // when & then
         assertThatThrownBy(() -> accountService.changePassword(accountId, request))
@@ -245,8 +248,9 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("reauth");
 
         Account account = mock(Account.class);
-        when(account.isWithdrawn()).thenReturn(false);
-        when(account.isActive()).thenReturn(true);
+        // 세대 검사는 이 테스트의 관심사가 아니다 — 현재 세대의 토큰으로 본다.
+        // 세대 판정 자체는 AccountTokenInvalidationTest가 고정한다.
+        lenient().when(account.isTokenVersionCurrent(any())).thenReturn(true);
         when(account.isOAuthAccount()).thenReturn(true);
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
 
@@ -269,7 +273,7 @@ class AccountServiceTokenCleanupTest {
         when(request.getReAuthToken()).thenReturn("invalid-reauth");
 
         doThrow(new BusinessException(ErrorCode.AUTH_INVALID_REAUTH_TOKEN))
-                .when(tokenService).validateReAuthToken(accountId, "invalid-reauth");
+                .when(tokenService).consumeReAuthToken(accountId, "invalid-reauth");
 
         // when & then
         assertThatThrownBy(() -> accountService.withdraw(accountId, request))

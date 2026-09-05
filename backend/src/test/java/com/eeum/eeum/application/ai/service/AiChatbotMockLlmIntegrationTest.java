@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.ai.service;
 
+import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
+import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.ai.dto.request.AiChatMessageRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiChatResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -21,17 +23,6 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestConstructor;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -42,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * AI 챗봇 전체 흐름 통합 테스트 — ai.provider=mock으로 LLM 라우터가 MockAiClient만 사용하게 해서
+ * AI 챗봇 전체 흐름 통합 테스트 — ai.provider=mock(application-test.yml)으로 LLM 라우터가 MockAiClient만 사용하게 해서
  * 외부 API 호출 없이 실제 MySQL/Redis Testcontainer 환경에서 실행.
  *
  * 단위 테스트(Mock)로는 검증 불가한 지점만 다룬다:
@@ -51,34 +42,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   대화 기록이 저장되는 흐름 (LazyInitializationException 없이 동작해야 함)
  * - 플랜 게이팅(FREE 차단)과 월 사용량 한도(BASIC 30회)가 실제 DB 카운트 + Redis 락으로 동작하는지
  */
-@SpringBootTest
-@Testcontainers
 @EnabledIfDockerAvailable
-@ActiveProfiles("test")
-@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
-class AiChatbotMockLlmIntegrationTest {
+class AiChatbotMockLlmIntegrationTest extends IntegrationTestSupport {
 
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("eeum")
-            .withUsername("test")
-            .withPassword("test");
 
-    @Container
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-        registry.add("ai.provider", () -> "mock"); // 외부 LLM 호출 차단 — MockAiClient 단독 체인
-    }
 
     private final AiChatbotService aiChatbotService;
     private final AccountRepository accountRepository;
@@ -107,7 +75,6 @@ class AiChatbotMockLlmIntegrationTest {
         aiUsageLogRepository.deleteAll();
         aiPlanSubscriptionRepository.deleteAll();
         storeRepository.deleteAll();
-        accountRepository.deleteAll();
     }
 
     private void subscribeBasic() {

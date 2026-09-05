@@ -34,7 +34,8 @@ public class ChatMessageResponseDto {
                 .messageId(message.getChatmessageId())
                 .roomId(message.getChatRoom().getChatroomId())
                 .senderAccountId(sender.getAccountId())
-                .senderName(sender.getName())
+                // 실명이 아니라 표시명이다 — 문의방은 모르는 사람과 연결된다
+                .senderName(sender.getDisplayName())
                 .senderProfileImageUrl(sender.getProfileImageUrl())
                 .content(deleted ? DELETED_PLACEHOLDER : message.getContent())
                 .imageUrl(deleted ? null : message.getImageUrl())
