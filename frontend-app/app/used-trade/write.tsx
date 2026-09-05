@@ -1,4 +1,4 @@
-import React, { useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { Text } from '../../components/CustomText';
 import * as ImagePicker from 'expo-image-picker';
 import { usedApi, UsedProductPriceType } from '../../api/used';
 import { USED_CATEGORIES } from '../../constants/usedCategories';
+import { categoryApi } from '../../api/category';
 
 export default function UsedTradeWriteScreen() {
   const router = useRouter();
@@ -31,7 +32,24 @@ export default function UsedTradeWriteScreen() {
   };
   const formattedPrice = price ? Number(price).toLocaleString() : '';
 
-  const selectableCategories = USED_CATEGORIES.filter(c => c.id !== null);
+  // 카테고리는 서버(category 테이블 type=USED)에서 받는다.
+  // 조회에 실패하면 상수 목록으로 떨어뜨려 글 작성 자체가 막히지 않게 한다.
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
+    USED_CATEGORIES.filter(c => c.id !== null).map(c => ({ id: c.id as number, name: c.name }))
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    categoryApi.getCategories('USED')
+      .then(list => {
+        if (cancelled || list.length === 0) return;
+        setCategories(list.map(c => ({ id: c.categoryId, name: c.name })));
+      })
+      .catch(err => console.warn('카테고리 조회 실패, 기본 목록 사용:', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  const selectableCategories = categories;
   const selectedCategoryName = selectableCategories.find(c => c.id === categoryId)?.name || '카테고리를 선택해주세요';
 
   const pickImages = async () => {
@@ -253,6 +271,16 @@ export default function UsedTradeWriteScreen() {
           <Text style={styles.tipText}>3. 계좌이체는 신중하게 진행해주세요.</Text>
         </View>
 
+        <TouchableOpacity
+          style={[styles.bottomSubmit, isLoading && styles.bottomSubmitDisabled]}
+          onPress={handleSubmit}
+          disabled={isLoading}
+        >
+          {isLoading
+            ? <ActivityIndicator size="small" color="#FFF" />
+            : <Text style={styles.bottomSubmitText}>완료</Text>}
+        </TouchableOpacity>
+
       </ScrollView>
 
       <Modal visible={isCategoryModalOpen} transparent animationType="fade" onRequestClose={() => setIsCategoryModalOpen(false)}>
@@ -318,6 +346,9 @@ const styles = StyleSheet.create({
   tipContainer: { backgroundColor: '#F5F5F5', borderRadius: 8, padding: 16, marginHorizontal: 20, marginTop: 10 },
   tipTitle: { fontSize: 13, fontWeight: 'bold', color: '#333', marginBottom: 10 },
   tipText: { fontSize: 12, color: '#666', marginBottom: 4 },
+  bottomSubmit: { backgroundColor: '#00A859', borderRadius: 8, height: 52, justifyContent: 'center', alignItems: 'center', marginHorizontal: 20, marginTop: 24 },
+  bottomSubmitDisabled: { backgroundColor: '#9ED9BD' },
+  bottomSubmitText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingVertical: 10, paddingBottom: 30 },
   modalOption: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 24 },

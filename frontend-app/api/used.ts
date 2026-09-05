@@ -36,6 +36,34 @@ export interface CreateUsedProductReq {
   price: number;
 }
 
+export interface UsedProductImage {
+  imageId: number;
+  imageUrl: string;
+  displayOrder: number;
+  thumbnail: boolean;
+}
+
+export interface UsedProductDetail {
+  usedProductId: number;
+  sellerId: number;
+  sellerNickname: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  regionId: number | null;
+  regionName: string | null;
+  title: string;
+  content: string;
+  priceType: UsedProductPriceType;
+  price: number | null;
+  status: UsedProductStatus;
+  hidden: boolean;
+  viewCount: number;
+  favoriteCount: number;
+  createdAt: string;
+  modifiedAt: string;
+  images: UsedProductImage[];
+}
+
 export const usedApi = {
   // 동네 중고 게시글 목록 조회
   getUsedProducts: async (params: UsedProductListParams = {}) => {
@@ -47,6 +75,12 @@ export const usedApi = {
       // status는 ?status=A&status=B 형태로 반복해야 서버 List 바인딩에 맞는다.
       paramsSerializer: { indexes: null },
     });
+  },
+
+  // 중고 게시글 상세 조회 (비회원도 조회 가능, 본인 글이 아니면 조회수가 오른다)
+  getUsedProduct: async (usedProductId: number): Promise<UsedProductDetail> => {
+    const res = await client.get(`/used/${usedProductId}`);
+    return res.data.data;
   },
 
   createUsedProduct: async (data: CreateUsedProductReq) => {
