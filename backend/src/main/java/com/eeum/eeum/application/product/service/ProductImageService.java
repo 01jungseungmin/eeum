@@ -125,7 +125,9 @@ public class ProductImageService {
         ProductImage image = getImageWithProductCheck(productId, imageId);
 
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
         productImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
 
         // 대표 이미지 삭제 시 다음 이미지를 대표로 설정
         if (wasThumbnail) {

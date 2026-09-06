@@ -85,9 +85,11 @@ public class AccountService {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_NICKNAME);
         }
 
-        if (request.getProfileImageUrl() != null) {
+        if (request.getProfileImageUrl() != null
+                && !request.getProfileImageUrl().equals(account.getProfileImageUrl())) {
             fileStorageService.requireAttachableObject(
                     accountId, FileUploadPurpose.PROFILE, request.getProfileImageUrl());
+            fileStorageService.scheduleAttachedObjectCleanup(account.getProfileImageUrl());
         }
 
         account.updateInfo(request.getNickname(), request.getProfileImageUrl());

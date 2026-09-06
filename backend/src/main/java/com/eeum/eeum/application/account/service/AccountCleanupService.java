@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.service.SettlementAccountDeleteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
@@ -31,6 +32,7 @@ public class AccountCleanupService {
     private final OwnerInfoRepository ownerInfoRepository;
     private final SettlementAccountDeleteService settlementAccountDeleteService;
     private final FavoriteService favoriteService;
+    private final FileStorageService fileStorageService;
 
     // 탈퇴 후 유예 기간이 지난 계정의 개인정보를 파기한다.
     // 대상 조회만 하고 파기는 계정별 트랜잭션으로 넘긴다 — 한 계정의 실패가 회차 전체를 되돌리면
@@ -76,6 +78,7 @@ public class AccountCleanupService {
         // 익명화를 먼저 반영한다. 아래 정리 작업에는 영속성 컨텍스트를 비우는
         // bulk 연산(@Modifying(clearAutomatically))이 섞여 있어, 나중에 호출하면
         // 엔티티가 분리된 뒤라 dirty checking 대상에서 빠져 파기가 통째로 유실된다.
+        fileStorageService.scheduleAttachedObjectCleanup(account.getProfileImageUrl());
         account.anonymize();
         accountRepository.flush();
 

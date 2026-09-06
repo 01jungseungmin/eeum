@@ -71,9 +71,18 @@ public class FileObject extends BaseEntity {
 
     public void attach() {
         if (status == FileObjectStatus.CLEANUP_PENDING) {
-            return;
+            throw new IllegalStateException("정리 대상으로 전환된 파일은 연결할 수 없습니다");
+        }
+        if (status == FileObjectStatus.ATTACHED) {
+            throw new IllegalStateException("이미 연결된 파일입니다");
         }
         status = FileObjectStatus.ATTACHED;
+    }
+
+    public void detach() {
+        if (status == FileObjectStatus.ATTACHED) {
+            status = FileObjectStatus.CLEANUP_PENDING;
+        }
     }
 
     public boolean claimCleanup() {

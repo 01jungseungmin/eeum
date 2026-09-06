@@ -162,6 +162,7 @@ class UsedProductImageServiceTest {
 
         // then
         verify(usedProductImageRepository).delete(thumbnail);
+        verify(fileStorageService).scheduleAttachedObjectCleanup("a.jpg");
         assertThat(second.isThumbnail()).isTrue();
         assertThat(third.isThumbnail()).isFalse();
     }

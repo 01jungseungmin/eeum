@@ -97,6 +97,7 @@ class CommunityPostImageServiceTest {
 
         verify(postRepository).findWithAccountByPostIdForUpdate(postId);
         verify(imageRepository).delete(image);
+        verify(fileStorageService).scheduleAttachedObjectCleanup("https://example.com/delete.jpg");
     }
 
     private CommunityPost ownedPost(Long accountId) {

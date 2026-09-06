@@ -37,9 +37,9 @@ public class FileController {
     private final FileStorageService fileStorageService;
 
     @PostMapping("/presigned-url")
-    @Operation(summary = "이미지 Presigned PUT URL 발급",
-            description = "프론트는 응답 uploadUrl에 실제 이미지 바이트를 PUT하고, headers의 Content-Type을 그대로 넣어야 합니다. "
-                    + "PUT 성공 후 /files/confirm으로 업로드를 확정하고, confirm 응답의 objectKey를 기존 이미지 등록 API에 전달합니다.")
+    @Operation(summary = "이미지 Presigned POST 정책 발급",
+            description = "프론트는 응답 uploadUrl에 multipart/form-data POST를 보내고, formFields의 모든 항목을 form field로 넣은 뒤 file field에 실제 이미지를 넣어야 합니다. "
+                    + "POST 성공 후 /files/confirm으로 업로드를 확정하고, confirm 응답의 objectKey를 기존 이미지 등록 API에 전달합니다.")
     public ResponseEntity<ApiResponse<FilePresignedUrlResponseDto>> createPresignedUploadUrl(
             @Valid @RequestBody FilePresignedUrlRequestDto request
     ) {

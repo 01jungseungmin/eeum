@@ -302,8 +302,15 @@ public class StoreReviewService {
         StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
+        List<String> imageUrls = storeReviewImageRepository
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId)
+                .stream()
+                .map(StoreReviewImage::getImageUrl)
+                .toList();
+
         // 연관 이미지 / 답글 먼저 삭제
         storeReviewImageRepository.deleteAllByStoreReview_StorereviewId(reviewId);
+        imageUrls.forEach(fileStorageService::scheduleAttachedObjectCleanup);
         storeReviewReplyRepository.deleteByStoreReview_StorereviewId(reviewId);
         storeReviewRepository.delete(review);
         storeReviewRepository.flush();
@@ -366,7 +373,9 @@ public class StoreReviewService {
         }
 
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
         storeReviewImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
 
         if (wasThumbnail) {
             storeReviewImageRepository

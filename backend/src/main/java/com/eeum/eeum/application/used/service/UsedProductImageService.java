@@ -82,8 +82,10 @@ public class UsedProductImageService {
 
         UsedProductImage image = getImageOfProductOrThrow(usedProductId, imageId);
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
 
         usedProductImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
         // 아래에서 남은 목록을 다시 읽으므로, 삭제를 DB에 먼저 반영해야 지운 행이 딸려오지 않는다.
         usedProductImageRepository.flush();
 

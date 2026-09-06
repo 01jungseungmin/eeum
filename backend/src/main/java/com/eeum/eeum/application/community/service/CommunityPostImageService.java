@@ -69,7 +69,9 @@ public class CommunityPostImageService {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
 
+        String imageUrl = image.getImageUrl();
         imageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
         imageRepository.flush();
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);

@@ -29,12 +29,22 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 
 import java.time.Instant;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.nio.charset.StandardCharsets;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -52,10 +62,14 @@ public class FileStorageService {
             "image/png", "png",
             "image/webp", "webp"
     );
+    private static final DateTimeFormatter AWS_DATE = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter AWS_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+            .withZone(ZoneOffset.UTC);
 
     private final S3StorageProperties properties;
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
+    private final AwsCredentialsProvider awsCredentialsProvider;
     private final RateLimitService rateLimitService;
     private final FileObjectLifecycleService fileObjectLifecycleService;
 
@@ -79,34 +93,81 @@ public class FileStorageService {
                 UUID.randomUUID().toString()
         );
 
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(properties.bucket())
-                .key(objectKey)
-                // 이 값은 서명에 포함된다. 프론트는 반드시 같은 Content-Type으로 PUT해야 한다.
-                .contentType(contentType)
-                .build();
-
         try {
-            PresignedPutObjectRequest presignedRequest = s3Presigner.presignPutObject(
-                    PutObjectPresignRequest.builder()
-                            .signatureDuration(properties.uploadUrlExpiration())
-                            .putObjectRequest(putObjectRequest)
-                            .build()
-            );
+            Instant now = Instant.now();
+            Map<String, String> formFields = createPresignedPostFields(objectKey, contentType, now);
 
             return new FilePresignedUrlResponseDto(
                     objectKey,
-                    presignedRequest.url().toString(),
-                    Map.of("Content-Type", contentType),
-                    presignedRequest.expiration()
+                    "https://" + properties.bucket() + ".s3." + properties.region() + ".amazonaws.com/",
+                    formFields,
+                    "POST",
+                    now.plus(properties.uploadUrlExpiration())
             );
         } catch (SdkException exception) {
             throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR, "S3 업로드 URL 발급에 실패했습니다", exception);
         }
     }
 
+    private Map<String, String> createPresignedPostFields(String objectKey, String contentType, Instant now) {
+        AwsCredentials credentials = awsCredentialsProvider.resolveCredentials();
+        String date = AWS_DATE.format(now);
+        String timestamp = AWS_TIMESTAMP.format(now);
+        String credential = credentials.accessKeyId() + "/" + date + "/" + properties.region() + "/s3/aws4_request";
+        Instant expiration = now.plus(properties.uploadUrlExpiration());
+
+        StringBuilder conditions = new StringBuilder()
+                .append("[{\"bucket\":\"").append(properties.bucket()).append("\"}")
+                .append(",{\"key\":\"").append(objectKey).append("\"}")
+                .append(",{\"Content-Type\":\"").append(contentType).append("\"}")
+                .append(",[\"content-length-range\",1,").append(MAX_IMAGE_SIZE_BYTES).append("]")
+                .append(",{\"x-amz-algorithm\":\"AWS4-HMAC-SHA256\"}")
+                .append(",{\"x-amz-credential\":\"").append(credential).append("\"}")
+                .append(",{\"x-amz-date\":\"").append(timestamp).append("\"}");
+
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("key", objectKey);
+        fields.put("Content-Type", contentType);
+        fields.put("x-amz-algorithm", "AWS4-HMAC-SHA256");
+        fields.put("x-amz-credential", credential);
+        fields.put("x-amz-date", timestamp);
+        if (credentials instanceof AwsSessionCredentials sessionCredentials) {
+            fields.put("x-amz-security-token", sessionCredentials.sessionToken());
+            conditions.append(",{\"x-amz-security-token\":\"")
+                    .append(sessionCredentials.sessionToken()).append("\"}");
+        }
+        String policy = "{\"expiration\":\"" + expiration + "\",\"conditions\":" + conditions + "]}";
+        String encodedPolicy = Base64.getEncoder().encodeToString(policy.getBytes(StandardCharsets.UTF_8));
+        fields.put("policy", encodedPolicy);
+        fields.put("x-amz-signature", signPostPolicy(credentials.secretAccessKey(), date, encodedPolicy));
+        return Map.copyOf(fields);
+    }
+
+    private String signPostPolicy(String secretAccessKey, String date, String encodedPolicy) {
+        try {
+            byte[] dateKey = hmac(("AWS4" + secretAccessKey).getBytes(StandardCharsets.UTF_8), date);
+            byte[] regionKey = hmac(dateKey, properties.region());
+            byte[] serviceKey = hmac(regionKey, "s3");
+            byte[] signingKey = hmac(serviceKey, "aws4_request");
+            byte[] signature = hmac(signingKey, encodedPolicy);
+            StringBuilder hex = new StringBuilder(signature.length * 2);
+            for (byte value : signature) {
+                hex.append(String.format("%02x", value));
+            }
+            return hex.toString();
+        } catch (Exception exception) {
+            throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR, "S3 업로드 정책 생성에 실패했습니다", exception);
+        }
+    }
+
+    private byte[] hmac(byte[] key, String value) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(key, "HmacSHA256"));
+        return mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
+    }
+
     // 프론트가 S3 PUT 직후 호출한다. 임시 객체를 검사한 뒤 최종 key로 복사한다.
-    // 최종 key에는 Presigned PUT URL을 발급하지 않으므로, 이후 객체를 덮어쓸 수 없다.
+    // 최종 key에는 Presigned POST 정책을 발급하지 않으므로, 이후 객체를 덮어쓸 수 없다.
     public FileUploadConfirmResponseDto confirmUpload(Long accountId, FileUploadConfirmRequestDto request) {
         assertConfigured();
         String temporaryObjectKey = requireOwnedTemporaryObjectKey(accountId, request.objectKey());
@@ -166,7 +227,10 @@ public class FileStorageService {
             throw exception;
         } catch (S3Exception exception) {
             if (exception.statusCode() == 404) {
-                throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+                return fileObjectLifecycleService.findReusableConfirmedObjectKey(
+                                accountId, purpose, temporaryObjectKey)
+                        .map(FileUploadConfirmResponseDto::new)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.FILE_NOT_FOUND));
             }
             throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR, "S3 업로드 확인에 실패했습니다", exception);
         } catch (SdkException exception) {
@@ -201,6 +265,13 @@ public class FileStorageService {
             throw new ForbiddenException(ErrorCode.FILE_ACCESS_DENIED);
         }
         fileObjectLifecycleService.attach(accountId, purpose, objectKey);
+    }
+
+    // 이미지 행이 삭제된 같은 트랜잭션에서 상태만 정리한다. 실제 S3 I/O는 스케줄러가 커밋 후 수행한다.
+    public void scheduleAttachedObjectCleanup(String objectKey) {
+        if (isFinalObjectKey(objectKey)) {
+            fileObjectLifecycleService.detach(objectKey);
+        }
     }
 
     private boolean isLegacyHttpsUrl(String value) {

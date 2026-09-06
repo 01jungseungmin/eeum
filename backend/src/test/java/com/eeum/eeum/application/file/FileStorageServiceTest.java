@@ -19,14 +19,18 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Base64;
 import java.util.concurrent.atomic.AtomicReference;
 
 import software.amazon.awssdk.core.ResponseBytes;
@@ -36,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -51,6 +56,9 @@ class FileStorageServiceTest {
 
     @Mock
     private S3Presigner s3Presigner;
+
+    @Mock
+    private AwsCredentialsProvider awsCredentialsProvider;
 
     @Mock
     private RateLimitService rateLimitService;
@@ -76,30 +84,27 @@ class FileStorageServiceTest {
                         Duration.ofMinutes(10), Duration.ofMinutes(10)),
                 s3Client,
                 s3Presigner,
+                awsCredentialsProvider,
                 rateLimitService,
                 fileObjectLifecycleService
         );
+        lenient().when(awsCredentialsProvider.resolveCredentials())
+                .thenReturn(AwsBasicCredentials.create("test-access-key", "test-secret-key"));
     }
 
     @Test
     void 허용된_이미지면_계정_소유_경로의_Presigned_PUT_URL을_발급한다() throws Exception {
-        given(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
-                .willReturn(presignedPutObjectRequest);
-        given(presignedPutObjectRequest.url()).willReturn(new URL("https://example.com/upload"));
-        given(presignedPutObjectRequest.expiration()).willReturn(Instant.parse("2026-09-06T10:00:00Z"));
-
         FilePresignedUrlResponseDto result = fileStorageService.createPresignedUploadUrl(
                 42L,
                 new FilePresignedUrlRequestDto(FileUploadPurpose.USED, "image/webp", 1024L)
         );
 
-        ArgumentCaptor<PutObjectPresignRequest> captor = ArgumentCaptor.forClass(PutObjectPresignRequest.class);
-        verify(s3Presigner).presignPutObject(captor.capture());
-        assertThat(captor.getValue().putObjectRequest().bucket()).isEqualTo("eeum-prod-media-2026");
-        assertThat(captor.getValue().putObjectRequest().key()).startsWith("tmp/used/42/").endsWith(".webp");
-        assertThat(captor.getValue().putObjectRequest().contentType()).isEqualTo("image/webp");
         assertThat(result.objectKey()).startsWith("tmp/used/42/").endsWith(".webp");
-        assertThat(result.headers()).containsEntry("Content-Type", "image/webp");
+        assertThat(result.uploadMethod()).isEqualTo("POST");
+        assertThat(result.formFields())
+                .containsEntry("key", result.objectKey())
+                .containsEntry("Content-Type", "image/webp")
+                .containsKey("policy");
     }
 
     @Test
@@ -168,5 +173,37 @@ class FileStorageServiceTest {
 
         // Then — 재시도는 새 final object를 만들지 않고 같은 key를 돌려준다.
         assertThat(retried.objectKey()).isEqualTo(first.objectKey());
+    }
+
+    @Test
+    void 다른_confirm이_임시_객체를_삭제한_뒤에도_기존_확정_결과를_반환한다() {
+        // Given — 첫 확인 조회 직후 다른 요청이 확정 등록과 tmp 삭제를 완료했다.
+        // 기존 구현은 headObject 404를 FILE_NOT_FOUND로 바꿔 정상 재시도를 실패시켰다.
+        String temporaryObjectKey = "tmp/used/42/upload.png";
+        String confirmedObjectKey = "used/42/confirmed.png";
+        given(fileObjectLifecycleService.findReusableConfirmedObjectKey(
+                42L, FileUploadPurpose.USED, temporaryObjectKey))
+                .willReturn(Optional.empty(), Optional.of(confirmedObjectKey));
+        given(s3Client.headObject(any(java.util.function.Consumer.class)))
+                .willThrow(S3Exception.builder().statusCode(404).build());
+
+        // When
+        FileUploadConfirmResponseDto result = fileStorageService.confirmUpload(
+                42L, new FileUploadConfirmRequestDto(temporaryObjectKey));
+
+        // Then — 경쟁에서 진 요청도 이미 확정된 결과를 멱등하게 받는다.
+        assertThat(result.objectKey()).isEqualTo(confirmedObjectKey);
+    }
+
+    @Test
+    void 업로드_정책에는_실제_본문_크기_상한이_포함된다() throws Exception {
+        // Given
+        // When
+        FilePresignedUrlResponseDto result = fileStorageService.createPresignedUploadUrl(
+                42L, new FilePresignedUrlRequestDto(FileUploadPurpose.USED, "image/png", 1024L));
+
+        // Then — 클라이언트 선언값이 아니라 S3가 강제하는 정책 필드가 반환돼야 한다.
+        String policy = new String(Base64.getDecoder().decode(result.formFields().get("policy")));
+        assertThat(policy).contains("[\"content-length-range\",1,10485760]");
     }
 }

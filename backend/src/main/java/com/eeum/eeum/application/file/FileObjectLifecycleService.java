@@ -6,6 +6,7 @@ import com.eeum.eeum.domain.file.repository.FileObjectRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
+import com.eeum.eeum.exception.ConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +46,7 @@ public class FileObjectLifecycleService {
 
     @Transactional
     public void attach(Long accountId, FileUploadPurpose purpose, String objectKey) {
-        FileObject fileObject = fileObjectRepository.findByObjectKey(objectKey)
+        FileObject fileObject = fileObjectRepository.findByObjectKeyForUpdate(objectKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FILE_NOT_FOUND));
 
         if (!fileObject.isOwnedBy(accountId, purpose.name())) {
@@ -54,16 +55,27 @@ public class FileObjectLifecycleService {
         if (fileObject.getStatus() == FileObjectStatus.CLEANUP_PENDING) {
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
+        if (fileObject.getStatus() == FileObjectStatus.ATTACHED) {
+            throw new ConflictException(ErrorCode.FILE_ALREADY_ATTACHED);
+        }
         fileObject.attach();
     }
 
     @Transactional
+    public void detach(String objectKey) {
+        fileObjectRepository.findByObjectKeyForUpdate(objectKey)
+                .ifPresent(FileObject::detach);
+    }
+
+    @Transactional
     public List<FileObjectCleanupTarget> claimExpiredUnattached(LocalDateTime threshold) {
-        return fileObjectRepository.findTop100ByStatusInAndCreatedAtBeforeOrderByCreatedAtAsc(
-                        List.of(FileObjectStatus.CONFIRMED, FileObjectStatus.CLEANUP_PENDING), threshold)
-                .stream()
-                .filter(fileObject -> fileObject.getStatus() == FileObjectStatus.CLEANUP_PENDING
-                        || fileObject.claimCleanup())
+        List<FileObject> cleanupPending = fileObjectRepository.findTop100ByStatusOrderByCreatedAtAsc(
+                FileObjectStatus.CLEANUP_PENDING);
+        List<FileObject> expiredConfirmed = fileObjectRepository.findTop100ByStatusInAndCreatedAtBeforeOrderByCreatedAtAsc(
+                List.of(FileObjectStatus.CONFIRMED), threshold);
+
+        return java.util.stream.Stream.concat(cleanupPending.stream(), expiredConfirmed.stream())
+                .filter(fileObject -> fileObject.getStatus() == FileObjectStatus.CLEANUP_PENDING || fileObject.claimCleanup())
                 .map(fileObject -> new FileObjectCleanupTarget(fileObject.getFileObjectId(), fileObject.getObjectKey()))
                 .toList();
     }

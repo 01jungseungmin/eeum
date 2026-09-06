@@ -107,7 +107,9 @@ public class StoreImageService {
         StoreImage image = getImageWithOwnerCheck(store, imageId);
 
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
         storeImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
 
         // 대표 이미지 삭제 시 다음 이미지를 대표로 설정
         if (wasThumbnail) {
