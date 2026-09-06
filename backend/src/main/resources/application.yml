@@ -97,6 +97,13 @@ fcm:
   # 발표/시연 시 실제 FCM 발송이 필요하면 --spring.profiles.active=demo 로 기동
   # demo 프로필: FcmPushAdapter(실제 발송) + FCM 단건 테스트 API(/owner/ai-manager/test/fcm) 모두 활성
 
+storage:
+  s3:
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-northeast-2}
+    upload-url-expiration: PT10M
+    download-url-expiration: PT10M
+
 # 실시간(WebSocket·SSE) 활성화 여부.
 # 인스턴스를 늘리면 인메모리 STOMP 브로커와 SseEmitter가 JVM 경계를 넘지 못한다.
 # 실시간 커넥션은 LB 경로 라우팅으로 한 인스턴스에 모으고, API 전용 인스턴스는 false로 끈다.

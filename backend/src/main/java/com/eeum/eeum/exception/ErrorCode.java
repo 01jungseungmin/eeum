@@ -29,6 +29,15 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMON_CONFLICT("COMMON_010", "요청 처리 중 충돌이 발생했습니다.", HttpStatus.CONFLICT),
     COMMON_METHOD_NOT_ALLOWED("COMMON_011", "지원하지 않는 HTTP 메서드입니다", HttpStatus.METHOD_NOT_ALLOWED),
 
+    // ===================== 파일 (FILE) =====================
+    FILE_STORAGE_NOT_CONFIGURED("FILE_001", "파일 저장소가 설정되지 않았습니다", HttpStatus.SERVICE_UNAVAILABLE),
+    FILE_UNSUPPORTED_CONTENT_TYPE("FILE_002", "지원하지 않는 이미지 형식입니다", HttpStatus.BAD_REQUEST),
+    FILE_TOO_LARGE("FILE_003", "이미지는 10MB 이하만 업로드할 수 있습니다", HttpStatus.BAD_REQUEST),
+    FILE_ACCESS_DENIED("FILE_004", "파일 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
+    FILE_NOT_FOUND("FILE_005", "업로드한 파일을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+    FILE_UPLOAD_INVALID("FILE_006", "업로드한 파일 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    FILE_STORAGE_ERROR("FILE_007", "파일 저장소 처리 중 오류가 발생했습니다", HttpStatus.BAD_GATEWAY),
+
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
     AUTH_EXPIRED_TOKEN("AUTH_002", "만료된 토큰입니다", HttpStatus.UNAUTHORIZED),
