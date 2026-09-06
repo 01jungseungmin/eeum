@@ -37,6 +37,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     FILE_NOT_FOUND("FILE_005", "업로드한 파일을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
     FILE_UPLOAD_INVALID("FILE_006", "업로드한 파일 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
     FILE_STORAGE_ERROR("FILE_007", "파일 저장소 처리 중 오류가 발생했습니다", HttpStatus.BAD_GATEWAY),
+    FILE_RATE_LIMITED("FILE_008", "파일 업로드 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요", HttpStatus.TOO_MANY_REQUESTS),
 
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
