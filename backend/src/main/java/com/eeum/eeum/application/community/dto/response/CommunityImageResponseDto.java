@@ -20,9 +20,13 @@ public class CommunityImageResponseDto {
     private int displayOrder;
 
     public static CommunityImageResponseDto from(CommunityImage image) {
+        return from(image, image.getImageUrl());
+    }
+
+    public static CommunityImageResponseDto from(CommunityImage image, String imageUrl) {
         return CommunityImageResponseDto.builder()
                 .imageId(image.getImageId())
-                .imageUrl(image.getImageUrl())
+                .imageUrl(imageUrl)
                 .displayOrder(image.getDisplayOrder())
                 .build();
     }

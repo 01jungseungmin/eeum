@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.used.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -15,11 +17,13 @@ import lombok.Getter;
 @Schema(description = "중고 게시글 이미지 항목")
 public class UsedProductImageUploadRequestDto {
 
-    @NotBlank(message = "이미지 URL은 필수입니다.")
-    @Size(max = 1000, message = "이미지 URL은 1000자 이하로 입력해야 합니다.")
+    @NotBlank(message = "이미지 objectKey는 필수입니다.")
+    @Size(max = 500, message = "이미지 objectKey는 500자 이하로 입력해야 합니다.")
     @Schema(
-            description = "이미지 URL. 현재는 임시 외부 URL을 저장하고, 추후 S3 업로드 URL로 교체할 예정입니다.",
-            example = "https://example.com/images/used-1.jpg"
+            description = "S3 업로드 확정 API가 반환한 objectKey",
+            example = "used/42/550e8400-e29b-41d4-a716-446655440000.webp"
     )
+    @JsonProperty("objectKey")
+    @JsonAlias("imageUrl")
     private String imageUrl;
 }

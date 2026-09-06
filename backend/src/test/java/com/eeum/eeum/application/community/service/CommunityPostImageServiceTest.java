@@ -31,6 +31,7 @@ class CommunityPostImageServiceTest {
     @InjectMocks private CommunityPostImageService service;
     @Mock private CommunityPostRepository postRepository;
     @Mock private CommunityImageRepository imageRepository;
+    @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
 
     @Test
     void 이미지_추가는_노출중인_게시글을_쓰기잠금으로_조회한다() {

@@ -1,7 +1,9 @@
 package com.eeum.eeum.application.chat.listener;
 
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
+import com.eeum.eeum.domain.chat.enums.MessageType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -9,6 +11,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 
+import static org.mockito.BDDMockito.given;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -22,6 +26,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
  * {@code @TransactionalEventListener(phase = AFTER_COMMIT)} 위상은 Spring 트랜잭션 인프라가 관리하므로
  * 단위 테스트에서는 메서드 동작(destination · payload 전달)만 검증한다.
  * AFTER_COMMIT 실행 보장은 통합 테스트 범위로 분류한다.
+ *
+ * <p>증상: private S3 objectKey가 STOMP로 그대로 전달돼 이미지 메시지를 표시할 수 없었다.
+ * 결함 위치: ChatBroadcastEventListener.onBroadcast.
+ * 이 테스트는 브로드캐스트 payload가 조회 가능한 URL을 사용함을 고정한다.
  */
 @ExtendWith(MockitoExtension.class)
 class ChatBroadcastEventListenerTest {
@@ -30,6 +38,7 @@ class ChatBroadcastEventListenerTest {
     private ChatBroadcastEventListener chatBroadcastEventListener;
 
     @Mock private RealtimeRelayPublisher realtimeRelayPublisher;
+    @Mock private FileStorageService fileStorageService;
 
     // ===================== onBroadcast =====================
 
@@ -49,17 +58,37 @@ class ChatBroadcastEventListenerTest {
     }
 
     @Test
-    void 브로드캐스트_이벤트_payload_변환없이_그대로_전송() {
-        // Given — 리스너는 relay 역할이므로 payload를 변환하지 않아야 한다
+    void 이미지_메시지_브로드캐스트에는_조회_가능한_presigned_URL을_전송한다() {
+        // Given — private S3 objectKey는 STOMP 구독자가 직접 조회할 수 없다.
         Long roomId = 20L;
-        ChatMessageResponseDto payload = mock(ChatMessageResponseDto.class);
+        ChatMessageResponseDto payload = ChatMessageResponseDto.builder()
+                .messageId(1L)
+                .roomId(roomId)
+                .senderAccountId(2L)
+                .senderName("판매자")
+                .senderProfileImageUrl("profiles/2/profile.webp")
+                .imageUrl("chat/2/message.webp")
+                .messageType(MessageType.IMAGE)
+                .deleted(false)
+                .build();
+        given(fileStorageService.resolveImageUrl("profiles/2/profile.webp"))
+                .willReturn("https://signed.example/profile");
+        given(fileStorageService.resolveImageUrl("chat/2/message.webp"))
+                .willReturn("https://signed.example/message");
+        given(fileStorageService.isFinalObjectKey("profiles/2/profile.webp")).willReturn(true);
+        given(fileStorageService.isFinalObjectKey("chat/2/message.webp")).willReturn(true);
         ChatMessageBroadcastEvent event = new ChatMessageBroadcastEvent(roomId, payload);
 
         // When
         chatBroadcastEventListener.onBroadcast(event);
 
         // Then
-        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/20", payload);
+        org.mockito.ArgumentCaptor<ChatMessageResponseDto> captor =
+                org.mockito.ArgumentCaptor.forClass(ChatMessageResponseDto.class);
+        verify(realtimeRelayPublisher).publishStomp(
+                org.mockito.ArgumentMatchers.eq("/sub/chat/rooms/20"), captor.capture());
+        assertThat(captor.getValue().getSenderProfileImageUrl()).isEqualTo("https://signed.example/profile");
+        assertThat(captor.getValue().getImageUrl()).isEqualTo("https://signed.example/message");
     }
 
     @Test

@@ -12,6 +12,6 @@ public class UpdateInfoRequestDto {
     @Size(min = 2, max = 20, message = "닉네임은 2~20자 이내여야 합니다")
     private String nickname;
 
-    @Schema(description = "프로필 이미지 URL", example = "https://s3.amazonaws.com/...")
+    @Schema(description = "S3 업로드 확정 objectKey (기존 HTTPS URL은 전환 기간 동안 허용)", example = "profiles/42/550e8400-e29b-41d4-a716-446655440000.webp")
     private String profileImageUrl;
 }

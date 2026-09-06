@@ -28,6 +28,10 @@ public class ChatMessageResponseDto {
     private final LocalDateTime sentAt;
 
     public static ChatMessageResponseDto from(ChatMessage message) {
+        return from(message, message.getImageUrl());
+    }
+
+    public static ChatMessageResponseDto from(ChatMessage message, String imageUrl) {
         Account sender = message.getAccount();
         boolean deleted = message.isDeleted();
         return ChatMessageResponseDto.builder()
@@ -38,10 +42,25 @@ public class ChatMessageResponseDto {
                 .senderName(sender.getDisplayName())
                 .senderProfileImageUrl(sender.getProfileImageUrl())
                 .content(deleted ? DELETED_PLACEHOLDER : message.getContent())
-                .imageUrl(deleted ? null : message.getImageUrl())
+                .imageUrl(deleted ? null : imageUrl)
                 .messageType(message.getMessageType())
                 .deleted(deleted)
                 .sentAt(message.getSentAt())
+                .build();
+    }
+
+    public ChatMessageResponseDto withResolvedImageUrls(String senderProfileImageUrl, String imageUrl) {
+        return ChatMessageResponseDto.builder()
+                .messageId(messageId)
+                .roomId(roomId)
+                .senderAccountId(senderAccountId)
+                .senderName(senderName)
+                .senderProfileImageUrl(senderProfileImageUrl)
+                .content(content)
+                .imageUrl(imageUrl)
+                .messageType(messageType)
+                .deleted(deleted)
+                .sentAt(sentAt)
                 .build();
     }
 }

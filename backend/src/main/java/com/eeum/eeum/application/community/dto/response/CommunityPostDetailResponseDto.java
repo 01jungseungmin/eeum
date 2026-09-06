@@ -8,6 +8,7 @@ import lombok.Getter;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -69,6 +70,15 @@ public class CommunityPostDetailResponseDto {
     private String shareUrl;
 
     public static CommunityPostDetailResponseDto of(CommunityPost post, boolean likedByMe, List<CommunityImage> images) {
+        return of(post, likedByMe, images, CommunityImage::getImageUrl);
+    }
+
+    public static CommunityPostDetailResponseDto of(
+            CommunityPost post,
+            boolean likedByMe,
+            List<CommunityImage> images,
+            Function<CommunityImage, String> imageUrlResolver
+    ) {
         return CommunityPostDetailResponseDto.builder()
                 .postId(post.getPostId())
                 .authorId(post.getAccount().getAccountId())
@@ -84,7 +94,9 @@ public class CommunityPostDetailResponseDto {
                 .likeCount(post.getLikeCount())
                 .commentCount(post.getCommentCount())
                 .likedByMe(likedByMe)
-                .images(images.stream().map(CommunityImageResponseDto::from).toList())
+                .images(images.stream()
+                        .map(image -> CommunityImageResponseDto.from(image, imageUrlResolver.apply(image)))
+                        .toList())
                 .createdAt(post.getCreatedAt())
                 .modifiedAt(post.getModifiedAt())
                 .shareUrl("eeum://community/posts/" + post.getPostId())

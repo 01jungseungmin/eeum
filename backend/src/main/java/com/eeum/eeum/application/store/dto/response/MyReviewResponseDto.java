@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -64,6 +65,15 @@ public class MyReviewResponseDto {
             List<StoreReviewImage> images,
             List<OrderItem> orderItems
     ) {
+        return ofOrder(review, images, orderItems, Function.identity());
+    }
+
+    public static MyReviewResponseDto ofOrder(
+            StoreReview review,
+            List<StoreReviewImage> images,
+            List<OrderItem> orderItems,
+            Function<String, String> imageUrlResolver
+    ) {
         return MyReviewResponseDto.builder()
                 .storereviewId(review.getStorereviewId())
                 .reviewType(review.getReviewType())
@@ -71,7 +81,7 @@ public class MyReviewResponseDto {
                 .storeName(review.getStore().getName())
                 .rating(review.getRating())
                 .content(review.getContent())
-                .images(toImageDtos(images))
+                .images(toImageDtos(images, imageUrlResolver))
                 .orderId(review.getOrder().getOrderId())
                 .orderItems(orderItems == null ? Collections.emptyList()
                         : orderItems.stream().map(OrderItemSummaryDto::from).toList())
@@ -83,6 +93,14 @@ public class MyReviewResponseDto {
             StoreReview review,
             List<StoreReviewImage> images
     ) {
+        return ofReservation(review, images, Function.identity());
+    }
+
+    public static MyReviewResponseDto ofReservation(
+            StoreReview review,
+            List<StoreReviewImage> images,
+            Function<String, String> imageUrlResolver
+    ) {
         return MyReviewResponseDto.builder()
                 .storereviewId(review.getStorereviewId())
                 .reviewType(review.getReviewType())
@@ -90,7 +108,7 @@ public class MyReviewResponseDto {
                 .storeName(review.getStore().getName())
                 .rating(review.getRating())
                 .content(review.getContent())
-                .images(toImageDtos(images))
+                .images(toImageDtos(images, imageUrlResolver))
                 .visitReservationId(review.getVisitReservation().getVisitReservationId())
                 .visitDate(review.getVisitReservation().getVisitDate())
                 .visitTime(review.getVisitReservation().getVisitTime())
@@ -98,11 +116,14 @@ public class MyReviewResponseDto {
                 .build();
     }
 
-    private static List<ImageResponseDto> toImageDtos(List<StoreReviewImage> images) {
+    private static List<ImageResponseDto> toImageDtos(
+            List<StoreReviewImage> images,
+            Function<String, String> imageUrlResolver
+    ) {
         return images.stream()
                 .map(img -> ImageResponseDto.builder()
                         .imageId(img.getStorereviewimageId())
-                        .imageUrl(img.getImageUrl())
+                        .imageUrl(imageUrlResolver.apply(img.getImageUrl()))
                         .displayOrder(img.getDisplayOrder())
                         .isThumbnail(img.isThumbnail())
                         .build())

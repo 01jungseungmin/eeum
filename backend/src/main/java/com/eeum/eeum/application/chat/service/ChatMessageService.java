@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.chat.service;
 
 import com.eeum.eeum.application.chat.ChatRedisKeys;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.application.chat.dto.request.ChatImageMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
@@ -53,6 +55,7 @@ public class ChatMessageService {
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationOutboxRecorder outboxRecorder;
     private final StringRedisTemplate redisTemplate;
+    private final FileStorageService fileStorageService;
 
     // ===================== 메시지 발송 =====================
 
@@ -87,7 +90,7 @@ public class ChatMessageService {
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
-        ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
+        ChatMessageResponseDto dto = toResponse(message);
 
         eventPublisher.publishEvent(
                 new ChatMessageBroadcastEvent(room.getChatroomId(), dto)
@@ -104,6 +107,7 @@ public class ChatMessageService {
     public ChatMessageResponseDto sendImageMessage(
             Long accountId, Long roomId, ChatImageMessageSendRequestDto request) {
         checkIdempotency(accountId, roomId, request.getClientMessageId());
+        fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.CHAT, request.getImageUrl());
 
         // 텍스트 발송과 같은 순서로 잠근다 — account → chat_room.
         accountWriteGuard.lockActive(accountId);
@@ -122,7 +126,7 @@ public class ChatMessageService {
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
-        ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
+        ChatMessageResponseDto dto = toResponse(message);
         eventPublisher.publishEvent(new ChatMessageBroadcastEvent(room.getChatroomId(), dto));
         publishSentEvent(room, sender, message, "사진을 보냈습니다", firstMessage);
         return dto;
@@ -148,7 +152,7 @@ public class ChatMessageService {
         chatAccessHelper.verifyParticipant(accountId, roomId);
 
         return chatMessageRepository.findRoomMessages(roomId, cursor, size)
-                .map(ChatMessageResponseDto::from);
+                .map(this::toResponse);
     }
 
     // 전체 안 읽은 메시지 수 (Redis 우선, 캐시 미스 시 DB 합산)
@@ -169,7 +173,7 @@ public class ChatMessageService {
         }
         message.markDeleted();
         Long roomId = message.getChatRoom().getChatroomId();
-        eventPublisher.publishEvent(new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message)));
+        eventPublisher.publishEvent(new ChatMessageBroadcastEvent(roomId, toResponse(message)));
         log.info("채팅 메시지 삭제: messageId={}, accountId={}", messageId, accountId);
     }
 
@@ -235,6 +239,10 @@ public class ChatMessageService {
                 .mapToLong(p -> chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                         p.getChatRoom().getChatroomId(), p.unreadSince(), accountId))
                 .sum();
+    }
+
+    private ChatMessageResponseDto toResponse(ChatMessage message) {
+        return ChatMessageResponseDto.from(message);
     }
 
     private String truncate(String text) {

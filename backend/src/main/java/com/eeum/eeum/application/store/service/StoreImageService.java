@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.application.store.mapper.StoreMapper;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
@@ -27,6 +29,7 @@ public class StoreImageService {
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
     private final StoreMapper storeMapper;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public List<ImageResponseDto> getImages(Long accountId) {
@@ -48,6 +51,9 @@ public class StoreImageService {
         if (currentCount + requestCount > MAX_IMAGE_COUNT) {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
+
+        request.getImages().forEach(image ->
+                fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.STORE, image.getImageUrl()));
 
         validateThumbnailCount(request);
 

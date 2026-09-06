@@ -5,6 +5,8 @@ import com.eeum.eeum.application.store.dto.request.StoreReviewCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.*;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
@@ -62,6 +64,7 @@ public class StoreReviewService {
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileStorageService fileStorageService;
 
     // ===================== 공개 조회 =====================
 
@@ -150,7 +153,7 @@ public class StoreReviewService {
 
         // 이미지 저장 (신규 리뷰이므로 currentCount = 0)
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
-            saveReviewImages(review, request.getImageUrls(), 0);
+            saveReviewImages(accountId, review, request.getImageUrls(), 0);
         }
 
         // Store 평점 및 리뷰 수 갱신
@@ -207,7 +210,7 @@ public class StoreReviewService {
         }
 
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
-            saveReviewImages(review, request.getImageUrls(), 0);
+            saveReviewImages(accountId, review, request.getImageUrls(), 0);
         }
 
         recalculateStoreRating(store);
@@ -337,7 +340,7 @@ public class StoreReviewService {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        saveReviewImages(review, imageUrls, currentCount);
+        saveReviewImages(accountId, review, imageUrls, currentCount);
 
         log.info("리뷰 이미지 추가: reviewId={}, count={}", reviewId, imageUrls.size());
 
@@ -520,7 +523,9 @@ public class StoreReviewService {
 
     // 리뷰 이미지 목록을 저장
     // @param currentCount 이미 저장된 이미지 수 (호출 측에서 조회한 값을 재사용해 중복 쿼리 방지) - 신규 리뷰 생성 시에는 0을 전달
-    private void saveReviewImages(StoreReview review, List<String> imageUrls, int currentCount) {
+    private void saveReviewImages(Long accountId, StoreReview review, List<String> imageUrls, int currentCount) {
+        imageUrls.forEach(imageUrl ->
+                fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.STORE, imageUrl));
         boolean hasExistingThumbnail = storeReviewImageRepository
                 .existsByStoreReview_StorereviewIdAndIsThumbnailTrue(review.getStorereviewId());
 

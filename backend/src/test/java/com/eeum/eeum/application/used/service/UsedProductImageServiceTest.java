@@ -45,6 +45,7 @@ class UsedProductImageServiceTest {
     @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private UsedProductImageRepository usedProductImageRepository;
+    @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
 
     @InjectMocks
     private UsedProductImageService usedProductImageService;

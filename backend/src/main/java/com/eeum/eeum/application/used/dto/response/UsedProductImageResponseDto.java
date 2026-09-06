@@ -23,9 +23,13 @@ public class UsedProductImageResponseDto {
     private boolean thumbnail;
 
     public static UsedProductImageResponseDto from(UsedProductImage image) {
+        return from(image, image.getImageUrl());
+    }
+
+    public static UsedProductImageResponseDto from(UsedProductImage image, String imageUrl) {
         return UsedProductImageResponseDto.builder()
                 .imageId(image.getImageId())
-                .imageUrl(image.getImageUrl())
+                .imageUrl(imageUrl)
                 .displayOrder(image.getDisplayOrder())
                 .thumbnail(image.isThumbnail())
                 .build();

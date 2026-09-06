@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -86,10 +87,20 @@ public class StoreReviewResponseDto {
             StoreReviewReplyResponseDto reply,
             List<OrderItem> orderItems
     ) {
+        return of(review, images, reply, orderItems, Function.identity());
+    }
+
+    public static StoreReviewResponseDto of(
+            StoreReview review,
+            List<StoreReviewImage> images,
+            StoreReviewReplyResponseDto reply,
+            List<OrderItem> orderItems,
+            Function<String, String> imageUrlResolver
+    ) {
         List<ImageResponseDto> imageDtos = images.stream()
                 .map(img -> ImageResponseDto.builder()
                         .imageId(img.getStorereviewimageId())
-                        .imageUrl(img.getImageUrl())
+                        .imageUrl(imageUrlResolver.apply(img.getImageUrl()))
                         .displayOrder(img.getDisplayOrder())
                         .isThumbnail(img.isThumbnail())
                         .build())

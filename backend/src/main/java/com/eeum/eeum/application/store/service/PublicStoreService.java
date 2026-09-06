@@ -402,7 +402,7 @@ public class PublicStoreService {
                 .stream()
                 .filter(StoreImage::isThumbnail)
                 .findFirst()
-                .map(StoreImage::getImageUrl)
+                .map(image -> image.getImageUrl())
                 .orElse(null);
     }
 

@@ -7,6 +7,8 @@ import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.MyPageResponseDto;
 import com.eeum.eeum.application.account.dto.response.OwnerApplicationDetailResponseDto;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
@@ -53,6 +55,7 @@ public class AccountService {
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileStorageService fileStorageService;
 
     // ===================== 내 정보 조회 =====================
 
@@ -80,6 +83,11 @@ public class AccountService {
                 && !request.getNickname().equals(account.getNickname())
                 && accountRepository.existsByNickname(request.getNickname())) {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_NICKNAME);
+        }
+
+        if (request.getProfileImageUrl() != null) {
+            fileStorageService.requireAttachableObject(
+                    accountId, FileUploadPurpose.PROFILE, request.getProfileImageUrl());
         }
 
         account.updateInfo(request.getNickname(), request.getProfileImageUrl());
