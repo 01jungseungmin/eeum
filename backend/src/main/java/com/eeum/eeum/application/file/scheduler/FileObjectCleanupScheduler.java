@@ -29,7 +29,7 @@ public class FileObjectCleanupScheduler {
                 fileStorageService.deleteObject(target.objectKey());
                 fileObjectLifecycleService.completeCleanup(target.fileObjectId());
             } catch (Exception exception) {
-                fileObjectLifecycleService.cancelCleanup(target.fileObjectId());
+                // S3 삭제만 성공했을 수도 있으므로 첨부를 금지한 상태로 다음 회차에 재시도한다.
                 log.warn("미연결 S3 이미지 정리 실패: key={}", target.objectKey(), exception);
             }
         });

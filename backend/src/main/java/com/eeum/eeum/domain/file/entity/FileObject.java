@@ -93,9 +93,4 @@ public class FileObject extends BaseEntity {
         return true;
     }
 
-    public void cancelCleanup() {
-        if (status == FileObjectStatus.CLEANUP_PENDING) {
-            status = FileObjectStatus.CONFIRMED;
-        }
-    }
 }
