@@ -44,7 +44,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://localhost:3000",
                         "http://localhost:8081",
                         "http://localhost:5173",
-                        "http://localhost:63342"
+                        "http://localhost:63342",
+                        "https://eeum.life",
+                        "https://www.eeum.life"
                 );
     }
 
