@@ -15,6 +15,7 @@ import org.springframework.dao.TransientDataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.CannotCreateTransactionException;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 
 import java.time.LocalDateTime;
@@ -116,10 +117,23 @@ public class FileObjectCleanupScheduler {
             return true;
         }
         if (exception instanceof BusinessException businessException) {
-            // SdkClientException은 응답을 받지 못한 경우 — 네트워크 단절, 자격증명 해석 실패 등.
-            // 객체별 사유(없는 key 등)는 S3Exception으로 와서 여기 걸리지 않는다.
-            return businessException.getErrorCode() == ErrorCode.FILE_STORAGE_NOT_CONFIGURED
-                    || businessException.getCause() instanceof SdkClientException;
+            if (businessException.getErrorCode() == ErrorCode.FILE_STORAGE_NOT_CONFIGURED) {
+                return true;
+            }
+            return isInfrastructureCause(businessException.getCause());
+        }
+        return false;
+    }
+
+    private boolean isInfrastructureCause(Throwable cause) {
+        // 응답을 받지 못한 경우 — 네트워크 단절, 자격증명 해석 실패 등.
+        if (cause instanceof SdkClientException) {
+            return true;
+        }
+        // 응답은 받았지만 S3 쪽 사정인 경우. 한 회차에 최대 200건을 지우므로 SlowDown이
+        // 충분히 나오고, 5xx도 마찬가지다. 객체별 사유(없는 key 등)는 4xx로 와서 제외된다.
+        if (cause instanceof AwsServiceException awsException) {
+            return awsException.statusCode() >= 500 || awsException.isThrottlingException();
         }
         return false;
     }
