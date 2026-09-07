@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '../../components/CustomText';
-import { verifyPaymentWithPendingOrder } from '../../utils/paymentCompletion';
+import { extractRedirectFailure, verifyPaymentWithPendingOrder } from '../../utils/paymentCompletion';
 
 /**
  * 외부 결제앱(토스·카카오페이 등)에서 eeum://payment/success 로 돌아오는 착지 화면.
@@ -20,6 +20,8 @@ export default function PaymentSuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const paymentId = params.paymentId ? String(params.paymentId) : '';
+  const failureCode = params.code ? String(params.code) : '';
+  const failureMessage = params.message ? String(params.message) : '';
 
   const [message, setMessage] = useState('결제를 확인하고 있어요...');
   const [isFailed, setIsFailed] = useState(false);
@@ -32,6 +34,14 @@ export default function PaymentSuccessScreen() {
     startedRef.current = true;
 
     const run = async () => {
+      // 실패·취소도 같은 주소로 돌아온다. paymentId가 실려 있어도 검증을 보내면 안 된다.
+      const failure = extractRedirectFailure({ code: failureCode, message: failureMessage });
+      if (failure) {
+        setIsFailed(true);
+        setMessage(`결제가 완료되지 않았습니다.\n${failure.message}`);
+        return;
+      }
+
       if (!paymentId) {
         setIsFailed(true);
         setMessage('결제 정보를 확인할 수 없습니다.\n주문 내역에서 결제 상태를 확인해 주세요.');
@@ -63,7 +73,7 @@ export default function PaymentSuccessScreen() {
     };
 
     run();
-  }, [paymentId, router]);
+  }, [paymentId, failureCode, failureMessage, router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

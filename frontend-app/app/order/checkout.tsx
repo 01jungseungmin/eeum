@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Platform } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
@@ -11,6 +11,7 @@ import { userApi } from '@/api/user';
 import {
   PAYMENT_REDIRECT_URL,
   extractPaymentId,
+  extractRedirectFailure,
   savePendingOrder,
   verifyPaymentWithPendingOrder,
   type PendingOrder
@@ -50,8 +51,7 @@ export default function CheckoutScreen() {
     customerName: '',
     customerPhone: '',
     customerEmail: '',
-    portonePayMethod: 'CARD', 
-    portoneChannelKey: '',
+    portonePayMethod: 'CARD',
     easyPayProvider: ''
   });
 
@@ -73,6 +73,16 @@ export default function CheckoutScreen() {
     };
     fetchInitialData();
   }, []);
+
+  // 외부 결제앱에서 돌아오면 딥링크가 /payment/success 를 이 화면 위에 쌓는다.
+  // 그때 결제 웹뷰는 역할이 끝났으므로 접어둔다 — 남겨두면 사용자가 뒤로가기로
+  // 이미 끝난 결제창에 다시 들어오게 된다. (외부 앱 전환은 화면 이동이 아니라
+  // 포커스를 잃지 않으므로, 결제 도중에 닫히지는 않는다.)
+  useFocusEffect(
+    useCallback(() => {
+      return () => setIsPaymentVisible(false);
+    }, [])
+  );
 
   const handlePayment = async () => {
     // 안전장치: 만약 이미 한 번 주문생성이 완료되어 주문번호가 있다면,
@@ -130,7 +140,6 @@ export default function CheckoutScreen() {
                         : 'test@eeum.com',
         customerPhone: userInfo.phone,
         portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
-        portoneChannelKey: process.env.EXPO_PUBLIC_PORTONE_TOSS_CHANNEL_KEY || '', 
         easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
       });
 
@@ -215,6 +224,14 @@ export default function CheckoutScreen() {
     // 1. 결제 완료 복귀 주소 낚아채기. 웹뷰 안에서 끝난 결제는 외부 앱을 거치지
     //    않고 여기로 바로 들어온다 — 딥링크 리스너까지 갈 필요가 없다.
     if (url.startsWith(PAYMENT_REDIRECT_URL)) {
+      // 실패·취소도 이 주소로 돌아오고 paymentId까지 실려 있다. code가 있으면 검증 금지.
+      const failure = extractRedirectFailure(url);
+      if (failure) {
+        setIsPaymentVisible(false);
+        Alert.alert('결제 실패', failure.message);
+        return false;
+      }
+
       const paymentId = extractPaymentId(url);
       if (paymentId) {
         completePayment(paymentId);

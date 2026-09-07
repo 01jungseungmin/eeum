@@ -24,11 +24,32 @@ export interface PendingOrder {
 }
 
 // 커스텀 스킴은 URL 생성자가 쿼리를 못 뽑는 환경이 있어 직접 자른다.
-export const extractPaymentId = (url: string): string | null => {
+export const extractQueryParam = (url: string, key: string): string | null => {
   const query = url.split('?')[1];
   if (!query) return null;
-  const hit = query.split('&').find((pair) => pair.startsWith('paymentId='));
-  return hit ? decodeURIComponent(hit.slice('paymentId='.length)) : null;
+  const prefix = `${key}=`;
+  const hit = query.split('&').find((pair) => pair.startsWith(prefix));
+  return hit ? decodeURIComponent(hit.slice(prefix.length).replace(/\+/g, ' ')) : null;
+};
+
+export const extractPaymentId = (url: string): string | null => extractQueryParam(url, 'paymentId');
+
+/**
+ * 포트원은 실패·취소도 같은 redirectUrl로 돌려보내면서 code/message를 붙인다.
+ * paymentId는 그대로 실려 오므로, code가 있으면 검증을 보내지 않고 실패로 끊어야 한다.
+ */
+export interface PaymentRedirectFailure {
+  code: string;
+  message: string;
+}
+
+export const extractRedirectFailure = (
+  params: { code?: string | null; message?: string | null } | string
+): PaymentRedirectFailure | null => {
+  const code = typeof params === 'string' ? extractQueryParam(params, 'code') : params.code;
+  if (!code) return null;
+  const message = typeof params === 'string' ? extractQueryParam(params, 'message') : params.message;
+  return { code, message: message || '결제가 완료되지 않았습니다.' };
 };
 
 // 결제창을 열기 직전에만 쓴다. 저장 실패가 결제 자체를 막지는 않는다.
