@@ -46,7 +46,7 @@ public class FileObjectLifecycleService {
 
     @Transactional
     public void attach(Long accountId, FileUploadPurpose purpose, String objectKey) {
-        FileObject fileObject = fileObjectRepository.findByObjectKeyForUpdate(objectKey)
+        FileObject fileObject = fileObjectRepository.findForUpdateByObjectKey(objectKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FILE_NOT_FOUND));
 
         if (!fileObject.isOwnedBy(accountId, purpose.name())) {
@@ -63,7 +63,7 @@ public class FileObjectLifecycleService {
 
     @Transactional
     public void detach(String objectKey) {
-        fileObjectRepository.findByObjectKeyForUpdate(objectKey)
+        fileObjectRepository.findForUpdateByObjectKey(objectKey)
                 .ifPresent(FileObject::detach);
     }
 
@@ -83,11 +83,6 @@ public class FileObjectLifecycleService {
     @Transactional
     public void completeCleanup(Long fileObjectId) {
         fileObjectRepository.deleteById(fileObjectId);
-    }
-
-    @Transactional
-    public void cancelCleanup(Long fileObjectId) {
-        fileObjectRepository.findById(fileObjectId).ifPresent(FileObject::cancelCleanup);
     }
 
     public record FileObjectCleanupTarget(Long fileObjectId, String objectKey) {

@@ -31,7 +31,7 @@ class FileObjectLifecycleServiceTest {
         FileObject fileObject = FileObject.confirmed(
                 42L, FileUploadPurpose.USED.name(), "tmp/used/42/file.webp", "used/42/file.webp");
         FileObjectLifecycleService service = new FileObjectLifecycleService(fileObjectRepository);
-        given(fileObjectRepository.findByObjectKeyForUpdate("used/42/file.webp"))
+        given(fileObjectRepository.findForUpdateByObjectKey("used/42/file.webp"))
                 .willReturn(Optional.of(fileObject));
         service.attach(42L, FileUploadPurpose.USED, "used/42/file.webp");
 

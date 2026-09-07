@@ -16,7 +16,7 @@ public interface FileObjectRepository extends JpaRepository<FileObject, Long> {
     Optional<FileObject> findByObjectKey(String objectKey);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    Optional<FileObject> findByObjectKeyForUpdate(String objectKey);
+    Optional<FileObject> findForUpdateByObjectKey(String objectKey);
 
     Optional<FileObject> findByTemporaryObjectKey(String temporaryObjectKey);
 
