@@ -7,6 +7,7 @@ import com.eeum.eeum.application.file.dto.response.FilePresignedUrlResponseDto;
 import com.eeum.eeum.application.file.dto.response.FileUploadConfirmResponseDto;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import com.eeum.eeum.common.lock.RateLimitKeys;
@@ -33,11 +34,14 @@ import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import java.time.Instant;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -276,6 +280,29 @@ public class FileStorageService {
     // DB 저장 Service가 호출하는 순수 참조 검증이다. S3 I/O는 confirm 단계에서만 수행한다.
     // 기존 외부 HTTPS URL은 프론트의 점진 전환 기간에만 허용한다. 새 업로드는 confirm 응답의 final key를 사용한다.
     public void requireAttachableObject(Long accountId, FileUploadPurpose purpose, String objectKey) {
+        String finalObjectKey = validateAttachableObjectKey(accountId, purpose, objectKey);
+        if (finalObjectKey != null) {
+            fileObjectLifecycleService.attach(accountId, purpose, finalObjectKey);
+        }
+    }
+
+    // 다중 첨부는 요청 배열 순서가 아니라 file_object PK 순서로 잠근다. 그렇지 않으면
+    // 같은 두 객체를 역순으로 첨부하는 요청이 서로의 잠금을 기다릴 수 있다.
+    public void requireAttachableObjects(Long accountId, FileUploadPurpose purpose, Collection<String> objectKeys) {
+        List<String> finalObjectKeys = new ArrayList<>();
+        for (String objectKey : objectKeys) {
+            String finalObjectKey = validateAttachableObjectKey(accountId, purpose, objectKey);
+            if (finalObjectKey != null) {
+                finalObjectKeys.add(finalObjectKey);
+            }
+        }
+        if (finalObjectKeys.size() != new HashSet<>(finalObjectKeys).size()) {
+            throw new ConflictException(ErrorCode.FILE_ALREADY_ATTACHED);
+        }
+        fileObjectLifecycleService.attachAll(accountId, purpose, finalObjectKeys);
+    }
+
+    private String validateAttachableObjectKey(Long accountId, FileUploadPurpose purpose, String objectKey) {
         if (isLegacyHttpsUrl(objectKey)) {
             // 전환 기간 예외다. 외부 URL에는 소유권 모델이 없어 여기를 지나면 검증이 사라지므로,
             // 스위치를 내리면 곧바로 막힌다.
@@ -286,7 +313,7 @@ public class FileStorageService {
             if (objectKey.length() > MAX_OBJECT_KEY_LENGTH) {
                 throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
             }
-            return;
+            return null;
         }
         if (objectKey == null || objectKey.isBlank()
                 || objectKey.contains("..") || objectKey.contains("\\")
@@ -296,7 +323,7 @@ public class FileStorageService {
         if (objectKey.length() > MAX_OBJECT_KEY_LENGTH) {
             throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
         }
-        fileObjectLifecycleService.attach(accountId, purpose, objectKey);
+        return objectKey;
     }
 
     // 이미지 행이 삭제된 같은 트랜잭션에서 상태만 정리한다. 실제 S3 I/O는 스케줄러가 커밋 후 수행한다.

@@ -52,8 +52,8 @@ public class StoreImageService {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        request.getImages().forEach(image ->
-                fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.STORE, image.getImageUrl()));
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.STORE,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         validateThumbnailCount(request);
 

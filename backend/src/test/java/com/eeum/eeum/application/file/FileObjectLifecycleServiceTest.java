@@ -3,6 +3,7 @@ package com.eeum.eeum.application.file;
 import com.eeum.eeum.domain.file.entity.FileObject;
 import com.eeum.eeum.domain.file.enums.FileObjectStatus;
 import com.eeum.eeum.domain.file.repository.FileObjectRepository;
+import com.eeum.eeum.domain.file.repository.FileObjectIdProjection;
 import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class FileObjectLifecycleServiceTest {
         FileObject second = attached("used/42/b.webp", 1L);
         FileObjectLifecycleService service = new FileObjectLifecycleService(fileObjectRepository);
         List<String> keys = List.of("used/42/a.webp", "used/42/b.webp");
-        given(fileObjectRepository.findByObjectKeyIn(keys)).willReturn(List.of(first, second));
+        given(fileObjectRepository.findByObjectKeyIn(keys)).willReturn(List.of(projection(2L), projection(1L)));
         given(fileObjectRepository.findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(List.of(1L, 2L)))
                 .willReturn(List.of(second, first));
 
@@ -110,5 +111,37 @@ class FileObjectLifecycleServiceTest {
         ReflectionTestUtils.setField(fileObject, "fileObjectId", fileObjectId);
         fileObject.attach();
         return fileObject;
+    }
+
+    @Test
+    void 여러_key를_첨부할_때는_ID_오름차순으로_한번에_잠근다() {
+        // Given — 클라이언트가 보낸 key 순서와 DB PK 순서를 일부러 반대로 둔다.
+        FileObject first = confirmed("used/42/a.webp", 2L);
+        FileObject second = confirmed("used/42/b.webp", 1L);
+        FileObjectLifecycleService service = new FileObjectLifecycleService(fileObjectRepository);
+        List<String> keys = List.of("used/42/a.webp", "used/42/b.webp");
+        given(fileObjectRepository.findByObjectKeyIn(keys)).willReturn(List.of(projection(2L), projection(1L)));
+        given(fileObjectRepository.findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(List.of(1L, 2L)))
+                .willReturn(List.of(second, first));
+
+        // When
+        service.attachAll(42L, FileUploadPurpose.USED, keys);
+
+        // Then
+        assertThat(first.getStatus()).isEqualTo(FileObjectStatus.ATTACHED);
+        assertThat(second.getStatus()).isEqualTo(FileObjectStatus.ATTACHED);
+        verify(fileObjectRepository)
+                .findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(List.of(1L, 2L));
+    }
+
+    private FileObject confirmed(String objectKey, Long fileObjectId) {
+        FileObject fileObject = FileObject.confirmed(
+                42L, FileUploadPurpose.USED.name(), "tmp/" + objectKey, objectKey);
+        ReflectionTestUtils.setField(fileObject, "fileObjectId", fileObjectId);
+        return fileObject;
+    }
+
+    private FileObjectIdProjection projection(Long fileObjectId) {
+        return () -> fileObjectId;
     }
 }

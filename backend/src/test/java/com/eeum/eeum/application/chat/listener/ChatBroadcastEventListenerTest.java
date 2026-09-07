@@ -88,6 +88,31 @@ class ChatBroadcastEventListenerTest {
         verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/1", payload);
     }
 
+    @Test
+    void final_이미지_key를_STOMP_전송_전에_조회_URL로_변환한다() {
+        // Given
+        ChatMessageResponseDto payload = mock(ChatMessageResponseDto.class);
+        ChatMessageResponseDto resolvedPayload = mock(ChatMessageResponseDto.class);
+        when(payload.getSenderProfileImageUrl()).thenReturn("profiles/2/profile.webp");
+        when(payload.getImageUrl()).thenReturn("chat/2/message.webp");
+        when(fileStorageService.isFinalObjectKey("profiles/2/profile.webp")).thenReturn(true);
+        when(fileStorageService.isFinalObjectKey("chat/2/message.webp")).thenReturn(true);
+        when(fileStorageService.resolveImageUrl("profiles/2/profile.webp"))
+                .thenReturn("https://signed.example/profile");
+        when(fileStorageService.resolveImageUrl("chat/2/message.webp"))
+                .thenReturn("https://signed.example/message");
+        when(payload.withResolvedImageUrls("https://signed.example/profile", "https://signed.example/message"))
+                .thenReturn(resolvedPayload);
+
+        // When
+        chatBroadcastEventListener.onBroadcast(new ChatMessageBroadcastEvent(10L, payload));
+
+        // Then
+        verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/10", resolvedPayload);
+        verify(fileStorageService).resolveImageUrl("profiles/2/profile.webp");
+        verify(fileStorageService).resolveImageUrl("chat/2/message.webp");
+    }
+
     private void givenRawImageUrls(ChatMessageResponseDto payload) {
         when(payload.getSenderProfileImageUrl()).thenReturn(null);
         when(payload.getImageUrl()).thenReturn(null);

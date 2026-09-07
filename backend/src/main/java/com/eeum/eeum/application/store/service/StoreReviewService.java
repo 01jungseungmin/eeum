@@ -533,8 +533,7 @@ public class StoreReviewService {
     // 리뷰 이미지 목록을 저장
     // @param currentCount 이미 저장된 이미지 수 (호출 측에서 조회한 값을 재사용해 중복 쿼리 방지) - 신규 리뷰 생성 시에는 0을 전달
     private void saveReviewImages(Long accountId, StoreReview review, List<String> imageUrls, int currentCount) {
-        imageUrls.forEach(imageUrl ->
-                fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.STORE, imageUrl));
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.STORE, imageUrls);
         boolean hasExistingThumbnail = storeReviewImageRepository
                 .existsByStoreReview_StorereviewIdAndIsThumbnailTrue(review.getStorereviewId());
 

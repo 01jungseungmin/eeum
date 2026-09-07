@@ -64,6 +64,38 @@ public class FileObjectLifecycleService {
         fileObject.attach();
     }
 
+    // 다중 첨부는 클라이언트가 보낸 표시 순서대로 잠그면 역순 요청끼리 교착될 수 있다.
+    // PK만 먼저 고른 뒤 PK 오름차순으로 한 번에 잠가 전역 순서를 고정한다.
+    @Transactional
+    public void attachAll(Long accountId, FileUploadPurpose purpose, Collection<String> objectKeys) {
+        if (objectKeys.isEmpty()) {
+            return;
+        }
+
+        List<String> distinctObjectKeys = objectKeys.stream().distinct().toList();
+        if (distinctObjectKeys.size() != objectKeys.size()) {
+            throw new ConflictException(ErrorCode.FILE_ALREADY_ATTACHED);
+        }
+
+        List<Long> fileObjectIds = fileObjectRepository.findByObjectKeyIn(distinctObjectKeys).stream()
+                .map(com.eeum.eeum.domain.file.repository.FileObjectIdProjection::getFileObjectId)
+                .sorted()
+                .toList();
+        if (fileObjectIds.size() != distinctObjectKeys.size()) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+
+        List<FileObject> fileObjects = fileObjectRepository
+                .findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(fileObjectIds);
+        if (fileObjects.size() != distinctObjectKeys.size()) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        for (FileObject fileObject : fileObjects) {
+            validateAttachable(accountId, purpose, fileObject);
+        }
+        fileObjects.forEach(FileObject::attach);
+    }
+
     @Transactional
     public void detach(String objectKey) {
         fileObjectRepository.findForUpdateByObjectKey(objectKey)
@@ -81,7 +113,7 @@ public class FileObjectLifecycleService {
             return;
         }
         List<Long> fileObjectIds = fileObjectRepository.findByObjectKeyIn(objectKeys).stream()
-                .map(FileObject::getFileObjectId)
+                .map(com.eeum.eeum.domain.file.repository.FileObjectIdProjection::getFileObjectId)
                 .sorted()
                 .toList();
         if (fileObjectIds.isEmpty()) {
@@ -120,6 +152,19 @@ public class FileObjectLifecycleService {
         return fileObjectRepository.findById(fileObjectId)
                 .map(fileObject -> fileObject.recordCleanupFailure(maxAttempts))
                 .orElse(false);
+    }
+
+    private void validateAttachable(Long accountId, FileUploadPurpose purpose, FileObject fileObject) {
+        if (!fileObject.isOwnedBy(accountId, purpose.name())) {
+            throw new ForbiddenException(ErrorCode.FILE_ACCESS_DENIED);
+        }
+        if (fileObject.getStatus() == FileObjectStatus.CLEANUP_PENDING
+                || fileObject.getStatus() == FileObjectStatus.CLEANUP_FAILED) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        if (fileObject.getStatus() == FileObjectStatus.ATTACHED) {
+            throw new ConflictException(ErrorCode.FILE_ALREADY_ATTACHED);
+        }
     }
 
     public record FileObjectCleanupTarget(Long fileObjectId, String objectKey) {

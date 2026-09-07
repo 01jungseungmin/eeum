@@ -70,8 +70,8 @@ public class ProductImageService {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        request.getImages().forEach(image ->
-                fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.PRODUCT, image.getImageUrl()));
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.PRODUCT,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         validateThumbnailCount(request);
 

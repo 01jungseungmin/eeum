@@ -41,8 +41,8 @@ public class CommunityPostImageService {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        request.getImages().forEach(image ->
-                fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.COMMUNITY, image.getImageUrl()));
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.COMMUNITY,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         List<CommunityImage> images = new ArrayList<>();
         for (int i = 0; i < request.getImages().size(); i++) {

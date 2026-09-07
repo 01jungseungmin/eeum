@@ -18,8 +18,9 @@ public interface FileObjectRepository extends JpaRepository<FileObject, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<FileObject> findForUpdateByObjectKey(String objectKey);
 
-    // 잠글 대상을 먼저 고르기만 한다. 잠금은 PK로 다시 건다 — 아래 메서드 참고.
-    List<FileObject> findByObjectKeyIn(Collection<String> objectKeys);
+    // 잠글 대상을 먼저 고르기만 한다. 엔티티를 먼저 읽으면 이후 잠금 조회가 영속성 컨텍스트의
+    // 오래된 상태를 재사용할 수 있으므로 PK projection만 가져온다.
+    List<FileObjectIdProjection> findByObjectKeyIn(Collection<String> objectKeys);
 
     // 여러 행을 한 번에 잠근다. 행마다 조회하면 이미지 수만큼 SELECT ... FOR UPDATE가 나간다.
     // 조건을 PK로 두는 것이 핵심이다. InnoDB는 ORDER BY가 아니라 스캔한 인덱스 순서로 행을

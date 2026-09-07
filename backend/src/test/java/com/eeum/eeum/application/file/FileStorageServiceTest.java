@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Base64;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -122,6 +123,18 @@ class FileStorageServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .extracting(exception -> ((BadRequestException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.FILE_UNSUPPORTED_CONTENT_TYPE);
+    }
+
+    @Test
+    void 여러_final_key는_생명주기_서비스에_한번에_첨부를_요청한다() {
+        // Given
+        List<String> objectKeys = List.of("used/42/a.webp", "used/42/b.webp");
+
+        // When
+        fileStorageService.requireAttachableObjects(42L, FileUploadPurpose.USED, objectKeys);
+
+        // Then
+        verify(fileObjectLifecycleService).attachAll(42L, FileUploadPurpose.USED, objectKeys);
     }
 
     @Test

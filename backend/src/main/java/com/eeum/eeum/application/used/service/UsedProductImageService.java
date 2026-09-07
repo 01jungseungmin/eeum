@@ -48,8 +48,8 @@ public class UsedProductImageService {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        request.getImages().forEach(image ->
-                fileStorageService.requireAttachableObject(sellerId, FileUploadPurpose.USED, image.getImageUrl()));
+        fileStorageService.requireAttachableObjects(sellerId, FileUploadPurpose.USED,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         List<UsedProductImage> images = new ArrayList<>();
         for (int i = 0; i < request.getImages().size(); i++) {
