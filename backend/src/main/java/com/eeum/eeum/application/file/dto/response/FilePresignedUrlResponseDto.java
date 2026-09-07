@@ -7,7 +7,7 @@ import java.util.Map;
 
 @Schema(description = "S3 Presigned POST URL 응답")
 public record FilePresignedUrlResponseDto(
-        @Schema(description = "DB에 저장할 object key", example = "used/42/550e8400-e29b-41d4-a716-446655440000.webp")
+        @Schema(description = "업로드 후 /files/confirm에 전달할 임시 object key. DB에는 confirm 응답의 최종 key를 저장합니다.", example = "tmp/used/42/550e8400-e29b-41d4-a716-446655440000.webp")
         String objectKey,
 
         @Schema(description = "S3에 multipart/form-data POST할 임시 URL")

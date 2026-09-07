@@ -22,13 +22,10 @@ import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -166,7 +163,7 @@ public class FileStorageService {
         return mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
     }
 
-    // 프론트가 S3 PUT 직후 호출한다. 임시 객체를 검사한 뒤 최종 key로 복사한다.
+    // 프론트가 S3 POST 직후 호출한다. 임시 객체를 검사한 뒤 최종 key로 복사한다.
     // 최종 key에는 Presigned POST 정책을 발급하지 않으므로, 이후 객체를 덮어쓸 수 없다.
     public FileUploadConfirmResponseDto confirmUpload(Long accountId, FileUploadConfirmRequestDto request) {
         assertConfigured();
@@ -185,7 +182,11 @@ public class FileStorageService {
 
             String contentType = normalizeAndValidateContentType(object.contentType());
             validateSize(object.contentLength());
-            validateImageSignature(temporaryObjectKey, contentType);
+            String eTag = object.eTag();
+            if (eTag == null || eTag.isBlank()) {
+                throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
+            }
+            validateImageSignature(temporaryObjectKey, contentType, eTag);
 
             String objectKey = purpose.createObjectKey(
                     accountId,
@@ -194,6 +195,7 @@ public class FileStorageService {
             );
             s3Client.copyObject(CopyObjectRequest.builder()
                     .copySource(properties.bucket() + "/" + temporaryObjectKey)
+                    .copySourceIfMatch(eTag)
                     .bucket(properties.bucket())
                     .key(objectKey)
                     .contentType(contentType)
@@ -226,6 +228,9 @@ public class FileStorageService {
         } catch (BusinessException exception) {
             throw exception;
         } catch (S3Exception exception) {
+            if (exception.statusCode() == 412) {
+                throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
+            }
             if (exception.statusCode() == 404) {
                 return fileObjectLifecycleService.findReusableConfirmedObjectKey(
                                 accountId, purpose, temporaryObjectKey)
@@ -257,7 +262,11 @@ public class FileStorageService {
     // 기존 외부 HTTPS URL은 프론트의 점진 전환 기간에만 허용한다. 새 업로드는 confirm 응답의 final key를 사용한다.
     public void requireAttachableObject(Long accountId, FileUploadPurpose purpose, String objectKey) {
         if (isLegacyHttpsUrl(objectKey)) {
+            rejectSignedUrl(objectKey);
             return;
+        }
+        if (objectKey != null && objectKey.length() > 500) {
+            throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
         }
         if (objectKey == null || objectKey.isBlank()
                 || objectKey.contains("..") || objectKey.contains("\\")
@@ -276,6 +285,24 @@ public class FileStorageService {
 
     private boolean isLegacyHttpsUrl(String value) {
         return value != null && value.startsWith("https://");
+    }
+
+    private void rejectSignedUrl(String value) {
+        try {
+            String query = java.net.URI.create(value).getQuery();
+            if (query != null) {
+                for (String parameter : query.split("&")) {
+                    String name = parameter.split("=", 2)[0];
+                    if (name.equalsIgnoreCase("X-Amz-Signature")
+                            || name.equalsIgnoreCase("AWSAccessKeyId")
+                            || name.equalsIgnoreCase("Signature")) {
+                        throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
+                    }
+                }
+            }
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
+        }
     }
 
     public FilePresignedGetUrlResponseDto createPresignedGetUrl(String objectKey) {
@@ -357,13 +384,14 @@ public class FileStorageService {
         }
     }
 
-    private void validateImageSignature(String objectKey, String contentType) {
+    private void validateImageSignature(String objectKey, String contentType, String eTag) {
         try {
             ResponseBytes<GetObjectResponse> bytes = s3Client.getObject(
                     GetObjectRequest.builder()
                             .bucket(properties.bucket())
                             .key(objectKey)
                             .range("bytes=0-15")
+                            .ifMatch(eTag)
                             .build(),
                     ResponseTransformer.toBytes());
             byte[] header = bytes.asByteArray();
@@ -371,6 +399,8 @@ public class FileStorageService {
                 throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
             }
         } catch (BusinessException exception) {
+            throw exception;
+        } catch (S3Exception exception) {
             throw exception;
         } catch (SdkException exception) {
             throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR, "S3 이미지 형식 확인에 실패했습니다", exception);

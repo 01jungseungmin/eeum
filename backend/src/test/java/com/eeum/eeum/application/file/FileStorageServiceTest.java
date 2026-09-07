@@ -51,6 +51,47 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class FileStorageServiceTest {
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void 검사나_복사_중_객체가_바뀌면_확정하지_않는다(boolean changedDuringCopy) {
+        // Given — S3의 If-Match 실패를 재현하며 DB 등록이 일어나지 않아야 한다.
+        String key = "tmp/used/42/upload.png";
+        given(s3Client.headObject(any(java.util.function.Consumer.class))).willReturn(headObjectResponse);
+        given(headObjectResponse.contentType()).willReturn("image/png");
+        given(headObjectResponse.contentLength()).willReturn(100L);
+        given(headObjectResponse.eTag()).willReturn("\"original\"");
+        S3Exception changed = (S3Exception) S3Exception.builder().statusCode(412).build();
+        if (changedDuringCopy) {
+            given(s3Client.getObject(any(GetObjectRequest.class),
+                    org.mockito.ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()))
+                    .willReturn(imageHeader);
+            given(imageHeader.asByteArray()).willReturn(new byte[]{
+                    (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+            given(s3Client.copyObject(any(software.amazon.awssdk.services.s3.model.CopyObjectRequest.class)))
+                    .willThrow(changed);
+        } else {
+            given(s3Client.getObject(any(GetObjectRequest.class),
+                    org.mockito.ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()))
+                    .willThrow(changed);
+        }
+        // When / Then
+        assertThatThrownBy(() -> fileStorageService.confirmUpload(42L, new FileUploadConfirmRequestDto(key)))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_INVALID);
+        verify(fileObjectLifecycleService).findReusableConfirmedObjectKey(42L, FileUploadPurpose.USED, key);
+        org.mockito.Mockito.verifyNoMoreInteractions(fileObjectLifecycleService);
+    }
+
+    @Test
+    void 조회용_서명_URL은_영구_이미지로_첨부하지_않는다() {
+        // Given — 응답 URL 재저장은 기존 프로필을 detach하고 만료 URL을 저장하게 한다.
+        String url = "https://eeum-prod-media-2026.s3.ap-northeast-2.amazonaws.com/profiles/42/a.png?X-Amz-Signature=abc";
+        // When / Then
+        assertThatThrownBy(() -> fileStorageService.requireAttachableObject(42L, FileUploadPurpose.PROFILE, url))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_INVALID);
+    }
+
     @Mock
     private S3Client s3Client;
 
@@ -145,6 +186,7 @@ class FileStorageServiceTest {
         given(s3Client.headObject(any(java.util.function.Consumer.class))).willReturn(headObjectResponse);
         given(headObjectResponse.contentType()).willReturn("image/png");
         given(headObjectResponse.contentLength()).willReturn(100L);
+        given(headObjectResponse.eTag()).willReturn("\"original\"");
         given(s3Client.getObject(
                 any(GetObjectRequest.class),
                 org.mockito.ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()
@@ -173,6 +215,14 @@ class FileStorageServiceTest {
 
         // Then — 재시도는 새 final object를 만들지 않고 같은 key를 돌려준다.
         assertThat(retried.objectKey()).isEqualTo(first.objectKey());
+        // 검사와 복사가 동일한 객체를 대상으로 해야 임시 파일 덮어쓰기를 차단한다.
+        ArgumentCaptor<GetObjectRequest> getRequest = ArgumentCaptor.forClass(GetObjectRequest.class);
+        verify(s3Client).getObject(getRequest.capture(), any(ResponseTransformer.class));
+        assertThat(getRequest.getValue().ifMatch()).isEqualTo("\"original\"");
+        ArgumentCaptor<software.amazon.awssdk.services.s3.model.CopyObjectRequest> copyRequest =
+                ArgumentCaptor.forClass(software.amazon.awssdk.services.s3.model.CopyObjectRequest.class);
+        verify(s3Client).copyObject(copyRequest.capture());
+        assertThat(copyRequest.getValue().copySourceIfMatch()).isEqualTo("\"original\"");
     }
 
     @Test
