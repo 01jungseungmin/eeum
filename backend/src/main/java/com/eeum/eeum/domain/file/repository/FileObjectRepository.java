@@ -18,6 +18,11 @@ public interface FileObjectRepository extends JpaRepository<FileObject, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<FileObject> findForUpdateByObjectKey(String objectKey);
 
+    // 여러 key를 한 번에 잠근다. key마다 조회하면 이미지 수만큼 SELECT ... FOR UPDATE가 나간다.
+    // PK 오름차순으로 읽어 잠금 순서를 프로젝트 규약(ID 오름차순)에 맞춘다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<FileObject> findForUpdateByObjectKeyInOrderByFileObjectIdAsc(Collection<String> objectKeys);
+
     Optional<FileObject> findByTemporaryObjectKey(String temporaryObjectKey);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

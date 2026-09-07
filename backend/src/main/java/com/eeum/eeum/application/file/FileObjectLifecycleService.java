@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,7 +41,8 @@ public class FileObjectLifecycleService {
     ) {
         return fileObjectRepository.findByTemporaryObjectKey(temporaryObjectKey)
                 .filter(fileObject -> fileObject.isOwnedBy(accountId, purpose.name()))
-                .filter(fileObject -> fileObject.getStatus() != FileObjectStatus.CLEANUP_PENDING)
+                .filter(fileObject -> fileObject.getStatus() != FileObjectStatus.CLEANUP_PENDING
+                        && fileObject.getStatus() != FileObjectStatus.CLEANUP_FAILED)
                 .map(FileObject::getObjectKey);
     }
 
@@ -52,7 +54,8 @@ public class FileObjectLifecycleService {
         if (!fileObject.isOwnedBy(accountId, purpose.name())) {
             throw new ForbiddenException(ErrorCode.FILE_ACCESS_DENIED);
         }
-        if (fileObject.getStatus() == FileObjectStatus.CLEANUP_PENDING) {
+        if (fileObject.getStatus() == FileObjectStatus.CLEANUP_PENDING
+                || fileObject.getStatus() == FileObjectStatus.CLEANUP_FAILED) {
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
         if (fileObject.getStatus() == FileObjectStatus.ATTACHED) {
@@ -65,6 +68,17 @@ public class FileObjectLifecycleService {
     public void detach(String objectKey) {
         fileObjectRepository.findForUpdateByObjectKey(objectKey)
                 .ifPresent(FileObject::detach);
+    }
+
+    // 여러 key를 한 번의 잠금 조회로 처리한다. key마다 detach를 부르면 이미지 수만큼
+    // SELECT ... FOR UPDATE가 나가고, 잠금 순서도 호출 순서(표시 순서)에 끌려간다.
+    @Transactional
+    public void detachAll(Collection<String> objectKeys) {
+        if (objectKeys.isEmpty()) {
+            return;
+        }
+        fileObjectRepository.findForUpdateByObjectKeyInOrderByFileObjectIdAsc(objectKeys)
+                .forEach(FileObject::detach);
     }
 
     @Transactional
@@ -83,6 +97,19 @@ public class FileObjectLifecycleService {
     @Transactional
     public void completeCleanup(Long fileObjectId) {
         fileObjectRepository.deleteById(fileObjectId);
+    }
+
+    /**
+     * 정리 실패를 기록한다. 한계를 넘긴 행은 CLEANUP_FAILED가 되어 이후 회차의
+     * {@link #claimExpiredUnattached}가 집지 않는다.
+     *
+     * @return 재시도를 포기했으면 true
+     */
+    @Transactional
+    public boolean recordCleanupFailure(Long fileObjectId, int maxAttempts) {
+        return fileObjectRepository.findById(fileObjectId)
+                .map(fileObject -> fileObject.recordCleanupFailure(maxAttempts))
+                .orElse(false);
     }
 
     public record FileObjectCleanupTarget(Long fileObjectId, String objectKey) {
