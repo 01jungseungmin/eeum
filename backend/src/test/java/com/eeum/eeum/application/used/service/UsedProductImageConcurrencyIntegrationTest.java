@@ -20,6 +20,9 @@ import com.eeum.eeum.domain.notification.repository.NotificationRepository;
 import com.eeum.eeum.domain.used.repository.UsedProductRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.application.file.FileUploadPurpose;
+import com.eeum.eeum.domain.file.entity.FileObject;
+import com.eeum.eeum.domain.file.repository.FileObjectRepository;
 import com.eeum.eeum.support.IntegrationTestSupport;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
@@ -57,6 +60,7 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
     private final UsedProductImageService usedProductImageService;
     private final UsedProductReportActionExecutor reportActionExecutor;
     private final UsedProductImageRepository usedProductImageRepository;
+    private final FileObjectRepository fileObjectRepository;
     private final UsedProductRepository usedProductRepository;
     private final FavoriteRepository favoriteRepository;
     private final NotificationRepository notificationRepository;
@@ -90,6 +94,7 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
 
     @AfterEach
     void tearDown() {
+        fileObjectRepository.deleteAll();
         usedProductImageRepository.deleteAll();
         favoriteRepository.deleteAll();
         usedProductRepository.deleteAll();
@@ -196,6 +201,14 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
         return images.stream().filter(UsedProductImage::isThumbnail).count();
     }
 
+    /**
+     * S3 전환 후 imageUrl은 {@code used/{accountId}/{fileId}.jpg} 형태의 final object key여야 한다.
+     * 맨 파일명을 넣으면 {@code FileUploadPurpose.owns()}가 접두사를 확인하다 막아
+     * 잠금에 닿기도 전에 403으로 빠져나가고, 그러면 이 테스트가 재현하려는 경쟁 자체가 없어진다.
+     *
+     * <p>{@code attach()}는 대상 행을 찾지 못하면 FILE_NOT_FOUND를 던지므로,
+     * 각 key에 대응하는 {@code FileObject}를 CONFIRMED 상태로 미리 넣는다.
+     */
     private UsedProductImageUploadListRequestDto upload(int count, String prefix) {
         UsedProductImageUploadListRequestDto request = new UsedProductImageUploadListRequestDto();
         List<UsedProductImageUploadRequestDto> images = Arrays.stream(new int[count].clone())
@@ -203,9 +216,16 @@ class UsedProductImageConcurrencyIntegrationTest extends IntegrationTestSupport 
                 .map(ignored -> new UsedProductImageUploadRequestDto())
                 .toList();
         for (int i = 0; i < images.size(); i++) {
-            ReflectionTestUtils.setField(images.get(i), "imageUrl", prefix + "-" + i + ".jpg");
+            ReflectionTestUtils.setField(images.get(i), "imageUrl", confirmedObjectKey(prefix + "-" + i));
         }
         ReflectionTestUtils.setField(request, "images", images);
         return request;
+    }
+
+    private String confirmedObjectKey(String fileId) {
+        String objectKey = "used/" + sellerId + "/" + fileId + ".jpg";
+        fileObjectRepository.saveAndFlush(FileObject.confirmed(
+                sellerId, FileUploadPurpose.USED.name(), "tmp/" + objectKey, objectKey));
+        return objectKey;
     }
 }

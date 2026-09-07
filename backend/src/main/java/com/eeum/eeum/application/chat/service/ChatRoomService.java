@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatParticipantResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
@@ -70,6 +71,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatRoomService {
 
+    private final FileStorageService fileStorageService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatMessageRepository chatMessageRepository;

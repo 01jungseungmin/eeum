@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.request.ChatRoomAdminSearchDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdminChatService {
 
+    private final FileStorageService fileStorageService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatParticipantRepository chatParticipantRepository;

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.chat.service;
 
 import com.eeum.eeum.application.chat.dto.request.ChatRoomAdminSearchDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -45,6 +46,7 @@ class AdminChatServiceTest {
     @InjectMocks
     private AdminChatService adminChatService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatParticipantRepository chatParticipantRepository;

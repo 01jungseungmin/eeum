@@ -1,8 +1,10 @@
 package com.eeum.eeum.application.product.mapper;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.product.dto.response.*;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.domain.product.entity.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -10,7 +12,11 @@ import java.math.RoundingMode;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class ProductMapper {
+
+    private final FileStorageService fileStorageService;
+
     private Integer calculateDiscountRate(BigDecimal originalPrice, BigDecimal eventPrice) {
         if (originalPrice == null || originalPrice.compareTo(BigDecimal.ZERO) == 0) {
             return 0;

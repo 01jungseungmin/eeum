@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.product.dto.response.*;
 import com.eeum.eeum.application.store.dto.request.NearbyStoreSearchCondition;
 import com.eeum.eeum.application.store.dto.request.StoreSearchDto;
@@ -49,6 +50,7 @@ public class PublicStoreService {
 
     private static final Duration PRODUCT_VIEW_TTL = Duration.ofHours(6);
 
+    private final FileStorageService fileStorageService;
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
     private final StoreNoticeRepository storeNoticeRepository;
@@ -415,7 +417,7 @@ public class PublicStoreService {
                 .stream()
                 .filter(image -> image.isThumbnail())
                 .findFirst()
-                .map(image -> image.getImageUrl())
+                .map(ProductImage::getImageUrl)
                 .orElse(null);
     }
 

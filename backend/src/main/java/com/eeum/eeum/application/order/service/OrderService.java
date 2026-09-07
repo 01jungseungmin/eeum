@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.order.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
 import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
@@ -49,6 +50,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrderService {
 
+    private final FileStorageService fileStorageService;
     private final AccountRepository accountRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;

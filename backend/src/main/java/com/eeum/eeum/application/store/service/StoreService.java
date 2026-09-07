@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.dto.request.StoreBusinessHourUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
@@ -53,6 +54,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StoreService {
 
+    private final FileStorageService fileStorageService;
     private final StoreRepository storeRepository;
     private final StoreNoticeRepository storeNoticeRepository;
     private final CategoryRepository categoryRepository;

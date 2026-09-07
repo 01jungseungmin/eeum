@@ -2,6 +2,8 @@ package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductImageUploadListRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.domain.used.entity.UsedProduct;
 import com.eeum.eeum.domain.used.entity.UsedProductImage;
 import com.eeum.eeum.domain.used.repository.UsedProductImageRepository;
@@ -31,6 +33,7 @@ public class UsedProductImageService {
     private final AccountWriteGuard accountWriteGuard;
     private final UsedProductRepository usedProductRepository;
     private final UsedProductImageRepository usedProductImageRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public List<UsedProductImageResponseDto> addImages(
@@ -44,6 +47,9 @@ public class UsedProductImageService {
         if (currentCount + request.getImages().size() > MAX_IMAGE_COUNT) {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
+
+        fileStorageService.requireAttachableObjects(sellerId, FileUploadPurpose.USED,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         List<UsedProductImage> images = new ArrayList<>();
         for (int i = 0; i < request.getImages().size(); i++) {
@@ -59,14 +65,14 @@ public class UsedProductImageService {
 
         List<UsedProductImage> saved = usedProductImageRepository.saveAll(images);
         log.info("중고 게시글 사진 등록: usedProductId={}, count={}", usedProductId, saved.size());
-        return saved.stream().map(UsedProductImageResponseDto::from).toList();
+        return saved.stream().map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
     public List<UsedProductImageResponseDto> getImages(Long usedProductId) {
         return usedProductImageRepository
                 .findByUsedProduct_UsedProductIdOrderByDisplayOrderAsc(usedProductId).stream()
-                .map(UsedProductImageResponseDto::from)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -76,8 +82,10 @@ public class UsedProductImageService {
 
         UsedProductImage image = getImageOfProductOrThrow(usedProductId, imageId);
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
 
         usedProductImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
         // 아래에서 남은 목록을 다시 읽으므로, 삭제를 DB에 먼저 반영해야 지운 행이 딸려오지 않는다.
         usedProductImageRepository.flush();
 
@@ -111,6 +119,10 @@ public class UsedProductImageService {
 
         target.markAsThumbnail();
         log.info("중고 게시글 대표 사진 변경: usedProductId={}, imageId={}", usedProductId, imageId);
+    }
+
+    private UsedProductImageResponseDto toResponse(UsedProductImage image) {
+        return UsedProductImageResponseDto.from(image, image.getImageUrl());
     }
 
     // ===================== 내부 헬퍼 =====================

@@ -31,6 +31,10 @@ public final class RateLimitKeys {
         return "rate-limit:fcm-test:" + ownerId;
     }
 
+    public static String fileUpload(Long accountId) {
+        return "rate-limit:file-upload:" + accountId;
+    }
+
     // 생활권 매칭 노출 가게 목록 조회(공개 API) — viewerKey(account:{id} 또는 ip:{ip}) 단위 과호출 방지
     public static String aiExposureView(String viewerKey) {
         return "rate-limit:ai-exposure-view:" + viewerKey;

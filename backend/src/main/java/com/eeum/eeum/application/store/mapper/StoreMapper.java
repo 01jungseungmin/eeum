@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.mapper;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.dto.response.SettlementAccountResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreBusinessHourResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
@@ -7,10 +8,15 @@ import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.common.util.MaskingUtil;
 import com.eeum.eeum.domain.store.entity.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class StoreMapper {
+
+    private final FileStorageService fileStorageService;
+
     public StoreListResponseDto toStoreListResponseDto(Store store) {
         return StoreListResponseDto.builder()
                 .storeId(store.getStoreId())

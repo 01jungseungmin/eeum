@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -22,6 +23,10 @@ public class ChatParticipantResponseDto {
     private final LocalDateTime joinedAt;
 
     public static ChatParticipantResponseDto from(ChatParticipant participant) {
+        return from(participant, Function.identity());
+    }
+
+    public static ChatParticipantResponseDto from(ChatParticipant participant, Function<String, String> imageUrlResolver) {
         Account account = participant.getAccount();
         return ChatParticipantResponseDto.builder()
                 .accountId(account.getAccountId())
@@ -29,7 +34,7 @@ public class ChatParticipantResponseDto {
                 // 필드를 없애지 않는 이유는 프론트 계약을 깨지 않기 위해서다 — nickname과 같은 값이다.
                 .name(account.getDisplayName())
                 .nickname(account.getDisplayName())
-                .profileImageUrl(account.getProfileImageUrl())
+                .profileImageUrl(imageUrlResolver.apply(account.getProfileImageUrl()))
                 .status(participant.getStatus())
                 .joinedAt(participant.getJoinedAt())
                 .build();

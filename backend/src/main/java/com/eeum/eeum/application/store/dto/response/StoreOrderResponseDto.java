@@ -14,6 +14,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -35,14 +36,16 @@ public class StoreOrderResponseDto {
     private RefundInfoResponseDto refundInfo;
 
 
-    public static StoreOrderResponseDto of(Order order, List<OrderItem> orderItems, Payment payment) {
+    public static StoreOrderResponseDto of(
+            Order order, List<OrderItem> orderItems, Payment payment,
+            Function<String, String> imageUrlResolver) {
         return StoreOrderResponseDto.builder()
                 .orderId(order.getOrderId())
                 .customerNickname(order.getAccount().getNickname())
                 .orderStatus(order.getStatus())
                 .totalPrice(order.getTotalPrice())
                 .items(orderItems.stream()
-                        .map(OrderItemResponseDto::from)
+                        .map(item -> OrderItemResponseDto.from(item, imageUrlResolver))
                         .toList())
                 .paidAt(order.getPaidAt())
                 .confirmedAt(order.getConfirmedAt())

@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -84,12 +85,13 @@ public class StoreReviewDetailResponseDto {
             StoreReview review,
             List<StoreReviewImage> images,
             StoreReviewReplyResponseDto reply,
-            List<OrderItem> orderItems
+            List<OrderItem> orderItems,
+            Function<String, String> imageUrlResolver
     ) {
         List<ImageResponseDto> imageDtos = images.stream()
                 .map(img -> ImageResponseDto.builder()
                         .imageId(img.getStorereviewimageId())
-                        .imageUrl(img.getImageUrl())
+                        .imageUrl(imageUrlResolver.apply(img.getImageUrl()))
                         .displayOrder(img.getDisplayOrder())
                         .isThumbnail(img.isThumbnail())
                         .build())
@@ -115,7 +117,7 @@ public class StoreReviewDetailResponseDto {
                     .orderNumber(review.getOrder().getOrderNumber())
                     .orderCreatedAt(review.getOrder().getCreatedAt())
                     .orderItems(orderItems == null ? Collections.emptyList()
-                            : orderItems.stream().map(OrderItemResponseDto::from).toList());
+                            : orderItems.stream().map(item -> OrderItemResponseDto.from(item, imageUrlResolver)).toList());
         } else if (review.getReviewType() == StoreReviewType.RESERVATION && review.getVisitReservation() != null) {
             builder.visitReservationId(review.getVisitReservation().getVisitReservationId())
                     .visitDate(review.getVisitReservation().getVisitDate())

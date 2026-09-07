@@ -72,6 +72,26 @@ public class AsyncConfig {
         return executor;
     }
 
+    @Bean(name = "chatBroadcastTaskExecutor")
+    public Executor chatBroadcastTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 메시지의 체감 순서는 채팅 기능의 계약이다. Presigned URL 생성만 비동기로 빼되
+        // 단일 FIFO 워커로 Redis 발행 순서를 보존한다.
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("chat-broadcast-");
+        // 큐 포화가 커밋 완료 콜백을 다시 요청 스레드에서 막으면 비동기 분리 의미가 사라진다.
+        // 메시지는 REST 조회로 재동기화할 수 있으므로 이 경우 실시간 1건만 건너뛴다.
+        executor.setRejectedExecutionHandler((task, poolExecutor) ->
+                log.warn("채팅 실시간 중계 큐 포화 — REST 재동기화 대기. queued={}",
+                        poolExecutor.getQueue().size()));
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
+
     /**
      * Spring MVC async 전용 풀 ({@code Callable}·{@code WebAsyncTask} 반환값 처리).
      *

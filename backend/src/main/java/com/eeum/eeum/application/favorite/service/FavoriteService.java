@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.favorite.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.favorite.dto.request.FavoriteBatchCheckRequestDto;
 import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.favorite.dto.response.*;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FavoriteService {
 
+    private final FileStorageService fileStorageService;
     private final FavoriteRepository favoriteRepository;
     private final AccountWriteGuard accountWriteGuard;
     private final StoreRepository storeRepository;

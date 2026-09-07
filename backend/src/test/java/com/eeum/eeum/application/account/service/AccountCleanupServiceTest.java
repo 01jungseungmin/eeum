@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.service.SettlementAccountDeleteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
@@ -44,6 +45,7 @@ class AccountCleanupServiceTest {
     @Mock private OwnerInfoRepository ownerInfoRepository;
     @Mock private SettlementAccountDeleteService settlementAccountDeleteService;
     @Mock private FavoriteService favoriteService;
+    @Mock private FileStorageService fileStorageService;
 
     @InjectMocks
     private AccountCleanupService accountCleanupService;

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.order.service;
 
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -49,6 +50,7 @@ class OrderServiceTest {
     @InjectMocks
     private OrderService orderService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private AccountRepository accountRepository;
     @Mock private CartRepository cartRepository;
     @Mock private CartItemRepository cartItemRepository;

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.favorite.service;
 
 import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.favorite.dto.response.FavoriteUsedProductResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.Region;
@@ -62,6 +63,7 @@ class FavoriteUsedProductServiceTest {
     private static final Long ACCOUNT_ID = 1L;
     private static final Long PRODUCT_ID = 10L;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private FavoriteRepository favoriteRepository;
     @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private StoreRepository storeRepository;
@@ -253,7 +255,9 @@ class FavoriteUsedProductServiceTest {
         // given — 게시글마다 사진을 조회하면 페이지 크기만큼 쿼리가 나간다(N+1)
         givenFavoriteSlice(row(PRODUCT_ID));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
-                .thenReturn(List.of(UsedProductImage.create(product(), "thumb.jpg", 1, true)));
+                .thenReturn(List.of(UsedProductImage.create(product(), "used/7/thumb.webp", 1, true)));
+        // Service는 트랜잭션 안에서 S3 URL을 발급하지 않고 objectKey만 DTO에 담는다.
+        // HTTP 응답 직전 ImageUrlResponseAdvice가 조회용 URL로 변환한다.
 
         // when
         CursorSlice<FavoriteUsedProductResponseDto> result =
@@ -261,7 +265,7 @@ class FavoriteUsedProductServiceTest {
 
         // then
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("thumb.jpg");
+        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("used/7/thumb.webp");
         assertThat(result.getContent().get(0).getUsedProductId()).isEqualTo(PRODUCT_ID);
         assertThat(result.getContent().get(0).getRegionName()).isEqualTo("역삼동");
         verify(usedProductImageRepository, times(1))

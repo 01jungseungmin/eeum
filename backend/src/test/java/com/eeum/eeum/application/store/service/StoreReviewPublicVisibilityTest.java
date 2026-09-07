@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
@@ -39,6 +40,7 @@ import static org.mockito.Mockito.when;
 class StoreReviewPublicVisibilityTest {
 
     @InjectMocks private StoreReviewService service;
+    @Mock private FileStorageService fileStorageService;
     @Mock private StoreRepository storeRepository;
     @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private StoreReviewImageRepository storeReviewImageRepository;

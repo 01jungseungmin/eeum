@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.product.service;
 
 import com.eeum.eeum.application.product.mapper.ProductMapper;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
@@ -30,6 +32,7 @@ public class ProductImageService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final ProductMapper productMapper;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public ImageResponseDto getImage(Long accountId, Long productId) {
@@ -66,6 +69,9 @@ public class ProductImageService {
         if (currentCount + requestCount > MAX_IMAGE_COUNT) {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
+
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.PRODUCT,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         validateThumbnailCount(request);
 
@@ -119,7 +125,9 @@ public class ProductImageService {
         ProductImage image = getImageWithProductCheck(productId, imageId);
 
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
         productImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
 
         // 대표 이미지 삭제 시 다음 이미지를 대표로 설정
         if (wasThumbnail) {

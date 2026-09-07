@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.service.OrderService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
@@ -38,6 +39,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StoreOrderService {
 
+    private final FileStorageService fileStorageService;
     private final StoreRepository storeRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -65,7 +67,7 @@ public class StoreOrderService {
         List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(orderId);
         Payment payment = paymentRepository.findByOrder_OrderId(orderId).orElse(null);
 
-        return StoreOrderResponseDto.of(order, orderItems, payment);
+        return StoreOrderResponseDto.of(order, orderItems, payment, fileStorageService::resolveImageUrl);
     }
 
     @Transactional(readOnly = true)
@@ -80,7 +82,7 @@ public class StoreOrderService {
         return orders.map(order -> {
             List<OrderItem> orderItems = orderItemRepository.findByOrder_OrderId(order.getOrderId());
             Payment payment = paymentRepository.findByOrder_OrderId(order.getOrderId()).orElse(null);
-            return StoreOrderResponseDto.of(order, orderItems, payment);
+            return StoreOrderResponseDto.of(order, orderItems, payment, fileStorageService::resolveImageUrl);
         });
     }
 

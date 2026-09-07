@@ -1,6 +1,8 @@
 package com.eeum.eeum.application.community.service;
 
 import com.eeum.eeum.application.community.dto.response.CommunityImageResponseDto;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.domain.community.entity.CommunityImage;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
@@ -28,6 +30,7 @@ public class CommunityPostImageService {
 
     private final CommunityPostRepository postRepository;
     private final CommunityImageRepository imageRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<CommunityImageResponseDto> addImages(Long accountId, Long postId, ImageUploadListRequestDto request) {
@@ -37,6 +40,9 @@ public class CommunityPostImageService {
         if (currentCount + request.getImages().size() > MAX_IMAGE_COUNT) {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
+
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.COMMUNITY,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         List<CommunityImage> images = new ArrayList<>();
         for (int i = 0; i < request.getImages().size(); i++) {
@@ -49,7 +55,7 @@ public class CommunityPostImageService {
 
         List<CommunityImage> saved = imageRepository.saveAll(images);
         log.info("커뮤니티 이미지 등록: postId={}, count={}", postId, saved.size());
-        return saved.stream().map(CommunityImageResponseDto::from).toList();
+        return saved.stream().map(this::toResponse).toList();
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -63,7 +69,9 @@ public class CommunityPostImageService {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
 
+        String imageUrl = image.getImageUrl();
         imageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
         imageRepository.flush();
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
@@ -91,5 +99,9 @@ public class CommunityPostImageService {
         if (!post.isOwnedBy(accountId)) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
+    }
+
+    private CommunityImageResponseDto toResponse(CommunityImage image) {
+        return CommunityImageResponseDto.from(image, image.getImageUrl());
     }
 }

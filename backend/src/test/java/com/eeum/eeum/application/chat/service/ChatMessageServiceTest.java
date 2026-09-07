@@ -74,12 +74,14 @@ class ChatMessageServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.eeum.eeum.application.notification.service.NotificationOutboxRecorder outboxRecorder;
     @Mock private StringRedisTemplate redisTemplate;
+    @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
     @SuppressWarnings("unchecked")
     @Mock private ValueOperations<String, String> valueOps;
 
     @BeforeEach
     void setUp() {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(fileStorageService.resolveImageUrl(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     // ===================== 픽스처 헬퍼 =====================

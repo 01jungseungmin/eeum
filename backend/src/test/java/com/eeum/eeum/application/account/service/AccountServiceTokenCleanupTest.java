@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.account.dto.request.ChangePasswordRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.account.dto.request.WithdrawRequestDto;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
@@ -41,6 +42,7 @@ class AccountServiceTokenCleanupTest {
 
     @InjectMocks AccountService accountService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock AccountRepository accountRepository;
     @Mock OwnerInfoRepository ownerInfoRepository;
     @Mock AccountRegionRepository accountRegionRepository;

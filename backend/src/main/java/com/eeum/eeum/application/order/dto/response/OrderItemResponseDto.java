@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -48,14 +49,14 @@ public class OrderItemResponseDto {
     @Schema(description = "상품 총 금액", example = "9800")
     private BigDecimal lineTotalPrice;
 
-    public static OrderItemResponseDto from(OrderItem orderItem) {
+    public static OrderItemResponseDto from(OrderItem orderItem, Function<String, String> imageUrlResolver) {
         return OrderItemResponseDto.builder()
                 .orderItemId(orderItem.getOrderItemId())
                 .productId(orderItem.getProductId())
                 .eventProductId(orderItem.getEventProductId())
                 .productType(orderItem.getProductType().name())
                 .productName(orderItem.getProductName())
-                .thumbnailUrl(orderItem.getThumbnailUrl())
+                .thumbnailUrl(imageUrlResolver.apply(orderItem.getThumbnailUrl()))
                 .selectedOptionsText(orderItem.getSelectedOptionsText())
                 .basePrice(orderItem.getBasePrice())
                 .optionsTotalPrice(orderItem.getOptionsTotalPrice())

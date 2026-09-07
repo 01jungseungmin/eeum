@@ -45,6 +45,7 @@ class UsedProductImageServiceTest {
     @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private UsedProductImageRepository usedProductImageRepository;
+    @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
 
     @InjectMocks
     private UsedProductImageService usedProductImageService;
@@ -161,6 +162,7 @@ class UsedProductImageServiceTest {
 
         // then
         verify(usedProductImageRepository).delete(thumbnail);
+        verify(fileStorageService).scheduleAttachedObjectCleanup("a.jpg");
         assertThat(second.isThumbnail()).isTrue();
         assertThat(third.isThumbnail()).isFalse();
     }
