@@ -50,7 +50,9 @@ module.exports = {
         foregroundImage: "./assets/images/android-icon-foreground.png"
       },
       "softwareKeyboardLayoutMode": "resize",
-      package: "com.eeum.app",
+      // android/app/build.gradle 의 applicationId 와 반드시 같아야 한다.
+      // 카카오·네이버 콘솔에 등록된 패키지명도 이 값이다.
+      package: "com.eeum",
       googleServicesFile: "./google-services.json"
     },
     
