@@ -81,7 +81,7 @@ public class AdminChatService {
         getRoomOrThrow(roomId);
         return chatMessageRepository
                 .findAllByChatRoom_ChatroomIdOrderBySentAtDesc(roomId, pageable)
-                .map(message -> ChatMessageResponseDto.from(message, fileStorageService::resolveImageUrl));
+                .map(ChatMessageResponseDto::from);
     }
 
     // 메시지 강제 삭제 (Soft Delete)
@@ -92,7 +92,7 @@ public class AdminChatService {
         message.markDeleted();
         Long roomId = message.getChatRoom().getChatroomId();
         eventPublisher.publishEvent(
-                new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message, fileStorageService::resolveImageUrl)));
+                new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message)));
         log.info("[ADMIN] 채팅 메시지 강제 삭제: messageId={}", messageId);
     }
 

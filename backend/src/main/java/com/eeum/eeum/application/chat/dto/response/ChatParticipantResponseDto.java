@@ -22,6 +22,10 @@ public class ChatParticipantResponseDto {
     private final ParticipantStatus status;
     private final LocalDateTime joinedAt;
 
+    public static ChatParticipantResponseDto from(ChatParticipant participant) {
+        return from(participant, Function.identity());
+    }
+
     public static ChatParticipantResponseDto from(ChatParticipant participant, Function<String, String> imageUrlResolver) {
         Account account = participant.getAccount();
         return ChatParticipantResponseDto.builder()

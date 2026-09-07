@@ -102,6 +102,6 @@ public class CommunityPostImageService {
     }
 
     private CommunityImageResponseDto toResponse(CommunityImage image) {
-        return CommunityImageResponseDto.from(image, fileStorageService.resolveImageUrl(image.getImageUrl()));
+        return CommunityImageResponseDto.from(image, image.getImageUrl());
     }
 }

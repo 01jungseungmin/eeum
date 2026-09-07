@@ -503,7 +503,7 @@ public class UsedProductService {
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
                 .collect(Collectors.toMap(
                         image -> image.getUsedProduct().getUsedProductId(),
-                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                        UsedProductImage::getImageUrl,
                         (first, second) -> first));
     }
 

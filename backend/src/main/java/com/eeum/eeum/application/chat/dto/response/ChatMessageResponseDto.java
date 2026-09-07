@@ -28,6 +28,10 @@ public class ChatMessageResponseDto {
     private final boolean deleted;
     private final LocalDateTime sentAt;
 
+    public static ChatMessageResponseDto from(ChatMessage message) {
+        return from(message, java.util.function.Function.identity());
+    }
+
     /**
      * @param imageUrlResolver objectKey를 조회용 URL로 바꾼다. DB에는 key만 있으므로 이 변환을
      *                         거치지 않은 값은 private 버킷에서 열리지 않는다.
@@ -47,6 +51,21 @@ public class ChatMessageResponseDto {
                 .messageType(message.getMessageType())
                 .deleted(deleted)
                 .sentAt(message.getSentAt())
+                .build();
+    }
+
+    public ChatMessageResponseDto withResolvedImageUrls(String senderProfileImageUrl, String imageUrl) {
+        return ChatMessageResponseDto.builder()
+                .messageId(messageId)
+                .roomId(roomId)
+                .senderAccountId(senderAccountId)
+                .senderName(senderName)
+                .senderProfileImageUrl(senderProfileImageUrl)
+                .content(content)
+                .imageUrl(imageUrl)
+                .messageType(messageType)
+                .deleted(deleted)
+                .sentAt(sentAt)
                 .build();
     }
 }

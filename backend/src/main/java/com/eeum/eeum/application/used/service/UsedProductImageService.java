@@ -122,7 +122,7 @@ public class UsedProductImageService {
     }
 
     private UsedProductImageResponseDto toResponse(UsedProductImage image) {
-        return UsedProductImageResponseDto.from(image, fileStorageService.resolveImageUrl(image.getImageUrl()));
+        return UsedProductImageResponseDto.from(image, image.getImageUrl());
     }
 
     // ===================== 내부 헬퍼 =====================

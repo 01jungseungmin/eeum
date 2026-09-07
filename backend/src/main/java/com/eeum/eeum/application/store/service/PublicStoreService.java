@@ -369,7 +369,7 @@ public class PublicStoreService {
     private ImageResponseDto toStoreImageDto(StoreImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getStoreImageId())
-                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .imageUrl(image.getImageUrl())
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();
@@ -378,7 +378,7 @@ public class PublicStoreService {
     private ImageResponseDto toProductImageDto(ProductImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getProductImageId())
-                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .imageUrl(image.getImageUrl())
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();
@@ -404,7 +404,7 @@ public class PublicStoreService {
                 .stream()
                 .filter(StoreImage::isThumbnail)
                 .findFirst()
-                .map(image -> fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .map(StoreImage::getImageUrl)
                 .orElse(null);
     }
 
@@ -417,7 +417,7 @@ public class PublicStoreService {
                 .stream()
                 .filter(image -> image.isThumbnail())
                 .findFirst()
-                .map(image -> fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .map(ProductImage::getImageUrl)
                 .orElse(null);
     }
 

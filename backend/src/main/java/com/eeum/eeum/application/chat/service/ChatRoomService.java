@@ -320,7 +320,7 @@ public class ChatRoomService {
         List<ChatParticipantResponseDto> participants = chatParticipantRepository
                 .findAllByChatRoom_ChatroomIdAndStatus(roomId, ParticipantStatus.ACTIVE)
                 .stream()
-                .map(participant -> ChatParticipantResponseDto.from(participant, fileStorageService::resolveImageUrl))
+                .map(ChatParticipantResponseDto::from)
                 .toList();
 
         return ChatRoomDetailResponseDto.of(room, participants, resolveUsedProductSummary(room));
@@ -712,7 +712,7 @@ public class ChatRoomService {
         chatMessageRepository.save(system);
         room.updateLastMessageAt(system.getSentAt());
         eventPublisher.publishEvent(
-                new ChatMessageBroadcastEvent(room.getChatroomId(), ChatMessageResponseDto.from(system, fileStorageService::resolveImageUrl)));
+                new ChatMessageBroadcastEvent(room.getChatroomId(), ChatMessageResponseDto.from(system)));
     }
 
     // STORE 단톡방 자동 이름 / 일반 그룹 이름 결정
@@ -857,7 +857,7 @@ public class ChatRoomService {
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
                 .collect(Collectors.toMap(
                         image -> image.getUsedProduct().getUsedProductId(),
-                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                        UsedProductImage::getImageUrl,
                         (first, second) -> first));
 
         Map<Long, UsedProductChatSummaryDto> byRoomId = new HashMap<>();

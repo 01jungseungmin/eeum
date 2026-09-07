@@ -126,7 +126,6 @@ public class StoreService {
         String thumbnailUrl = storeImageRepository
                 .findByStore_StoreIdAndIsThumbnailTrue(store.getStoreId())
                 .map(StoreImage::getImageUrl)
-                .map(fileStorageService::resolveImageUrl)
                 .orElse(null);
 
         // 매출은 결제 완료 후 전이된 상태까지 포함해야 실제 매출과 일치한다 (PAID만 합산하면 사장이

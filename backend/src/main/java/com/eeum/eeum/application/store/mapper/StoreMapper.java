@@ -53,7 +53,7 @@ public class StoreMapper {
     public ImageResponseDto toImageDto(StoreImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getStoreImageId())
-                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .imageUrl(image.getImageUrl())
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();
@@ -84,7 +84,7 @@ public class StoreMapper {
     public ImageResponseDto toImageResponseDto(StoreImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getStoreImageId())
-                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .imageUrl(image.getImageUrl())
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();

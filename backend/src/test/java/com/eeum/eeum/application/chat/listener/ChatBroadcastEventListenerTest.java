@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.chat.listener;
 
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
@@ -23,8 +25,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
  * 단위 테스트에서는 메서드 동작(destination · payload 전달)만 검증한다.
  * AFTER_COMMIT 실행 보장은 통합 테스트 범위로 분류한다.
  *
- * <p>이미지 URL 변환은 이 리스너의 책임이 아니다 — DTO를 만드는 Service에서 이미 끝난다.
- * 그 보장은 {@code ChatMessageResponseDtoTest}가 고정한다.
+ * <p>이미지 URL 변환은 DB 커밋 뒤 이 리스너에서 수행한다.
  */
 @ExtendWith(MockitoExtension.class)
 class ChatBroadcastEventListenerTest {
@@ -33,6 +34,7 @@ class ChatBroadcastEventListenerTest {
     private ChatBroadcastEventListener chatBroadcastEventListener;
 
     @Mock private RealtimeRelayPublisher realtimeRelayPublisher;
+    @Mock private FileStorageService fileStorageService;
 
     // ===================== onBroadcast =====================
 
@@ -41,6 +43,7 @@ class ChatBroadcastEventListenerTest {
         // Given
         Long roomId = 10L;
         ChatMessageResponseDto payload = mock(ChatMessageResponseDto.class);
+        givenRawImageUrls(payload);
         ChatMessageBroadcastEvent event = new ChatMessageBroadcastEvent(roomId, payload);
 
         // When
@@ -58,6 +61,8 @@ class ChatBroadcastEventListenerTest {
         Long roomIdB = 99L;
         ChatMessageResponseDto payloadA = mock(ChatMessageResponseDto.class);
         ChatMessageResponseDto payloadB = mock(ChatMessageResponseDto.class);
+        givenRawImageUrls(payloadA);
+        givenRawImageUrls(payloadB);
 
         // When
         chatBroadcastEventListener.onBroadcast(new ChatMessageBroadcastEvent(roomIdA, payloadA));
@@ -74,11 +79,18 @@ class ChatBroadcastEventListenerTest {
         // Given
         Long roomId = 1L;
         ChatMessageResponseDto payload = mock(ChatMessageResponseDto.class);
+        givenRawImageUrls(payload);
 
         // When
         chatBroadcastEventListener.onBroadcast(new ChatMessageBroadcastEvent(roomId, payload));
 
         // Then — /sub/chat/rooms/{roomId} 형식 준수
         verify(realtimeRelayPublisher).publishStomp("/sub/chat/rooms/1", payload);
+    }
+
+    private void givenRawImageUrls(ChatMessageResponseDto payload) {
+        when(payload.getSenderProfileImageUrl()).thenReturn(null);
+        when(payload.getImageUrl()).thenReturn(null);
+        when(payload.withResolvedImageUrls(null, null)).thenReturn(payload);
     }
 }

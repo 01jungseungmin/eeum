@@ -551,7 +551,7 @@ public class OrderService {
                 .eventProductId(item.getEventProductId())
                 .productType(item.getProductType().name())
                 .productName(item.getProductName())
-                .thumbnailUrl(fileStorageService.resolveImageUrl(item.getThumbnailUrl()))
+                .thumbnailUrl(item.getThumbnailUrl())
                 .selectedOptionsText(item.getSelectedOptionsText())
                 .basePrice(item.getBasePrice())
                 .optionsTotalPrice(item.getOptionsTotalPrice())

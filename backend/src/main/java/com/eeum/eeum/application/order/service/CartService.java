@@ -443,7 +443,6 @@ public class CartService {
                 .filter(ProductImage::isThumbnail)
                 .findFirst()
                 .map(ProductImage::getImageUrl)
-                .map(fileStorageService::resolveImageUrl)
                 .orElse(null);
     }
 

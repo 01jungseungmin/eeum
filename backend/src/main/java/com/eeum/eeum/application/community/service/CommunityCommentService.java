@@ -59,7 +59,7 @@ public class CommunityCommentService {
                 CommunityCommentResponseDto.of(
                         comment,
                         likedIds.contains(comment.getCommentId()),
-                        fileStorageService::resolveImageUrl
+                        java.util.function.Function.identity()
                 )
         );
     }
@@ -75,7 +75,7 @@ public class CommunityCommentService {
                 CommunityCommentResponseDto.of(
                         comment,
                         likedIds.contains(comment.getCommentId()),
-                        fileStorageService::resolveImageUrl
+                        java.util.function.Function.identity()
                 )
         );
     }
@@ -101,7 +101,7 @@ public class CommunityCommentService {
                 CommunityCommentResponseDto.of(
                         reply,
                         likedIds.contains(reply.getCommentId()),
-                        fileStorageService::resolveImageUrl
+                        java.util.function.Function.identity()
                 )
         );
     }
@@ -127,7 +127,7 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(comment);
-        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(comment, false, fileStorageService::resolveImageUrl);
+        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(comment, false, java.util.function.Function.identity());
         Long postAuthorAccountId = post.getAccount().getAccountId();
         String postTitle = post.getTitle();
         postRepository.increaseCommentCount(postId);
@@ -178,7 +178,7 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(reply);
-        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(reply, false, fileStorageService::resolveImageUrl);
+        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(reply, false, java.util.function.Function.identity());
         Long parentAuthorAccountId = parent.getAccount().getAccountId();
         postRepository.increaseCommentCount(postId);
 
@@ -216,7 +216,7 @@ public class CommunityCommentService {
         boolean likedByMe = commentLikeRepository
                 .existsByAccount_AccountIdAndComment_CommentId(accountId, commentId);
 
-        return CommunityCommentResponseDto.of(comment, likedByMe, fileStorageService::resolveImageUrl);
+        return CommunityCommentResponseDto.of(comment, likedByMe, java.util.function.Function.identity());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)

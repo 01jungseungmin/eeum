@@ -2,6 +2,7 @@ package com.eeum.eeum.application.chat.listener;
 
 import com.eeum.eeum.application.chat.dto.response.ChatRoomClosedResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.chat.event.ChatMessageBroadcastEvent;
 import com.eeum.eeum.domain.chat.event.ChatRoomClosedEvent;
 import lombok.RequiredArgsConstructor;
@@ -27,14 +28,15 @@ import org.springframework.scheduling.annotation.Async;
 public class ChatBroadcastEventListener {
 
     private final RealtimeRelayPublisher realtimeRelayPublisher;
+    private final FileStorageService fileStorageService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async("chatBroadcastTaskExecutor")
     public void onBroadcast(ChatMessageBroadcastEvent event) {
         // Redis로 중계한다 — 이 메시지를 만든 인스턴스와 구독자가 붙은 인스턴스가 다를 수 있다.
-        // payload의 이미지 URL은 DTO를 만드는 Service에서 이미 조회용 URL로 바뀐 상태다.
+        // AFTER_COMMIT 비동기 경로에서만 이미지 key를 조회 URL로 바꾼다.
         realtimeRelayPublisher.publishStomp(
-                "/sub/chat/rooms/" + event.roomId(), event.payload());
+                "/sub/chat/rooms/" + event.roomId(), resolveImageUrls(event.payload()));
     }
 
     // 채팅방 종료 통지 — 남아있는 구독자가 즉시 방을 닫도록 별도 채널로 전송.
@@ -45,5 +47,23 @@ public class ChatBroadcastEventListener {
                 "/sub/chat/rooms/" + event.roomId() + "/closed",
                 ChatRoomClosedResponseDto.of(
                         event.roomId(), event.closedByAccountId(), event.closedAt()));
+    }
+
+    private ChatMessageResponseDto resolveImageUrls(ChatMessageResponseDto payload) {
+        return payload.withResolvedImageUrls(
+                resolveImageUrlOrNull(payload.getSenderProfileImageUrl()),
+                resolveImageUrlOrNull(payload.getImageUrl()));
+    }
+
+    private String resolveImageUrlOrNull(String objectKey) {
+        if (!fileStorageService.isFinalObjectKey(objectKey)) {
+            return objectKey;
+        }
+        try {
+            return fileStorageService.resolveImageUrl(objectKey);
+        } catch (RuntimeException exception) {
+            log.warn("채팅 브로드캐스트 이미지 URL 발급 실패: key={}", objectKey, exception);
+            return null;
+        }
     }
 }

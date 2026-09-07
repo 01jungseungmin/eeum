@@ -227,7 +227,7 @@ public class FavoriteService {
                 .findByStore_StoreIdInAndIsThumbnailTrue(storeIds).stream()
                 .collect(Collectors.toMap(
                         img -> img.getStore().getStoreId(),
-                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                        StoreImage::getImageUrl,
                         (first, second) -> first));
     }
 
@@ -264,7 +264,7 @@ public class FavoriteService {
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
                 .collect(Collectors.toMap(
                         image -> image.getUsedProduct().getUsedProductId(),
-                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                        UsedProductImage::getImageUrl,
                         (first, second) -> first));
 
         return rows.map(row -> FavoriteUsedProductResponseDto.of(

@@ -245,7 +245,7 @@ public class ChatMessageService {
     }
 
     private ChatMessageResponseDto toResponse(ChatMessage message) {
-        return ChatMessageResponseDto.from(message, fileStorageService::resolveImageUrl);
+        return ChatMessageResponseDto.from(message);
     }
 
     private String truncate(String text) {

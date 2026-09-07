@@ -62,7 +62,7 @@ public class ProductMapper {
     public ImageResponseDto toImageResponseDto(ProductImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getProductImageId())
-                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
+                .imageUrl(image.getImageUrl())
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();

@@ -116,8 +116,8 @@ public class CommunityPostService {
                 .existsByAccount_AccountIdAndPost_PostId(accountId, postId);
 
         return CommunityPostDetailResponseDto.of(post, likedByMe, images,
-                image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
-                fileStorageService::resolveImageUrl);
+                CommunityImage::getImageUrl,
+                java.util.function.Function.identity());
     }
 
     @Transactional
@@ -139,8 +139,8 @@ public class CommunityPostService {
         log.info("커뮤니티 게시글 작성: accountId={}, postId={}", accountId, post.getPostId());
 
         return CommunityPostDetailResponseDto.of(post, false, List.of(),
-                image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
-                fileStorageService::resolveImageUrl);
+                CommunityImage::getImageUrl,
+                java.util.function.Function.identity());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -161,8 +161,8 @@ public class CommunityPostService {
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
 
         return CommunityPostDetailResponseDto.of(post, likedByMe, images,
-                image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
-                fileStorageService::resolveImageUrl);
+                CommunityImage::getImageUrl,
+                java.util.function.Function.identity());
     }
 
     @Transactional
