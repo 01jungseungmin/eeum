@@ -1,9 +1,11 @@
 package com.eeum.eeum.application.report.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.entity.StoreReviewImage;
 import com.eeum.eeum.domain.store.event.StoreReviewAdminActionEvent;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewImageRepository;
@@ -15,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class StoreReviewReportActionExecutor implements ReportTargetActionExecutor {
@@ -24,6 +28,7 @@ public class StoreReviewReportActionExecutor implements ReportTargetActionExecut
     private final StoreReviewReplyRepository replyRepository;
     private final StoreRepository storeRepository;
     private final ReportedAccountActionService reportedAccountActionService;
+    private final FileStorageService fileStorageService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -64,7 +69,16 @@ public class StoreReviewReportActionExecutor implements ReportTargetActionExecut
         StoreReview review = getReviewForUpdate(reviewId);
         Long authorAccountId = review.getAccount().getAccountId();
 
+        // 이미지 행만 지우면 FileObject가 ATTACHED로 남아 정리 스케줄러가 회수하지 못한다.
+        // 삭제 전에 key를 모아 두고, 행을 지운 뒤 정리 대상으로 전환한다.
+        List<String> imageUrls = imageRepository
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId)
+                .stream()
+                .map(StoreReviewImage::getImageUrl)
+                .toList();
+
         imageRepository.deleteAllByStoreReview_StorereviewId(reviewId);
+        imageUrls.forEach(fileStorageService::scheduleAttachedObjectCleanup);
         replyRepository.deleteByStoreReview_StorereviewId(reviewId);
         reviewRepository.delete(review);
         reviewRepository.flush();
