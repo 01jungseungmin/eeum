@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.used.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductSearchRequestDto;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
@@ -58,6 +59,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UsedProductService {
 
+    private final FileStorageService fileStorageService;
     private final UsedProductRepository usedProductRepository;
     private final EntityManager entityManager;
     private final AccountRepository accountRepository;
@@ -501,7 +503,7 @@ public class UsedProductService {
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
                 .collect(Collectors.toMap(
                         image -> image.getUsedProduct().getUsedProductId(),
-                        UsedProductImage::getImageUrl,
+                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
                         (first, second) -> first));
     }
 

@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.request.ChatRoomAdminSearchDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdminChatService {
 
+    private final FileStorageService fileStorageService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatParticipantRepository chatParticipantRepository;
@@ -79,7 +81,7 @@ public class AdminChatService {
         getRoomOrThrow(roomId);
         return chatMessageRepository
                 .findAllByChatRoom_ChatroomIdOrderBySentAtDesc(roomId, pageable)
-                .map(ChatMessageResponseDto::from);
+                .map(message -> ChatMessageResponseDto.from(message, fileStorageService::resolveImageUrl));
     }
 
     // 메시지 강제 삭제 (Soft Delete)
@@ -90,7 +92,7 @@ public class AdminChatService {
         message.markDeleted();
         Long roomId = message.getChatRoom().getChatroomId();
         eventPublisher.publishEvent(
-                new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message)));
+                new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message, fileStorageService::resolveImageUrl)));
         log.info("[ADMIN] 채팅 메시지 강제 삭제: messageId={}", messageId);
     }
 

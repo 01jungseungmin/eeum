@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.product.dto.response.*;
 import com.eeum.eeum.application.store.dto.request.NearbyStoreSearchCondition;
 import com.eeum.eeum.application.store.dto.request.StoreSearchDto;
@@ -49,6 +50,7 @@ public class PublicStoreService {
 
     private static final Duration PRODUCT_VIEW_TTL = Duration.ofHours(6);
 
+    private final FileStorageService fileStorageService;
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
     private final StoreNoticeRepository storeNoticeRepository;
@@ -367,7 +369,7 @@ public class PublicStoreService {
     private ImageResponseDto toStoreImageDto(StoreImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getStoreImageId())
-                .imageUrl(image.getImageUrl())
+                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();
@@ -376,7 +378,7 @@ public class PublicStoreService {
     private ImageResponseDto toProductImageDto(ProductImage image) {
         return ImageResponseDto.builder()
                 .imageId(image.getProductImageId())
-                .imageUrl(image.getImageUrl())
+                .imageUrl(fileStorageService.resolveImageUrl(image.getImageUrl()))
                 .displayOrder(image.getDisplayOrder())
                 .isThumbnail(image.isThumbnail())
                 .build();
@@ -402,7 +404,7 @@ public class PublicStoreService {
                 .stream()
                 .filter(StoreImage::isThumbnail)
                 .findFirst()
-                .map(image -> image.getImageUrl())
+                .map(image -> fileStorageService.resolveImageUrl(image.getImageUrl()))
                 .orElse(null);
     }
 
@@ -415,7 +417,7 @@ public class PublicStoreService {
                 .stream()
                 .filter(image -> image.isThumbnail())
                 .findFirst()
-                .map(image -> image.getImageUrl())
+                .map(image -> fileStorageService.resolveImageUrl(image.getImageUrl()))
                 .orElse(null);
     }
 

@@ -22,10 +22,6 @@ public class UsedProductImageResponseDto {
     @Schema(description = "대표 사진 여부")
     private boolean thumbnail;
 
-    public static UsedProductImageResponseDto from(UsedProductImage image) {
-        return from(image, image.getImageUrl());
-    }
-
     public static UsedProductImageResponseDto from(UsedProductImage image, String imageUrl) {
         return UsedProductImageResponseDto.builder()
                 .imageId(image.getImageId())

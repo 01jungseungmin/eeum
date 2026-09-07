@@ -228,8 +228,9 @@ public class FileStorageService {
                         .key(temporaryObjectKey)
                         .build());
             } catch (SdkException exception) {
-                // 최종 객체 복사는 이미 성공했다. 임시 객체는 S3 Lifecycle이 정리하므로
-                // 삭제 실패 때문에 클라이언트가 최종 key를 받지 못하게 하지 않는다.
+                // 최종 객체 복사는 이미 성공했다. 남은 임시 객체는 버킷의 tmp/ Lifecycle 규칙이
+                // 정리하므로(.claude/skills/references/s3-object-lifecycle.md — 규칙이 없으면
+                // 아무도 지우지 않는다) 삭제 실패로 클라이언트가 최종 key를 못 받게 하지 않는다.
                 log.warn("S3 임시 이미지 삭제 실패: key={}", temporaryObjectKey, exception);
             }
 
@@ -264,6 +265,11 @@ public class FileStorageService {
         if (!isFinalObjectKey(imageUrl)) {
             return imageUrl;
         }
+        // 저장소가 설정되지 않은 환경(로컬·테스트)에서는 서명할 수단이 없다. 여기서 던지면
+        // 이미지가 들어간 모든 조회 응답이 503이 된다 — 읽기 경로를 설정 공백으로 막지 않는다.
+        if (!properties.isConfigured()) {
+            return imageUrl;
+        }
         return createPresignedGetUrl(imageUrl).downloadUrl();
     }
 
@@ -271,7 +277,15 @@ public class FileStorageService {
     // 기존 외부 HTTPS URL은 프론트의 점진 전환 기간에만 허용한다. 새 업로드는 confirm 응답의 final key를 사용한다.
     public void requireAttachableObject(Long accountId, FileUploadPurpose purpose, String objectKey) {
         if (isLegacyHttpsUrl(objectKey)) {
+            // 전환 기간 예외다. 외부 URL에는 소유권 모델이 없어 여기를 지나면 검증이 사라지므로,
+            // 스위치를 내리면 곧바로 막힌다.
+            if (!properties.allowLegacyHttpsUrl()) {
+                throw new ForbiddenException(ErrorCode.FILE_ACCESS_DENIED);
+            }
             rejectSignedUrl(objectKey);
+            if (objectKey.length() > MAX_OBJECT_KEY_LENGTH) {
+                throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
+            }
             return;
         }
         if (objectKey == null || objectKey.isBlank()
@@ -384,6 +398,14 @@ public class FileStorageService {
             throw new ForbiddenException(ErrorCode.FILE_ACCESS_DENIED);
         }
         return objectKey;
+    }
+
+    @jakarta.annotation.PostConstruct
+    void warnLegacyHttpsUrlAllowed() {
+        if (properties.allowLegacyHttpsUrl()) {
+            log.warn("legacy HTTPS 이미지 URL 허용이 켜져 있습니다 — 이미지 필드에 소유권 검증 없이"
+                    + " 외부 URL이 저장될 수 있습니다. 프론트 전환 완료 후 storage.s3.allow-legacy-https-url=false로 내리세요.");
+        }
     }
 
     public boolean isFinalObjectKey(String objectKey) {

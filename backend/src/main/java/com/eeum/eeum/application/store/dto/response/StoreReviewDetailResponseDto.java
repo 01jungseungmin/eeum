@@ -85,15 +85,6 @@ public class StoreReviewDetailResponseDto {
             StoreReview review,
             List<StoreReviewImage> images,
             StoreReviewReplyResponseDto reply,
-            List<OrderItem> orderItems
-    ) {
-        return of(review, images, reply, orderItems, Function.identity());
-    }
-
-    public static StoreReviewDetailResponseDto of(
-            StoreReview review,
-            List<StoreReviewImage> images,
-            StoreReviewReplyResponseDto reply,
             List<OrderItem> orderItems,
             Function<String, String> imageUrlResolver
     ) {
@@ -126,7 +117,7 @@ public class StoreReviewDetailResponseDto {
                     .orderNumber(review.getOrder().getOrderNumber())
                     .orderCreatedAt(review.getOrder().getCreatedAt())
                     .orderItems(orderItems == null ? Collections.emptyList()
-                            : orderItems.stream().map(OrderItemResponseDto::from).toList());
+                            : orderItems.stream().map(item -> OrderItemResponseDto.from(item, imageUrlResolver)).toList());
         } else if (review.getReviewType() == StoreReviewType.RESERVATION && review.getVisitReservation() != null) {
             builder.visitReservationId(review.getVisitReservation().getVisitReservationId())
                     .visitDate(review.getVisitReservation().getVisitDate())

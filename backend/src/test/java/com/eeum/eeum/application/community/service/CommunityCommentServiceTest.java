@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.community.service;
 
 import com.eeum.eeum.application.community.dto.request.CommunityCommentCreateRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.community.dto.request.CommunityCommentUpdateRequestDto;
 import com.eeum.eeum.application.community.dto.response.CommunityCommentResponseDto;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -46,6 +47,7 @@ class CommunityCommentServiceTest {
     @InjectMocks
     private CommunityCommentService commentService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityPostRepository postRepository;

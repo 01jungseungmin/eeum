@@ -69,21 +69,19 @@ public class CommunityPostDetailResponseDto {
     @Schema(description = "공유 딥링크 URL", example = "eeum://community/posts/42")
     private String shareUrl;
 
-    public static CommunityPostDetailResponseDto of(CommunityPost post, boolean likedByMe, List<CommunityImage> images) {
-        return of(post, likedByMe, images, CommunityImage::getImageUrl);
-    }
-
     public static CommunityPostDetailResponseDto of(
             CommunityPost post,
             boolean likedByMe,
             List<CommunityImage> images,
-            Function<CommunityImage, String> imageUrlResolver
+            Function<CommunityImage, String> imageUrlResolver,
+            // 프로필 사진은 CommunityImage가 아니라 objectKey 문자열이라 변환기가 따로 필요하다.
+            Function<String, String> profileImageUrlResolver
     ) {
         return CommunityPostDetailResponseDto.builder()
                 .postId(post.getPostId())
                 .authorId(post.getAccount().getAccountId())
                 .authorNickname(post.getAccount().getNickname())
-                .authorProfileImageUrl(post.getAccount().getProfileImageUrl())
+                .authorProfileImageUrl(profileImageUrlResolver.apply(post.getAccount().getProfileImageUrl()))
                 .categoryId(post.getCategory().getCategoryId())
                 .categoryName(post.getCategory().getName())
                 .regionId(post.getRegion().getRegionId())

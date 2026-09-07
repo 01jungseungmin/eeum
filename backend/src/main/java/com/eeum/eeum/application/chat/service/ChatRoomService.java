@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatParticipantResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
@@ -70,6 +71,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatRoomService {
 
+    private final FileStorageService fileStorageService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -318,7 +320,7 @@ public class ChatRoomService {
         List<ChatParticipantResponseDto> participants = chatParticipantRepository
                 .findAllByChatRoom_ChatroomIdAndStatus(roomId, ParticipantStatus.ACTIVE)
                 .stream()
-                .map(ChatParticipantResponseDto::from)
+                .map(participant -> ChatParticipantResponseDto.from(participant, fileStorageService::resolveImageUrl))
                 .toList();
 
         return ChatRoomDetailResponseDto.of(room, participants, resolveUsedProductSummary(room));
@@ -710,7 +712,7 @@ public class ChatRoomService {
         chatMessageRepository.save(system);
         room.updateLastMessageAt(system.getSentAt());
         eventPublisher.publishEvent(
-                new ChatMessageBroadcastEvent(room.getChatroomId(), ChatMessageResponseDto.from(system)));
+                new ChatMessageBroadcastEvent(room.getChatroomId(), ChatMessageResponseDto.from(system, fileStorageService::resolveImageUrl)));
     }
 
     // STORE 단톡방 자동 이름 / 일반 그룹 이름 결정
@@ -855,7 +857,7 @@ public class ChatRoomService {
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
                 .collect(Collectors.toMap(
                         image -> image.getUsedProduct().getUsedProductId(),
-                        UsedProductImage::getImageUrl,
+                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
                         (first, second) -> first));
 
         Map<Long, UsedProductChatSummaryDto> byRoomId = new HashMap<>();

@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.order.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
 import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
@@ -49,6 +50,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrderService {
 
+    private final FileStorageService fileStorageService;
     private final AccountRepository accountRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
@@ -549,7 +551,7 @@ public class OrderService {
                 .eventProductId(item.getEventProductId())
                 .productType(item.getProductType().name())
                 .productName(item.getProductName())
-                .thumbnailUrl(item.getThumbnailUrl())
+                .thumbnailUrl(fileStorageService.resolveImageUrl(item.getThumbnailUrl()))
                 .selectedOptionsText(item.getSelectedOptionsText())
                 .basePrice(item.getBasePrice())
                 .optionsTotalPrice(item.getOptionsTotalPrice())

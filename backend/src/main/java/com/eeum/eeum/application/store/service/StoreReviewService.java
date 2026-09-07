@@ -86,7 +86,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // 내가 작성한 리뷰 목록 조회 (주문 리뷰 / 예약 리뷰 통합 또는 타입별)
@@ -105,9 +105,9 @@ public class StoreReviewService {
 
             if (review.getReviewType() == StoreReviewType.ORDER) {
                 List<OrderItem> orderItems = getOrderItemsForReview(review);
-                return MyReviewResponseDto.ofOrder(review, images, orderItems);
+                return MyReviewResponseDto.ofOrder(review, images, orderItems, fileStorageService::resolveImageUrl);
             }
-            return MyReviewResponseDto.ofReservation(review, images);
+            return MyReviewResponseDto.ofReservation(review, images, fileStorageService::resolveImageUrl);
         });
     }
 
@@ -172,7 +172,7 @@ public class StoreReviewService {
         List<StoreReviewImage> savedImages = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, savedImages, null, orderItems);
+        return StoreReviewResponseDto.of(review, savedImages, null, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // 방문 예약 리뷰 작성 — 방문 완료(COMPLETED) 예약만 허용, 1예약 1리뷰
@@ -227,7 +227,7 @@ public class StoreReviewService {
 
         List<StoreReviewImage> savedImages = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
-        return StoreReviewResponseDto.of(review, savedImages, null, Collections.emptyList());
+        return StoreReviewResponseDto.of(review, savedImages, null, Collections.emptyList(), fileStorageService::resolveImageUrl);
     }
 
     // 방문 예약 리뷰 단건 조회 — 해당 예약의 작성자만 가능
@@ -244,7 +244,7 @@ public class StoreReviewService {
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         StoreReviewReplyResponseDto replyDto = buildReplyDto(review.getStorereviewId());
-        return StoreReviewDetailResponseDto.of(review, images, replyDto, Collections.emptyList());
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, Collections.emptyList(), fileStorageService::resolveImageUrl);
     }
 
     // 주문 리뷰 단건 조회 — 해당 주문의 작성자만 가능
@@ -262,7 +262,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         StoreReviewReplyResponseDto replyDto = buildReplyDto(review.getStorereviewId());
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // 리뷰 수정 — 본인만 가능
@@ -292,7 +292,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // 리뷰 삭제 — 본인만 가능
@@ -355,7 +355,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // 리뷰 이미지 삭제
@@ -516,7 +516,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return OwnerStoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+        return OwnerStoreReviewDetailResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -588,7 +588,7 @@ public class StoreReviewService {
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
 
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
     }
 
     // 주문 기반 리뷰인 경우 OrderItem 스냅샷 목록 조회, 예약 기반이면 빈 목록

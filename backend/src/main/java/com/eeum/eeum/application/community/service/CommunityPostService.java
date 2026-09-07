@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.community.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.community.dto.request.CommunityPostCreateRequestDto;
 import com.eeum.eeum.application.community.dto.request.CommunityPostUpdateRequestDto;
 import com.eeum.eeum.application.community.dto.response.CommunityPostDetailResponseDto;
@@ -37,6 +38,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CommunityPostService {
 
+    private final FileStorageService fileStorageService;
     private final CommunityPostRepository postRepository;
     private final CommunityPostLikeRepository postLikeRepository;
     private final CommunityImageRepository imageRepository;
@@ -113,7 +115,9 @@ public class CommunityPostService {
         boolean likedByMe = postLikeRepository
                 .existsByAccount_AccountIdAndPost_PostId(accountId, postId);
 
-        return CommunityPostDetailResponseDto.of(post, likedByMe, images);
+        return CommunityPostDetailResponseDto.of(post, likedByMe, images,
+                image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                fileStorageService::resolveImageUrl);
     }
 
     @Transactional
@@ -134,7 +138,9 @@ public class CommunityPostService {
 
         log.info("커뮤니티 게시글 작성: accountId={}, postId={}", accountId, post.getPostId());
 
-        return CommunityPostDetailResponseDto.of(post, false, List.of());
+        return CommunityPostDetailResponseDto.of(post, false, List.of(),
+                image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                fileStorageService::resolveImageUrl);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -154,7 +160,9 @@ public class CommunityPostService {
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
 
-        return CommunityPostDetailResponseDto.of(post, likedByMe, images);
+        return CommunityPostDetailResponseDto.of(post, likedByMe, images,
+                image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
+                fileStorageService::resolveImageUrl);
     }
 
     @Transactional

@@ -107,7 +107,6 @@ public class ChatMessageService {
     public ChatMessageResponseDto sendImageMessage(
             Long accountId, Long roomId, ChatImageMessageSendRequestDto request) {
         checkIdempotency(accountId, roomId, request.getClientMessageId());
-        fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.CHAT, request.getImageUrl());
 
         // 텍스트 발송과 같은 순서로 잠근다 — account → chat_room.
         accountWriteGuard.lockActive(accountId);
@@ -115,6 +114,10 @@ public class ChatMessageService {
         ChatRoom room = chatAccessHelper.getRoomWithPessimisticLockOrThrow(roomId);
         chatAccessHelper.verifyRoomActive(room);
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
+
+        // file_object 잠금은 마지막이다. 먼저 잡으면 file_object를 쥔 채 account를 기다리게 되어
+        // 다른 이미지 경로(used/community/store)와 순서가 엇갈린다.
+        fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.CHAT, request.getImageUrl());
 
         Account sender = participant.getAccount();
         // 위 lockActive가 계정 행을 잠그고 상태를 확인했다. 참여자를 통해 얻은 이 인스턴스가
@@ -242,7 +245,7 @@ public class ChatMessageService {
     }
 
     private ChatMessageResponseDto toResponse(ChatMessage message) {
-        return ChatMessageResponseDto.from(message);
+        return ChatMessageResponseDto.from(message, fileStorageService::resolveImageUrl);
     }
 
     private String truncate(String text) {

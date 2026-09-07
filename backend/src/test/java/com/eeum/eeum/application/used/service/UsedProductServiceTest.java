@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.used.service;
 
 import com.eeum.eeum.application.used.dto.request.UsedProductCreateRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.used.dto.request.UsedProductUpdateRequestDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
 import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
@@ -63,6 +64,7 @@ class UsedProductServiceTest {
     private static final Long REGION_ID = 1000L;
     private static final Long ACCOUNT_REGION_ID = 500L;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private UsedProductRepository usedProductRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private AccountWriteGuard accountWriteGuard;
@@ -304,7 +306,10 @@ class UsedProductServiceTest {
         when(usedProductRepository.search(any(), any(), anyInt(), any()))
                 .thenReturn(CursorSlice.of(List.of(product), false, null, null, Sort.by(Sort.Direction.DESC, "createdAt")));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
-                .thenReturn(List.of(UsedProductImage.create(product, "thumb.jpg", 1, true)));
+                .thenReturn(List.of(UsedProductImage.create(product, "used/7/thumb.webp", 1, true)));
+        // DB에는 objectKey만 있다. 조회용 URL 변환을 거치지 않으면 private 버킷에서 열리지 않는다.
+        when(fileStorageService.resolveImageUrl("used/7/thumb.webp"))
+                .thenReturn("https://signed.example/thumb");
 
         // when
         CursorSlice<UsedProductSummaryResponseDto> result =
@@ -312,7 +317,7 @@ class UsedProductServiceTest {
 
         // then
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("thumb.jpg");
+        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("https://signed.example/thumb");
         verify(usedProductImageRepository, times(1))
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(any());
     }

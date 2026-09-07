@@ -19,10 +19,6 @@ public class CommunityImageResponseDto {
     @Schema(description = "노출 순서")
     private int displayOrder;
 
-    public static CommunityImageResponseDto from(CommunityImage image) {
-        return from(image, image.getImageUrl());
-    }
-
     public static CommunityImageResponseDto from(CommunityImage image, String imageUrl) {
         return CommunityImageResponseDto.builder()
                 .imageId(image.getImageId())

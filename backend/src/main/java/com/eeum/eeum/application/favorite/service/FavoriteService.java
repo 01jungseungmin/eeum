@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.favorite.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.favorite.dto.request.FavoriteBatchCheckRequestDto;
 import com.eeum.eeum.application.favorite.dto.request.FavoriteToggleRequestDto;
 import com.eeum.eeum.application.favorite.dto.response.*;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FavoriteService {
 
+    private final FileStorageService fileStorageService;
     private final FavoriteRepository favoriteRepository;
     private final AccountWriteGuard accountWriteGuard;
     private final StoreRepository storeRepository;
@@ -225,7 +227,7 @@ public class FavoriteService {
                 .findByStore_StoreIdInAndIsThumbnailTrue(storeIds).stream()
                 .collect(Collectors.toMap(
                         img -> img.getStore().getStoreId(),
-                        StoreImage::getImageUrl,
+                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
                         (first, second) -> first));
     }
 
@@ -262,7 +264,7 @@ public class FavoriteService {
                 .findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(productIds).stream()
                 .collect(Collectors.toMap(
                         image -> image.getUsedProduct().getUsedProductId(),
-                        UsedProductImage::getImageUrl,
+                        image -> fileStorageService.resolveImageUrl(image.getImageUrl()),
                         (first, second) -> first));
 
         return rows.map(row -> FavoriteUsedProductResponseDto.of(

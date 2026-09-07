@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.community.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.community.dto.request.CommunityCommentCreateRequestDto;
 import com.eeum.eeum.application.community.dto.request.CommunityCommentUpdateRequestDto;
 import com.eeum.eeum.application.community.dto.response.CommunityCommentResponseDto;
@@ -34,6 +35,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CommunityCommentService {
 
+    private final FileStorageService fileStorageService;
     private final CommunityCommentRepository commentRepository;
     private final CommunityCommentLikeRepository commentLikeRepository;
     private final CommunityPostRepository postRepository;
@@ -56,7 +58,8 @@ public class CommunityCommentService {
         return comments.map(comment ->
                 CommunityCommentResponseDto.of(
                         comment,
-                        likedIds.contains(comment.getCommentId())
+                        likedIds.contains(comment.getCommentId()),
+                        fileStorageService::resolveImageUrl
                 )
         );
     }
@@ -71,7 +74,8 @@ public class CommunityCommentService {
         return comments.map(comment ->
                 CommunityCommentResponseDto.of(
                         comment,
-                        likedIds.contains(comment.getCommentId())
+                        likedIds.contains(comment.getCommentId()),
+                        fileStorageService::resolveImageUrl
                 )
         );
     }
@@ -96,7 +100,8 @@ public class CommunityCommentService {
         return replies.map(reply ->
                 CommunityCommentResponseDto.of(
                         reply,
-                        likedIds.contains(reply.getCommentId())
+                        likedIds.contains(reply.getCommentId()),
+                        fileStorageService::resolveImageUrl
                 )
         );
     }
@@ -122,7 +127,7 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(comment);
-        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(comment, false);
+        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(comment, false, fileStorageService::resolveImageUrl);
         Long postAuthorAccountId = post.getAccount().getAccountId();
         String postTitle = post.getTitle();
         postRepository.increaseCommentCount(postId);
@@ -173,7 +178,7 @@ public class CommunityCommentService {
         );
 
         commentRepository.save(reply);
-        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(reply, false);
+        CommunityCommentResponseDto response = CommunityCommentResponseDto.of(reply, false, fileStorageService::resolveImageUrl);
         Long parentAuthorAccountId = parent.getAccount().getAccountId();
         postRepository.increaseCommentCount(postId);
 
@@ -211,7 +216,7 @@ public class CommunityCommentService {
         boolean likedByMe = commentLikeRepository
                 .existsByAccount_AccountIdAndComment_CommentId(accountId, commentId);
 
-        return CommunityCommentResponseDto.of(comment, likedByMe);
+        return CommunityCommentResponseDto.of(comment, likedByMe, fileStorageService::resolveImageUrl);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)

@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.account.mapper;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.MyPageResponseDto;
@@ -16,6 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AccountMapper {
 
+    private final FileStorageService fileStorageService;
     private final AccountRegionMapper accountRegionMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
 
@@ -26,7 +28,7 @@ public class AccountMapper {
                 .email(MaskingUtil.maskEmail(account.getEmail()))
                 .nickname(account.getNickname())
                 .name(MaskingUtil.maskName(account.getName()))
-                .profileImageUrl(account.getProfileImageUrl())
+                .profileImageUrl(fileStorageService.resolveImageUrl(account.getProfileImageUrl()))
                 .role(account.getRole().name())
                 .status(account.getStatus().name())
                 .provider(account.getProvider().name())
@@ -43,7 +45,7 @@ public class AccountMapper {
                 .nickname(account.getNickname())
                 .name(MaskingUtil.maskName(account.getName()))
                 .phone(account.getPhone())
-                .profileImageUrl(account.getProfileImageUrl())
+                .profileImageUrl(fileStorageService.resolveImageUrl(account.getProfileImageUrl()))
                 .role(account.getRole().name())
                 .status(account.getStatus().name())
                 .provider(account.getProvider().name())
@@ -64,7 +66,7 @@ public class AccountMapper {
                 .email(account.getEmail())
                 .nickname(account.getNickname())
                 .name(account.getName())
-                .profileImageUrl(account.getProfileImageUrl())
+                .profileImageUrl(fileStorageService.resolveImageUrl(account.getProfileImageUrl()))
                 .role(account.getRole().name())
                 .status(account.getStatus().name())
                 .provider(account.getProvider().name())

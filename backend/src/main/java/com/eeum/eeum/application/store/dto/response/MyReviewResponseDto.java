@@ -63,14 +63,6 @@ public class MyReviewResponseDto {
     public static MyReviewResponseDto ofOrder(
             StoreReview review,
             List<StoreReviewImage> images,
-            List<OrderItem> orderItems
-    ) {
-        return ofOrder(review, images, orderItems, Function.identity());
-    }
-
-    public static MyReviewResponseDto ofOrder(
-            StoreReview review,
-            List<StoreReviewImage> images,
             List<OrderItem> orderItems,
             Function<String, String> imageUrlResolver
     ) {
@@ -84,16 +76,9 @@ public class MyReviewResponseDto {
                 .images(toImageDtos(images, imageUrlResolver))
                 .orderId(review.getOrder().getOrderId())
                 .orderItems(orderItems == null ? Collections.emptyList()
-                        : orderItems.stream().map(OrderItemSummaryDto::from).toList())
+                        : orderItems.stream().map(item -> OrderItemSummaryDto.from(item, imageUrlResolver)).toList())
                 .createdAt(review.getCreatedAt())
                 .build();
-    }
-
-    public static MyReviewResponseDto ofReservation(
-            StoreReview review,
-            List<StoreReviewImage> images
-    ) {
-        return ofReservation(review, images, Function.identity());
     }
 
     public static MyReviewResponseDto ofReservation(
@@ -144,10 +129,10 @@ public class MyReviewResponseDto {
         @Schema(description = "수량", example = "2")
         private Integer quantity;
 
-        public static OrderItemSummaryDto from(OrderItem orderItem) {
+        public static OrderItemSummaryDto from(OrderItem orderItem, Function<String, String> imageUrlResolver) {
             return OrderItemSummaryDto.builder()
                     .productName(orderItem.getProductName())
-                    .thumbnailUrl(orderItem.getThumbnailUrl())
+                    .thumbnailUrl(imageUrlResolver.apply(orderItem.getThumbnailUrl()))
                     .quantity(orderItem.getQuantity())
                     .build();
         }

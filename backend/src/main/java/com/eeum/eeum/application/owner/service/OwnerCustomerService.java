@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.owner.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
 import com.eeum.eeum.application.owner.dto.response.OwnerCustomerResponseDto;
 import com.eeum.eeum.application.owner.dto.response.OwnerCustomerSummaryResponseDto;
@@ -45,6 +46,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OwnerCustomerService {
 
+    private final FileStorageService fileStorageService;
     private final StoreRepository storeRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -250,7 +252,7 @@ public class OwnerCustomerService {
         return orders.map(order -> {
             List<OrderItem> items = orderItemRepository.findByOrder_OrderId(order.getOrderId());
             Payment payment = paymentRepository.findByOrder_OrderId(order.getOrderId()).orElse(null);
-            return StoreOrderResponseDto.of(order, items, payment);
+            return StoreOrderResponseDto.of(order, items, payment, fileStorageService::resolveImageUrl);
         });
     }
 

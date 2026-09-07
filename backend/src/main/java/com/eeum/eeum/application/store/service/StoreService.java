@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.store.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.dto.request.StoreBusinessHourUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreNoticeRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
@@ -53,6 +54,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StoreService {
 
+    private final FileStorageService fileStorageService;
     private final StoreRepository storeRepository;
     private final StoreNoticeRepository storeNoticeRepository;
     private final CategoryRepository categoryRepository;
@@ -124,6 +126,7 @@ public class StoreService {
         String thumbnailUrl = storeImageRepository
                 .findByStore_StoreIdAndIsThumbnailTrue(store.getStoreId())
                 .map(StoreImage::getImageUrl)
+                .map(fileStorageService::resolveImageUrl)
                 .orElse(null);
 
         // 매출은 결제 완료 후 전이된 상태까지 포함해야 실제 매출과 일치한다 (PAID만 합산하면 사장이

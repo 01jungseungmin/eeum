@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.application.order.service.OrderService;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -48,6 +49,7 @@ class StoreOrderServiceTest {
     @InjectMocks
     private StoreOrderService storeOrderService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private StoreRepository storeRepository;
     @Mock private OrderRepository orderRepository;
     @Mock private OrderItemRepository orderItemRepository;
