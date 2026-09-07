@@ -272,8 +272,10 @@ public class Account extends BaseEntity {
             this.nickname = nickname;
         }
 
+        // null은 "바꾸지 않음", 빈 문자열은 "사진 지우기"다. 둘을 구분하지 않으면
+        // 프로필 사진을 없앨 방법이 사라진다.
         if (profileImageUrl != null) {
-            this.profileImageUrl = profileImageUrl;
+            this.profileImageUrl = profileImageUrl.isBlank() ? null : profileImageUrl;
         }
     }
 

@@ -85,10 +85,15 @@ public class AccountService {
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_NICKNAME);
         }
 
-        if (request.getProfileImageUrl() != null
-                && !request.getProfileImageUrl().equals(account.getProfileImageUrl())) {
-            fileStorageService.requireAttachableObject(
-                    accountId, FileUploadPurpose.PROFILE, request.getProfileImageUrl());
+        String requestedProfileImageUrl = request.getProfileImageUrl();
+        if (requestedProfileImageUrl != null
+                && !requestedProfileImageUrl.equals(account.getProfileImageUrl())) {
+            // 빈 값은 "사진 지우기"라 첨부할 객체가 없다. 그대로 검증에 태우면 소유권 위반으로
+            // 오인해 사진을 지우려던 사용자에게 403이 나간다.
+            if (!requestedProfileImageUrl.isBlank()) {
+                fileStorageService.requireAttachableObject(
+                        accountId, FileUploadPurpose.PROFILE, requestedProfileImageUrl);
+            }
             fileStorageService.scheduleAttachedObjectCleanup(account.getProfileImageUrl());
         }
 
