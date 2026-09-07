@@ -355,7 +355,8 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, fileStorageService::resolveImageUrl);
+        // 트랜잭션 안에서는 objectKey만 조립한다. HTTP 응답 직전 Advice가 조회 URL로 바꾼다.
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // 리뷰 이미지 삭제
