@@ -32,6 +32,7 @@ import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 
 import java.time.Instant;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -52,6 +53,9 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 public class FileStorageService {
 
     private static final long MAX_IMAGE_SIZE_BYTES = 10L * 1024 * 1024;
+    // file_object.object_key 컬럼 길이와 같은 값이어야 한다. 어긋나면 검증을 통과한 key가
+    // 저장 시점에 잘려 나간다.
+    private static final int MAX_OBJECT_KEY_LENGTH = 500;
     private static final int MAX_UPLOAD_URLS_PER_MINUTE = 20;
     private static final Duration UPLOAD_URL_RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
     private static final Map<String, String> EXTENSIONS_BY_CONTENT_TYPE = Map.of(
@@ -182,8 +186,11 @@ public class FileStorageService {
 
             String contentType = normalizeAndValidateContentType(object.contentType());
             validateSize(object.contentLength());
+            // HeadObject는 항상 ETag를 준다. 없으면 S3 쪽 이상이므로, If-Match 없이
+            // 진행해 검사와 복사가 갈라지게 두지 않고 여기서 끊는다.
             String eTag = object.eTag();
             if (eTag == null || eTag.isBlank()) {
+                log.error("S3 HeadObject 응답에 ETag가 없어 업로드 확정을 중단합니다: key={}", temporaryObjectKey);
                 throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
             }
             validateImageSignature(temporaryObjectKey, contentType, eTag);
@@ -199,7 +206,9 @@ public class FileStorageService {
                     .bucket(properties.bucket())
                     .key(objectKey)
                     .contentType(contentType)
-                    .metadataDirective("COPY")
+                    // COPY면 S3가 원본 메타데이터를 그대로 복사해 위 contentType 지정이 무시된다.
+                    // 정규화·검증을 마친 값을 최종 객체에 실제로 반영하려면 REPLACE여야 한다.
+                    .metadataDirective("REPLACE")
                     .build());
             try {
                 fileObjectLifecycleService.registerConfirmed(accountId, purpose, temporaryObjectKey, objectKey);
@@ -265,13 +274,13 @@ public class FileStorageService {
             rejectSignedUrl(objectKey);
             return;
         }
-        if (objectKey != null && objectKey.length() > 500) {
-            throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
-        }
         if (objectKey == null || objectKey.isBlank()
                 || objectKey.contains("..") || objectKey.contains("\\")
                 || !purpose.owns(objectKey, accountId)) {
             throw new ForbiddenException(ErrorCode.FILE_ACCESS_DENIED);
+        }
+        if (objectKey.length() > MAX_OBJECT_KEY_LENGTH) {
+            throw new BadRequestException(ErrorCode.FILE_UPLOAD_INVALID);
         }
         fileObjectLifecycleService.attach(accountId, purpose, objectKey);
     }
@@ -281,6 +290,14 @@ public class FileStorageService {
         if (isFinalObjectKey(objectKey)) {
             fileObjectLifecycleService.detach(objectKey);
         }
+    }
+
+    // 여러 이미지를 한꺼번에 정리할 때 쓴다. 한 건씩 부르면 이미지 수만큼
+    // SELECT ... FOR UPDATE가 나가고, 잠금 순서가 표시 순서에 끌려간다.
+    public void scheduleAttachedObjectCleanup(Collection<String> objectKeys) {
+        fileObjectLifecycleService.detachAll(objectKeys.stream()
+                .filter(this::isFinalObjectKey)
+                .toList());
     }
 
     private boolean isLegacyHttpsUrl(String value) {
