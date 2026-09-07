@@ -26,6 +26,21 @@ class CommunityPostDeletionProcessorTest {
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityImageRepository imageRepository;
+    @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
+
+    @Test
+    void 게시글_삭제시_첨부_객체도_정리_대상으로_전환한다() {
+        // Given — 이미지 행만 삭제하면 FileObject가 ATTACHED로 남아 영구 누적된다.
+        CommunityPost post = CommunityPost.create(null, null, null, "제목", "본문");
+        ReflectionTestUtils.setField(post, "postId", 10L);
+        var image = com.eeum.eeum.domain.community.entity.CommunityImage.create(post, "community/42/a.png", 1);
+        org.mockito.BDDMockito.given(imageRepository.findByPost_PostIdOrderByDisplayOrder(10L))
+                .willReturn(java.util.List.of(image));
+        // When
+        processor.deleteLockedPost(post);
+        // Then
+        org.mockito.Mockito.verify(fileStorageService).scheduleAttachedObjectCleanup("community/42/a.png");
+    }
 
     @Test
     void 잠긴_게시글은_자식_FK_순서대로_삭제한다() {

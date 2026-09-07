@@ -16,7 +16,7 @@ public class ImageUploadRequestDto {
             example = "stores/42/550e8400-e29b-41d4-a716-446655440000.webp"
     )
     @NotBlank(message = "이미지 objectKey는 필수입니다.")
-    @Size(max = 500, message = "이미지 objectKey는 500자 이하로 입력해야 합니다.")
+    @Size(max = 1000, message = "이미지 URL은 1000자 이하로 입력해야 합니다.")
     @JsonProperty("objectKey")
     @JsonAlias("imageUrl")
     private String imageUrl;
