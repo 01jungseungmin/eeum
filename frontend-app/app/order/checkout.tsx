@@ -1,13 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Platform } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { orderApi } from '../../api/order';
 import { userApi } from '@/api/user';
+import {
+  PAYMENT_REDIRECT_URL,
+  extractPaymentId,
+  extractRedirectFailure,
+  savePendingOrder,
+  verifyPaymentWithPendingOrder,
+  type PendingOrder
+} from '../../utils/paymentCompletion';
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -43,11 +51,12 @@ export default function CheckoutScreen() {
     customerName: '',
     customerPhone: '',
     customerEmail: '',
-    portonePayMethod: 'CARD', 
-    portoneChannelKey: '',
+    portonePayMethod: 'CARD',
     easyPayProvider: ''
   });
- 
+
+  // 웹뷰가 같은 완료 주소를 두 번 흘릴 수 있다. 검증은 결제당 한 번만 보낸다.
+  const verifiedPaymentIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -65,6 +74,16 @@ export default function CheckoutScreen() {
     fetchInitialData();
   }, []);
 
+  // 외부 결제앱에서 돌아오면 딥링크가 /payment/success 를 이 화면 위에 쌓는다.
+  // 그때 결제 웹뷰는 역할이 끝났으므로 접어둔다 — 남겨두면 사용자가 뒤로가기로
+  // 이미 끝난 결제창에 다시 들어오게 된다. (외부 앱 전환은 화면 이동이 아니라
+  // 포커스를 잃지 않으므로, 결제 도중에 닫히지는 않는다.)
+  useFocusEffect(
+    useCallback(() => {
+      return () => setIsPaymentVisible(false);
+    }, [])
+  );
+
   const handlePayment = async () => {
     // 안전장치: 만약 이미 한 번 주문생성이 완료되어 주문번호가 있다면,
     // 백엔드 API를 다시 호출하지 않고 (장바구니 비어있음 에러 방지) 곧바로 결제창만 다시 열어줍니다.
@@ -74,6 +93,8 @@ export default function CheckoutScreen() {
         portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
         easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
       }));
+      // 재시도도 외부 앱으로 나갈 수 있다. 복귀 대비는 첫 시도와 동일하게 해둔다.
+      await savePendingOrder(buildPendingOrder(currentOrderNumber, currentOrderId));
       setIsPaymentVisible(true);
       return;
     }
@@ -99,10 +120,12 @@ export default function CheckoutScreen() {
 
       // 현장 결제 분기 처리 (포트원 웹뷰 우회)
       if (selectedPayMethod === 'ONSITE') {
+        // 방금 부른 setState는 아직 반영 전이라 state로 읽으면 빈 값이 넘어간다.
+        const order = buildPendingOrder(orderResponse.orderNumber, String(orderResponse.orderId || '1'));
         Alert.alert("주문 접수", "현장 결제로 주문이 접수되었습니다.", [
-          { text: "확인", onPress: () => navigateToComplete() }
+          { text: "확인", onPress: () => navigateToComplete(order) }
         ]);
-        return; 
+        return;
       }
 
       // 토스페이먼츠 단일 채널 및 간편결제 프로바이더 데이터 동적 주입
@@ -117,10 +140,12 @@ export default function CheckoutScreen() {
                         : 'test@eeum.com',
         customerPhone: userInfo.phone,
         portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
-        portoneChannelKey: process.env.EXPO_PUBLIC_PORTONE_TOSS_CHANNEL_KEY || '', 
         easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
       });
 
+      await savePendingOrder(
+        buildPendingOrder(orderResponse.orderNumber, String(orderResponse.orderId || '1'))
+      );
       setIsPaymentVisible(true);
     } catch (error) {
       console.error(error);
@@ -128,54 +153,93 @@ export default function CheckoutScreen() {
     }
   };
 
-  const navigateToComplete = () => {
+  // 현재 화면이 알고 있는 주문. 결제창을 열기 전에 저장해 두면 외부 결제앱 때문에
+  // 앱이 죽었다 살아나도 /payment/success 화면이 같은 값을 집어 검증을 마칠 수 있다.
+  const buildPendingOrder = (orderNumber: string, orderId: string): PendingOrder => ({
+    orderNumber,
+    orderId,
+    orderName: displayOrder.orderName,
+    totalPrice: displayOrder.totalPrice
+  });
+
+  const navigateToComplete = (order: PendingOrder) => {
     router.push({
       pathname: '/order/complete',
       params: {
-        orderId: currentOrderId,
-        orderNumber: currentOrderNumber,
-        orderName: displayOrder.orderName,
-        totalPrice: displayOrder.totalPrice
+        orderId: order.orderId,
+        orderNumber: order.orderNumber,
+        orderName: order.orderName,
+        totalPrice: order.totalPrice
       }
     });
   };
 
-  const handleWebViewMessage = async (event: any) => {
-    const response = JSON.parse(event.nativeEvent.data);
+  /**
+   * 웹뷰 안에서 끝난 결제의 검증. 외부 앱을 거치지 않았으므로 화면 state가 살아 있어
+   * 딥링크 착지 화면(/payment/success)까지 갈 필요 없이 여기서 바로 처리한다.
+   */
+  const completePayment = async (paymentId: string) => {
+    if (!paymentId || verifiedPaymentIdRef.current === paymentId) {
+      return;
+    }
+    verifiedPaymentIdRef.current = paymentId;
     setIsPaymentVisible(false);
 
+    const result = await verifyPaymentWithPendingOrder(
+      paymentId,
+      buildPendingOrder(currentOrderNumber, currentOrderId)
+    );
+
+    if (result.status === 'success') {
+      Alert.alert('결제 성공', '주문이 완료되었습니다!', [
+        { text: '확인', onPress: () => navigateToComplete(result.order) }
+      ]);
+      return;
+    }
+
+    // 재시도할 수 있도록 잠금을 푼다 — 여기서 막아두면 복구 경로가 사라진다.
+    verifiedPaymentIdRef.current = null;
+    Alert.alert(
+      '결제 검증 실패',
+      result.status === 'no-order'
+        ? '주문 정보를 찾을 수 없습니다. 주문 내역에서 결제 상태를 확인해 주세요.'
+        : '결제는 진행되었으나 서버 검증에 실패했습니다. 주문 내역에서 상태를 확인해 주세요.'
+    );
+  };
+
+  const handleWebViewMessage = async (event: any) => {
+    const response = JSON.parse(event.nativeEvent.data);
+
     if (response.code != null) {
+      setIsPaymentVisible(false);
       Alert.alert("결제 실패", response.message);
     } else {
-      try {
-        await orderApi.verifyPayment(response.paymentId, currentOrderNumber);
-        Alert.alert("결제 성공", "주문이 완료되었습니다!", [
-          { text: "확인", onPress: () => navigateToComplete() }
-        ]);
-      } catch (e: any) {
-        Alert.alert("결제 검증 실패", "결제는 진행되었으나 서버 검증에 실패했습니다.");
-      }
+      await completePayment(response.paymentId);
     }
   };
 
   const handleShouldStartLoadWithRequest = (request: any) => {
     const { url } = request;
 
-    // 1. 결제 완료 성공 주소 낚아채기
-    if (url.includes('http://localhost/payment/success')) {
-      setIsPaymentVisible(false);
-      const urlParts = url.split('paymentId=');
-      if (urlParts.length > 1) {
-        const paymentId = urlParts[1].split('&')[0];
-        orderApi.verifyPayment(paymentId, currentOrderNumber)
-          .then(() => {
-            Alert.alert("결제 성공", "주문이 완료되었습니다!", [
-              { text: "확인", onPress: () => navigateToComplete() }
-            ]);
-          })
-          .catch(() => Alert.alert("검증 실패", "서버 검증에 실패했습니다."));
+    // 1. 결제 완료 복귀 주소 낚아채기. 웹뷰 안에서 끝난 결제는 외부 앱을 거치지
+    //    않고 여기로 바로 들어온다 — 딥링크 리스너까지 갈 필요가 없다.
+    if (url.startsWith(PAYMENT_REDIRECT_URL)) {
+      // 실패·취소도 이 주소로 돌아오고 paymentId까지 실려 있다. code가 있으면 검증 금지.
+      const failure = extractRedirectFailure(url);
+      if (failure) {
+        setIsPaymentVisible(false);
+        Alert.alert('결제 실패', failure.message);
+        return false;
       }
-      return false; 
+
+      const paymentId = extractPaymentId(url);
+      if (paymentId) {
+        completePayment(paymentId);
+      } else {
+        setIsPaymentVisible(false);
+        Alert.alert('검증 실패', '결제 정보를 확인할 수 없습니다. 주문 내역에서 상태를 확인해 주세요.');
+      }
+      return false;
     }
 
     // 2. 일반 웹 주소(http, https)는 웹뷰 안에서 그대로 보여주기
@@ -249,7 +313,7 @@ export default function CheckoutScreen() {
                   phoneNumber: '${paymentData.customerPhone}',
                   email: '${paymentData.customerEmail}'
                 },
-                redirectUrl: 'http://localhost/payment/success'
+                redirectUrl: '${PAYMENT_REDIRECT_URL}'
               });
             } catch (error) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ code: error.code, message: error.message }));
