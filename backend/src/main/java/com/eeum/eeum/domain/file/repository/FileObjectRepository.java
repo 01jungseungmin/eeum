@@ -18,10 +18,15 @@ public interface FileObjectRepository extends JpaRepository<FileObject, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<FileObject> findForUpdateByObjectKey(String objectKey);
 
-    // 여러 key를 한 번에 잠근다. key마다 조회하면 이미지 수만큼 SELECT ... FOR UPDATE가 나간다.
-    // PK 오름차순으로 읽어 잠금 순서를 프로젝트 규약(ID 오름차순)에 맞춘다.
+    // 잠글 대상을 먼저 고르기만 한다. 잠금은 PK로 다시 건다 — 아래 메서드 참고.
+    List<FileObject> findByObjectKeyIn(Collection<String> objectKeys);
+
+    // 여러 행을 한 번에 잠근다. 행마다 조회하면 이미지 수만큼 SELECT ... FOR UPDATE가 나간다.
+    // 조건을 PK로 두는 것이 핵심이다. InnoDB는 ORDER BY가 아니라 스캔한 인덱스 순서로 행을
+    // 잠그므로, object_key IN (...)으로 잠그면 uk_file_object_key 순서(=UUID 순서)에 끌려간다.
+    // PK IN이면 스캔 순서가 곧 ID 오름차순이라 프로젝트 잠금 순서 규약과 일치한다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    List<FileObject> findForUpdateByObjectKeyInOrderByFileObjectIdAsc(Collection<String> objectKeys);
+    List<FileObject> findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(Collection<Long> fileObjectIds);
 
     Optional<FileObject> findByTemporaryObjectKey(String temporaryObjectKey);
 

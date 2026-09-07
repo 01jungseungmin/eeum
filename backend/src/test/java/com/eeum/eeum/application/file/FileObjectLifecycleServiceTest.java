@@ -9,12 +9,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,22 +53,24 @@ class FileObjectLifecycleServiceTest {
      * 증상: 이미지 여러 장을 정리할 때 장수만큼 SELECT ... FOR UPDATE가 나가고,
      * 잠금 순서가 표시 순서에 끌려간다.
      * 결함 위치: 호출부가 key마다 detach를 부르던 방식.
-     * 한 번의 잠금 조회로 묶고, PK 오름차순으로 읽어 프로젝트 잠금 순서 규약을 따른다.
+     * 한 번의 잠금 조회로 묶는다. 잠금은 PK로 걸어야 InnoDB의 스캔 순서가 ID 오름차순이
+     * 되므로, object_key로 고른 뒤 ID로 다시 잠근다.
      */
     @Test
-    void 여러_key는_한_번의_잠금_조회로_정리_대상이_된다() {
-        // Given
-        FileObject first = attached("used/42/a.webp");
-        FileObject second = attached("used/42/b.webp");
+    void 여러_key는_ID_오름차순_잠금_조회_한_번으로_정리_대상이_된다() {
+        // Given — 표시 순서(a, b)와 ID 순서(2, 1)를 일부러 어긋나게 둔다.
+        FileObject first = attached("used/42/a.webp", 2L);
+        FileObject second = attached("used/42/b.webp", 1L);
         FileObjectLifecycleService service = new FileObjectLifecycleService(fileObjectRepository);
         List<String> keys = List.of("used/42/a.webp", "used/42/b.webp");
-        given(fileObjectRepository.findForUpdateByObjectKeyInOrderByFileObjectIdAsc(keys))
-                .willReturn(List.of(first, second));
+        given(fileObjectRepository.findByObjectKeyIn(keys)).willReturn(List.of(first, second));
+        given(fileObjectRepository.findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(List.of(1L, 2L)))
+                .willReturn(List.of(second, first));
 
         // When
         service.detachAll(keys);
 
-        // Then
+        // Then — 잠금 조회에 넘긴 ID가 오름차순이어야 한다(위 stubbing이 그것을 고정한다).
         assertThat(first.getStatus()).isEqualTo(FileObjectStatus.CLEANUP_PENDING);
         assertThat(second.getStatus()).isEqualTo(FileObjectStatus.CLEANUP_PENDING);
     }
@@ -80,13 +84,30 @@ class FileObjectLifecycleServiceTest {
         service.detachAll(List.of());
 
         // Then
+        verify(fileObjectRepository, never()).findByObjectKeyIn(any());
         verify(fileObjectRepository, never())
-                .findForUpdateByObjectKeyInOrderByFileObjectIdAsc(org.mockito.ArgumentMatchers.any());
+                .findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(any());
     }
 
-    private FileObject attached(String objectKey) {
+    @Test
+    void 이미_사라진_key만_있으면_잠금_조회를_하지_않는다() {
+        // Given — 다른 요청이 먼저 정리해 행이 남아 있지 않다.
+        FileObjectLifecycleService service = new FileObjectLifecycleService(fileObjectRepository);
+        List<String> keys = List.of("used/42/gone.webp");
+        given(fileObjectRepository.findByObjectKeyIn(keys)).willReturn(List.of());
+
+        // When
+        service.detachAll(keys);
+
+        // Then — 빈 IN 절로 잠금 조회를 날리지 않는다.
+        verify(fileObjectRepository, never())
+                .findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(any());
+    }
+
+    private FileObject attached(String objectKey, Long fileObjectId) {
         FileObject fileObject = FileObject.confirmed(
                 42L, FileUploadPurpose.USED.name(), "tmp/" + objectKey, objectKey);
+        ReflectionTestUtils.setField(fileObject, "fileObjectId", fileObjectId);
         fileObject.attach();
         return fileObject;
     }

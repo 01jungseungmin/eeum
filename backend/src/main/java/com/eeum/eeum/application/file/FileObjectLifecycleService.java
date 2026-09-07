@@ -72,12 +72,22 @@ public class FileObjectLifecycleService {
 
     // 여러 key를 한 번의 잠금 조회로 처리한다. key마다 detach를 부르면 이미지 수만큼
     // SELECT ... FOR UPDATE가 나가고, 잠금 순서도 호출 순서(표시 순서)에 끌려간다.
+    //
+    // 대상을 먼저 조회해 ID를 뽑고, 잠금은 PK로 건다. object_key로 바로 잠그면 InnoDB가
+    // uk_file_object_key를 스캔하며 UUID 순서로 잠가, 다른 경로와 순서가 엇갈릴 수 있다.
     @Transactional
     public void detachAll(Collection<String> objectKeys) {
         if (objectKeys.isEmpty()) {
             return;
         }
-        fileObjectRepository.findForUpdateByObjectKeyInOrderByFileObjectIdAsc(objectKeys)
+        List<Long> fileObjectIds = fileObjectRepository.findByObjectKeyIn(objectKeys).stream()
+                .map(FileObject::getFileObjectId)
+                .sorted()
+                .toList();
+        if (fileObjectIds.isEmpty()) {
+            return;
+        }
+        fileObjectRepository.findForUpdateByFileObjectIdInOrderByFileObjectIdAsc(fileObjectIds)
                 .forEach(FileObject::detach);
     }
 
@@ -103,7 +113,7 @@ public class FileObjectLifecycleService {
      * 정리 실패를 기록한다. 한계를 넘긴 행은 CLEANUP_FAILED가 되어 이후 회차의
      * {@link #claimExpiredUnattached}가 집지 않는다.
      *
-     * @return 재시도를 포기했으면 true
+     * @return 재시도를 포기했으면 true. 행이 이미 사라졌으면 남은 재시도가 없으므로 false
      */
     @Transactional
     public boolean recordCleanupFailure(Long fileObjectId, int maxAttempts) {

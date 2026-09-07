@@ -188,6 +188,9 @@ class FileStorageServiceTest {
                 ArgumentCaptor.forClass(CopyObjectRequest.class);
         verify(s3Client).copyObject(copyRequest.capture());
         assertThat(copyRequest.getValue().copySourceIfMatch()).isEqualTo("\"original\"");
+        // COPY면 S3가 원본 메타데이터를 복사해 정규화한 Content-Type이 최종 객체에서 사라진다.
+        assertThat(copyRequest.getValue().metadataDirectiveAsString()).isEqualTo("REPLACE");
+        assertThat(copyRequest.getValue().contentType()).isEqualTo("image/png");
     }
 
     @Test
