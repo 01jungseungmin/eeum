@@ -51,6 +51,10 @@ public class FileObject extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private FileObjectStatus status;
 
+    // 정리 시도 횟수. 한계를 넘기면 CLEANUP_FAILED로 내려 스케줄러 대상에서 제외한다.
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -70,7 +74,7 @@ public class FileObject extends BaseEntity {
     }
 
     public void attach() {
-        if (status == FileObjectStatus.CLEANUP_PENDING) {
+        if (status == FileObjectStatus.CLEANUP_PENDING || status == FileObjectStatus.CLEANUP_FAILED) {
             throw new IllegalStateException("정리 대상으로 전환된 파일은 연결할 수 없습니다");
         }
         if (status == FileObjectStatus.ATTACHED) {
@@ -91,6 +95,23 @@ public class FileObject extends BaseEntity {
         }
         status = FileObjectStatus.CLEANUP_PENDING;
         return true;
+    }
+
+    /**
+     * 정리 실패를 기록한다. 한계를 넘기면 CLEANUP_FAILED로 내려 더 이상 재시도하지 않는다.
+     *
+     * <p>실패해도 CLEANUP_PENDING으로 되돌리지 않는 이유는 S3 삭제만 성공했을 수 있어서다.
+     * 그렇다고 무한히 재시도하면 영구 실패 건이 정리 큐 앞을 계속 차지해 뒤의 작업이 굶는다.
+     *
+     * @return 재시도를 포기하고 CLEANUP_FAILED로 내렸으면 true
+     */
+    public boolean recordCleanupFailure(int maxAttempts) {
+        attemptCount++;
+        if (attemptCount >= maxAttempts) {
+            status = FileObjectStatus.CLEANUP_FAILED;
+            return true;
+        }
+        return false;
     }
 
 }
