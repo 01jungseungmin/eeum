@@ -134,8 +134,8 @@ class StoreReviewReportActionExecutorTest {
         order.verify(imageRepository)
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(REVIEW_ID);
         order.verify(imageRepository).deleteAllByStoreReview_StorereviewId(REVIEW_ID);
-        order.verify(fileStorageService).scheduleAttachedObjectCleanup("stores/30/first.webp");
-        order.verify(fileStorageService).scheduleAttachedObjectCleanup("stores/30/second.webp");
+        order.verify(fileStorageService).scheduleAttachedObjectCleanup(
+                List.of("stores/30/first.webp", "stores/30/second.webp"));
     }
 
     @Test

@@ -39,7 +39,7 @@ public class CommunityPostDeletionProcessor {
         commentRepository.deleteTopLevelCommentsByPost_PostId(postId);
         postLikeRepository.deleteByPost_PostId(postId);
         imageRepository.deleteByPost_PostId(postId);
-        imageKeys.forEach(fileStorageService::scheduleAttachedObjectCleanup);
+        fileStorageService.scheduleAttachedObjectCleanup(imageKeys);
         postRepository.delete(post);
     }
 }

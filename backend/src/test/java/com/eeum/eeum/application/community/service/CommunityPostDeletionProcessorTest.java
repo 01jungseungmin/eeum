@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.community.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.domain.community.entity.CommunityImage;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.repository.CommunityCommentLikeRepository;
 import com.eeum.eeum.domain.community.repository.CommunityCommentRepository;
@@ -14,7 +16,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
+
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class CommunityPostDeletionProcessorTest {
@@ -26,20 +32,20 @@ class CommunityPostDeletionProcessorTest {
     @Mock private CommunityCommentRepository commentRepository;
     @Mock private CommunityCommentLikeRepository commentLikeRepository;
     @Mock private CommunityImageRepository imageRepository;
-    @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
+    @Mock private FileStorageService fileStorageService;
 
     @Test
     void 게시글_삭제시_첨부_객체도_정리_대상으로_전환한다() {
         // Given — 이미지 행만 삭제하면 FileObject가 ATTACHED로 남아 영구 누적된다.
         CommunityPost post = CommunityPost.create(null, null, null, "제목", "본문");
         ReflectionTestUtils.setField(post, "postId", 10L);
-        var image = com.eeum.eeum.domain.community.entity.CommunityImage.create(post, "community/42/a.png", 1);
-        org.mockito.BDDMockito.given(imageRepository.findByPost_PostIdOrderByDisplayOrder(10L))
-                .willReturn(java.util.List.of(image));
+        CommunityImage image = CommunityImage.create(post, "community/42/a.png", 1);
+        given(imageRepository.findByPost_PostIdOrderByDisplayOrder(10L))
+                .willReturn(List.of(image));
         // When
         processor.deleteLockedPost(post);
         // Then
-        org.mockito.Mockito.verify(fileStorageService).scheduleAttachedObjectCleanup("community/42/a.png");
+        verify(fileStorageService).scheduleAttachedObjectCleanup(List.of("community/42/a.png"));
     }
 
     @Test

@@ -310,7 +310,7 @@ public class StoreReviewService {
 
         // 연관 이미지 / 답글 먼저 삭제
         storeReviewImageRepository.deleteAllByStoreReview_StorereviewId(reviewId);
-        imageUrls.forEach(fileStorageService::scheduleAttachedObjectCleanup);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrls);
         storeReviewReplyRepository.deleteByStoreReview_StorereviewId(reviewId);
         storeReviewRepository.delete(review);
         storeReviewRepository.flush();

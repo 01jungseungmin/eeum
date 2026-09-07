@@ -78,7 +78,7 @@ public class StoreReviewReportActionExecutor implements ReportTargetActionExecut
                 .toList();
 
         imageRepository.deleteAllByStoreReview_StorereviewId(reviewId);
-        imageUrls.forEach(fileStorageService::scheduleAttachedObjectCleanup);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrls);
         replyRepository.deleteByStoreReview_StorereviewId(reviewId);
         reviewRepository.delete(review);
         reviewRepository.flush();
