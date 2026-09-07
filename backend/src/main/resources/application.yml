@@ -103,6 +103,9 @@ storage:
     region: ${AWS_REGION:ap-northeast-2}
     upload-url-expiration: PT10M
     download-url-expiration: PT10M
+    # 프론트가 예전 외부 HTTPS URL을 보내는 전환 기간에만 true. 켜져 있으면 이미지 필드에
+    # 소유권 검증 없이 임의 외부 URL이 저장될 수 있다 — 전환이 끝나면 false로 내린다.
+    allow-legacy-https-url: ${LEGACY_IMAGE_URL_ALLOWED:true}
 
 # 실시간(WebSocket·SSE) 활성화 여부.
 # 인스턴스를 늘리면 인메모리 STOMP 브로커와 SseEmitter가 JVM 경계를 넘지 못한다.

@@ -87,7 +87,7 @@ class FileStorageServiceTest {
     void setUp() {
         fileStorageService = new FileStorageService(
                 new S3StorageProperties("eeum-prod-media-2026", "ap-northeast-2",
-                        Duration.ofMinutes(10), Duration.ofMinutes(10)),
+                        Duration.ofMinutes(10), Duration.ofMinutes(10), true),
                 s3Client,
                 s3Presigner,
                 awsCredentialsProvider,
