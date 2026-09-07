@@ -11,10 +11,14 @@ import com.eeum.eeum.common.service.RateLimitService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
@@ -32,6 +36,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.Base64;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import software.amazon.awssdk.core.ResponseBytes;
 
@@ -42,6 +47,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 /**
  * 증상: confirm 응답 유실 뒤 동일 tmp key를 재전송하면 새 final object가 생성됐다.
@@ -50,47 +56,6 @@ import static org.mockito.Mockito.verify;
  */
 @ExtendWith(MockitoExtension.class)
 class FileStorageServiceTest {
-
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
-    void 검사나_복사_중_객체가_바뀌면_확정하지_않는다(boolean changedDuringCopy) {
-        // Given — S3의 If-Match 실패를 재현하며 DB 등록이 일어나지 않아야 한다.
-        String key = "tmp/used/42/upload.png";
-        given(s3Client.headObject(any(java.util.function.Consumer.class))).willReturn(headObjectResponse);
-        given(headObjectResponse.contentType()).willReturn("image/png");
-        given(headObjectResponse.contentLength()).willReturn(100L);
-        given(headObjectResponse.eTag()).willReturn("\"original\"");
-        S3Exception changed = (S3Exception) S3Exception.builder().statusCode(412).build();
-        if (changedDuringCopy) {
-            given(s3Client.getObject(any(GetObjectRequest.class),
-                    org.mockito.ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()))
-                    .willReturn(imageHeader);
-            given(imageHeader.asByteArray()).willReturn(new byte[]{
-                    (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
-            given(s3Client.copyObject(any(software.amazon.awssdk.services.s3.model.CopyObjectRequest.class)))
-                    .willThrow(changed);
-        } else {
-            given(s3Client.getObject(any(GetObjectRequest.class),
-                    org.mockito.ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()))
-                    .willThrow(changed);
-        }
-        // When / Then
-        assertThatThrownBy(() -> fileStorageService.confirmUpload(42L, new FileUploadConfirmRequestDto(key)))
-                .isInstanceOf(BadRequestException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_INVALID);
-        verify(fileObjectLifecycleService).findReusableConfirmedObjectKey(42L, FileUploadPurpose.USED, key);
-        org.mockito.Mockito.verifyNoMoreInteractions(fileObjectLifecycleService);
-    }
-
-    @Test
-    void 조회용_서명_URL은_영구_이미지로_첨부하지_않는다() {
-        // Given — 응답 URL 재저장은 기존 프로필을 detach하고 만료 URL을 저장하게 한다.
-        String url = "https://eeum-prod-media-2026.s3.ap-northeast-2.amazonaws.com/profiles/42/a.png?X-Amz-Signature=abc";
-        // When / Then
-        assertThatThrownBy(() -> fileStorageService.requireAttachableObject(42L, FileUploadPurpose.PROFILE, url))
-                .isInstanceOf(BadRequestException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_INVALID);
-    }
 
     @Mock
     private S3Client s3Client;
@@ -183,13 +148,13 @@ class FileStorageServiceTest {
     void 같은_임시_objectKey를_다시_confirm하면_처음_확정한_결과를_반환한다() {
         // Given — confirm 응답이 유실되어 클라이언트가 동일한 tmp key를 재전송한다.
         String temporaryObjectKey = "tmp/used/42/upload.png";
-        given(s3Client.headObject(any(java.util.function.Consumer.class))).willReturn(headObjectResponse);
+        given(s3Client.headObject(any(Consumer.class))).willReturn(headObjectResponse);
         given(headObjectResponse.contentType()).willReturn("image/png");
         given(headObjectResponse.contentLength()).willReturn(100L);
         given(headObjectResponse.eTag()).willReturn("\"original\"");
         given(s3Client.getObject(
                 any(GetObjectRequest.class),
-                org.mockito.ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()
+                ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()
         )).willReturn(imageHeader);
         given(imageHeader.asByteArray()).willReturn(new byte[]{
                 (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
@@ -219,8 +184,8 @@ class FileStorageServiceTest {
         ArgumentCaptor<GetObjectRequest> getRequest = ArgumentCaptor.forClass(GetObjectRequest.class);
         verify(s3Client).getObject(getRequest.capture(), any(ResponseTransformer.class));
         assertThat(getRequest.getValue().ifMatch()).isEqualTo("\"original\"");
-        ArgumentCaptor<software.amazon.awssdk.services.s3.model.CopyObjectRequest> copyRequest =
-                ArgumentCaptor.forClass(software.amazon.awssdk.services.s3.model.CopyObjectRequest.class);
+        ArgumentCaptor<CopyObjectRequest> copyRequest =
+                ArgumentCaptor.forClass(CopyObjectRequest.class);
         verify(s3Client).copyObject(copyRequest.capture());
         assertThat(copyRequest.getValue().copySourceIfMatch()).isEqualTo("\"original\"");
     }
@@ -234,7 +199,7 @@ class FileStorageServiceTest {
         given(fileObjectLifecycleService.findReusableConfirmedObjectKey(
                 42L, FileUploadPurpose.USED, temporaryObjectKey))
                 .willReturn(Optional.empty(), Optional.of(confirmedObjectKey));
-        given(s3Client.headObject(any(java.util.function.Consumer.class)))
+        given(s3Client.headObject(any(Consumer.class)))
                 .willThrow(S3Exception.builder().statusCode(404).build());
 
         // When
@@ -255,5 +220,46 @@ class FileStorageServiceTest {
         // Then — 클라이언트 선언값이 아니라 S3가 강제하는 정책 필드가 반환돼야 한다.
         String policy = new String(Base64.getDecoder().decode(result.formFields().get("policy")));
         assertThat(policy).contains("[\"content-length-range\",1,10485760]");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void 검사나_복사_중_객체가_바뀌면_확정하지_않는다(boolean changedDuringCopy) {
+        // Given — S3의 If-Match 실패를 재현하며 DB 등록이 일어나지 않아야 한다.
+        String key = "tmp/used/42/upload.png";
+        given(s3Client.headObject(any(Consumer.class))).willReturn(headObjectResponse);
+        given(headObjectResponse.contentType()).willReturn("image/png");
+        given(headObjectResponse.contentLength()).willReturn(100L);
+        given(headObjectResponse.eTag()).willReturn("\"original\"");
+        S3Exception changed = (S3Exception) S3Exception.builder().statusCode(412).build();
+        if (changedDuringCopy) {
+            given(s3Client.getObject(any(GetObjectRequest.class),
+                    ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()))
+                    .willReturn(imageHeader);
+            given(imageHeader.asByteArray()).willReturn(new byte[]{
+                    (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+            given(s3Client.copyObject(any(CopyObjectRequest.class)))
+                    .willThrow(changed);
+        } else {
+            given(s3Client.getObject(any(GetObjectRequest.class),
+                    ArgumentMatchers.<ResponseTransformer<GetObjectResponse, ResponseBytes<GetObjectResponse>>>any()))
+                    .willThrow(changed);
+        }
+        // When / Then
+        assertThatThrownBy(() -> fileStorageService.confirmUpload(42L, new FileUploadConfirmRequestDto(key)))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_INVALID);
+        verify(fileObjectLifecycleService).findReusableConfirmedObjectKey(42L, FileUploadPurpose.USED, key);
+        verifyNoMoreInteractions(fileObjectLifecycleService);
+    }
+
+    @Test
+    void 조회용_서명_URL은_영구_이미지로_첨부하지_않는다() {
+        // Given — 응답 URL 재저장은 기존 프로필을 detach하고 만료 URL을 저장하게 한다.
+        String url = "https://eeum-prod-media-2026.s3.ap-northeast-2.amazonaws.com/profiles/42/a.png?X-Amz-Signature=abc";
+        // When / Then
+        assertThatThrownBy(() -> fileStorageService.requireAttachableObject(42L, FileUploadPurpose.PROFILE, url))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_INVALID);
     }
 }
