@@ -13,8 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 증상: private S3 objectKey가 응답과 STOMP payload에 그대로 실려 이미지를 표시할 수 없었다.
- * 결함 위치: 변환을 맡던 ResponseBodyAdvice가 Jackson 3 환경에서 아예 실행되지 않았다.
- * 변환 책임을 DTO 생성 시점으로 옮기고, 두 이미지 필드가 모두 변환되는지 고정한다.
+ * 채팅 STOMP 브로드캐스트는 HTTP ResponseBodyAdvice를 거치지 않으므로,
+ * 리스너가 두 이미지 필드에 URL 변환을 적용할 수 있도록 DTO 변환 함수를 제공한다.
  */
 class ChatMessageResponseDtoTest {
 

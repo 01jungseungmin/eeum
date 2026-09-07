@@ -256,9 +256,8 @@ class FavoriteUsedProductServiceTest {
         givenFavoriteSlice(row(PRODUCT_ID));
         when(usedProductImageRepository.findByUsedProduct_UsedProductIdInAndIsThumbnailTrue(List.of(PRODUCT_ID)))
                 .thenReturn(List.of(UsedProductImage.create(product(), "used/7/thumb.webp", 1, true)));
-        // DB에는 objectKey만 있다. 조회용 URL 변환을 거치지 않으면 private 버킷에서 열리지 않는다.
-        when(fileStorageService.resolveImageUrl("used/7/thumb.webp"))
-                .thenReturn("https://signed.example/thumb");
+        // Service는 트랜잭션 안에서 S3 URL을 발급하지 않고 objectKey만 DTO에 담는다.
+        // HTTP 응답 직전 ImageUrlResponseAdvice가 조회용 URL로 변환한다.
 
         // when
         CursorSlice<FavoriteUsedProductResponseDto> result =
@@ -266,7 +265,7 @@ class FavoriteUsedProductServiceTest {
 
         // then
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("https://signed.example/thumb");
+        assertThat(result.getContent().get(0).getThumbnailUrl()).isEqualTo("used/7/thumb.webp");
         assertThat(result.getContent().get(0).getUsedProductId()).isEqualTo(PRODUCT_ID);
         assertThat(result.getContent().get(0).getRegionName()).isEqualTo("역삼동");
         verify(usedProductImageRepository, times(1))
