@@ -13,9 +13,14 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface UsedProductRepository
         extends JpaRepository<UsedProduct, Long>, UsedProductRepositoryCustom {
+
+    @EntityGraph(attributePaths = {"seller", "category", "region"})
+    Page<UsedProduct> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     //  Soft Delete 대상이므로 단건 조회는 항상 이 메서드 사용
     Optional<UsedProduct> findByUsedProductIdAndDeletedAtIsNull(Long usedProductId);
