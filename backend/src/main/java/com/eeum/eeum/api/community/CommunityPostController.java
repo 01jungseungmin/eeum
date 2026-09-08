@@ -7,6 +7,8 @@ import com.eeum.eeum.application.community.dto.response.CommunityPostDetailRespo
 import com.eeum.eeum.application.community.dto.response.CommunityPostSummaryResponseDto;
 import com.eeum.eeum.application.community.service.CommunityPostImageService;
 import com.eeum.eeum.application.community.service.CommunityPostService;
+import com.eeum.eeum.application.search.enums.PopularSearchScope;
+import com.eeum.eeum.application.search.service.PopularSearchService;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
@@ -33,6 +35,7 @@ public class CommunityPostController {
 
     private final CommunityPostService postService;
     private final CommunityPostImageService postImageService;
+    private final PopularSearchService popularSearchService;
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
@@ -44,9 +47,9 @@ public class CommunityPostController {
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
 
-        return ResponseEntity.ok(ApiResponse.success(
-                postService.getPosts(accountId, keyword, pageable)
-        ));
+        Page<CommunityPostSummaryResponseDto> posts = postService.getPosts(accountId, keyword, pageable);
+        popularSearchService.record(PopularSearchScope.COMMUNITY, keyword, "account:" + accountId);
+        return ResponseEntity.ok(ApiResponse.success(posts));
     }
 
     @GetMapping("/me")

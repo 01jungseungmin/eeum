@@ -107,6 +107,17 @@ storage:
     # 소유권 검증 없이 임의 외부 URL이 저장될 수 있다 — 전환이 끝나면 false로 내린다.
     allow-legacy-https-url: ${LEGACY_IMAGE_URL_ALLOWED:true}
 
+search:
+  popular:
+    # 시간 버킷을 합산해 최근 24시간을 만든다. 금칙어는 쉼표로 구분해 배포 환경변수에서 주입한다.
+    bucket-ttl: PT25H
+    duplicate-ttl: PT10M
+    cache-ttl: PT1M
+    window-hours: 24
+    min-keyword-length: 2
+    max-keyword-length: 50
+    banned-keywords: ${POPULAR_SEARCH_BANNED_KEYWORDS:}
+
 # 실시간(WebSocket·SSE) 활성화 여부.
 # 인스턴스를 늘리면 인메모리 STOMP 브로커와 SseEmitter가 JVM 경계를 넘지 못한다.
 # 실시간 커넥션은 LB 경로 라우팅으로 한 인스턴스에 모으고, API 전용 인스턴스는 false로 끈다.

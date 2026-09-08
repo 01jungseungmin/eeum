@@ -5,6 +5,9 @@ import com.eeum.eeum.application.store.dto.response.StoreDetailResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.application.store.service.PublicStoreService;
+import com.eeum.eeum.application.search.enums.PopularSearchScope;
+import com.eeum.eeum.application.search.service.PopularSearchService;
+import com.eeum.eeum.application.search.service.PopularSearchViewerKeyResolver;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.ViewerKeyResolver;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +30,8 @@ import java.util.List;
 public class PublicStoreController {
 
     private final PublicStoreService publicStoreService;
+    private final PopularSearchService popularSearchService;
+    private final PopularSearchViewerKeyResolver popularSearchViewerKeyResolver;
     private final ViewerKeyResolver viewerKeyResolver;
 
     @Operation(summary = "상점 목록 조회",
@@ -36,11 +41,13 @@ public class PublicStoreController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long regionId,
             @RequestParam(required = false) String keyword,
+            HttpServletRequest request,
             @PageableDefault(size = 20, sort = "createdAt",
                     direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getStores(categoryId, regionId, keyword, pageable)));
+        Page<StoreListResponseDto> stores = publicStoreService.getStores(categoryId, regionId, keyword, pageable);
+        popularSearchService.record(PopularSearchScope.STORE, keyword, popularSearchViewerKeyResolver.resolve(request));
+        return ResponseEntity.ok(ApiResponse.success(stores));
     }
 
     @Operation(summary = "주변 상점 조회", description = "현재 위치 기준 반경 내 상점을 조회합니다.")
@@ -51,10 +58,13 @@ public class PublicStoreController {
             @RequestParam(defaultValue = "3.0") double radiusKm,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long regionId,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getNearbyStores(latitude, longitude, radiusKm,categoryId,regionId,keyword)));
+        List<StoreListResponseDto> stores = publicStoreService.getNearbyStores(
+                latitude, longitude, radiusKm, categoryId, regionId, keyword);
+        popularSearchService.record(PopularSearchScope.STORE, keyword, popularSearchViewerKeyResolver.resolve(request));
+        return ResponseEntity.ok(ApiResponse.success(stores));
     }
 
     @Operation(summary = "상점 상세 조회",
