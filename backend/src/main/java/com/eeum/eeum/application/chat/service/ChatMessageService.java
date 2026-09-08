@@ -182,6 +182,8 @@ public class ChatMessageService {
     // 본인 메시지 Soft Delete — 삭제 후 같은 방 참여자에게 "삭제된 메시지" 상태 브로드캐스트
     @Transactional
     public void deleteMessage(Long accountId, Long messageId) {
+        // 발송과 같은 account → message 순서다. 탈퇴·정지와 경합해도 삭제 쓰기가 뒤늦게 커밋되지 않는다.
+        accountWriteGuard.lockActive(accountId);
         ChatMessage message = chatAccessHelper.verifyMessageOwnership(accountId, messageId);
         if (!message.isDeletable(accountId)) {
             throw new BadRequestException(ErrorCode.CHAT_MESSAGE_NOT_DELETABLE);

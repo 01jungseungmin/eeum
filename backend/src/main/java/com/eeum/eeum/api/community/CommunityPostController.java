@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,11 +24,13 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
+@Validated
 @RequestMapping("/community/posts")
 @RequiredArgsConstructor
 @Tag(name = "21. Community Post", description = "커뮤니티 게시글 API")
@@ -71,7 +74,7 @@ public class CommunityPostController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "게시글 상세 조회")
     public ResponseEntity<ApiResponse<CommunityPostDetailResponseDto>> getPost(
-            @PathVariable Long postId
+            @PathVariable @Positive Long postId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountIdOrNull();
         return ResponseEntity.ok(ApiResponse.success(postService.getPost(accountId, postId)));
@@ -93,7 +96,7 @@ public class CommunityPostController {
     @PreAuthorize("isAuthenticated()")
     @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<ApiResponse<List<CommunityImageResponseDto>>> addCommunityImages(
-            @PathVariable Long communityPostId,
+            @PathVariable @Positive Long communityPostId,
             @Valid @RequestBody ImageUploadListRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
@@ -107,8 +110,8 @@ public class CommunityPostController {
     @PreAuthorize("isAuthenticated()")
     @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<ApiResponse<Void>> deleteCommunityImages(
-            @PathVariable Long communityPostId,
-            @PathVariable Long imageId
+            @PathVariable @Positive Long communityPostId,
+            @PathVariable @Positive Long imageId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         postImageService.deleteImage(accountId, communityPostId, imageId);
@@ -120,7 +123,7 @@ public class CommunityPostController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "게시글 수정")
     public ResponseEntity<ApiResponse<CommunityPostDetailResponseDto>> updatePost(
-            @PathVariable Long postId,
+            @PathVariable @Positive Long postId,
             @Valid @RequestBody CommunityPostUpdateRequestDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
@@ -132,7 +135,7 @@ public class CommunityPostController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "게시글 삭제")
     public ResponseEntity<ApiResponse<Void>> deletePost(
-            @PathVariable Long postId
+            @PathVariable @Positive Long postId
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         postService.deletePost(accountId, postId);

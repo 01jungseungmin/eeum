@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -57,6 +58,7 @@ class CommunityPostServiceTest {
     @Mock private CommunityPostDeletionProcessor postDeletionProcessor;
 
     @Mock private AccountRepository accountRepository;
+    @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private CategoryRepository categoryRepository;
     @Mock private PrimaryRegionResolver primaryRegionResolver;
 
@@ -397,6 +399,7 @@ class CommunityPostServiceTest {
         // then
         assertThat(result.getTitle()).isEqualTo("새 게시글");
         assertThat(result.isLikedByMe()).isFalse();
+        verify(accountWriteGuard).lockActive(accountId);
         verify(postRepository).save(any(CommunityPost.class));
     }
 
@@ -532,6 +535,7 @@ class CommunityPostServiceTest {
         // then
         assertThat(result.getTitle()).isEqualTo("수정 제목");
         assertThat(result.getContent()).isEqualTo("수정 내용");
+        verify(accountWriteGuard).lockActive(accountId);
     }
 
     @Test
@@ -605,6 +609,7 @@ class CommunityPostServiceTest {
 
         // then
         verify(postRepository).findWithAccountByPostIdForUpdate(postId);
+        verify(accountWriteGuard).lockActive(accountId);
         verify(postDeletionProcessor).deleteLockedPost(post);
     }
 

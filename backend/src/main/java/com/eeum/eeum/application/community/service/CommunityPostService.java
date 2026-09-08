@@ -9,6 +9,7 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -44,6 +45,7 @@ public class CommunityPostService {
     private final CommunityImageRepository imageRepository;
     private final CommunityPostDeletionProcessor postDeletionProcessor;
     private final AccountRepository accountRepository;
+    private final AccountWriteGuard accountWriteGuard;
     private final CategoryRepository categoryRepository;
     private final PrimaryRegionResolver primaryRegionResolver;
 
@@ -122,6 +124,8 @@ public class CommunityPostService {
 
     @Transactional
     public CommunityPostDetailResponseDto createPost(Long accountId, CommunityPostCreateRequestDto request) {
+        // 계정 → 게시글 순서로 잠근다. 탈퇴·정지와 겹쳐도 이후 게시글이 남지 않는다.
+        accountWriteGuard.lockActive(accountId);
         Account account = getAccountOrThrow(accountId);
         Category category = getCategoryOrThrow(request.getCategoryId());
         Region region = getPrimaryRegion(account);
@@ -149,6 +153,8 @@ public class CommunityPostService {
             Long postId,
             CommunityPostUpdateRequestDto request
     ) {
+        // account → post 전역 순서를 지켜 탈퇴·정지 후 수정 커밋을 막는다.
+        accountWriteGuard.lockActive(accountId);
         CommunityPost post = getVisiblePostForUpdateOrThrow(postId);
         validateOwner(post, accountId);
 
@@ -167,6 +173,8 @@ public class CommunityPostService {
 
     @Transactional
     public void deletePost(Long accountId, Long postId) {
+        // 계정 상태를 먼저 잠근 뒤 게시글과 하위 데이터를 정리한다.
+        accountWriteGuard.lockActive(accountId);
         CommunityPost post = getPostForUpdateOrThrow(postId);
         validateOwner(post, accountId);
         postDeletionProcessor.deleteLockedPost(post);

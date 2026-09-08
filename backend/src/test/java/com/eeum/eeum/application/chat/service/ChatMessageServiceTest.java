@@ -546,6 +546,7 @@ class ChatMessageServiceTest {
 
         // Then
         assertThat(message.isDeleted()).isTrue();
+        verify(accountWriteGuard).lockActive(accountId);
         verify(eventPublisher).publishEvent(any(ChatMessageBroadcastEvent.class));
     }
 
