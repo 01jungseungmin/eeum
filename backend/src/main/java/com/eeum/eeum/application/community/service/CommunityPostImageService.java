@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.community.service;
 
 import com.eeum.eeum.application.community.dto.response.CommunityImageResponseDto;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
@@ -31,9 +32,12 @@ public class CommunityPostImageService {
     private final CommunityPostRepository postRepository;
     private final CommunityImageRepository imageRepository;
     private final FileStorageService fileStorageService;
+    private final AccountWriteGuard accountWriteGuard;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<CommunityImageResponseDto> addImages(Long accountId, Long postId, ImageUploadListRequestDto request) {
+        // account → post → file_object 순서. 탈퇴·정지와 겹쳐 이미지가 뒤늦게 추가되는 것을 막는다.
+        accountWriteGuard.lockActive(accountId);
         CommunityPost post = getVisiblePostWithOwnerCheckForUpdate(accountId, postId);
 
         int currentCount = imageRepository.countByPost_PostId(postId);
@@ -60,6 +64,8 @@ public class CommunityPostImageService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteImage(Long accountId, Long postId, Long imageId) {
+        // 추가와 같은 account → post 순서를 유지해 탈퇴 정리와 직렬화한다.
+        accountWriteGuard.lockActive(accountId);
         getPostWithOwnerCheckForUpdate(accountId, postId);
 
         CommunityImage image = imageRepository.findById(imageId)
