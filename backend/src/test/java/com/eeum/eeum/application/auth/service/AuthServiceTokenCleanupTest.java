@@ -24,6 +24,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.eeum.eeum.application.auth.dto.request.ReAuthRequestDto;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -55,6 +56,7 @@ class AuthServiceTokenCleanupTest {
     // 나머지 의존성 — 이 테스트에서 호출되지 않으므로 Mock만 선언
     @Mock com.eeum.eeum.domain.account.repository.OwnerInfoRepository ownerInfoRepository;
     @Mock com.eeum.eeum.domain.store.repository.StoreRepository storeRepository;
+    @Mock com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     @Mock EmailService emailService;
     @Mock OAuthService oAuthService;
     @Mock org.springframework.data.redis.core.RedisTemplate redisTemplate;
@@ -268,9 +270,10 @@ class AuthServiceTokenCleanupTest {
         when(jwtProvider.generateRefreshToken(any(), any())).thenReturn("new-refresh");
 
         // when
-        authService.reissue(request);
+        com.eeum.eeum.application.auth.dto.response.TokenResponseDto response = authService.reissue(request);
 
         // then: lock key로 직렬화됨
+        assertThat(response.getAiPlanType()).isNull();
         verify(redisLockService).executeWithLock(
                 eq(LockKeys.reissue(accountId)),
                 any(Duration.class),
@@ -278,6 +281,66 @@ class AuthServiceTokenCleanupTest {
         );
         verify(tokenService).validateRefreshToken(refreshToken);
         verify(tokenService).saveRefreshToken(eq(accountId), anyString());
+    }
+
+    @Test
+    void 사장_토큰_발급_시_현재_유효한_AI_플랜을_응답에_포함한다() {
+        // given
+        Long accountId = 1L;
+        String refreshToken = "owner-refresh-token";
+        ReissueRequestDto request = mock(ReissueRequestDto.class);
+        when(request.getRefreshToken()).thenReturn(refreshToken);
+        when(jwtProvider.isValid(refreshToken)).thenReturn(true);
+        when(jwtProvider.isRefreshToken(refreshToken)).thenReturn(true);
+        when(jwtProvider.getAccountId(refreshToken)).thenReturn(accountId);
+        when(redisLockService.<com.eeum.eeum.application.auth.dto.response.TokenResponseDto>executeWithLock(
+                eq(LockKeys.reissue(accountId)), any(Duration.class), any(Supplier.class)))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
+
+        Account owner = mock(Account.class);
+        when(owner.isTokenVersionCurrent(any())).thenReturn(true);
+        when(owner.isWithdrawn()).thenReturn(false);
+        when(owner.isActive()).thenReturn(true);
+        when(owner.getAccountId()).thenReturn(accountId);
+        when(owner.getRole()).thenReturn(com.eeum.eeum.domain.account.enums.AccountRole.ROLE_OWNER);
+        when(tokenService.validateRefreshToken(refreshToken)).thenReturn(accountId);
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(owner));
+        when(jwtProvider.generateAccessToken(any(), any(), any())).thenReturn("new-access");
+        when(jwtProvider.generateRefreshToken(any(), any())).thenReturn("new-refresh");
+
+        com.eeum.eeum.domain.store.entity.Store store = mock(com.eeum.eeum.domain.store.entity.Store.class);
+        when(store.getStoreId()).thenReturn(100L);
+        when(storeRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(store));
+        com.eeum.eeum.domain.ai.entity.AiPlanSubscription subscription =
+                mock(com.eeum.eeum.domain.ai.entity.AiPlanSubscription.class);
+        when(subscription.getPlanType()).thenReturn(com.eeum.eeum.domain.ai.enums.AiPlanType.BASIC);
+        when(aiPlanSubscriptionRepository.findCurrentActivePlans(eq(100L), any(), any()))
+                .thenReturn(List.of(subscription));
+
+        // when
+        com.eeum.eeum.application.auth.dto.response.TokenResponseDto response = authService.reissue(request);
+
+        // then
+        assertThat(response.getAiPlanType()).isEqualTo("BASIC");
+    }
+
+    @Test
+    void OAuth_기존_회원_로그인_응답에도_AI_플랜을_전달한다() {
+        // given
+        com.eeum.eeum.application.auth.dto.response.TokenResponseDto tokens =
+                com.eeum.eeum.application.auth.dto.response.TokenResponseDto.builder()
+                        .accessToken("access")
+                        .refreshToken("refresh")
+                        .role("ROLE_OWNER")
+                        .aiPlanType("PRO")
+                        .build();
+
+        // when
+        com.eeum.eeum.application.auth.dto.response.OAuthLoginResponseDto response =
+                com.eeum.eeum.application.auth.dto.response.OAuthLoginResponseDto.existingUser(tokens);
+
+        // then
+        assertThat(response.getAiPlanType()).isEqualTo("PRO");
     }
 
     @Test

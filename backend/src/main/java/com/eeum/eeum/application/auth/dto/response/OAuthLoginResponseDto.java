@@ -34,6 +34,9 @@ public class OAuthLoginResponseDto {
     @Schema(description = "회원 역할")
     private String role;
 
+    @Schema(description = "사장 AI 구독 플랜. 사장이 아닌 회원은 null", example = "BASIC", allowableValues = {"FREE", "BASIC", "PRO"})
+    private String aiPlanType;
+
     public static OAuthLoginResponseDto existingUser(TokenResponseDto tokens) {
         return OAuthLoginResponseDto.builder()
                 .isNewUser(false)
@@ -43,6 +46,7 @@ public class OAuthLoginResponseDto {
                 .accessTokenExpiresIn(tokens.getAccessTokenExpiresIn())
                 .refreshTokenExpiresIn(tokens.getRefreshTokenExpiresIn())
                 .role(tokens.getRole())
+                .aiPlanType(tokens.getAiPlanType())
                 .build();
     }
 
