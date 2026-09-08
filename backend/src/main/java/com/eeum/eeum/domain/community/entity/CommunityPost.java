@@ -75,4 +75,8 @@ public class CommunityPost extends BaseEntity {
     public void hide() {
         this.hidden = true;
     }
+
+    public void show() {
+        this.hidden = false;
+    }
 }

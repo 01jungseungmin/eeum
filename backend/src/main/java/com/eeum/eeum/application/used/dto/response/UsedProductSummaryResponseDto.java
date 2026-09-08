@@ -54,6 +54,9 @@ public class UsedProductSummaryResponseDto {
     @Schema(description = "작성일시")
     private LocalDateTime createdAt;
 
+    @Schema(description = "관리자 숨김 여부")
+    private boolean hidden;
+
     public static UsedProductSummaryResponseDto of(UsedProduct product, String thumbnailUrl) {
         return UsedProductSummaryResponseDto.builder()
                 .usedProductId(product.getUsedProductId())
@@ -68,6 +71,7 @@ public class UsedProductSummaryResponseDto {
                 .favoriteCount(product.getFavoriteCount())
                 .viewCount(product.getViewCount())
                 .createdAt(product.getCreatedAt())
+                .hidden(product.isHidden())
                 .build();
     }
 }

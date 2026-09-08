@@ -57,6 +57,9 @@ public class CommunityPostDetailResponseDto {
     @Schema(description = "현재 로그인 사용자의 좋아요 여부")
     private boolean likedByMe;
 
+    @Schema(description = "관리자 숨김 여부")
+    private boolean hidden;
+
     @Schema(description = "이미지 목록")
     private List<CommunityImageResponseDto> images;
 
@@ -92,6 +95,7 @@ public class CommunityPostDetailResponseDto {
                 .likeCount(post.getLikeCount())
                 .commentCount(post.getCommentCount())
                 .likedByMe(likedByMe)
+                .hidden(post.isHidden())
                 .images(images.stream()
                         .map(image -> CommunityImageResponseDto.from(image, imageUrlResolver.apply(image)))
                         .toList())
