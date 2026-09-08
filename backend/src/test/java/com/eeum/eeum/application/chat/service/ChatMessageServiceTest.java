@@ -3,6 +3,7 @@ package com.eeum.eeum.application.chat.service;
 import com.eeum.eeum.application.chat.dto.request.ChatImageMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatImageMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatUnreadCountResponseDto;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -48,6 +49,7 @@ import java.util.function.LongSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -433,6 +435,54 @@ class ChatMessageServiceTest {
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_NOT_PARTICIPANT);
+    }
+
+    // ===================== getImageMessages (사진 모아보기 커서 기반) =====================
+
+    @Test
+    void 활성_참여자는_삭제되지_않은_이미지_메시지를_커서로_조회한다() {
+        // Given
+        Long accountId = 1L;
+        Long roomId = 10L;
+        int size = 20;
+        Account sender = createAccount(accountId, "홍길동");
+        ChatRoom room = createGroupRoom(roomId, sender);
+        ChatParticipant participant = ChatParticipant.create(room, sender);
+        ChatMessage image = ChatMessage.image(room, sender, "chat/image/object-key");
+        ReflectionTestUtils.setField(image, "chatmessageId", 30L);
+
+        when(chatAccessHelper.verifyParticipant(accountId, roomId)).thenReturn(participant);
+        when(chatMessageRepository.findRoomImageMessages(eq(roomId), isNull(), eq(size)))
+                .thenReturn(CursorSlice.of(List.of(image), false, null, null,
+                        Sort.by(Sort.Order.desc("sentAt"), Sort.Order.desc("chatMessageId"))));
+
+        // When
+        CursorSlice<ChatImageMessageResponseDto> result =
+                chatMessageService.getImageMessages(accountId, roomId, null, null, size);
+
+        // Then
+        assertThat(result.getContent()).singleElement().satisfies(dto -> {
+            assertThat(dto.getMessageId()).isEqualTo(30L);
+            assertThat(dto.getImageUrl()).isEqualTo("chat/image/object-key");
+        });
+        verify(chatAccessHelper).verifyParticipant(accountId, roomId);
+        verify(chatMessageRepository).findRoomImageMessages(eq(roomId), isNull(), eq(size));
+    }
+
+    @Test
+    void 사진_모아보기는_비참여자를_거절한다() {
+        // Given
+        Long accountId = 1L;
+        Long roomId = 10L;
+        doThrow(new ForbiddenException(ErrorCode.CHAT_NOT_PARTICIPANT))
+                .when(chatAccessHelper).verifyParticipant(accountId, roomId);
+
+        // When & Then
+        assertThatThrownBy(() -> chatMessageService.getImageMessages(accountId, roomId, null, null, 20))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_NOT_PARTICIPANT);
+        verify(chatMessageRepository, never()).findRoomImageMessages(any(), any(), anyInt());
     }
 
     // ===================== countUnread =====================

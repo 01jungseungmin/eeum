@@ -20,7 +20,10 @@ import java.time.LocalDateTime;
                 // 방 메시지 목록 — 방으로 좁히고 최신순으로 읽는다. 커서 조건과 정렬이
                 // 모두 이 인덱스로 풀린다. PK를 명시해야 같은 sent_at 구간의 정렬까지 인덱스가 맡는다.
                 @Index(name = "idx_chat_message_room_sent",
-                        columnList = "chat_room_id, sent_at, chat_message_id")
+                        columnList = "chat_room_id, sent_at, chat_message_id"),
+                // 사진 모아보기 — 방·타입·삭제 상태로 좁힌 뒤 최신순 커서 조회
+                @Index(name = "idx_chat_message_room_image_sent",
+                        columnList = "chat_room_id, message_type, deleted_at, sent_at, chat_message_id")
         }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
