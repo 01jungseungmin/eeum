@@ -15,6 +15,13 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 
 @Tag(name = "32. Admin - Used Product", description = "관리자 중고거래 API")
 @SecurityRequirement(name = "bearerAuth")
@@ -26,6 +33,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminUsedProductController {
 
     private final AdminUsedProductService adminUsedProductService;
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<UsedProductSummaryResponseDto>>> getUsedProducts(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(adminUsedProductService.getProducts(pageable)));
+    }
+
+    @GetMapping("/{usedProductId}")
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> getUsedProduct(
+            @PathVariable @Positive Long usedProductId) {
+        return ResponseEntity.ok(ApiResponse.success(adminUsedProductService.getDetail(usedProductId)));
+    }
+
+    @PatchMapping("/{usedProductId}/hide")
+    public ResponseEntity<ApiResponse<Void>> hideUsedProduct(
+            @PathVariable @Positive Long usedProductId) {
+        adminUsedProductService.hide(usedProductId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 
     @Operation(
             summary = "중고 게시글 숨김 해제",
