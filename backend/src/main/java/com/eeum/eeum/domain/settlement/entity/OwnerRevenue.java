@@ -5,6 +5,8 @@ import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -57,7 +59,7 @@ public class OwnerRevenue extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private OwnerRevenueStatus status;
 
-    @Column(name = "settleable_at", nullable = false)
+    @Column(name = "settleable_at")
     private LocalDateTime settleableAt;
 
     @Column(name = "cancelled_at")
@@ -72,9 +74,9 @@ public class OwnerRevenue extends BaseEntity {
             BigDecimal paymentAmount,
             BigDecimal pgFeeAmount,
             BigDecimal platformFeeAmount,
-            BigDecimal payoutAmount,
-            LocalDateTime settleableAt
+            BigDecimal payoutAmount
     ) {
+        validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
         OwnerRevenue revenue = new OwnerRevenue();
         revenue.order = order;
         revenue.payment = payment;
@@ -84,21 +86,57 @@ public class OwnerRevenue extends BaseEntity {
         revenue.platformFeeAmount = platformFeeAmount;
         revenue.payoutAmount = payoutAmount;
         revenue.status = OwnerRevenueStatus.ACCRUED;
-        revenue.settleableAt = settleableAt;
         return revenue;
     }
 
+    // 주문 완료 전에는 지급 가능 시각을 만들 수 없다. 결제 완료 원장은 이 값 없이 먼저 생성된다.
+    public void markSettleableAt(LocalDateTime settleableAt) {
+        if (status != OwnerRevenueStatus.ACCRUED || settleableAt == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.settleableAt = settleableAt;
+    }
+
     public void markSettlementPending() {
+        if (status != OwnerRevenueStatus.ACCRUED || settleableAt == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         this.status = OwnerRevenueStatus.SETTLEMENT_PENDING;
     }
 
     public void markSettled() {
+        if (status != OwnerRevenueStatus.SETTLEMENT_PENDING) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         this.status = OwnerRevenueStatus.SETTLED;
     }
 
     public void cancel(String reason, LocalDateTime cancelledAt) {
+        if (status != OwnerRevenueStatus.ACCRUED || cancelledAt == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         this.status = OwnerRevenueStatus.CANCELLED;
         this.cancelReason = reason;
         this.cancelledAt = cancelledAt;
+    }
+
+    private static void validateAmountSnapshot(
+            BigDecimal paymentAmount,
+            BigDecimal pgFeeAmount,
+            BigDecimal platformFeeAmount,
+            BigDecimal payoutAmount
+    ) {
+        if (paymentAmount == null
+                || pgFeeAmount == null
+                || platformFeeAmount == null
+                || payoutAmount == null
+                || paymentAmount.signum() < 0
+                || pgFeeAmount.signum() < 0
+                || platformFeeAmount.signum() < 0
+                || payoutAmount.signum() < 0
+                || paymentAmount.subtract(pgFeeAmount).subtract(platformFeeAmount)
+                .compareTo(payoutAmount) != 0) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_AMOUNT);
+        }
     }
 }

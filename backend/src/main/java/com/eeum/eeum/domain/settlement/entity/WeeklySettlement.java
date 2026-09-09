@@ -5,6 +5,8 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.settlement.enums.PayoutGatewayType;
 import com.eeum.eeum.domain.settlement.enums.WeeklySettlementStatus;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -108,6 +110,7 @@ public class WeeklySettlement extends BaseEntity {
             BigDecimal payoutAmount,
             String payoutIdempotencyKey
     ) {
+        validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
         WeeklySettlement settlement = new WeeklySettlement();
         settlement.store = store;
         settlement.periodStartAt = periodStartAt;
@@ -121,14 +124,35 @@ public class WeeklySettlement extends BaseEntity {
         return settlement;
     }
 
-    public void claim(String claimToken, LocalDateTime claimExpiresAt, LocalDateTime requestedAt) {
+    public void claim(
+            String claimToken,
+            LocalDateTime claimExpiresAt,
+            LocalDateTime requestedAt,
+            LocalDateTime now
+    ) {
+        if (now == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        boolean canClaim = status == WeeklySettlementStatus.PAYOUT_PENDING
+                || (status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
+                && this.claimExpiresAt != null
+                && !this.claimExpiresAt.isAfter(now));
+        if (!canClaim || claimToken == null || claimExpiresAt == null || !claimExpiresAt.isAfter(now)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         this.status = WeeklySettlementStatus.PAYOUT_IN_PROGRESS;
         this.claimToken = claimToken;
         this.claimExpiresAt = claimExpiresAt;
         this.payoutRequestedAt = requestedAt;
     }
 
-    public void requireManualReview(String failureCode, String failureReason) {
+    public void requireManualReview(
+            String claimToken,
+            String failureCode,
+            String failureReason,
+            LocalDateTime now
+    ) {
+        validateActiveClaim(claimToken, now);
         this.status = WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED;
         this.failureCode = failureCode;
         this.failureReason = failureReason;
@@ -136,9 +160,11 @@ public class WeeklySettlement extends BaseEntity {
 
     public void completeManually(
             Account completedBy,
+            String claimToken,
             String payoutReference,
             LocalDateTime completedAt
     ) {
+        validateActiveClaim(claimToken, completedAt);
         this.status = WeeklySettlementStatus.COMPLETED;
         this.payoutGateway = PayoutGatewayType.MANUAL;
         this.manualCompletedBy = completedBy;
@@ -147,5 +173,36 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutCompletedAt = completedAt;
         this.claimToken = null;
         this.claimExpiresAt = null;
+    }
+
+    private void validateActiveClaim(String claimToken, LocalDateTime now) {
+        if (status != WeeklySettlementStatus.PAYOUT_IN_PROGRESS
+                || this.claimToken == null
+                || !this.claimToken.equals(claimToken)
+                || claimExpiresAt == null
+                || now == null
+                || !now.isBefore(claimExpiresAt)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
+        }
+    }
+
+    private static void validateAmountSnapshot(
+            BigDecimal paymentAmount,
+            BigDecimal pgFeeAmount,
+            BigDecimal platformFeeAmount,
+            BigDecimal payoutAmount
+    ) {
+        if (paymentAmount == null
+                || pgFeeAmount == null
+                || platformFeeAmount == null
+                || payoutAmount == null
+                || paymentAmount.signum() < 0
+                || pgFeeAmount.signum() < 0
+                || platformFeeAmount.signum() < 0
+                || payoutAmount.signum() < 0
+                || paymentAmount.subtract(pgFeeAmount).subtract(platformFeeAmount)
+                .compareTo(payoutAmount) != 0) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_AMOUNT);
+        }
     }
 }

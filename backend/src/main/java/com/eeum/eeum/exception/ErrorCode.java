@@ -140,6 +140,11 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ORDER_INVALID_STATUS("ORDER_007", "유효하지 않은 주문 상태 입니다.", HttpStatus.BAD_REQUEST),
     ORDER_REFUND_NOT_ALLOWED("ORDER_008", "환불 요청할 수 없는 주문 상태입니다", HttpStatus.BAD_REQUEST),
 
+    // ===================== 정산 (SETTLEMENT) =====================
+    SETTLEMENT_INVALID_AMOUNT("SETTLEMENT_001", "정산 금액 구성이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    SETTLEMENT_INVALID_STATUS("SETTLEMENT_002", "처리할 수 없는 정산 상태입니다", HttpStatus.CONFLICT),
+    SETTLEMENT_CLAIM_MISMATCH("SETTLEMENT_003", "유효하지 않거나 만료된 정산 작업입니다", HttpStatus.CONFLICT),
+
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
     PAYMENT_AMOUNT_MISMATCH("PAYMENT_002", "결제 금액이 일치하지 않습니다", HttpStatus.BAD_REQUEST),

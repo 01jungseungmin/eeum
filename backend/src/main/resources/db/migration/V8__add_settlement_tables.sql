@@ -9,7 +9,8 @@ CREATE TABLE owner_revenue (
     platform_fee_amount    DECIMAL(10,2)   NOT NULL,
     payout_amount          DECIMAL(10,2)   NOT NULL,
     status                 ENUM('ACCRUED','SETTLEMENT_PENDING','SETTLED','CANCELLED') NOT NULL,
-    settleable_at          DATETIME(6)     NOT NULL,
+    -- 결제 완료 시 원장을 먼저 만들고, 주문 완료 시 completed_at + 7일로 채운다.
+    settleable_at          DATETIME(6)     NULL,
     cancelled_at           DATETIME(6)     NULL,
     cancel_reason          VARCHAR(500)    NULL,
     created_at             DATETIME(6)     NOT NULL,

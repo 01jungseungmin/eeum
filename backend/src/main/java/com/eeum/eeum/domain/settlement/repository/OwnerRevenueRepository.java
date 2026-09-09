@@ -18,9 +18,16 @@ public interface OwnerRevenueRepository extends JpaRepository<OwnerRevenue, Long
 
     Optional<OwnerRevenue> findByOrder_OrderId(Long orderId);
 
-    List<OwnerRevenue> findByStatusAndSettleableAtBeforeOrderByOwnerRevenueIdAsc(
-            OwnerRevenueStatus status,
-            LocalDateTime settleableAt
+    @Query("""
+        SELECT r.ownerRevenueId
+        FROM OwnerRevenue r
+        WHERE r.status = :status
+          AND r.settleableAt < :settleableAt
+        ORDER BY r.ownerRevenueId ASC
+    """)
+    List<Long> findEligibleIds(
+            @Param("status") OwnerRevenueStatus status,
+            @Param("settleableAt") LocalDateTime settleableAt
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
