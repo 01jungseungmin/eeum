@@ -15,6 +15,9 @@ import com.eeum.eeum.domain.used.enums.UsedProductStatus;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.eeum.eeum.common.util.SecurityUtil;
+import com.eeum.eeum.application.search.enums.PopularSearchScope;
+import com.eeum.eeum.application.search.service.PopularSearchService;
+import com.eeum.eeum.application.search.service.PopularSearchViewerKeyResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -25,6 +28,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -48,6 +52,8 @@ public class UsedProductController {
 
     private final UsedProductService usedProductService;
     private final UsedProductImageService usedProductImageService;
+    private final PopularSearchService popularSearchService;
+    private final PopularSearchViewerKeyResolver popularSearchViewerKeyResolver;
 
     @GetMapping
     @SecurityRequirements   // 전역 bearer 설정 해제 — 비회원도 조회할 수 있다
@@ -92,18 +98,19 @@ public class UsedProductController {
             @RequestParam(required = false) String cursorValue,
             @Parameter(description = "직전 응답의 nextCursorId. 첫 페이지면 생략")
             @RequestParam(required = false) @Positive Long cursorId,
+            HttpServletRequest httpRequest,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         // 비회원도 둘러볼 수 있다 — 실제 거래(채팅)에서 지역 인증을 요구한다.
         Long viewerId = SecurityUtil.getCurrentAccountIdOrNull();
-        return ResponseEntity.ok(ApiResponse.success(
-                usedProductService.getRegionProducts(
-                        viewerId,
-                        new UsedProductSearchRequestDto(
-                                regionId, keyword, categoryId, priceType, minPrice, maxPrice, status),
-                        cursorValue,
-                        cursorId,
-                        pageable)));
+        CursorSlice<UsedProductSummaryResponseDto> products = usedProductService.getRegionProducts(
+                viewerId,
+                new UsedProductSearchRequestDto(regionId, keyword, categoryId, priceType, minPrice, maxPrice, status),
+                cursorValue,
+                cursorId,
+                pageable);
+        popularSearchService.record(PopularSearchScope.USED, keyword, popularSearchViewerKeyResolver.resolve(httpRequest));
+        return ResponseEntity.ok(ApiResponse.success(products));
     }
 
     @PostMapping

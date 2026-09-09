@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.category.service.CategoryQueryService;
 import com.eeum.eeum.application.product.dto.response.*;
 import com.eeum.eeum.application.store.dto.request.NearbyStoreSearchCondition;
 import com.eeum.eeum.application.store.dto.request.StoreSearchDto;
@@ -10,6 +11,7 @@ import com.eeum.eeum.application.store.dto.response.StoreListResponseDto;
 import com.eeum.eeum.application.store.dto.response.StoreNoticeResponseDto;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
+import com.eeum.eeum.domain.category.enums.CategoryType;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.chat.entity.ChatRoom;
@@ -64,6 +66,7 @@ public class PublicStoreService {
     private final OwnerInfoRepository ownerInfoRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final CategoryQueryService categoryQueryService;
 
     // ===================== 상점 목록 조회 =====================
 
@@ -75,7 +78,7 @@ public class PublicStoreService {
             Pageable pageable
     ) {
         StoreSearchDto condition = new StoreSearchDto();
-        condition.setCategoryId(categoryId);
+        condition.setCategoryIds(categoryQueryService.resolveActiveCategoryIds(CategoryType.STORE, categoryId));
         condition.setRegionId(regionId);
         condition.setKeyword(keyword);
 
@@ -126,8 +129,14 @@ public class PublicStoreService {
     // ===================== 상점 상품 목록 조회 =====================
 
     @Transactional(readOnly = true)
-    public List<ProductListResponseDto> getStoreProducts(Long storeId) {
+    public List<ProductListResponseDto> getStoreProducts(Long storeId, Long productCategoryId) {
         getPublicVisibleStore(storeId);
+
+        if (productCategoryId != null) {
+            productCategoryRepository.findByProductCategoryIdAndStore_StoreIdAndIsActiveTrue(
+                            productCategoryId, storeId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
+        }
 
         /*
          * 사용자 앱에서도 SOLD_OUT 상품은 보여준다.
@@ -136,7 +145,10 @@ public class PublicStoreService {
          * 제외 대상:
          * - INACTIVE 상품
          */
-        return productRepository.findByStore_StoreIdAndStatusNot(storeId, ProductStatus.INACTIVE)
+        return (productCategoryId == null
+                ? productRepository.findByStore_StoreIdAndStatusNot(storeId, ProductStatus.INACTIVE)
+                : productRepository.findByStore_StoreIdAndProductCategory_ProductCategoryIdAndStatusNot(
+                        storeId, productCategoryId, ProductStatus.INACTIVE))
                 .stream()
                 .map(this::toProductListDto)
                 .toList();
@@ -215,7 +227,7 @@ public class PublicStoreService {
         condition.setLatitude(latitude);
         condition.setLongitude(longitude);
         condition.setRadiusKm(radiusKm);
-        condition.setCategoryId(categoryId);
+        condition.setCategoryIds(categoryQueryService.resolveActiveCategoryIds(CategoryType.STORE, categoryId));
         condition.setRegionId(regionId);
         condition.setKeyword(keyword);
 

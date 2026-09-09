@@ -35,6 +35,8 @@ import java.time.LocalDateTime;
                 // TODO: 운영 데이터로 EXPLAIN 확인 후 컬럼 순서 재검토
                 @Index(name = "idx_used_product_public_list",
                         columnList = "region_id, deleted_at, is_hidden, created_at"),
+                // 관리자 전체 목록 최신순 조회
+                @Index(name = "idx_used_product_admin_created", columnList = "created_at"),
                 // 내가 쓴 글 목록
                 @Index(name = "idx_used_product_seller", columnList = "account_id")
         }

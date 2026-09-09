@@ -9,6 +9,8 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
+import com.eeum.eeum.application.category.service.CategoryQueryService;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -57,7 +59,9 @@ class CommunityPostServiceTest {
     @Mock private CommunityPostDeletionProcessor postDeletionProcessor;
 
     @Mock private AccountRepository accountRepository;
+    @Mock private AccountWriteGuard accountWriteGuard;
     @Mock private CategoryRepository categoryRepository;
+    @Mock private CategoryQueryService categoryQueryService;
     @Mock private PrimaryRegionResolver primaryRegionResolver;
 
     // ──────────────────── Helpers ────────────────────
@@ -137,6 +141,36 @@ class CommunityPostServiceTest {
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getPostId()).isEqualTo(10L);
         assertThat(result.getContent().get(0).isLikedByMe()).isTrue();
+    }
+
+    @Test
+    void 게시글_목록_카테고리_필터는_활성_하위_카테고리까지_조회_조건으로_전달한다() {
+        // given
+        Long accountId = 1L;
+        Long regionId = 100L;
+        Long categoryId = 13L;
+        Pageable pageable = PageRequest.of(0, 10);
+        Account account = createAccount(accountId, regionId);
+        CommunityPost post = createPost(10L, account, regionId);
+        List<Long> categoryIds = List.of(13L, 130L);
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        stubVerifiedPrimaryRegion(accountId, regionId, account, regionId);
+        when(categoryQueryService.resolveActiveCategoryIds(CategoryType.COMMUNITY, categoryId))
+                .thenReturn(categoryIds);
+        when(postRepository.searchByRegionKeywordAndCategoryIds(
+                regionId, "질문", categoryIds, pageable))
+                .thenReturn(new PageImpl<>(List.of(post), pageable, 1));
+        when(postLikeRepository.findLikedPostIds(accountId, List.of(10L))).thenReturn(Set.of());
+
+        // when
+        Page<CommunityPostSummaryResponseDto> result = postService.getPosts(
+                accountId, "질문", categoryId, pageable);
+
+        // then
+        assertThat(result.getContent()).hasSize(1);
+        verify(postRepository).searchByRegionKeywordAndCategoryIds(
+                regionId, "질문", categoryIds, pageable);
     }
 
     @Test
@@ -397,6 +431,7 @@ class CommunityPostServiceTest {
         // then
         assertThat(result.getTitle()).isEqualTo("새 게시글");
         assertThat(result.isLikedByMe()).isFalse();
+        verify(accountWriteGuard).lockActive(accountId);
         verify(postRepository).save(any(CommunityPost.class));
     }
 
@@ -532,6 +567,7 @@ class CommunityPostServiceTest {
         // then
         assertThat(result.getTitle()).isEqualTo("수정 제목");
         assertThat(result.getContent()).isEqualTo("수정 내용");
+        verify(accountWriteGuard).lockActive(accountId);
     }
 
     @Test
@@ -605,6 +641,7 @@ class CommunityPostServiceTest {
 
         // then
         verify(postRepository).findWithAccountByPostIdForUpdate(postId);
+        verify(accountWriteGuard).lockActive(accountId);
         verify(postDeletionProcessor).deleteLockedPost(post);
     }
 

@@ -29,4 +29,7 @@ public class TokenResponseDto {
 
     @Schema(description = "사장 입점 심사 상태", example = "PENDING", allowableValues = {"PENDING", "REJECTED", "APPROVED"})
     private String ownerApprovalStatus;
+
+    @Schema(description = "사장 AI 구독 플랜. 사장이 아닌 회원은 null", example = "BASIC", allowableValues = {"FREE", "BASIC", "PRO"})
+    private String aiPlanType;
 }

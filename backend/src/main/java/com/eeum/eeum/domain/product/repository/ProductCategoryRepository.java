@@ -21,6 +21,11 @@ public interface ProductCategoryRepository extends JpaRepository<ProductCategory
             Long storeId
     );
 
+    Optional<ProductCategory> findByProductCategoryIdAndStore_StoreIdAndIsActiveTrue(
+            Long productCategoryId,
+            Long storeId
+    );
+
     boolean existsByStore_StoreIdAndName(Long storeId, String name);
 
     boolean existsByStore_StoreIdAndNameAndProductCategoryIdNot(

@@ -15,6 +15,13 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
 
 @Tag(name = "32. Admin - Used Product", description = "관리자 중고거래 API")
 @SecurityRequirement(name = "bearerAuth")
@@ -26,6 +33,28 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminUsedProductController {
 
     private final AdminUsedProductService adminUsedProductService;
+
+    @Operation(summary = "[관리자] 중고 게시글 목록 조회", description = "숨김 및 삭제된 게시글을 포함해 최신순으로 조회합니다.")
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<UsedProductSummaryResponseDto>>> getUsedProducts(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(adminUsedProductService.getProducts(pageable)));
+    }
+
+    @Operation(summary = "[관리자] 중고 게시글 상세 조회", description = "숨김 또는 삭제된 게시글도 조회할 수 있습니다.")
+    @GetMapping("/{usedProductId}")
+    public ResponseEntity<ApiResponse<UsedProductDetailResponseDto>> getUsedProduct(
+            @PathVariable @Positive Long usedProductId) {
+        return ResponseEntity.ok(ApiResponse.success(adminUsedProductService.getDetail(usedProductId)));
+    }
+
+    @Operation(summary = "[관리자] 중고 게시글 숨김", description = "게시글 노출만 중단하며 거래 상태는 변경하지 않습니다.")
+    @PatchMapping("/{usedProductId}/hide")
+    public ResponseEntity<ApiResponse<Void>> hideUsedProduct(
+            @PathVariable @Positive Long usedProductId) {
+        adminUsedProductService.hide(usedProductId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 
     @Operation(
             summary = "중고 게시글 숨김 해제",

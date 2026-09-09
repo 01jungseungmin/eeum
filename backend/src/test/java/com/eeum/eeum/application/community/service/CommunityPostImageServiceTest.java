@@ -2,6 +2,7 @@ package com.eeum.eeum.application.community.service;
 
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.common.dto.request.ImageUploadRequestDto;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
 import com.eeum.eeum.domain.community.entity.CommunityImage;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
 import com.eeum.eeum.domain.community.repository.CommunityImageRepository;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -21,6 +23,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +35,7 @@ class CommunityPostImageServiceTest {
     @Mock private CommunityPostRepository postRepository;
     @Mock private CommunityImageRepository imageRepository;
     @Mock private com.eeum.eeum.application.file.FileStorageService fileStorageService;
+    @Mock private AccountWriteGuard accountWriteGuard;
 
     @Test
     void 이미지_추가는_노출중인_게시글을_쓰기잠금으로_조회한다() {
@@ -44,6 +48,9 @@ class CommunityPostImageServiceTest {
 
         service.addImages(accountId, postId, imageRequest("https://example.com/image.jpg"));
 
+        InOrder inOrder = inOrder(accountWriteGuard, postRepository);
+        inOrder.verify(accountWriteGuard).lockActive(accountId);
+        inOrder.verify(postRepository).findVisibleByPostIdForUpdate(postId);
         verify(postRepository).findVisibleByPostIdForUpdate(postId);
         verify(imageRepository).saveAll(anyList());
     }
@@ -95,6 +102,9 @@ class CommunityPostImageServiceTest {
 
         service.deleteImage(accountId, postId, imageId);
 
+        InOrder inOrder = inOrder(accountWriteGuard, postRepository);
+        inOrder.verify(accountWriteGuard).lockActive(accountId);
+        inOrder.verify(postRepository).findWithAccountByPostIdForUpdate(postId);
         verify(postRepository).findWithAccountByPostIdForUpdate(postId);
         verify(imageRepository).delete(image);
         verify(fileStorageService).scheduleAttachedObjectCleanup("https://example.com/delete.jpg");

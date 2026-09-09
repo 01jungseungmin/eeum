@@ -2,6 +2,7 @@ package com.eeum.eeum.domain.chat.repository;
 
 import com.eeum.eeum.domain.chat.entity.ChatMessage;
 import com.eeum.eeum.domain.chat.entity.QChatMessage;
+import com.eeum.eeum.domain.chat.enums.MessageType;
 import com.eeum.eeum.common.dto.response.CursorSlice;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -57,6 +58,26 @@ public class ChatMessageRepositoryImpl implements ChatMessageRepositoryCustom {
                 MESSAGE_SORT);
     }
 
+    @Override
+    public CursorSlice<ChatMessage> findRoomImageMessages(
+            Long roomId, ChatMessageCursor cursor, int size) {
+        List<ChatMessage> fetched = queryFactory
+                .selectFrom(message)
+                .join(message.account).fetchJoin()
+                .where(
+                        message.chatRoom.chatroomId.eq(roomId),
+                        message.messageType.eq(MessageType.IMAGE),
+                        message.deletedAt.isNull(),
+                        message.imageUrl.isNotNull(),
+                        afterCursor(cursor)
+                )
+                .orderBy(message.sentAt.desc(), message.chatmessageId.desc())
+                .limit(size + 1L)
+                .fetch();
+
+        return toCursorSlice(fetched, size);
+    }
+
     /**
      * 커서 이후(= 더 과거) 구간. "발신 시각이 더 이르거나, 같으면 ID가 더 작은" 메시지다.
      *
@@ -70,6 +91,19 @@ public class ChatMessageRepositoryImpl implements ChatMessageRepositoryCustom {
         return message.sentAt.lt(cursor.sentAt())
                 .or(message.sentAt.eq(cursor.sentAt())
                         .and(message.chatmessageId.lt(cursor.chatMessageId())));
+    }
+
+    private CursorSlice<ChatMessage> toCursorSlice(List<ChatMessage> fetched, int size) {
+        boolean hasNext = fetched.size() > size;
+        List<ChatMessage> content = hasNext ? fetched.subList(0, size) : fetched;
+        ChatMessage last = content.isEmpty() ? null : content.get(content.size() - 1);
+
+        return CursorSlice.of(
+                content,
+                hasNext,
+                last == null ? null : last.getSentAt().toString(),
+                last == null ? null : last.getChatmessageId(),
+                MESSAGE_SORT);
     }
 
     @Override

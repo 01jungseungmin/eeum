@@ -3,6 +3,7 @@ package com.eeum.eeum.api.chat;
 import com.eeum.eeum.application.chat.dto.request.ChatImageMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatImageMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatUnreadCountResponseDto;
 import com.eeum.eeum.application.chat.service.ChatMessageService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
@@ -55,6 +56,20 @@ public class ChatMessageController {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 chatMessageService.getMessages(accountId, roomId, cursorValue, cursorId, size)));
+    }
+
+    @Operation(summary = "채팅 사진 모아보기", description = "활성 참여자만 조회할 수 있습니다. 삭제된 이미지 메시지는 제외하며, "
+            + "최신순 커서 페이징입니다. 직전 응답의 nextCursorValue·nextCursorId를 그대로 전달하세요.")
+    @GetMapping("/rooms/{roomId}/images")
+    public ResponseEntity<ApiResponse<CursorSlice<ChatImageMessageResponseDto>>> getImageMessages(
+            @PathVariable @Positive Long roomId,
+            @RequestParam(required = false) String cursorValue,
+            @RequestParam(required = false) @Positive Long cursorId,
+            @RequestParam(defaultValue = "50") @Positive @Max(100) int size
+    ) {
+        Long accountId = SecurityUtil.getCurrentAccountId();
+        return ResponseEntity.ok(ApiResponse.success(
+                chatMessageService.getImageMessages(accountId, roomId, cursorValue, cursorId, size)));
     }
 
     @Operation(summary = "텍스트 메시지 발송", description = "REST 폴백 경로로 텍스트 메시지를 발송합니다.")

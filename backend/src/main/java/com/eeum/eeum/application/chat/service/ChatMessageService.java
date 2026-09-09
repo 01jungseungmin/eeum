@@ -6,6 +6,7 @@ import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.application.chat.dto.request.ChatImageMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatImageMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatUnreadCountResponseDto;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -158,6 +159,17 @@ public class ChatMessageService {
                 .map(this::toResponse);
     }
 
+    /** 활성 참여자만 사진 모아보기에서 삭제되지 않은 이미지 메시지를 조회할 수 있다. */
+    @Transactional(readOnly = true)
+    public CursorSlice<ChatImageMessageResponseDto> getImageMessages(
+            Long accountId, Long roomId, String cursorValue, Long cursorId, int size) {
+        ChatMessageCursor cursor = ChatMessageCursor.ofNullable(cursorValue, cursorId);
+        chatAccessHelper.verifyParticipant(accountId, roomId);
+
+        return chatMessageRepository.findRoomImageMessages(roomId, cursor, size)
+                .map(ChatImageMessageResponseDto::from);
+    }
+
     // 전체 안 읽은 메시지 수 (Redis 우선, 캐시 미스 시 DB 합산)
     @Transactional(readOnly = true)
     public ChatUnreadCountResponseDto countUnread(Long accountId) {
@@ -170,6 +182,8 @@ public class ChatMessageService {
     // 본인 메시지 Soft Delete — 삭제 후 같은 방 참여자에게 "삭제된 메시지" 상태 브로드캐스트
     @Transactional
     public void deleteMessage(Long accountId, Long messageId) {
+        // 발송과 같은 account → message 순서다. 탈퇴·정지와 경합해도 삭제 쓰기가 뒤늦게 커밋되지 않는다.
+        accountWriteGuard.lockActive(accountId);
         ChatMessage message = chatAccessHelper.verifyMessageOwnership(accountId, messageId);
         if (!message.isDeletable(accountId)) {
             throw new BadRequestException(ErrorCode.CHAT_MESSAGE_NOT_DELETABLE);

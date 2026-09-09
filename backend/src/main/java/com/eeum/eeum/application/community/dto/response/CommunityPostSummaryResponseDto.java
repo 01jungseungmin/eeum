@@ -51,6 +51,9 @@ public class CommunityPostSummaryResponseDto {
     @Schema(description = "현재 로그인 사용자의 좋아요 여부")
     private boolean likedByMe;
 
+    @Schema(description = "관리자 숨김 여부")
+    private boolean hidden;
+
     public static CommunityPostSummaryResponseDto from(CommunityPost post, boolean likedByMe) {
         return CommunityPostSummaryResponseDto.builder()
                 .postId(post.getPostId())
@@ -65,6 +68,7 @@ public class CommunityPostSummaryResponseDto {
                 .likeCount(post.getLikeCount())
                 .commentCount(post.getCommentCount())
                 .likedByMe(likedByMe)
+                .hidden(post.isHidden())
                 .createdAt(post.getCreatedAt())
                 .build();
     }

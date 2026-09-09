@@ -41,7 +41,9 @@ public class SecurityConfig {
             "/regions/search",
             "/regions/nearby",
             "/event-products/**",
-            "/ai-exposures/stores"
+            "/ai-exposures/stores",
+            "/categories",
+            "/searches/popular-keywords"
     };
 
     // ===================== 인증 없이 허용할 POST 경로 =====================
