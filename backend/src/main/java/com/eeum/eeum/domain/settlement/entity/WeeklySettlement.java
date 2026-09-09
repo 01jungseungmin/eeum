@@ -142,7 +142,8 @@ public class WeeklySettlement extends BaseEntity {
                 || (status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
                 && this.claimExpiresAt != null
                 && !this.claimExpiresAt.isAfter(now));
-        if (!canClaim || claimToken == null || claimExpiresAt == null || !claimExpiresAt.isAfter(now)) {
+        if (!canClaim || !StringUtils.hasText(claimToken) || claimExpiresAt == null
+                || requestedAt == null || !claimExpiresAt.isAfter(now)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         this.status = WeeklySettlementStatus.PAYOUT_IN_PROGRESS;
@@ -215,6 +216,9 @@ public class WeeklySettlement extends BaseEntity {
     }
 
     void removeRevenue(WeeklySettlementItem item) {
+        if (item == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         OwnerRevenue revenue = item.getOwnerRevenue();
         if (status != WeeklySettlementStatus.PAYOUT_PENDING
                 || item.getWeeklySettlement() == null

@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 
 import java.math.BigDecimal;
 
@@ -44,6 +46,9 @@ public class WeeklySettlementItem extends BaseEntity {
     private BigDecimal payoutAmount;
 
     public static WeeklySettlementItem create(WeeklySettlement settlement, OwnerRevenue revenue) {
+        if (settlement == null || revenue == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         settlement.addRevenue(revenue);
         WeeklySettlementItem item = new WeeklySettlementItem();
         item.weeklySettlement = settlement;

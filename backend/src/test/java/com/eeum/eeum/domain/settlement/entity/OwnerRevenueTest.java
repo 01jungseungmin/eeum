@@ -61,6 +61,17 @@ class OwnerRevenueTest {
                 .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
     }
 
+    @Test
+    void 유보기간_경계_시각에는_정산_대기로_전이할_수_없다() {
+        OwnerRevenue revenue = createRevenue();
+        revenue.markSettleableAtFromCompletedOrder();
+
+        assertThatThrownBy(() -> revenue.markSettlementPending(LocalDateTime.of(2026, 9, 17, 12, 0)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
+    }
+
     private OwnerRevenue createRevenue() {
         Order order = completedOrder();
         Payment payment = paidPaymentFor(order);

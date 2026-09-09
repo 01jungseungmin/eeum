@@ -50,6 +50,20 @@ class WeeklySettlementTest {
         assertThat(settlement.getClaimToken()).isNull();
     }
 
+    @Test
+    void 만료된_claim은_실패를_수동검토로_전이할_수_없다() {
+        WeeklySettlement settlement = createSettlement();
+        LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
+        settlement.claim("worker-a", now.plusMinutes(1), now, now);
+        settlement.markFailed("worker-a", "PAYOUT_FAILED", "실패", now.plusSeconds(30));
+
+        assertThatThrownBy(() -> settlement.requireManualReview(
+                "worker-a", "PAYOUT_FAILED", "실패", now.plusMinutes(2)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
+    }
+
     private WeeklySettlement createSettlement() {
         return WeeklySettlement.create(
                 mock(Store.class),

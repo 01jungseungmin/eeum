@@ -85,6 +85,7 @@ public class OwnerRevenue extends BaseEntity {
                 || order.getOrderId() == null
                 || payment.getOrder().getOrderId() == null
                 || !Objects.equals(order.getOrderId(), payment.getOrder().getOrderId())
+                || paymentAmount == null
                 || payment.getAmount() == null
                 || payment.getAmount().compareTo(paymentAmount) != 0) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
@@ -148,6 +149,7 @@ public class OwnerRevenue extends BaseEntity {
         if (status != OwnerRevenueStatus.SETTLEMENT_PENDING
                 || settlementItem == null
                 || settlementItem.getOwnerRevenue() == null
+                || settlementItem.getWeeklySettlement() == null
                 || ownerRevenueId == null
                 || !Objects.equals(settlementItem.getOwnerRevenue().getOwnerRevenueId(), ownerRevenueId)
                 || cancelledAt == null) {
