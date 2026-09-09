@@ -81,6 +81,7 @@ class OwnerRevenueTest {
         Payment payment = mock(Payment.class);
         when(payment.getStatus()).thenReturn(PaymentStatus.PAID);
         when(payment.getOrder()).thenReturn(order);
+        when(payment.getAmount()).thenReturn(amount("10000"));
         return payment;
     }
 

@@ -82,7 +82,11 @@ public class OwnerRevenue extends BaseEntity {
         if (order == null || payment == null
                 || payment.getStatus() != PaymentStatus.PAID
                 || payment.getOrder() == null
-                || !Objects.equals(order.getOrderId(), payment.getOrder().getOrderId())) {
+                || order.getOrderId() == null
+                || payment.getOrder().getOrderId() == null
+                || !Objects.equals(order.getOrderId(), payment.getOrder().getOrderId())
+                || payment.getAmount() == null
+                || payment.getAmount().compareTo(paymentAmount) != 0) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
@@ -113,7 +117,7 @@ public class OwnerRevenue extends BaseEntity {
         if (status != OwnerRevenueStatus.ACCRUED
                 || settleableAt == null
                 || now == null
-                || now.isBefore(settleableAt)) {
+                || !settleableAt.isBefore(now)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         this.status = OwnerRevenueStatus.SETTLEMENT_PENDING;
@@ -136,10 +140,20 @@ public class OwnerRevenue extends BaseEntity {
     }
 
     // 이미 정산 항목에 포함된 원장은 주간 정산 합계 차감과 같은 트랜잭션에서만 취소한다.
-    public void cancelBeforePayout(String reason, LocalDateTime cancelledAt) {
-        if (status != OwnerRevenueStatus.SETTLEMENT_PENDING || cancelledAt == null) {
+    public void cancelBeforePayout(
+            WeeklySettlementItem settlementItem,
+            String reason,
+            LocalDateTime cancelledAt
+    ) {
+        if (status != OwnerRevenueStatus.SETTLEMENT_PENDING
+                || settlementItem == null
+                || settlementItem.getOwnerRevenue() == null
+                || ownerRevenueId == null
+                || !Objects.equals(settlementItem.getOwnerRevenue().getOwnerRevenueId(), ownerRevenueId)
+                || cancelledAt == null) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
+        settlementItem.getWeeklySettlement().removeRevenue(settlementItem);
         this.status = OwnerRevenueStatus.CANCELLED;
         this.cancelReason = reason;
         this.cancelledAt = cancelledAt;

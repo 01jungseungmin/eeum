@@ -214,8 +214,12 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutAmount = this.payoutAmount.add(revenue.getPayoutAmount());
     }
 
-    public void removeRevenue(OwnerRevenue revenue) {
+    void removeRevenue(WeeklySettlementItem item) {
+        OwnerRevenue revenue = item.getOwnerRevenue();
         if (status != WeeklySettlementStatus.PAYOUT_PENDING
+                || item.getWeeklySettlement() == null
+                || weeklySettlementId == null
+                || !Objects.equals(item.getWeeklySettlement().getWeeklySettlementId(), weeklySettlementId)
                 || revenue == null
                 || revenue.getStatus() != com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.SETTLEMENT_PENDING
                 || !Objects.equals(store.getStoreId(), revenue.getStore().getStoreId())) {
