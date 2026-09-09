@@ -26,7 +26,7 @@ class OwnerRevenueTest {
         OwnerRevenue revenue = createRevenue();
         // when
         revenue.markSettleableAtFromCompletedOrder();
-        revenue.markSettlementPending();
+        revenue.markSettlementPending(LocalDateTime.of(2026, 9, 17, 12, 0));
         revenue.markSettled();
 
         // then
@@ -51,7 +51,7 @@ class OwnerRevenueTest {
         // given
         OwnerRevenue revenue = createRevenue();
         revenue.markSettleableAtFromCompletedOrder();
-        revenue.markSettlementPending();
+        revenue.markSettlementPending(LocalDateTime.of(2026, 9, 17, 12, 0));
         revenue.markSettled();
 
         // when / then

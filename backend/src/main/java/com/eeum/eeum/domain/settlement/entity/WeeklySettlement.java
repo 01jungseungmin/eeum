@@ -136,6 +136,9 @@ public class WeeklySettlement extends BaseEntity {
         }
         boolean canClaim = status == WeeklySettlementStatus.PAYOUT_PENDING
                 || status == WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED
+                || (status == WeeklySettlementStatus.FAILED
+                && this.claimExpiresAt != null
+                && !this.claimExpiresAt.isAfter(now))
                 || (status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
                 && this.claimExpiresAt != null
                 && !this.claimExpiresAt.isAfter(now));
@@ -154,10 +157,7 @@ public class WeeklySettlement extends BaseEntity {
             String failureReason,
             LocalDateTime now
     ) {
-        if (status != WeeklySettlementStatus.FAILED) {
-            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
-        }
-        validateClaimToken(claimToken);
+        validateFailedClaim(claimToken, now);
         this.status = WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED;
         this.failureCode = failureCode;
         this.failureReason = failureReason;
@@ -214,10 +214,33 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutAmount = this.payoutAmount.add(revenue.getPayoutAmount());
     }
 
+    public void removeRevenue(OwnerRevenue revenue) {
+        if (status != WeeklySettlementStatus.PAYOUT_PENDING
+                || revenue == null
+                || revenue.getStatus() != com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.SETTLEMENT_PENDING
+                || !Objects.equals(store.getStoreId(), revenue.getStore().getStoreId())) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.paymentAmount = this.paymentAmount.subtract(revenue.getPaymentAmount());
+        this.pgFeeAmount = this.pgFeeAmount.subtract(revenue.getPgFeeAmount());
+        this.platformFeeAmount = this.platformFeeAmount.subtract(revenue.getPlatformFeeAmount());
+        this.payoutAmount = this.payoutAmount.subtract(revenue.getPayoutAmount());
+    }
+
     private void validateClaimToken(String claimToken) {
         if (this.claimToken == null || !this.claimToken.equals(claimToken)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
         }
+    }
+
+    private void validateFailedClaim(String claimToken, LocalDateTime now) {
+        if (status != WeeklySettlementStatus.FAILED
+                || now == null
+                || claimExpiresAt == null
+                || !now.isBefore(claimExpiresAt)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
+        }
+        validateClaimToken(claimToken);
     }
 
     private static void validateAmountSnapshot(

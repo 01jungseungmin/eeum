@@ -109,8 +109,11 @@ public class OwnerRevenue extends BaseEntity {
         this.settleableAt = order.getCompletedAt().plusDays(7);
     }
 
-    public void markSettlementPending() {
-        if (status != OwnerRevenueStatus.ACCRUED || settleableAt == null) {
+    public void markSettlementPending(LocalDateTime now) {
+        if (status != OwnerRevenueStatus.ACCRUED
+                || settleableAt == null
+                || now == null
+                || now.isBefore(settleableAt)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         this.status = OwnerRevenueStatus.SETTLEMENT_PENDING;
@@ -125,6 +128,16 @@ public class OwnerRevenue extends BaseEntity {
 
     public void cancel(String reason, LocalDateTime cancelledAt) {
         if (status != OwnerRevenueStatus.ACCRUED || cancelledAt == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.status = OwnerRevenueStatus.CANCELLED;
+        this.cancelReason = reason;
+        this.cancelledAt = cancelledAt;
+    }
+
+    // 이미 정산 항목에 포함된 원장은 주간 정산 합계 차감과 같은 트랜잭션에서만 취소한다.
+    public void cancelBeforePayout(String reason, LocalDateTime cancelledAt) {
+        if (status != OwnerRevenueStatus.SETTLEMENT_PENDING || cancelledAt == null) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         this.status = OwnerRevenueStatus.CANCELLED;
