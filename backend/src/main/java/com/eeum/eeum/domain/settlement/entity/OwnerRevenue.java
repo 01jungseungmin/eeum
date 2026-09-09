@@ -3,6 +3,8 @@ package com.eeum.eeum.domain.settlement.entity;
 import com.eeum.eeum.common.entity.BaseEntity;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
+import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.exception.BusinessException;
@@ -14,6 +16,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Getter
@@ -76,6 +79,12 @@ public class OwnerRevenue extends BaseEntity {
             BigDecimal platformFeeAmount,
             BigDecimal payoutAmount
     ) {
+        if (order == null || payment == null
+                || payment.getStatus() != PaymentStatus.PAID
+                || payment.getOrder() == null
+                || !Objects.equals(order.getOrderId(), payment.getOrder().getOrderId())) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
         OwnerRevenue revenue = new OwnerRevenue();
         revenue.order = order;
@@ -90,11 +99,14 @@ public class OwnerRevenue extends BaseEntity {
     }
 
     // 주문 완료 전에는 지급 가능 시각을 만들 수 없다. 결제 완료 원장은 이 값 없이 먼저 생성된다.
-    public void markSettleableAt(LocalDateTime settleableAt) {
-        if (status != OwnerRevenueStatus.ACCRUED || settleableAt == null) {
+    public void markSettleableAtFromCompletedOrder() {
+        if (status != OwnerRevenueStatus.ACCRUED
+                || settleableAt != null
+                || order.getStatus() != OrderStatus.COMPLETED
+                || order.getCompletedAt() == null) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
-        this.settleableAt = settleableAt;
+        this.settleableAt = order.getCompletedAt().plusDays(7);
     }
 
     public void markSettlementPending() {

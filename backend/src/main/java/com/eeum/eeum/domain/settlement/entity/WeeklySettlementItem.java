@@ -44,6 +44,7 @@ public class WeeklySettlementItem extends BaseEntity {
     private BigDecimal payoutAmount;
 
     public static WeeklySettlementItem create(WeeklySettlement settlement, OwnerRevenue revenue) {
+        settlement.addRevenue(revenue);
         WeeklySettlementItem item = new WeeklySettlementItem();
         item.weeklySettlement = settlement;
         item.ownerRevenue = revenue;

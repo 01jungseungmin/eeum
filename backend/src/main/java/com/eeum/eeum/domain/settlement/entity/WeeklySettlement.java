@@ -14,6 +14,8 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
+import org.springframework.util.StringUtils;
 
 @Entity
 @Getter
@@ -104,21 +106,20 @@ public class WeeklySettlement extends BaseEntity {
             Store store,
             LocalDateTime periodStartAt,
             LocalDateTime periodEndAt,
-            BigDecimal paymentAmount,
-            BigDecimal pgFeeAmount,
-            BigDecimal platformFeeAmount,
-            BigDecimal payoutAmount,
             String payoutIdempotencyKey
     ) {
-        validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
+        if (store == null || periodStartAt == null || periodEndAt == null
+                || !periodStartAt.isBefore(periodEndAt) || !StringUtils.hasText(payoutIdempotencyKey)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         WeeklySettlement settlement = new WeeklySettlement();
         settlement.store = store;
         settlement.periodStartAt = periodStartAt;
         settlement.periodEndAt = periodEndAt;
-        settlement.paymentAmount = paymentAmount;
-        settlement.pgFeeAmount = pgFeeAmount;
-        settlement.platformFeeAmount = platformFeeAmount;
-        settlement.payoutAmount = payoutAmount;
+        settlement.paymentAmount = BigDecimal.ZERO;
+        settlement.pgFeeAmount = BigDecimal.ZERO;
+        settlement.platformFeeAmount = BigDecimal.ZERO;
+        settlement.payoutAmount = BigDecimal.ZERO;
         settlement.status = WeeklySettlementStatus.PAYOUT_PENDING;
         settlement.payoutIdempotencyKey = payoutIdempotencyKey;
         return settlement;
@@ -134,6 +135,7 @@ public class WeeklySettlement extends BaseEntity {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         boolean canClaim = status == WeeklySettlementStatus.PAYOUT_PENDING
+                || status == WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED
                 || (status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
                 && this.claimExpiresAt != null
                 && !this.claimExpiresAt.isAfter(now));
@@ -152,7 +154,10 @@ public class WeeklySettlement extends BaseEntity {
             String failureReason,
             LocalDateTime now
     ) {
-        validateActiveClaim(claimToken, now);
+        if (status != WeeklySettlementStatus.FAILED) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        validateClaimToken(claimToken);
         this.status = WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED;
         this.failureCode = failureCode;
         this.failureReason = failureReason;
@@ -165,6 +170,9 @@ public class WeeklySettlement extends BaseEntity {
             LocalDateTime completedAt
     ) {
         validateActiveClaim(claimToken, completedAt);
+        if (completedBy == null || !StringUtils.hasText(payoutReference)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
         this.status = WeeklySettlementStatus.COMPLETED;
         this.payoutGateway = PayoutGatewayType.MANUAL;
         this.manualCompletedBy = completedBy;
@@ -182,6 +190,32 @@ public class WeeklySettlement extends BaseEntity {
                 || claimExpiresAt == null
                 || now == null
                 || !now.isBefore(claimExpiresAt)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
+        }
+    }
+
+    public void markFailed(String claimToken, String failureCode, String failureReason, LocalDateTime now) {
+        validateActiveClaim(claimToken, now);
+        this.status = WeeklySettlementStatus.FAILED;
+        this.failureCode = failureCode;
+        this.failureReason = failureReason;
+    }
+
+    public void addRevenue(OwnerRevenue revenue) {
+        if (status != WeeklySettlementStatus.PAYOUT_PENDING
+                || revenue == null
+                || revenue.getStatus() != com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.SETTLEMENT_PENDING
+                || !Objects.equals(store.getStoreId(), revenue.getStore().getStoreId())) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.paymentAmount = this.paymentAmount.add(revenue.getPaymentAmount());
+        this.pgFeeAmount = this.pgFeeAmount.add(revenue.getPgFeeAmount());
+        this.platformFeeAmount = this.platformFeeAmount.add(revenue.getPlatformFeeAmount());
+        this.payoutAmount = this.payoutAmount.add(revenue.getPayoutAmount());
+    }
+
+    private void validateClaimToken(String claimToken) {
+        if (this.claimToken == null || !this.claimToken.equals(claimToken)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
         }
     }

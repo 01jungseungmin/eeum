@@ -55,7 +55,7 @@ class WeeklySettlementTest {
                 mock(Store.class),
                 LocalDateTime.of(2026, 9, 1, 0, 0),
                 LocalDateTime.of(2026, 9, 8, 0, 0),
-                amount("10000"), amount("0"), amount("0"), amount("10000"), "settlement-1");
+                "settlement-1");
     }
 
     private BigDecimal amount(String value) {
