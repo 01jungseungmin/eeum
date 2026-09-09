@@ -10,6 +10,7 @@ import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.application.account.service.PrimaryRegionResolver;
 import com.eeum.eeum.application.account.service.AccountWriteGuard;
+import com.eeum.eeum.application.category.service.CategoryQueryService;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.category.entity.Category;
 import com.eeum.eeum.domain.category.enums.CategoryType;
@@ -47,6 +48,7 @@ public class CommunityPostService {
     private final AccountRepository accountRepository;
     private final AccountWriteGuard accountWriteGuard;
     private final CategoryRepository categoryRepository;
+    private final CategoryQueryService categoryQueryService;
     private final PrimaryRegionResolver primaryRegionResolver;
 
     @Transactional(readOnly = true)
@@ -56,14 +58,26 @@ public class CommunityPostService {
 
     @Transactional(readOnly = true)
     public Page<CommunityPostSummaryResponseDto> getPosts(Long accountId, String keyword, Pageable pageable) {
+        return getPosts(accountId, keyword, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CommunityPostSummaryResponseDto> getPosts(
+            Long accountId,
+            String keyword,
+            Long categoryId,
+            Pageable pageable
+    ) {
         Account account = getAccountOrThrow(accountId);
         Region region = getPrimaryRegion(account);
 
-        Page<CommunityPost> posts = postRepository.searchByRegionAndKeyword(
-                region.getRegionId(),
-                normalizeKeyword(keyword),
-                pageable
-        );
+        Page<CommunityPost> posts = categoryId == null
+                ? postRepository.searchByRegionAndKeyword(region.getRegionId(), normalizeKeyword(keyword), pageable)
+                : postRepository.searchByRegionKeywordAndCategoryIds(
+                        region.getRegionId(),
+                        normalizeKeyword(keyword),
+                        categoryQueryService.resolveActiveCategoryIds(CategoryType.COMMUNITY, categoryId),
+                        pageable);
 
         return toSummaryPage(accountId, posts);
     }

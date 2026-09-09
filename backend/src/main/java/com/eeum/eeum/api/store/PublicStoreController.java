@@ -86,10 +86,11 @@ public class PublicStoreController {
             description = "특정 상점의 상품 목록을 조회합니다. 비회원 접근 가능.")
     @GetMapping("/stores/{storeId}/products")
     public ResponseEntity<ApiResponse<List<ProductListResponseDto>>> getStoreProducts(
-            @PathVariable @Positive Long storeId
+            @PathVariable @Positive Long storeId,
+            @RequestParam(required = false) @Positive Long productCategoryId
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                publicStoreService.getStoreProducts(storeId)));
+                publicStoreService.getStoreProducts(storeId, productCategoryId)));
     }
 
     @Operation(summary = "상점 상품 카테고리 조회", description = "특정 상점의 상품 카테고리 목록을 조회합니다.")

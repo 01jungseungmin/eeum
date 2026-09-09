@@ -27,6 +27,12 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByStore_StoreIdAndStatusNot(Long storeId, ProductStatus productStatus);
 
+    List<Product> findByStore_StoreIdAndProductCategory_ProductCategoryIdAndStatusNot(
+            Long storeId,
+            Long productCategoryId,
+            ProductStatus productStatus
+    );
+
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.productId = :productId")

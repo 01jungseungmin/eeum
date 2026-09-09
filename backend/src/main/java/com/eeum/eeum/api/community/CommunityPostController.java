@@ -46,11 +46,12 @@ public class CommunityPostController {
     @Operation(summary = "게시글 목록 조회", description = "내 지역 게시글 목록을 조회합니다. keyword로 제목/내용을 검색할 수 있습니다.")
     public ResponseEntity<ApiResponse<Page<CommunityPostSummaryResponseDto>>> getPosts(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @Positive Long categoryId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
 
-        Page<CommunityPostSummaryResponseDto> posts = postService.getPosts(accountId, keyword, pageable);
+        Page<CommunityPostSummaryResponseDto> posts = postService.getPosts(accountId, keyword, categoryId, pageable);
         popularSearchService.record(PopularSearchScope.COMMUNITY, keyword, "account:" + accountId);
         return ResponseEntity.ok(ApiResponse.success(posts));
     }

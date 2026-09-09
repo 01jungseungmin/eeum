@@ -42,6 +42,7 @@ public class SecurityConfig {
             "/regions/nearby",
             "/event-products/**",
             "/ai-exposures/stores",
+            "/categories",
             "/searches/popular-keywords"
     };
 
