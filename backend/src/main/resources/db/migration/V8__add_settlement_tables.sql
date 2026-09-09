@@ -23,7 +23,7 @@ CREATE TABLE owner_revenue (
         FOREIGN KEY (payment_id) REFERENCES payment(payment_id),
     CONSTRAINT fk_owner_revenue_store
         FOREIGN KEY (store_id) REFERENCES store(store_id),
-    INDEX idx_owner_revenue_settleable (store_id, status, settleable_at, owner_revenue_id)
+    INDEX idx_owner_revenue_settleable (status, settleable_at, owner_revenue_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 상점별 주간 정산. 기간은 [period_start_at, period_end_at) 반열린 구간으로 관리한다.
