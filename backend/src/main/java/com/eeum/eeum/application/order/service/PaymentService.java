@@ -149,6 +149,7 @@ public class PaymentService {
 
         // PortOne 취소 API 호출 — 실패하면 결제는 PAID로 남으므로 반드시 이력을 남긴다.
         // 이 기록이 없으면 "환불이 왜 안 됐는지"를 서버 로그에서만 찾아야 한다.
+        ownerRevenueService.assertCancellableBeforePayout(payment.getOrder().getOrderId());
         recordPortOneFailure(
                 OperationFailureCategory.REFUND,
                 "PaymentService.cancelPayment",
