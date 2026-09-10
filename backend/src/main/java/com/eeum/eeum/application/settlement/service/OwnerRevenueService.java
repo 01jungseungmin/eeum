@@ -95,4 +95,13 @@ public class OwnerRevenueService {
         revenue.cancelBeforePayout(item, reason, cancelledAt);
         weeklySettlementItemRepository.delete(item);
     }
+
+    @Transactional(readOnly = true)
+    public void assertCancellableBeforePayout(Long orderId) {
+        OwnerRevenue revenue = ownerRevenueRepository.findByOrder_OrderId(orderId).orElse(null);
+        if (revenue != null && revenue.getStatus() != OwnerRevenueStatus.ACCRUED
+                && revenue.getStatus() != OwnerRevenueStatus.SETTLEMENT_PENDING) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+    }
 }
