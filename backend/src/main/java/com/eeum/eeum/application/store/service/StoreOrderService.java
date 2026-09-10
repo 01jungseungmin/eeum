@@ -1,22 +1,18 @@
 package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.application.file.FileStorageService;
-import com.eeum.eeum.application.order.service.OrderService;
-import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.application.order.service.PaymentCancellationService;
 import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
-import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.common.service.RedisLockService;
-import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.OrderItem;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
+import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
-import com.eeum.eeum.domain.order.enums.RefundStatus;
 import com.eeum.eeum.domain.order.event.OrderStatusChangedEvent;
 import com.eeum.eeum.domain.order.repository.OrderItemRepository;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
@@ -33,9 +29,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.util.List;
-import java.time.LocalDateTime;
+import java.time.Duration;
 
 @Slf4j
 @Service
@@ -49,11 +44,9 @@ public class StoreOrderService {
     private final PaymentRepository paymentRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final RedisLockService redisLockService;
-    private final OrderService orderService;
-    private final PortOnePaymentClient portOnePaymentClient;
     private final PaymentCancellationService paymentCancellationService;
-    private final OperationFailureRecorder operationFailureRecorder;
     private final OwnerRevenueService ownerRevenueService;
+    private final OwnerOrderCancellationAuthorizer cancellationAuthorizer;
 
     private static final Duration ORDER_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
@@ -175,70 +168,23 @@ public class StoreOrderService {
                 order.getOrderId()));
     }
 
-    @Transactional
     public void rejectOrder(Long ownerId, Long orderId, String reason) {
+        PaymentStatus paymentStatus = cancellationAuthorizer.authorizeRejection(ownerId, orderId);
+        if (paymentStatus == PaymentStatus.PAID) {
+            paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.OWNER_ORDER_REJECT, reason);
+            return;
+        }
         redisLockService.executeWithLock(
-                LockKeys.order(orderId),
-                ORDER_LOCK_LEASE_TIME,
-                ErrorCode.LOCK_ORDER_FAILED,
-                () -> rejectOrderWithLock(ownerId, orderId, reason)
-        );
+                LockKeys.order(orderId), ORDER_LOCK_LEASE_TIME, ErrorCode.LOCK_ORDER_FAILED,
+                () -> {
+                    cancellationAuthorizer.rejectWithoutPg(ownerId, orderId, reason);
+                    return null;
+                });
     }
 
-    @Transactional
     public void approveRefund(Long ownerId, Long orderId) {
-        redisLockService.executeWithLock(
-                LockKeys.order(orderId),
-                ORDER_LOCK_LEASE_TIME,
-                ErrorCode.LOCK_ORDER_FAILED,
-                () -> approveRefundWithLock(ownerId, orderId)
-        );
-    }
-
-    private void approveRefundWithLock(Long ownerId, Long orderId) {
-        // 주문 락(redis) + Payment 비관적 락으로 임계구역이 보호되므로 order는 일반 조회로 충분하다.
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-        validateOwnerOrder(ownerId, order);
-
-        // 픽업 완료/취소/만료된 주문은 환불 승인 불가 — 상태 검증 없이 승인하면
-        // 고객이 물건을 수령(COMPLETED)한 뒤에도 전액 환불+재고 복구가 실행되는 금전 피해가 발생한다.
-        if (order.getStatus() == OrderStatus.COMPLETED
-                || order.getStatus() == OrderStatus.CANCELLED
-                || order.getStatus() == OrderStatus.EXPIRED) {
-            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
-        }
-
-        Payment payment = paymentRepository
-                .findByOrderIdWithPessimisticLock(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-        if (payment.getRefundStatus() != RefundStatus.REQUESTED) {
-            throw new BusinessException(ErrorCode.PAYMENT_REFUND_NOT_REQUESTED);
-        }
-
-        ownerRevenueService.assertCancellableBeforePayout(orderId);
-        recordPortOneFailure(
-                "StoreOrderService.approveRefund",
-                String.valueOf(payment.getPaymentId()),
-                "orderId=" + orderId + ", amount=" + payment.getAmount(),
-                () -> portOnePaymentClient.cancelPayment(
-                        payment.getPortonePaymentId(), payment.getAmount(), payment.getRefundReason()));
-
-        payment.completeRefund();
-        orderService.restoreStockForOrder(orderId);
-        order.cancel(payment.getRefundReason());
-        ownerRevenueService.cancelBeforePayout(orderId, payment.getRefundReason(), LocalDateTime.now());
-
-        eventPublisher.publishEvent(new OrderStatusChangedEvent(
-                order.getAccount().getAccountId(),
-                order.getStore().getName(),
-                order.getOrderNumber(),
-                "환불완료",
-                order.getOrderId()));
-
-        log.info("환불 승인 완료: orderId={}", orderId);
+        String reason = cancellationAuthorizer.authorizeRefundApproval(ownerId, orderId);
+        paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.OWNER_REFUND_APPROVAL, reason);
     }
 
     @Transactional
@@ -267,52 +213,6 @@ public class StoreOrderService {
         log.info("환불 거절 처리: orderId={}", orderId);
     }
 
-    private void rejectOrderWithLock(Long ownerId, Long orderId, String reason) {
-        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-        validateOwnerOrder(ownerId, order);
-
-        if (order.getStatus() != OrderStatus.PENDING
-                && order.getStatus() != OrderStatus.PAID) {
-            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
-        }
-
-        Payment payment = paymentRepository
-                .findByOrderIdWithPessimisticLock(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-        orderService.restoreStockForOrder(orderId);
-
-        if (payment.getStatus() == PaymentStatus.PAID) {
-            // 온라인 결제 완료 건은 PortOne 취소 성공 시에만 CANCELLED로 전환
-            ownerRevenueService.assertCancellableBeforePayout(orderId);
-            recordPortOneFailure(
-                    "StoreOrderService.rejectOrder",
-                    String.valueOf(payment.getPaymentId()),
-                    "orderId=" + orderId + ", amount=" + payment.getAmount(),
-                    () -> portOnePaymentClient.cancelPayment(
-                            payment.getPortonePaymentId(), payment.getAmount(), reason));
-            payment.cancel();
-        } else if (payment.getStatus() == PaymentStatus.PENDING) {
-            // 온라인 결제 대기 중(아직 결제 안 됨) — PortOne 호출 없이 취소
-            payment.cancel();
-        }
-        // 현장결제(NOT_PAID)는 결제 자체가 없었으므로 PaymentStatus 변경 없이 NOT_PAID 유지
-
-        order.cancel(reason);
-        ownerRevenueService.cancelBeforePayout(orderId, reason, LocalDateTime.now());
-
-        log.info("사장 주문 거절: orderId={}, paymentStatus={}", orderId, payment.getStatus());
-
-        eventPublisher.publishEvent(new OrderStatusChangedEvent(
-                order.getAccount().getAccountId(),
-                order.getStore().getName(),
-                order.getOrderNumber(),
-                "거절",
-                order.getOrderId()));
-    }
-
     private void validateOwnerOrder(Long ownerId, Order order) {
         Long storeOwnerId = order.getStore()
                 .getAccount()
@@ -336,17 +236,4 @@ public class StoreOrderService {
         }
     }
 
-    /**
-     * PortOne 취소 실패를 업무 맥락과 함께 한 번만 기록하고 예외를 그대로 다시 던진다.
-     * 클라이언트는 이력을 남기지 않으므로(PortOnePaymentClientImpl) 이 지점이 유일한 기록 책임자다.
-     */
-    private void recordPortOneFailure(String operation, String refId, String payload, Runnable call) {
-        try {
-            call.run();
-        } catch (RuntimeException e) {
-            operationFailureRecorder.record(
-                    OperationFailureCategory.REFUND, operation, "PAYMENT", refId, e, payload);
-            throw e;
-        }
-    }
 }

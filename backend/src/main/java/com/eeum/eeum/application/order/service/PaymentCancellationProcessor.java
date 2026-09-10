@@ -9,6 +9,8 @@ import com.eeum.eeum.domain.order.entity.PaymentCancellationOperation;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
+import com.eeum.eeum.domain.order.enums.RefundStatus;
+import com.eeum.eeum.domain.order.event.OrderStatusChangedEvent;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentCancellationOperationRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
@@ -16,6 +18,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +45,7 @@ public class PaymentCancellationProcessor {
     private final PaymentCancellationOperationRepository cancellationOperationRepository;
     private final OwnerRevenueService ownerRevenueService;
     private final OrderService orderService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 1단계 — 취소 대상을 확정하고 외부 호출을 준비한다.
@@ -80,6 +84,18 @@ public class PaymentCancellationProcessor {
                 && payment.getStatus() == PaymentStatus.PENDING;
         if (payment.getStatus() != PaymentStatus.PAID && !externalPendingCancellation) {
             throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+        if (trigger == PaymentCancellationTrigger.OWNER_REFUND_APPROVAL
+                && (payment.getRefundStatus() != RefundStatus.REQUESTED
+                || order.getStatus() == OrderStatus.COMPLETED
+                || order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.EXPIRED)) {
+            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+        }
+        if (trigger == PaymentCancellationTrigger.OWNER_ORDER_REJECT
+                && order.getStatus() != OrderStatus.PENDING
+                && order.getStatus() != OrderStatus.PAID) {
+            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
         }
 
         // 정산 지급이 시작된 거래는 PG를 건드리기 전에 막는다. 통과 후의 경합은 4단계가 격리한다.
@@ -155,6 +171,12 @@ public class PaymentCancellationProcessor {
 
         ownerRevenueService.cancelBeforePayout(orderId, reason, LocalDateTime.now());
         operation.markCompleted(LocalDateTime.now());
+        String changedStatus = trigger == PaymentCancellationTrigger.OWNER_REFUND_APPROVAL ? "환불완료"
+                : trigger == PaymentCancellationTrigger.OWNER_ORDER_REJECT ? "거절" : "취소완료";
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                order.getAccount().getAccountId(),
+                order.getStore().getName(),
+                order.getOrderNumber(), changedStatus, orderId));
     }
 
     /**
