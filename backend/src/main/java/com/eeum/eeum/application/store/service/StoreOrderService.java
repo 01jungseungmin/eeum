@@ -225,6 +225,7 @@ public class StoreOrderService {
         payment.completeRefund();
         orderService.restoreStockForOrder(orderId);
         order.cancel(payment.getRefundReason());
+        ownerRevenueService.cancelBeforePayout(orderId, payment.getRefundReason(), java.time.LocalDateTime.now());
 
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getAccount().getAccountId(),
@@ -295,6 +296,7 @@ public class StoreOrderService {
         // 현장결제(NOT_PAID)는 결제 자체가 없었으므로 PaymentStatus 변경 없이 NOT_PAID 유지
 
         order.cancel(reason);
+        ownerRevenueService.cancelBeforePayout(orderId, reason, java.time.LocalDateTime.now());
 
         log.info("사장 주문 거절: orderId={}, paymentStatus={}", orderId, payment.getStatus());
 

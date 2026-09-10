@@ -3,6 +3,10 @@ package com.eeum.eeum.application.settlement.service;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlement;
+import com.eeum.eeum.domain.settlement.entity.WeeklySettlementItem;
+import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
+import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
+import com.eeum.eeum.domain.settlement.repository.WeeklySettlementItemRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -18,6 +22,8 @@ public class ManualSettlementPayoutService {
 
     private final WeeklySettlementRepository weeklySettlementRepository;
     private final AccountRepository accountRepository;
+    private final WeeklySettlementItemRepository weeklySettlementItemRepository;
+    private final OwnerRevenueRepository ownerRevenueRepository;
 
     @Transactional
     public void claim(Long adminAccountId, Long weeklySettlementId, String claimToken, LocalDateTime expiresAt) {
@@ -41,5 +47,11 @@ public class ManualSettlementPayoutService {
         WeeklySettlement settlement = weeklySettlementRepository.findByIdWithPessimisticLock(weeklySettlementId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
         settlement.completeManually(admin, claimToken, payoutReference, LocalDateTime.now());
+        for (WeeklySettlementItem item : weeklySettlementItemRepository
+                .findByWeeklySettlement_WeeklySettlementId(weeklySettlementId)) {
+            OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(item.getOwnerRevenue().getOwnerRevenueId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+            revenue.markSettled();
+        }
     }
 }

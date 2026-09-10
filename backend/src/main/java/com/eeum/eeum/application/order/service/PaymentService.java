@@ -159,6 +159,7 @@ public class PaymentService {
                         payment.getPortonePaymentId(), payment.getAmount(), reason));
 
         payment.cancel();
+        ownerRevenueService.cancelBeforePayout(order.getOrderId(), reason, java.time.LocalDateTime.now());
 
         // 결제 취소로 끝내지 않고 주문 상태 전이(CANCELLED)와 재고 복원까지 함께 처리한다 —
         // 누락하면 주문이 PAID로 남아 사장 화면에 유효 주문으로 노출되고 차감된 재고가 영구 미복원된다.
