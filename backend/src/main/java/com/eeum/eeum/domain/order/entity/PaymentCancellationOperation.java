@@ -174,6 +174,9 @@ public class PaymentCancellationOperation extends BaseEntity {
      * 최종 상태가 확정되지 않은 경우다. 어느 쪽이든 자동 처리로 수렴시키지 않는다.
      */
     public void requireManualReview(String failureCode, String failureReason) {
+        if (status == PaymentCancellationStatus.COMPLETED) {
+            return;
+        }
         this.status = PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED;
         this.failureCode = failureCode;
         this.failureReason = truncate(failureReason);
@@ -197,6 +200,10 @@ public class PaymentCancellationOperation extends BaseEntity {
     /** PG 취소가 이미 확정된 작업인지 — 재시도 시 외부를 다시 호출하지 않기 위해 본다. */
     public boolean isPgCancelled() {
         return status == PaymentCancellationStatus.PG_CANCELLED;
+    }
+
+    public boolean isPgOutcomeUnknown() {
+        return status == PaymentCancellationStatus.PG_CANCEL_REQUESTED;
     }
 
     private static String truncate(String value) {

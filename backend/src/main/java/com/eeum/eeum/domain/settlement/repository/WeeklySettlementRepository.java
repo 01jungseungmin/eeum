@@ -5,6 +5,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
@@ -13,6 +14,20 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface WeeklySettlementRepository extends JpaRepository<WeeklySettlement, Long> {
+
+    @Modifying
+    @Query(value = """
+        INSERT IGNORE INTO weekly_settlement
+        (store_id, period_start_at, period_end_at, payment_amount, pg_fee_amount, platform_fee_amount,
+         payout_amount, status, payout_idempotency_key, version, created_at, modified_at)
+        VALUES (:storeId, :periodStartAt, :periodEndAt, 0, 0, 0, 0, 'PAYOUT_PENDING',
+                :idempotencyKey, 0, NOW(6), NOW(6))
+        """, nativeQuery = true)
+    int insertIfAbsent(
+            @Param("storeId") Long storeId,
+            @Param("periodStartAt") LocalDateTime periodStartAt,
+            @Param("periodEndAt") LocalDateTime periodEndAt,
+            @Param("idempotencyKey") String idempotencyKey);
 
     Page<WeeklySettlement> findByStore_StoreIdOrderByPeriodEndAtDesc(Long storeId, Pageable pageable);
 

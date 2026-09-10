@@ -22,4 +22,8 @@ public interface PaymentCancellationOperationRepository
             where o.order.orderId = :orderId
             """)
     Optional<PaymentCancellationOperation> findByOrderIdWithPessimisticLock(@Param("orderId") Long orderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM PaymentCancellationOperation o WHERE o.paymentCancellationOperationId = :operationId")
+    Optional<PaymentCancellationOperation> findByIdWithPessimisticLock(@Param("operationId") Long operationId);
 }

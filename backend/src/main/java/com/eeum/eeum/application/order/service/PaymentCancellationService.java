@@ -95,19 +95,25 @@ public class PaymentCancellationService {
             // 이미 완료된 취소 — 멱등하게 무시한다.
             return;
         }
+        if (plan.pgOutcomeUnknown()) {
+            processor.requireManualReview(plan.operationId(), "PG_OUTCOME_UNKNOWN",
+                    "이전 PG 취소 요청의 최종 결과를 확인해야 합니다.");
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        }
 
         if (!plan.alreadyPgCancelled() && !pgAlreadyCancelled) {
             PortOneCancelResult result = callPortOne(plan, orderId);
 
             // SUCCEEDED만 취소 완료로 확정한다. REQUESTED는 아직 돈이 돌아갔다고 말할 수 없다.
-            if (!result.isSucceeded()) {
+            if (!result.isSucceeded() || result.cancelledAmount() == null
+                    || result.cancelledAmount().compareTo(plan.amount()) != 0) {
                 processor.recordPendingPgStatus(plan.operationId(), result);
                 operationFailureRecorder.record(
                         OperationFailureCategory.REFUND,
                         "PaymentCancellationService.cancel",
                         "order", String.valueOf(orderId),
-                        "PG_CANCEL_NOT_CONFIRMED",
-                        "PortOne 취소 상태가 SUCCEEDED가 아님: " + result.status(),
+                        "PG_CANCEL_AMOUNT_MISMATCH",
+                        "PortOne 취소 상태 또는 금액이 전액 취소 조건과 다름: " + result.status(),
                         "trigger=" + trigger + ", cancellationId=" + result.cancellationId());
                 throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
             }
@@ -123,7 +129,8 @@ public class PaymentCancellationService {
 
     private PortOneCancelResult callPortOne(PaymentCancellationPlan plan, Long orderId) {
         try {
-            return portOnePaymentClient.cancelPayment(plan.portonePaymentId(), plan.amount(), plan.reason());
+            return portOnePaymentClient.cancelPayment(plan.portonePaymentId(), plan.amount(), plan.reason(),
+                    "payment-cancel-" + plan.operationId());
         } catch (RuntimeException e) {
             // PG 호출이 실패했으면 돈은 그대로다. 재시도 가능한 상태로 되돌리고 이력만 남긴다.
             processor.markPgFailed(plan.operationId(), resolveCode(e), e.getMessage());

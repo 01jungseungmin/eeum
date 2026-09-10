@@ -49,7 +49,7 @@ public class MockPortOnePaymentClient implements PortOnePaymentClient {
     }
 
     @Override
-    public PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason) {
+    public PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason, String idempotencyKey) {
         log.info("[LOCAL MOCK] PortOne 결제 취소 Mock 처리: paymentId={}, amount={}, reason={}",
                 paymentId, amount, reason);
         // Mock은 항상 즉시 완료를 돌려준다. REQUESTED 경로 검증은 계약 테스트가 담당한다.

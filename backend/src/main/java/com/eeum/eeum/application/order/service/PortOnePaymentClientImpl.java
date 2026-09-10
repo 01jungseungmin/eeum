@@ -66,7 +66,7 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
     }
 
     @Override
-    public PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason) {
+    public PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason, String idempotencyKey) {
         // 금액 변환은 외부 호출이 아니다 — try 밖에 두어 PortOne 실패로 오분류되지 않게 한다.
         long cancelAmount = toPortOneAmount(amount);
 
@@ -74,10 +74,14 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
         try {
             // 응답 본문을 버리지 않는다. 취소 상태(SUCCEEDED/REQUESTED/FAILED)와 취소 식별자가
             // 여기에만 있고, REQUESTED를 완료로 확정하면 미완료 취소가 완료로 기록된다.
-            response = RestClient.create(portOneProperties.baseUrl())
+            RestClient.RequestBodySpec request = RestClient.create(portOneProperties.baseUrl())
                     .post()
                     .uri("/payments/{paymentId}/cancel", paymentId)
-                    .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret())
+                    .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret());
+            if (idempotencyKey != null) {
+                request.header("Idempotency-Key", "\"" + idempotencyKey + "\"");
+            }
+            response = request
                     .body(Map.of(
                             "reason", reason,
                             "amount", cancelAmount

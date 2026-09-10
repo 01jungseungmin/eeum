@@ -16,6 +16,7 @@ public record PaymentCancellationPlan(
         String portonePaymentId,
         BigDecimal amount,
         String reason,
-        boolean alreadyPgCancelled
+        boolean alreadyPgCancelled,
+        boolean pgOutcomeUnknown
 ) {
 }

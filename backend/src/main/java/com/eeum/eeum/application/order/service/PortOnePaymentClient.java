@@ -13,5 +13,9 @@ public interface PortOnePaymentClient {
      * 결제를 취소한다. 응답의 취소 상태와 식별자를 그대로 돌려준다 —
      * 호출부가 {@code SUCCEEDED}만 취소 완료로 확정할 수 있어야 한다.
      */
-    PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason);
+    default PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason) {
+        return cancelPayment(paymentId, amount, reason, null);
+    }
+
+    PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason, String idempotencyKey);
 }

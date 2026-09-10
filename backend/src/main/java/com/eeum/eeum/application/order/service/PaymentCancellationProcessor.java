@@ -79,6 +79,10 @@ public class PaymentCancellationProcessor {
             // 사람이 수습 중인 건을 자동 경로가 다시 건드리면 상태가 더 꼬인다.
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
         }
+        if (operation != null && operation.isPgOutcomeUnknown()) {
+            return new PaymentCancellationPlan(operation.getPaymentCancellationOperationId(),
+                    payment.getPortonePaymentId(), payment.getAmount(), operation.getReason(), false, true);
+        }
 
         boolean externalPendingCancellation = trigger == PaymentCancellationTrigger.PORTONE_WEBHOOK
                 && payment.getStatus() == PaymentStatus.PENDING;
@@ -113,7 +117,7 @@ public class PaymentCancellationProcessor {
                 payment.getPortonePaymentId(),
                 payment.getAmount(),
                 reason,
-                operation.isPgCancelled());
+                operation.isPgCancelled(), false);
     }
 
     /**
@@ -204,7 +208,7 @@ public class PaymentCancellationProcessor {
     }
 
     private PaymentCancellationOperation getOperation(Long operationId) {
-        return cancellationOperationRepository.findById(operationId)
+        return cancellationOperationRepository.findByIdWithPessimisticLock(operationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS));
     }
 }

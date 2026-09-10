@@ -29,12 +29,12 @@ public class WeeklySettlementClosingService {
         OwnerRevenue snapshot = ownerRevenueRepository.findById(ownerRevenueId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
 
+        Long storeId = snapshot.getStore().getStoreId();
+        weeklySettlementRepository.insertIfAbsent(storeId, periodStartAt, periodEndAt,
+                "weekly:" + storeId + ":" + periodEndAt);
         WeeklySettlement settlement = weeklySettlementRepository.findByStoreAndPeriodWithPessimisticLock(
-                        snapshot.getStore().getStoreId(), periodStartAt, periodEndAt)
-                .orElseGet(() -> weeklySettlementRepository.save(WeeklySettlement.create(
-                        snapshot.getStore(), periodStartAt, periodEndAt,
-                        "weekly:" + snapshot.getStore().getStoreId() + ":" + periodEndAt
-                )));
+                        storeId, periodStartAt, periodEndAt)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
 
         // 정산 행을 먼저 잠근 뒤 원장을 current read 한다. 취소 경로도 이 순서를 공유한다.
         OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(ownerRevenueId)
