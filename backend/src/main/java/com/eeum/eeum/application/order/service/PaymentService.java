@@ -219,6 +219,17 @@ public class PaymentService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
         if (payment.getStatus() == PaymentStatus.PAID) {
+            PortOnePaymentInfo paymentInfo = recordPortOneFailure(
+                    OperationFailureCategory.EXTERNAL_API, "PaymentService.handleWebhook.getPayment",
+                    request.getPaymentId(), "orderId=" + order.getOrderId(),
+                    () -> portOnePaymentClient.getPayment(request.getPaymentId()));
+            if ("CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
+                ownerRevenueService.assertCancellableBeforePayout(order.getOrderId());
+                payment.cancel();
+                ownerRevenueService.cancelBeforePayout(order.getOrderId(), "PortOne 외부 취소", java.time.LocalDateTime.now());
+                orderService.cancelPaidOrder(order.getOrderId());
+                return;
+            }
             log.info("이미 처리된 Webhook: paymentId={}", request.getPaymentId());
             return;
         }

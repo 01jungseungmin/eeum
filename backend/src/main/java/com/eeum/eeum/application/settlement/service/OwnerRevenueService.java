@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlement;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlementItem;
+import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
 import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementItemRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
