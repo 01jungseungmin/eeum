@@ -484,8 +484,6 @@ class StoreOrderServiceTest {
     @Test
     void 환불_승인_성공() {
         // given
-        stubLockToRunImmediately();
-
         when(cancellationAuthorizer.authorizeRefundApproval(OWNER_ID, ORDER_ID))
                 .thenReturn("단순 변심");
 
