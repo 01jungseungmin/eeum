@@ -35,7 +35,7 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration/common
     # 기존 테이블이 이미 존재하지만
     # flyway_schema_history가 없는 DB를 Flyway 체계에 편입
     baseline-on-migrate: true
