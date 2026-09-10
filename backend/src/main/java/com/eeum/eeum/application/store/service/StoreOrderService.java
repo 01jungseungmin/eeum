@@ -173,10 +173,7 @@ public class StoreOrderService {
         }
         redisLockService.executeWithLock(
                 LockKeys.order(orderId), ORDER_LOCK_LEASE_TIME, ErrorCode.LOCK_ORDER_FAILED,
-                () -> {
-                    cancellationAuthorizer.rejectWithoutPg(ownerId, orderId, reason);
-                    return null;
-                });
+                () -> cancellationAuthorizer.rejectWithoutPg(ownerId, orderId, reason));
     }
 
     public void approveRefund(Long ownerId, Long orderId) {
