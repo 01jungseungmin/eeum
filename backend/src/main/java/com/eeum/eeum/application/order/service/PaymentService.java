@@ -15,6 +15,7 @@ import com.eeum.eeum.config.PortOneProperties;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.RefundStatus;
 import com.eeum.eeum.domain.order.event.OrderPaidEvent;
@@ -39,6 +40,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.function.Supplier;
 
@@ -58,6 +60,8 @@ public class PaymentService {
     private final OperationFailureRecorder operationFailureRecorder;
     private final RateLimitService rateLimitService;
     private final OwnerRevenueService ownerRevenueService;
+    private final PaymentCancellationService paymentCancellationService;
+    private final PaymentWebhookProcessor paymentWebhookProcessor;
     private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
@@ -78,7 +82,6 @@ public class PaymentService {
         );
     }
 
-    @Transactional
     public void handleWebhook(String rawBody, String signature) {
         // [1단계] 서명 검증 이전의 형식 오류는 이력에 남기지 않는다.
         // 이 엔드포인트는 permitAll이라 누구나 호출할 수 있고, 건별로 기록하면
@@ -133,38 +136,42 @@ public class PaymentService {
         return PaymentResponseDto.from(payment);
     }
 
-    @Transactional
+    /**
+     * 고객 결제 취소.
+     *
+     * <p>취소 절차 자체는 {@link PaymentCancellationService}가 맡는다. 이 메서드는
+     * "누가 어떤 결제를 취소할 수 있는가"만 판단한다 — 네 진입점이 각자 취소를 구현하면
+     * 경로마다 금전 처리가 갈린다.
+     *
+     * <p>{@code @Transactional}을 걸지 않는다. 취소 절차 안에서 PortOne을 호출하므로
+     * 여기에 트랜잭션을 걸면 외부 호출이 다시 트랜잭션 안으로 들어온다.
+     */
     public void cancelPayment(Long accountId, Long paymentId) {
+        Long orderId = resolveOwnOrderId(accountId, paymentId);
+        String reason = resolveCancelReason(accountId, paymentId);
+
+        paymentCancellationService.cancel(
+                orderId, PaymentCancellationTrigger.CUSTOMER_CANCEL, reason);
+    }
+
+    @Transactional(readOnly = true)
+    protected Long resolveOwnOrderId(Long accountId, Long paymentId) {
         Payment payment = paymentRepository
                 .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
-
         if (payment.getStatus() != PaymentStatus.PAID) {
             throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
+        return payment.getOrder().getOrderId();
+    }
 
-        String reason = StringUtils.hasText(payment.getRefundReason())
-                ? payment.getRefundReason()
-                : "고객 요청 취소";
-
-        // PortOne 취소 API 호출 — 실패하면 결제는 PAID로 남으므로 반드시 이력을 남긴다.
-        // 이 기록이 없으면 "환불이 왜 안 됐는지"를 서버 로그에서만 찾아야 한다.
-        ownerRevenueService.assertCancellableBeforePayout(payment.getOrder().getOrderId());
-        recordPortOneFailure(
-                OperationFailureCategory.REFUND,
-                "PaymentService.cancelPayment",
-                String.valueOf(payment.getPaymentId()),
-                "portonePaymentId=" + payment.getPortonePaymentId()
-                        + ", amount=" + payment.getAmount(),
-                () -> portOnePaymentClient.cancelPayment(
-                        payment.getPortonePaymentId(), payment.getAmount(), reason));
-
-        payment.cancel();
-        ownerRevenueService.cancelBeforePayout(order.getOrderId(), reason, java.time.LocalDateTime.now());
-
-        // 결제 취소로 끝내지 않고 주문 상태 전이(CANCELLED)와 재고 복원까지 함께 처리한다 —
-        // 누락하면 주문이 PAID로 남아 사장 화면에 유효 주문으로 노출되고 차감된 재고가 영구 미복원된다.
-        orderService.cancelPaidOrder(payment.getOrder().getOrderId());
+    @Transactional(readOnly = true)
+    protected String resolveCancelReason(Long accountId, Long paymentId) {
+        return paymentRepository
+                .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
+                .map(Payment::getRefundReason)
+                .filter(StringUtils::hasText)
+                .orElse("고객 요청 취소");
     }
 
     @Transactional
@@ -188,11 +195,9 @@ public class PaymentService {
          * 지금 구조에서는 Payment.portonePaymentId에 주문 생성 시 paymentId가 저장되어 있어야
          * webhook paymentId로 Payment를 찾을 수 있음.
          */
-        Payment foundPayment = paymentRepository
-                .findByPortonePaymentId(request.getPaymentId())
-                .orElse(null);
+        Long orderId = paymentRepository.findOrderIdByPortonePaymentId(request.getPaymentId()).orElse(null);
 
-        if (foundPayment == null) {
+        if (orderId == null) {
             // AI 플랜 구독 결제(ai-plan- prefix)는 AI 플랜 서비스로 위임
             if (request.getPaymentId() != null && request.getPaymentId()
                     .startsWith(com.eeum.eeum.application.ai.service.AiPlanPaymentCommandExecutor.AI_PLAN_PAYMENT_PREFIX)) {
@@ -204,93 +209,30 @@ public class PaymentService {
             return;
         }
 
-        Long orderId = foundPayment.getOrder().getOrderId();
-
-        /*
-         * 락 순서 통일:
-         * 1. Order PESSIMISTIC_WRITE
-         * 2. Payment PESSIMISTIC_WRITE
-         */
-        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-        Payment payment = paymentRepository
-                .findByOrderIdWithPessimisticLock(order.getOrderId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-        if (payment.getStatus() == PaymentStatus.PAID) {
-            PortOnePaymentInfo paymentInfo = recordPortOneFailure(
-                    OperationFailureCategory.EXTERNAL_API, "PaymentService.handleWebhook.getPayment",
-                    request.getPaymentId(), "orderId=" + order.getOrderId(),
-                    () -> portOnePaymentClient.getPayment(request.getPaymentId()));
-            if ("CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
-                ownerRevenueService.assertCancellableBeforePayout(order.getOrderId());
-                payment.cancel();
-                ownerRevenueService.cancelBeforePayout(order.getOrderId(), "PortOne 외부 취소", java.time.LocalDateTime.now());
-                orderService.cancelPaidOrder(order.getOrderId());
-                return;
-            }
-            log.info("이미 처리된 Webhook: paymentId={}", request.getPaymentId());
-            return;
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            // 주문이 이미 만료/취소됐는데 PortOne에는 결제가 실제로 PAID면(만료 직전 결제 + 웹훅 지연)
-            // 고객 돈이 PG에 묶이므로 자동 취소(환불)로 보상한다. 웹훅 재시도 시에는 PortOne 상태가
-            // 이미 CANCELLED이므로 이 분기를 다시 타지 않아 이중 환불되지 않는다.
-            PortOnePaymentInfo settledInfo = recordPortOneFailure(
-                    OperationFailureCategory.EXTERNAL_API,
-                    "PaymentService.handleWebhook.getPayment",
-                    request.getPaymentId(),
-                    "orderId=" + order.getOrderId() + ", orderStatus=" + order.getStatus(),
-                    () -> portOnePaymentClient.getPayment(request.getPaymentId()));
-
-            if ("PAID".equalsIgnoreCase(settledInfo.getStatus())) {
-                log.warn("만료/취소 주문에 결제 완료 Webhook 수신 — 자동 환불: orderId={}, status={}",
-                        order.getOrderId(), order.getStatus());
-                recordPortOneFailure(
-                        OperationFailureCategory.REFUND,
-                        "PaymentService.handleWebhook.autoCancel",
-                        request.getPaymentId(),
-                        "orderId=" + order.getOrderId() + ", amount=" + settledInfo.getAmount(),
-                        () -> portOnePaymentClient.cancelPayment(
-                                request.getPaymentId(), settledInfo.getAmount(),
-                                "주문 만료 후 결제 완료 — 자동 환불"));
-            } else {
-                log.info("이미 결제 처리 불가능한 주문 상태: orderId={}, status={}",
-                        order.getOrderId(), order.getStatus());
-            }
-            return;
-        }
-
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            log.info("이미 결제 처리 불가능한 결제 상태: paymentId={}, status={}",
-                    payment.getPaymentId(), payment.getStatus());
-            return;
-        }
-
-
-        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
-                OperationFailureCategory.EXTERNAL_API,
-                "PaymentService.handleWebhook.getPayment",
-                request.getPaymentId(),
-                "orderId=" + order.getOrderId(),
+        PortOnePaymentInfo externalPayment = recordPortOneFailure(
+                OperationFailureCategory.EXTERNAL_API, "PaymentService.handleWebhook.getPayment",
+                request.getPaymentId(), "orderId=" + orderId,
                 () -> portOnePaymentClient.getPayment(request.getPaymentId()));
 
-         validatePaymentAmount(order, paymentInfo);
+        if ("CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
+            // PG가 이미 취소됐으므로 재호출하지 않는다. Payment·Order·재고·정산은 공통 취소
+            // 작업이 짧은 독립 트랜잭션으로 함께 반영한다.
+            paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
+                    "PortOne 외부 취소 Webhook", true);
+            return;
+        }
+        if ("PARTIAL_CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND,
+                    "PaymentService.handleWebhook.partialCancel",
+                    "order", String.valueOf(orderId),
+                    "PARTIAL_CANCEL_NOT_SUPPORTED",
+                    "부분 취소는 자동 반영 대상이 아님 — 수동 확인 필요",
+                    "paymentId=" + request.getPaymentId() + ", externalStatus=" + externalPayment.getStatus());
+            return;
+        }
 
-         if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
-             payment.markAsPaid(paymentInfo.getPgProvider());
-             order.markAsPaid();
-             publishPaidEvents(order);
-        }else {
-             log.warn("결제 완료 상태가 아닌 Webhook 수신: paymentId={}, status={}",
-                     payment.getPortonePaymentId(),
-                     paymentInfo.getStatus());
-         }
-
-        log.info("Webhook 결제 완료 처리: orderNumber={}",
-                order.getOrderNumber());
+        paymentWebhookProcessor.applyPaidWebhook(orderId, request.getPaymentId(), externalPayment);
     }
 
     private void validateWebhookSignature(String rawBody, String signature) {
