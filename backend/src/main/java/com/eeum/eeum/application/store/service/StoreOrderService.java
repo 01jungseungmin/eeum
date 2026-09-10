@@ -215,6 +215,7 @@ public class StoreOrderService {
             throw new BusinessException(ErrorCode.PAYMENT_REFUND_NOT_REQUESTED);
         }
 
+        ownerRevenueService.assertCancellableBeforePayout(orderId);
         recordPortOneFailure(
                 "StoreOrderService.approveRefund",
                 String.valueOf(payment.getPaymentId()),
@@ -282,6 +283,7 @@ public class StoreOrderService {
 
         if (payment.getStatus() == PaymentStatus.PAID) {
             // 온라인 결제 완료 건은 PortOne 취소 성공 시에만 CANCELLED로 전환
+            ownerRevenueService.assertCancellableBeforePayout(orderId);
             recordPortOneFailure(
                     "StoreOrderService.rejectOrder",
                     String.valueOf(payment.getPaymentId()),
