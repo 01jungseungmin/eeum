@@ -9,8 +9,14 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 import java.time.LocalDateTime;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface WeeklySettlementRepository extends JpaRepository<WeeklySettlement, Long> {
+
+    Page<WeeklySettlement> findByStore_StoreIdOrderByPeriodEndAtDesc(Long storeId, Pageable pageable);
+
+    Page<WeeklySettlement> findAllByOrderByPeriodEndAtDesc(Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
