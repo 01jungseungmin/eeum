@@ -6,6 +6,7 @@ import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.PaymentResponseDto;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
 import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
+import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.lock.RateLimitKeys;
 import com.eeum.eeum.common.service.RateLimitService;
@@ -56,6 +57,7 @@ public class PaymentService {
     private final ApplicationEventPublisher eventPublisher;
     private final OperationFailureRecorder operationFailureRecorder;
     private final RateLimitService rateLimitService;
+    private final OwnerRevenueService ownerRevenueService;
     private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
@@ -395,6 +397,7 @@ public class PaymentService {
 
         payment.markAsPaid(paymentInfo.getPgProvider());
         order.markAsPaid();
+        ownerRevenueService.recordPaidOrder(order, payment);
         publishPaidEvents(order);
 
         log.info("결제 검증 완료: orderNumber={}, paymentId={}",

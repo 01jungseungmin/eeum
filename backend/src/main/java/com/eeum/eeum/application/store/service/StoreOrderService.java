@@ -3,6 +3,7 @@ package com.eeum.eeum.application.store.service;
 import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.service.OrderService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
+import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
@@ -49,6 +50,7 @@ public class StoreOrderService {
     private final OrderService orderService;
     private final PortOnePaymentClient portOnePaymentClient;
     private final OperationFailureRecorder operationFailureRecorder;
+    private final OwnerRevenueService ownerRevenueService;
 
     private static final Duration ORDER_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
@@ -158,6 +160,9 @@ public class StoreOrderService {
                 throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
             }
         }
+
+        ownerRevenueService.recordPaidOrder(order, payment);
+        ownerRevenueService.markOrderCompleted(order);
 
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getAccount().getAccountId(),
