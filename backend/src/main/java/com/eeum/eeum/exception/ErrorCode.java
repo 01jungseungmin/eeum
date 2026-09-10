@@ -145,6 +145,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     SETTLEMENT_INVALID_STATUS("SETTLEMENT_002", "처리할 수 없는 정산 상태입니다", HttpStatus.CONFLICT),
     SETTLEMENT_CLAIM_MISMATCH("SETTLEMENT_003", "유효하지 않거나 만료된 정산 작업입니다", HttpStatus.CONFLICT),
 
+    // 취소와 마감·지급이 같은 원장을 두고 경합한 경우. 재시도로 해소될 수 있는 충돌이라
+    // 상태 위반(SETTLEMENT_002)과 구분한다.
+    SETTLEMENT_CONCURRENT_MODIFICATION("SETTLEMENT_004", "정산 상태가 변경되었습니다. 다시 시도해 주세요", HttpStatus.CONFLICT),
+
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
     PAYMENT_AMOUNT_MISMATCH("PAYMENT_002", "결제 금액이 일치하지 않습니다", HttpStatus.BAD_REQUEST),
@@ -160,6 +164,16 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_REFUND_NOT_REQUESTED("PAYMENT_012", "환불 요청 상태가 아닙니다.", HttpStatus.BAD_REQUEST),
     // 서명 검증 이전 단계에서 걸러지는 형식 오류 — 인증 실패(401)와 구분해 400으로 응답한다
     PAYMENT_WEBHOOK_MALFORMED("PAYMENT_013", "형식이 올바르지 않은 Webhook 요청입니다", HttpStatus.BAD_REQUEST),
+
+    // 전액 취소 작업의 단계 전이 위반. 외부 PG 취소는 롤백되지 않으므로
+    // 단계를 건너뛰거나 되돌리려는 시도는 저장 전에 막는다.
+    PAYMENT_CANCELLATION_INVALID_STATUS("PAYMENT_014", "처리할 수 없는 취소 작업 상태입니다", HttpStatus.CONFLICT),
+
+    // 지급이 시작된 정산에 묶인 결제는 자동 취소하지 않는다 — 과지급이 되기 때문이다.
+    PAYMENT_CANCELLATION_PAYOUT_STARTED("PAYMENT_015", "정산 지급이 시작되어 자동 취소할 수 없습니다. 관리자 확인이 필요합니다", HttpStatus.CONFLICT),
+
+    // PG는 취소됐는데 내부 반영이 실패한 경우. 롤백하지 않고 수동 검토로 격리한다.
+    PAYMENT_CANCELLATION_MANUAL_REVIEW("PAYMENT_016", "취소 처리에 관리자 확인이 필요합니다", HttpStatus.CONFLICT),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
