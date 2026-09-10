@@ -60,6 +60,9 @@ class PaymentServiceTest {
     @Mock private com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
     @Mock private com.eeum.eeum.application.operation.service.OperationFailureRecorder operationFailureRecorder;
     @Mock private com.eeum.eeum.common.service.RateLimitService rateLimitService;
+    @Mock private com.eeum.eeum.application.settlement.service.OwnerRevenueService ownerRevenueService;
+    @Mock private PaymentCancellationService paymentCancellationService;
+    @Mock private PaymentWebhookProcessor paymentWebhookProcessor;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +78,9 @@ class PaymentServiceTest {
                 eventPublisher,
                 operationFailureRecorder,
                 rateLimitService,
+                ownerRevenueService,
+                paymentCancellationService,
+                paymentWebhookProcessor,
                 aiPlanSubscriptionService
         );
     }
