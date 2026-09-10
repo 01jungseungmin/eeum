@@ -46,12 +46,14 @@ public class ManualSettlementPayoutService {
         }
         WeeklySettlement settlement = weeklySettlementRepository.findByIdWithPessimisticLock(weeklySettlementId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
-        settlement.completeManually(admin, claimToken, payoutReference, LocalDateTime.now());
+        // claim은 먼저 검증하되 COMPLETED 전이는 포함 원장이 모두 SETTLED가 된 뒤에 한다.
+        settlement.validateManualCompletion(admin, claimToken, payoutReference, LocalDateTime.now());
         for (WeeklySettlementItem item : weeklySettlementItemRepository
-                .findByWeeklySettlement_WeeklySettlementId(weeklySettlementId)) {
+                .findByWeeklySettlementIdOrderByOwnerRevenueId(weeklySettlementId)) {
             OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(item.getOwnerRevenue().getOwnerRevenueId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
             revenue.markSettled();
         }
+        settlement.completeManually(admin, claimToken, payoutReference, LocalDateTime.now());
     }
 }

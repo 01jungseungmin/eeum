@@ -170,10 +170,7 @@ public class WeeklySettlement extends BaseEntity {
             String payoutReference,
             LocalDateTime completedAt
     ) {
-        validateActiveClaim(claimToken, completedAt);
-        if (completedBy == null || !StringUtils.hasText(payoutReference)) {
-            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
-        }
+        validateManualCompletion(completedBy, claimToken, payoutReference, completedAt);
         this.status = WeeklySettlementStatus.COMPLETED;
         this.payoutGateway = PayoutGatewayType.MANUAL;
         this.manualCompletedBy = completedBy;
@@ -182,6 +179,15 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutCompletedAt = completedAt;
         this.claimToken = null;
         this.claimExpiresAt = null;
+    }
+
+    public void validateManualCompletion(
+            Account completedBy, String claimToken, String payoutReference, LocalDateTime completedAt
+    ) {
+        validateActiveClaim(claimToken, completedAt);
+        if (completedBy == null || !StringUtils.hasText(payoutReference)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
     }
 
     private void validateActiveClaim(String claimToken, LocalDateTime now) {

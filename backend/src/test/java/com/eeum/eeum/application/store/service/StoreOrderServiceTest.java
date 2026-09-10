@@ -58,6 +58,9 @@ class StoreOrderServiceTest {
     @Mock private RedisLockService redisLockService;
     @Mock private OrderService orderService;
     @Mock private PortOnePaymentClient portOnePaymentClient;
+    @Mock private com.eeum.eeum.application.order.service.PaymentCancellationService paymentCancellationService;
+    @Mock private com.eeum.eeum.application.operation.service.OperationFailureRecorder operationFailureRecorder;
+    @Mock private com.eeum.eeum.application.settlement.service.OwnerRevenueService ownerRevenueService;
 
     private static final Long ORDER_ID = 1L;
     private static final Long OWNER_ID = 200L;

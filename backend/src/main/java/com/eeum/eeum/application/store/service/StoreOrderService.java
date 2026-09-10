@@ -3,6 +3,7 @@ package com.eeum.eeum.application.store.service;
 import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.service.OrderService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
+import com.eeum.eeum.application.order.service.PaymentCancellationService;
 import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -49,6 +51,7 @@ public class StoreOrderService {
     private final RedisLockService redisLockService;
     private final OrderService orderService;
     private final PortOnePaymentClient portOnePaymentClient;
+    private final PaymentCancellationService paymentCancellationService;
     private final OperationFailureRecorder operationFailureRecorder;
     private final OwnerRevenueService ownerRevenueService;
 
@@ -226,7 +229,7 @@ public class StoreOrderService {
         payment.completeRefund();
         orderService.restoreStockForOrder(orderId);
         order.cancel(payment.getRefundReason());
-        ownerRevenueService.cancelBeforePayout(orderId, payment.getRefundReason(), java.time.LocalDateTime.now());
+        ownerRevenueService.cancelBeforePayout(orderId, payment.getRefundReason(), LocalDateTime.now());
 
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getAccount().getAccountId(),
@@ -298,7 +301,7 @@ public class StoreOrderService {
         // 현장결제(NOT_PAID)는 결제 자체가 없었으므로 PaymentStatus 변경 없이 NOT_PAID 유지
 
         order.cancel(reason);
-        ownerRevenueService.cancelBeforePayout(orderId, reason, java.time.LocalDateTime.now());
+        ownerRevenueService.cancelBeforePayout(orderId, reason, LocalDateTime.now());
 
         log.info("사장 주문 거절: orderId={}, paymentStatus={}", orderId, payment.getStatus());
 

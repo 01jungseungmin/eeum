@@ -41,4 +41,18 @@ public interface WeeklySettlementRepository extends JpaRepository<WeeklySettleme
     Optional<WeeklySettlement> findByIdWithPessimisticLock(
             @Param("weeklySettlementId") Long weeklySettlementId
     );
+
+    /**
+     * 취소 경로의 첫 잠금. 항목이 있는 경우 반드시 주간 정산을 먼저 잠근 뒤 원장을 잠근다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT s
+        FROM WeeklySettlement s
+        JOIN WeeklySettlementItem i ON i.weeklySettlement = s
+        WHERE i.ownerRevenue.ownerRevenueId = :ownerRevenueId
+    """)
+    Optional<WeeklySettlement> findByOwnerRevenueIdWithPessimisticLock(
+            @Param("ownerRevenueId") Long ownerRevenueId
+    );
 }
