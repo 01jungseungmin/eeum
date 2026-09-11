@@ -5,6 +5,12 @@ import {
   Layers,
   Tag,
   ClipboardList,
+  ClipboardCheck,
+  MapPin,
+  Megaphone,
+  AlertTriangle,
+  Activity,
+  CreditCard,
   Calendar,
   Users,
   Star,
@@ -38,6 +44,68 @@ export const OWNER_MENU_CONFIG = [
         subtitle: '오늘의 상점 현황을 한눈에 확인하세요',
       },
       {
+        id: 'ai-manager',
+        name: 'AI 매니저',
+        path: '/ai-manager',
+        icon: <Sparkles {...iconProps} />,
+        children: [
+          {
+            id: 'ai-report',
+            name: 'AI 점장 보고',
+            sectionId: 'section-ai-report',
+            icon: <ClipboardCheck {...iconProps} />,
+          },
+          {
+            id: 'ai-care',
+            name: 'AI 고객 케어',
+            sectionId: 'section-ai-care',
+            icon: <UserCheck {...iconProps} />,
+          },
+          {
+            id: 'ai-review',
+            name: '리뷰·문의 대응',
+            sectionId: 'section-ai-review',
+            icon: <MessageSquare {...iconProps} />,
+          },
+          {
+            id: 'ai-event',
+            name: '이벤트 성과',
+            sectionId: 'section-ai-event',
+            icon: <TrendingUp {...iconProps} />,
+          },
+          {
+            id: 'ai-location',
+            name: '생활권 매칭',
+            sectionId: 'section-ai-location',
+            icon: <MapPin {...iconProps} />,
+          },
+          {
+            id: 'ai-marketing',
+            name: '마케팅 자동화',
+            sectionId: 'section-ai-marketing',
+            icon: <Megaphone {...iconProps} />,
+          },
+          {
+            id: 'ai-warning',
+            name: '운영 위험 조기경보',
+            sectionId: 'section-ai-warning',
+            icon: <AlertTriangle {...iconProps} />,
+          },
+          {
+            id: 'ai-summary',
+            name: 'AI 활동 요약',
+            sectionId: 'section-ai-summary',
+            icon: <Activity {...iconProps} />,
+          },
+          {
+            id: 'ai-plan',
+            name: '플랜 관리',
+            path: '/ai-manager/plan',
+            icon: <CreditCard {...iconProps} />,
+          },
+        ],
+      },
+      {
         id: 'store',
         name: '상점 관리',
         path: '/store',
@@ -64,32 +132,6 @@ export const OWNER_MENU_CONFIG = [
         path: '/events',
         icon: <Tag {...iconProps} />,
         subtitle: '특가 및 시간 제한 이벤트 상품을 관리하세요',
-      },
-    ],
-  },
-  {
-    group: 'AI 매니저',
-    items: [
-      {
-        id: 'ai-manager',
-        name: 'AI 매니저',
-        path: '/ai-manager',
-        icon: <Sparkles {...iconProps} />,
-        subtitle: 'AI가 정리한 오늘의 할 일을 확인하세요',
-      },
-      {
-        id: 'ai-customer-care',
-        name: 'AI 고객 케어',
-        path: '/ai-manager/customer-care',
-        icon: <HeartHandshake {...iconProps} />,
-        subtitle: '지금 말을 걸어야 할 고객을 확인하세요',
-      },
-      {
-        id: 'ai-messages',
-        name: 'AI 생성 메시지',
-        path: '/ai-manager/messages',
-        icon: <MessageSquareText {...iconProps} />,
-        subtitle: 'AI가 만든 초안을 검토하고 발송하세요',
       },
     ],
   },
@@ -282,8 +324,37 @@ export const ADMIN_MENU_CONFIG = [
   },
 ];
 
+// 사이드바 메뉴에 나타나지 않는 서브 페이지 전용 타이틀 정보 정의
+const SUB_PAGE_CONFIG = {
+  '/ai-manager/chat': {
+    id: 'ai-chat',
+    name: 'AI 매니저 상담',
+    subtitle: '리뷰·공지·이벤트·고객 메시지·문의 답변을 도와드립니다',
+  },
+  '/ai-manager/care': {
+    id: 'ai-care-detail',
+    name: 'AI 고객 케어 상세',
+    subtitle: '다시 안내하면 좋을 고객 분석과 AI 준비 메시지 현황을 보여줘요.',
+  },
+  '/ai-manager/location': {
+    id: 'ai-location-detail',
+    name: '생활권 매칭 상세',
+    subtitle:
+      '우리 가게와 잘 맞는 주변 생활권 고객을 찾아 노출 대상을 추천해요.',
+  },
+  '/ai-manager/plan': {
+    id: 'ai-plan-management',
+    name: '플랜 관리',
+    subtitle: '매장 성장을 돕는 최적의 AI 매니저 플랜을 선택하고 변경하세요.',
+  },
+};
+
 // 브레드크럼이나 헤더 타이틀 매칭 함수 리팩토링
 export const findMenuByPath = (path, role) => {
+  if (SUB_PAGE_CONFIG[path]) {
+    return SUB_PAGE_CONFIG[path];
+  }
+
   const targetConfig =
     role === 'ROLE_ADMIN' ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 
@@ -292,6 +363,14 @@ export const findMenuByPath = (path, role) => {
   for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;
+
+    // 만약 children(서브메뉴) 안에 정의된 path가 있다면 검색
+    for (const item of group.items) {
+      if (item.children) {
+        const subFound = item.children.find((sub) => sub.path === path);
+        if (subFound) return subFound;
+      }
+    }
   }
   return null;
 };

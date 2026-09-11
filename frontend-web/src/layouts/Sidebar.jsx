@@ -112,6 +112,31 @@ const StatusBadge = styled.span`
   font-weight: bold;
 `;
 
+const SubMenuWrapper = styled.div`
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+`;
+
+const SubMenuItem = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: ${(props) => (props.$active ? '#fff' : '#9bb0a5')};
+  background-color: ${(props) => (props.$active ? '#264d39' : 'transparent')};
+
+  &:hover {
+    color: #fff;
+    background-color: #234734;
+  }
+`;
+
 const CATEGORY_MAP = {
   orders: 'ORDER',
   reservations: 'RESERVATION',
@@ -142,6 +167,8 @@ function Sidebar({ approvalStatus }) {
 
   const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
   const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
+
+  const [activeSection, setActiveSection] = useState('section-ai-report');
 
   // SSE 실시간 연결
   useEffect(() => {
@@ -246,6 +273,28 @@ function Sidebar({ approvalStatus }) {
     }
   };
 
+  const handleSubMenuClick = (item, subItem) => {
+    if (subItem.path) {
+      navigate(subItem.path);
+      return;
+    }
+
+    // 2. sectionId 기반 스크롤 메뉴인 경우 (예: AI 점장 보고, 생활권 매칭 등)
+    if (subItem.sectionId) {
+      if (location.pathname !== item.path) {
+        // AI 매니저 페이지가 아니면 페이지 이동 후 해당 section 위치로 이동
+        navigate(`${item.path}#${subItem.sectionId}`);
+      } else {
+        // 이미 AI 매니저 페이지에 있다면 해시 스크롤 이동
+        const targetElement = document.getElementById(subItem.sectionId);
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setActiveSection(subItem.sectionId);
+        }
+      }
+    }
+  };
+
   return (
     <SideContainer $isAdmin={isAdmin}>
       <LogoSection $isAdmin={isAdmin}>
@@ -258,30 +307,59 @@ function Sidebar({ approvalStatus }) {
           <div key={group.group || index}>
             {group.group && <MenuGroupLabel>{group.group}</MenuGroupLabel>}
 
-            {group.items.map((item) => {
-              const isActive = location.pathname === item.path;
-              const isItemDisabled =
-                isOwnerRestricted &&
-                item.id !== 'approval' &&
-                item.id !== 'logout';
+            {Array.isArray(group.items) &&
+              group.items.map((item) => {
+                const isActive = location.pathname.startsWith(item.path);
+                const isItemDisabled =
+                  isOwnerRestricted &&
+                  item.id !== 'approval' &&
+                  item.id !== 'logout';
 
-              return (
-                <MenuItem
-                  key={item.id}
-                  onClick={(e) => handleMenuClick(e, item)}
-                  $active={isActive}
-                  $isAdmin={isAdmin}
-                  $disabled={isItemDisabled}
-                >
-                  <IconWrapper $active={isActive}>{item.icon}</IconWrapper>
-                  {item.name}
-                  {item.countKey && counts[item.countKey] > 0 && (
-                    <Badge $isAdmin={isAdmin}>{counts[item.countKey]}</Badge>
-                  )}
-                  {item.status && <StatusBadge>{item.status}</StatusBadge>}
-                </MenuItem>
-              );
-            })}
+                return (
+                  <div key={item.id}>
+                    <MenuItem
+                      onClick={(e) => handleMenuClick(e, item)}
+                      $active={isActive}
+                      $isAdmin={isAdmin}
+                      $disabled={isItemDisabled}
+                    >
+                      <IconWrapper $active={isActive}>{item.icon}</IconWrapper>
+                      {item.name}
+                      {item.countKey && counts[item.countKey] > 0 && (
+                        <Badge $isAdmin={isAdmin}>
+                          {counts[item.countKey]}
+                        </Badge>
+                      )}
+                      {item.status && <StatusBadge>{item.status}</StatusBadge>}
+                    </MenuItem>
+
+                    {/* 하위 서브메뉴(children)가 있는 경우 렌더링 */}
+                    {item.children && isActive && (
+                      <SubMenuWrapper>
+                        {item.children.map((subItem) => {
+                          // subItem.path가 있으면 현재 URL과 일치하는지, 없으면 activeSection과 일치하는지 판단
+                          const isSubActive = subItem.path
+                            ? location.pathname === subItem.path
+                            : activeSection === subItem.sectionId;
+
+                          return (
+                            <SubMenuItem
+                              key={subItem.id}
+                              $active={isSubActive}
+                              onClick={() => handleSubMenuClick(item, subItem)}
+                            >
+                              <IconWrapper $active={isSubActive}>
+                                {subItem.icon}
+                              </IconWrapper>
+                              {subItem.name}
+                            </SubMenuItem>
+                          );
+                        })}
+                      </SubMenuWrapper>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         ))}
       </MenuSection>
