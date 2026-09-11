@@ -74,6 +74,25 @@ public class OwnerOrderCancellationAuthorizer {
                 order.getStore().getName(), order.getOrderNumber(), "거절", orderId));
     }
 
+    /**
+     * 환불 거절은 환불 승인 취소와 같은 주문 락을 잡은 호출자만 진입한다.
+     * 여기서는 Order → Payment 순서의 DB 잠금 아래에서 상태를 다시 확인한다.
+     */
+    @Transactional
+    public void rejectRefund(Long ownerId, Long orderId) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        validateOwner(ownerId, order);
+        Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if (payment.getRefundStatus() != RefundStatus.REQUESTED) {
+            throw new BusinessException(ErrorCode.PAYMENT_REFUND_NOT_REQUESTED);
+        }
+        payment.rejectRefund();
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(order.getAccount().getAccountId(),
+                order.getStore().getName(), order.getOrderNumber(), "환불거절", orderId));
+    }
+
     private Order getOwnerOrder(Long ownerId, Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
