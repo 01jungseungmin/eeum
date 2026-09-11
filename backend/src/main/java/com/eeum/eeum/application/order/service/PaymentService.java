@@ -35,14 +35,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
+import java.util.Base64;
+import java.util.List;
 import java.util.function.Supplier;
+import org.springframework.http.HttpHeaders;
 
 @Slf4j
 @Service
@@ -82,7 +82,7 @@ public class PaymentService {
         );
     }
 
-    public void handleWebhook(String rawBody, String signature) {
+    public void handleWebhook(String rawBody, HttpHeaders headers) {
         // [1단계] 서명 검증 이전의 형식 오류는 이력에 남기지 않는다.
         // 이 엔드포인트는 permitAll이라 누구나 호출할 수 있고, 건별로 기록하면
         // 익명 요청 반복만으로 실패 이력 테이블을 채울 수 있다(3개월 보존).
@@ -98,12 +98,13 @@ public class PaymentService {
          * 4. 서명 불일치 시 Webhook 처리 중단
          * 5. 실패 로그 기록 및 401/400 계열 예외 처리
          */
-        validateWebhookSignature(rawBody, signature);
+        validateWebhookSignature(rawBody, headers);
 
         PaymentWebhookRequestDto request = parseWebhookBody(rawBody);
 
         // [3단계] 여기부터는 서명 검증을 통과한 요청이다 — 실패는 빠짐없이 기록한다.
-        if (request.getPaymentId() == null || request.getPaymentId().isBlank()) {
+        String paymentId = request.resolvedPaymentId();
+        if (paymentId == null || paymentId.isBlank()) {
             log.warn("paymentId 없는 Webhook 수신");
             operationFailureRecorder.record(
                     OperationFailureCategory.PAYMENT_WEBHOOK,
@@ -114,11 +115,23 @@ public class PaymentService {
         }
 
         redisLockService.executeWithLock(
-                LockKeys.portonePayment(request.getPaymentId()),
+                LockKeys.portonePayment(paymentId),
                 PAYMENT_LOCK_LEASE_TIME,
                 ErrorCode.LOCK_PAYMENT_FAILED,
-                () -> handleWebhookWithLock(request)
+                () -> handleWebhookWithLock(request, paymentId)
         );
+    }
+
+    /** 기존 단위 테스트와 구버전 Webhook의 최소 호환 진입점. HTTP 엔드포인트는 사용하지 않는다. */
+    @Deprecated(forRemoval = true)
+    public void handleWebhook(String rawBody, String signature) {
+        HttpHeaders headers = new HttpHeaders();
+        if (signature != null) {
+            headers.add("webhook-id", "legacy-test");
+            headers.add("webhook-timestamp", "0");
+            headers.add("webhook-signature", "v1," + signature);
+        }
+        handleWebhook(rawBody, headers);
     }
 
     @Transactional(readOnly = true)
@@ -190,29 +203,29 @@ public class PaymentService {
         payment.requestRefund(request.getReason());
     }
 
-    private void handleWebhookWithLock(PaymentWebhookRequestDto request) {
+    private void handleWebhookWithLock(PaymentWebhookRequestDto request, String paymentId) {
         /*
          * 지금 구조에서는 Payment.portonePaymentId에 주문 생성 시 paymentId가 저장되어 있어야
          * webhook paymentId로 Payment를 찾을 수 있음.
          */
-        Long orderId = paymentRepository.findOrderIdByPortonePaymentId(request.getPaymentId()).orElse(null);
+        Long orderId = paymentRepository.findOrderIdByPortonePaymentId(paymentId).orElse(null);
 
         if (orderId == null) {
             // AI 플랜 구독 결제(ai-plan- prefix)는 AI 플랜 서비스로 위임
-            if (request.getPaymentId() != null && request.getPaymentId()
+            if (paymentId != null && paymentId
                     .startsWith(com.eeum.eeum.application.ai.service.AiPlanPaymentCommandExecutor.AI_PLAN_PAYMENT_PREFIX)) {
-                aiPlanSubscriptionService.handleWebhook(request.getPaymentId());
+                aiPlanSubscriptionService.handleWebhook(paymentId);
                 return;
             }
             log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}",
-                    request.getPaymentId());
+                paymentId);
             return;
         }
 
         PortOnePaymentInfo externalPayment = recordPortOneFailure(
                 OperationFailureCategory.EXTERNAL_API, "PaymentService.handleWebhook.getPayment",
-                request.getPaymentId(), "orderId=" + orderId,
-                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
+                paymentId, "orderId=" + orderId,
+                () -> portOnePaymentClient.getPayment(paymentId));
 
         if ("CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
             // PG가 이미 취소됐으므로 재호출하지 않는다. Payment·Order·재고·정산은 공통 취소
@@ -228,14 +241,14 @@ public class PaymentService {
                     "order", String.valueOf(orderId),
                     "PARTIAL_CANCEL_NOT_SUPPORTED",
                     "부분 취소는 자동 반영 대상이 아님 — 수동 확인 필요",
-                    "paymentId=" + request.getPaymentId() + ", externalStatus=" + externalPayment.getStatus());
+                    "paymentId=" + paymentId + ", externalStatus=" + externalPayment.getStatus());
             return;
         }
 
-        paymentWebhookProcessor.applyPaidWebhook(orderId, request.getPaymentId(), externalPayment);
+        paymentWebhookProcessor.applyPaidWebhook(orderId, paymentId, externalPayment);
     }
 
-    private void validateWebhookSignature(String rawBody, String signature) {
+    private void validateWebhookSignature(String rawBody, HttpHeaders headers) {
         String secret = portOneProperties.webhookSecret();
         if (!StringUtils.hasText(secret)) {
             // 서버 설정 오류다. 공격자가 반복 유발할 수 있으므로 2단계와 같은 제한 기록을 쓴다.
@@ -244,19 +257,15 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
 
-        // [1단계] 서명 헤더 자체가 없으면 PortOne이 보낸 요청이 아니다 — 기록 없이 400.
-        if (!StringUtils.hasText(signature)) {
+        String webhookId = headers.getFirst("webhook-id");
+        String timestamp = headers.getFirst("webhook-timestamp");
+        List<String> signatures = headers.get("webhook-signature");
+        if (!StringUtils.hasText(webhookId) || !StringUtils.hasText(timestamp)
+                || signatures == null || signatures.isEmpty()) {
             log.warn("서명 헤더 없는 Webhook 수신");
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
         }
-
-        String expected = hmacSha256Hex(rawBody, secret);
-        String normalizedSignature = normalizeSignature(signature);
-
-        if (!MessageDigest.isEqual(
-                expected.getBytes(StandardCharsets.UTF_8),
-                normalizedSignature.getBytes(StandardCharsets.UTF_8)
-        )) {
+        if (!matchesStandardWebhookSignature(secret, webhookId, timestamp, rawBody, signatures)) {
             // [2단계] 서명은 왔는데 맞지 않는다 — 시크릿 로테이션 사고일 수도, 공격일 수도 있다.
             // 카운터로 전량 집계하고 이력은 구간당 1건만 남긴다.
             recordWebhookSignatureFailure("서명 불일치", rawBody);
@@ -264,13 +273,26 @@ public class PaymentService {
         }
     }
 
-    private String hmacSha256Hex(String payload, String secret) {
+    private boolean matchesStandardWebhookSignature(
+            String secret, String webhookId, String timestamp, String rawBody, List<String> signatures
+    ) {
         try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+            // Standard Webhooks: base64(HMAC-SHA256(webhook-id.timestamp.raw-body)).
+            String encodedSecret = secret.startsWith("whsec_") ? secret.substring("whsec_".length()) : secret;
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(Base64.getDecoder().decode(encodedSecret), "HmacSHA256"));
+            byte[] expected = mac.doFinal((webhookId + "." + timestamp + "." + rawBody)
+                    .getBytes(StandardCharsets.UTF_8));
+            for (String header : signatures) {
+                for (String part : header.split("\\s+")) {
+                    if (!part.startsWith("v1,")) continue;
+                    byte[] candidate = Base64.getDecoder().decode(part.substring(3));
+                    if (MessageDigest.isEqual(expected, candidate)) return true;
+                }
+            }
+            return false;
         } catch (Exception e) {
-            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
+            return false;
         }
     }
 
@@ -413,13 +435,6 @@ public class PaymentService {
         });
     }
 
-    private String normalizeSignature(String signature) {
-        String value = signature.trim();
-        if (value.startsWith("sha256=")) {
-            return value.substring("sha256=".length());
-        }
-        return value;
-    }
 
     /**
      * [2단계] 서명 검증 실패의 제한 기록.

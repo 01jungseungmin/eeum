@@ -10,14 +10,19 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PaymentCancellationOperationTest {
 
     @Test
     void PG_응답_유실_작업은_유예_시간_후에만_수동검토로_격리된다() {
         // given
+        Order order = mock(Order.class);
+        Payment payment = mock(Payment.class);
+        when(payment.getOrder()).thenReturn(order);
+        when(payment.getAmount()).thenReturn(BigDecimal.valueOf(10_000));
         PaymentCancellationOperation operation = PaymentCancellationOperation.start(
-                mock(Order.class), mock(Payment.class), PaymentCancellationTrigger.CUSTOMER_CANCEL,
+                order, payment, PaymentCancellationTrigger.CUSTOMER_CANCEL,
                 "고객 취소", BigDecimal.valueOf(10_000));
         LocalDateTime requestedAt = LocalDateTime.of(2026, 9, 11, 10, 0);
         operation.markPgRequested(PaymentCancellationTrigger.CUSTOMER_CANCEL, "고객 취소", requestedAt);

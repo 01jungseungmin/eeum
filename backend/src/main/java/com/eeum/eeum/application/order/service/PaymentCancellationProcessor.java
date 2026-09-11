@@ -123,6 +123,26 @@ public class PaymentCancellationProcessor {
     }
 
     /**
+     * PG 콘솔/웹훅에서 이미 취소된 결제가 지급 시작 뒤 발견된 경우의 격리 경로다.
+     * 고객 돈은 이미 움직였을 수 있으므로 자동 취소 차단만 하고 작업 이력을 남기지 않으면 안 된다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordExternallyCancelledAfterPayoutStarted(
+            Long orderId, PaymentCancellationTrigger trigger, String reason
+    ) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        PaymentCancellationOperation operation = cancellationOperationRepository
+                .findByOrderIdWithPessimisticLock(orderId)
+                .orElseGet(() -> cancellationOperationRepository.save(
+                        PaymentCancellationOperation.start(order, payment, trigger, reason, payment.getAmount())));
+        operation.requireManualReview("EXTERNAL_CANCEL_AFTER_PAYOUT_STARTED",
+                "PG에서 이미 취소됐으나 정산 지급이 시작되어 자동 반영하지 않았습니다.");
+    }
+
+    /**
      * 2단계 — PG 취소가 확정된 사실만 먼저 커밋한다.
      *
      * <p>3단계(내부 반영)와 나누는 이유는, 내부 반영이 실패해도 "PG는 이미 취소됐다"가

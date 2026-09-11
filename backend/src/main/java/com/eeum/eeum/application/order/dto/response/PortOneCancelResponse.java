@@ -23,7 +23,7 @@ public class PortOneCancelResponse {
     public static class Cancellation {
         private String id;
         private String status;
-        @JsonAlias({"amount", "cancelledAmount"})
+        @JsonAlias({"totalAmount", "amount", "cancelledAmount"})
         private BigDecimal cancelledAmount;
     }
 }

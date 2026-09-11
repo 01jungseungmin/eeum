@@ -8,6 +8,8 @@ import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
 import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementItemRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
+import com.eeum.eeum.domain.order.repository.PaymentCancellationOperationRepository;
+import com.eeum.eeum.domain.order.enums.PaymentCancellationStatus;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +27,7 @@ public class ManualSettlementPayoutService {
     private final AccountRepository accountRepository;
     private final WeeklySettlementItemRepository weeklySettlementItemRepository;
     private final OwnerRevenueRepository ownerRevenueRepository;
+    private final PaymentCancellationOperationRepository cancellationOperationRepository;
 
     @Transactional
     public void claim(Long adminAccountId, Long weeklySettlementId, String claimToken, LocalDateTime expiresAt) {
@@ -34,7 +38,15 @@ public class ManualSettlementPayoutService {
         }
         WeeklySettlement settlement = weeklySettlementRepository.findByIdWithPessimisticLock(weeklySettlementId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
-        settlement.claim(claimToken, expiresAt, LocalDateTime.now(), LocalDateTime.now());
+        List<Long> includedOrderIds = weeklySettlementItemRepository
+                .findByWeeklySettlementIdOrderByOwnerRevenueId(weeklySettlementId).stream()
+                .map(item -> item.getOwnerRevenue().getOrder().getOrderId())
+                .toList();
+        if (includedOrderIds.isEmpty() || cancellationOperationRepository.existsUncompletedByOrderIds(
+                includedOrderIds, PaymentCancellationStatus.COMPLETED)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        settlement.claim(admin, claimToken, expiresAt, LocalDateTime.now(), LocalDateTime.now());
     }
 
     @Transactional

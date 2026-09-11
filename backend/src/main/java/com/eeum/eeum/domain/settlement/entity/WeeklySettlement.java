@@ -92,6 +92,10 @@ public class WeeklySettlement extends BaseEntity {
     private LocalDateTime claimExpiresAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "claimed_by")
+    private Account claimedBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manual_completed_by")
     private Account manualCompletedBy;
 
@@ -126,6 +130,7 @@ public class WeeklySettlement extends BaseEntity {
     }
 
     public void claim(
+            Account claimedBy,
             String claimToken,
             LocalDateTime claimExpiresAt,
             LocalDateTime requestedAt,
@@ -149,7 +154,14 @@ public class WeeklySettlement extends BaseEntity {
         this.status = WeeklySettlementStatus.PAYOUT_IN_PROGRESS;
         this.claimToken = claimToken;
         this.claimExpiresAt = claimExpiresAt;
+        this.claimedBy = claimedBy;
         this.payoutRequestedAt = requestedAt;
+    }
+
+    /** 기존 도메인 단위 테스트 호환용. 실제 지급 claim은 관리자 식별자를 반드시 전달한다. */
+    @Deprecated(forRemoval = true)
+    public void claim(String claimToken, LocalDateTime claimExpiresAt, LocalDateTime requestedAt, LocalDateTime now) {
+        claim(null, claimToken, claimExpiresAt, requestedAt, now);
     }
 
     public void requireManualReview(
@@ -179,13 +191,16 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutCompletedAt = completedAt;
         this.claimToken = null;
         this.claimExpiresAt = null;
+        this.claimedBy = null;
     }
 
     public void validateManualCompletion(
             Account completedBy, String claimToken, String payoutReference, LocalDateTime completedAt
     ) {
         validateActiveClaim(claimToken, completedAt);
-        if (completedBy == null || !StringUtils.hasText(payoutReference)) {
+        if (completedBy == null || (claimedBy != null
+                && !Objects.equals(claimedBy.getAccountId(), completedBy.getAccountId()))
+                || !StringUtils.hasText(payoutReference)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
     }

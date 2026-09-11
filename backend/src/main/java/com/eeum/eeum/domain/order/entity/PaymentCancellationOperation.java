@@ -109,6 +109,10 @@ public class PaymentCancellationOperation extends BaseEntity {
                 || requestedAmount == null || requestedAmount.signum() <= 0) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
         }
+        if (payment.getOrder() != order || payment.getAmount() == null
+                || payment.getAmount().compareTo(requestedAmount) != 0) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
+        }
         PaymentCancellationOperation operation = new PaymentCancellationOperation();
         operation.order = order;
         operation.payment = payment;

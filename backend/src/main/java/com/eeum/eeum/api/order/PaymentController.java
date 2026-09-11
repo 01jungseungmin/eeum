@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "14. Payment", description = "결제 API")
@@ -53,11 +54,9 @@ public class PaymentController {
     @PostMapping("/webhook")
     public ResponseEntity<Void> handleWebhook(
             @RequestBody String rawBody,
-            @RequestHeader(value = "X-PortOne-Webhook-Signature", required = false) String portoneSignature,
-            @RequestHeader(value = "Portone-Webhook-Signature", required = false) String legacySignature
+            @RequestHeader HttpHeaders headers
     ) {
-        String signature = portoneSignature != null ? portoneSignature : legacySignature;
-        paymentService.handleWebhook(rawBody, signature);
+        paymentService.handleWebhook(rawBody, headers);
         return ResponseEntity.ok().build();
     }
 

@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.Collection;
+import com.eeum.eeum.domain.order.enums.PaymentCancellationStatus;
 
 public interface PaymentCancellationOperationRepository
         extends JpaRepository<PaymentCancellationOperation, Long> {
@@ -29,4 +31,12 @@ public interface PaymentCancellationOperationRepository
 
     @Query("SELECT o.order.orderId FROM PaymentCancellationOperation o WHERE o.paymentCancellationOperationId = :operationId")
     Optional<Long> findOrderIdByOperationId(@Param("operationId") Long operationId);
+
+    @Query("""
+            select count(o) > 0 from PaymentCancellationOperation o
+            where o.order.orderId in :orderIds and o.status <> :completedStatus
+            """)
+    boolean existsUncompletedByOrderIds(
+            @Param("orderIds") Collection<Long> orderIds,
+            @Param("completedStatus") PaymentCancellationStatus completedStatus);
 }

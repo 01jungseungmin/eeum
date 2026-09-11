@@ -96,7 +96,23 @@ public class PaymentCancellationService {
             String reason,
             boolean pgAlreadyCancelled
     ) {
-        PaymentCancellationPlan plan = processor.prepare(orderId, trigger, reason);
+        PaymentCancellationPlan plan;
+        try {
+            plan = processor.prepare(orderId, trigger, reason);
+        } catch (BusinessException e) {
+            if (pgAlreadyCancelled && e.getErrorCode() == ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED) {
+                processor.recordExternallyCancelledAfterPayoutStarted(orderId, trigger, reason);
+                operationFailureRecorder.record(
+                        OperationFailureCategory.REFUND,
+                        "PaymentCancellationService.cancel",
+                        "order", String.valueOf(orderId),
+                        "EXTERNAL_CANCEL_AFTER_PAYOUT_STARTED",
+                        "PG 외부 취소가 지급 시작 후 감지되어 수동 검토로 격리했습니다.",
+                        "trigger=" + trigger);
+                throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+            }
+            throw e;
+        }
         if (plan == null) {
             // 이미 완료된 취소 — 멱등하게 무시한다.
             return;

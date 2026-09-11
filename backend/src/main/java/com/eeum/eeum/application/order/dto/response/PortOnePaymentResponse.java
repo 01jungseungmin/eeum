@@ -12,7 +12,17 @@ public class PortOnePaymentResponse {
     private String id;
     private String status;
     private Amount amount;
-    private String pgProvider;
+    private Channel channel;
+
+    @Getter
+    @NoArgsConstructor
+    public static class Channel {
+        private String pgProvider;
+    }
+
+    public String getPgProvider() {
+        return channel == null ? null : channel.getPgProvider();
+    }
 
     @Getter
     @NoArgsConstructor

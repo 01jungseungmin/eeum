@@ -185,25 +185,16 @@ public class StoreOrderService {
     public void rejectRefund(Long ownerId, Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
         validateOwnerOrder(ownerId, order);
-
         Payment payment = paymentRepository.findByOrder_OrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
         if (payment.getRefundStatus() != RefundStatus.REQUESTED) {
             throw new BusinessException(ErrorCode.PAYMENT_REFUND_NOT_REQUESTED);
         }
-
         payment.rejectRefund();
-
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
-                order.getAccount().getAccountId(),
-                order.getStore().getName(),
-                order.getOrderNumber(),
-                "환불거절",
-                order.getOrderId()));
-
+                order.getAccount().getAccountId(), order.getStore().getName(),
+                order.getOrderNumber(), "환불거절", orderId));
         log.info("환불 거절 처리: orderId={}", orderId);
     }
 
