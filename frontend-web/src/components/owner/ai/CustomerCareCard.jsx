@@ -2,7 +2,6 @@ import React from 'react';
 import styled, { css } from 'styled-components';
 import { Send, Check, Sparkles } from 'lucide-react';
 
-/* variant에 따른 카드 배경색 분기 */
 const CardContainer = styled.div`
   border-radius: 16px;
   padding: 20px;
@@ -14,11 +13,11 @@ const CardContainer = styled.div`
   ${(props) =>
     props.$variant === 'grid'
       ? css`
-          background-color: #f9fafb; /* 메인 화면용 연한 회색 배경 */
+          background-color: #f9fafb;
           border: 1px solid #f3f4f6;
         `
       : css`
-          background-color: #ffffff; /* 상세 페이지용 흰색 배경 */
+          background-color: #ffffff;
           border: 1px solid #f3f4f6;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
         `}
@@ -121,11 +120,10 @@ const CardContent = styled.div`
     color: #6b7280;
     margin: 0 0 16px 0;
     line-height: 1.45;
-    ${(props) => props.$variant === 'grid' && 'height: 36px;'}
+    ${(props) => props.$variant === 'grid' && 'min-height: 36px;'}
   }
 `;
 
-/* 메인 그리드(grid)일 때는 흰색 배경, 상세(detail)일 때는 연초록 배경으로 처리 */
 const AiMessageBox = styled.div`
   border: 1px dashed #86efac;
   border-radius: 12px;
@@ -179,9 +177,9 @@ const ActionButton = styled.button`
 `;
 
 export default function CustomerCareCard({
-  data,
+  data = {},
   isSent = false,
-  variant = 'grid', // 'grid' | 'detail'
+  variant = 'grid',
   onActionClick,
 }) {
   const {
@@ -235,7 +233,7 @@ export default function CustomerCareCard({
 
           <CardContent $variant={variant}>
             {variant === 'grid' && <h4 className="card-title">{title}</h4>}
-            <p className="description">{description}</p>
+            {description && <p className="description">{description}</p>}
 
             {message && (
               <AiMessageBox $variant={variant}>
@@ -249,7 +247,7 @@ export default function CustomerCareCard({
         </CardBodyRow>
       </div>
 
-      {/* 액션 버튼 (메인 grid 모드에서만 하단 노출) */}
+      {/* 액션 버튼 */}
       {variant === 'grid' && (
         <ActionButton
           $isSent={isSent}

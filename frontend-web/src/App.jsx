@@ -25,6 +25,16 @@ import OwnerReportManagementPage from './pages/owner/main/ReportManagementPage';
 import AiManagerPage from './pages/owner/main/AiManagerPage';
 import AiChatPage from './pages/owner/main/AiChatPage';
 import AiCareDetailPage from './pages/owner/main/AiCareDetailPage';
+import AiPlanManagementPage from './pages/owner/main/AiPlanManagementPage';
+import AiNoticeCreatePage from './pages/owner/main/AiNoticeCreatePage';
+import AiReviewDetailNoticePage from './pages/owner/main/AiReviewDetailNoticePage';
+import AiEventDetailPage from './pages/owner/main/AiEventDetailPage';
+import AiCreateEventPage from './pages/owner/main/AiCreateEventPage';
+import AiLocationMatchingDetailPage from './pages/owner/main/AiLocationMatchingDetailPage';
+import AiMarketingPage from './pages/owner/main/AiMarketingPage';
+import AiOperationRiskDetailPage from './pages/owner/main/AiOperationRiskDetailPage';
+import AiSavingPlanCreatePage from './pages/owner/main/AiSavingPlanCreatePage';
+import AiPowerUsageReportPage from './pages/owner/main/AiPowerUsageReportPage';
 import AdminReportManagementPage from './pages/admin/main/ReportManagementPage';
 import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
@@ -222,6 +232,46 @@ function App() {
           <Route
             path="/ai-manager/care"
             element={<AiCareDetailPage />}
+          />
+          <Route
+            path="/ai-manager/notice"
+            element={<AiNoticeCreatePage />}
+          />
+          <Route
+            path="/ai-manager/review"
+            element={<AiReviewDetailNoticePage />}
+          />
+          <Route
+            path="/ai-manager/event"
+            element={<AiEventDetailPage />}
+          />
+          <Route
+            path="/ai-manager/event/create"
+            element={<AiCreateEventPage />}
+          />
+          <Route
+            path="/ai-manager/location"
+            element={<AiLocationMatchingDetailPage />}
+          />
+          <Route
+            path="/ai-manager/marketing"
+            element={<AiMarketingPage />}
+          />
+          <Route
+            path="/ai-manager/operation-risk"
+            element={<AiOperationRiskDetailPage />}
+          />
+          <Route
+            path="/ai-manager/saving-plan"
+            element={<AiSavingPlanCreatePage />}
+          />
+          <Route
+            path="/ai-manager/power-report"
+            element={<AiPowerUsageReportPage />}
+          />
+          <Route
+            path="/ai-manager/plan"
+            element={<AiPlanManagementPage />}
           />
         </Route>
       </Route>

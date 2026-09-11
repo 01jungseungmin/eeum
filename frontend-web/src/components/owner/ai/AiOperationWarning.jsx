@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import {
   Siren,
   ChevronRight,
@@ -10,7 +11,9 @@ import {
   ShieldAlert,
   Sparkles,
   Info,
+  Loader2,
 } from 'lucide-react';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -77,8 +80,26 @@ const SubText = styled.p`
   margin: 4px 0 0;
 `;
 
+/* 상단 Header 우측으로 이동된 더보기 버튼 스타일 */
+const HeaderMoreButton = styled.button`
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    color: #4b5563;
+  }
+`;
+
 const AlertBanner = styled.div`
-  background-color: #fffbe3;
+  background-color: ${(props) => props.$bgColor || '#fffbe3'};
   border-radius: 10px;
   padding: 12px 16px;
   font-size: 13px;
@@ -89,8 +110,8 @@ const AlertBanner = styled.div`
 `;
 
 const WarningBadge = styled.span`
-  background-color: #fee2e2;
-  color: #dc2626;
+  background-color: ${(props) => props.$bgColor || '#fee2e2'};
+  color: ${(props) => props.$textColor || '#dc2626'};
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
@@ -104,7 +125,7 @@ const WarningBadge = styled.span`
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background-color: #dc2626;
+    background-color: ${(props) => props.$textColor || '#dc2626'};
   }
 `;
 
@@ -187,6 +208,7 @@ const InfoBox = styled.div`
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 10px;
+    white-space: nowrap;
   }
 `;
 
@@ -225,7 +247,6 @@ const AiSummaryContent = styled.div`
 
 const Footer = styled.div`
   display: flex;
-  justify-content: space-between;
   align-items: center;
   margin-top: 4px;
 `;
@@ -238,25 +259,95 @@ const FooterText = styled.span`
   gap: 4px;
 `;
 
-const MoreButton = styled.button`
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  color: #374151;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
+const LoadingBox = styled.div`
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 4px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: #f9fafb;
-  }
+  padding: 40px;
+  color: #9ca3af;
 `;
 
+// 위험도 레벨 매핑 Helper
+const getLevelStyle = (level) => {
+  switch (level) {
+    case 'CRITICAL':
+      return {
+        label: '경보',
+        badgeBg: '#fee2e2',
+        badgeColor: '#dc2626',
+        cardBg: '#fff5f5',
+        cardBorder: '#fee2e2',
+        iconColor: '#dc2626',
+      };
+    case 'WARNING':
+      return {
+        label: '주의',
+        badgeBg: '#fef3c7',
+        badgeColor: '#d97706',
+        cardBg: '#fffdf5',
+        cardBorder: '#fef3c7',
+        iconColor: '#d97706',
+      };
+    case 'NORMAL':
+    default:
+      return {
+        label: '정상',
+        badgeBg: '#dcfce7',
+        badgeColor: '#16a34a',
+        cardBg: '#f0fdf4',
+        cardBorder: '#dcfce7',
+        iconColor: '#16a34a',
+      };
+  }
+};
+
 export default function AiOperationWarning() {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await aiManagerApi.getRiskEarlyInfo();
+        if (res.data?.success && res.data?.data) {
+          setData(res.data.data);
+        }
+      } catch (error) {
+        console.error('운영 위험 조기경보 데이터 로딩 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <CardContainer id="section-ai-warning">
+        <LoadingBox>
+          <Loader2
+            size={24}
+            className="animate-spin"
+          />
+        </LoadingBox>
+      </CardContainer>
+    );
+  }
+
+  // 레벨 스타일 할당
+  const overallStyle = getLevelStyle(data?.overallRiskLevel);
+  const energyStyle = getLevelStyle(data?.energySignalLevel);
+  const seasonalStyle = getLevelStyle(data?.seasonalAlertLevel);
+  const activityStyle = getLevelStyle(data?.activityAnomalyLevel);
+  const safetyStyle = getLevelStyle(data?.safetyCheckLevel);
+
+  // 사장님 데이터 소스 정보 추출
+  const ownerSource = data?.dataSources?.find(
+    (s) => s.sourceType === 'OWNER_INPUT',
+  );
+
   return (
     <CardContainer id="section-ai-warning">
       {/* 헤더 */}
@@ -277,14 +368,28 @@ export default function AiOperationWarning() {
             </SubText>
           </div>
         </HeaderLeft>
+
+        {/* 상단 우측 '더보기 >' 버튼 */}
+        <HeaderMoreButton
+          onClick={() => navigate('/ai-manager/operation-risk')}
+        >
+          더보기 <ChevronRight size={16} />
+        </HeaderMoreButton>
       </Header>
 
       {/* 경보 상태 배너 */}
-      <AlertBanner>
-        <WarningBadge>경보</WarningBadge>
+      <AlertBanner $bgColor={overallStyle.cardBg}>
+        <WarningBadge
+          $bgColor={overallStyle.badgeBg}
+          $textColor={overallStyle.badgeColor}
+        >
+          {overallStyle.label}
+        </WarningBadge>
         <div>
-          종합 위험 신호 — 신호 4개 중 <strong>경보 1 · 주의 2 · 정상 1</strong>{' '}
-          감지
+          종합 위험 신호 —{' '}
+          <strong>
+            {data?.notice || '실시간 상태 분석이 연동되었습니다.'}
+          </strong>
         </div>
       </AlertBanner>
 
@@ -292,38 +397,36 @@ export default function AiOperationWarning() {
       <GridContainer>
         {/* 1. 동네 에너지 경기 신호 */}
         <WarningCard
-          $bgColor="#fffdf5"
-          $borderColor="#fef3c7"
+          $bgColor={energyStyle.cardBg}
+          $borderColor={energyStyle.cardBorder}
         >
           <CardHeader>
             <CardTitle>
               <TrendingDown
                 size={18}
-                color="#d97706"
+                color={energyStyle.iconColor}
               />{' '}
               동네 에너지 경기 신호
             </CardTitle>
             <StatusTag
-              $bgColor="#fef3c7"
-              $color="#d97706"
+              $bgColor={energyStyle.badgeBg}
+              $color={energyStyle.badgeColor}
             >
-              주의
+              {energyStyle.label}
             </StatusTag>
           </CardHeader>
           <CardDesc>
-            우리 동네 음식점업, 최근 3개월 에너지 사용 -8%. 상권 활동 위축
-            가능성.
+            {data?.energySignal || '데이터를 불러오는 중입니다.'}
           </CardDesc>
-          <InfoBox
-            $badgeBg="#e0f2fe"
-            $badgeColor="#0284c7"
-          >
-            <span className="label">정밀측정</span>
-            <span>
-              우리 가게: 국토교통부 건물에너지정보(지번 단위) · 동네 평균:
-              한국전력공사 법정동별 전력사용량
-            </span>
-          </InfoBox>
+          {ownerSource && (
+            <InfoBox
+              $badgeBg="#e0f2fe"
+              $badgeColor="#0284c7"
+            >
+              <span className="label">{ownerSource.sourceLabel}</span>
+              <span>{ownerSource.description}</span>
+            </InfoBox>
+          )}
           <SourceText>
             출처: 한국전력거래소 행정구역별 에너지사용량 통합데이터
           </SourceText>
@@ -331,37 +434,27 @@ export default function AiOperationWarning() {
 
         {/* 2. 계절·시기 선제 알림 */}
         <WarningCard
-          $bgColor="#fff5f5"
-          $borderColor="#fee2e2"
+          $bgColor={seasonalStyle.cardBg}
+          $borderColor={seasonalStyle.cardBorder}
         >
           <CardHeader>
             <CardTitle>
               <Calendar
                 size={18}
-                color="#dc2626"
+                color={seasonalStyle.iconColor}
               />{' '}
               계절·시기 선제 알림
             </CardTitle>
             <StatusTag
-              $bgColor="#fee2e2"
-              $color="#dc2626"
+              $bgColor={seasonalStyle.badgeBg}
+              $color={seasonalStyle.badgeColor}
             >
-              경보
+              {seasonalStyle.label}
             </StatusTag>
           </CardHeader>
           <CardDesc>
-            다음 달부터 우리 업종 전력 사용 급증 시기. 지난 3년 평균 +32%.
+            {data?.seasonalAlert || '데이터를 불러오는 중입니다.'}
           </CardDesc>
-          <InfoBox
-            $badgeBg="#fef3c7"
-            $badgeColor="#d97706"
-          >
-            <span className="label">입력값</span>
-            <span>
-              우리 가게: 사장님 입력값(전기요금 고지서 기준) · 동네 평균:
-              한국전력공사 법정동별 전력사용량
-            </span>
-          </InfoBox>
           <SourceText>
             출처: 한국전력공사 산업분류별 법정동별 전력사용량(월별)
           </SourceText>
@@ -369,35 +462,27 @@ export default function AiOperationWarning() {
 
         {/* 3. 업종 활동 이상 변화 감지 */}
         <WarningCard
-          $bgColor="#f0fdf4"
-          $borderColor="#dcfce7"
+          $bgColor={activityStyle.cardBg}
+          $borderColor={activityStyle.cardBorder}
         >
           <CardHeader>
             <CardTitle>
               <Activity
                 size={18}
-                color="#16a34a"
+                color={activityStyle.iconColor}
               />{' '}
               업종 활동 이상 변화 감지
             </CardTitle>
             <StatusTag
-              $bgColor="#dcfce7"
-              $color="#16a34a"
+              $bgColor={activityStyle.badgeBg}
+              $color={activityStyle.badgeColor}
             >
-              정상
+              {activityStyle.label}
             </StatusTag>
           </CardHeader>
-          <CardDesc>현재 사용 패턴은 평년 범위 내. 특이 신호 없음.</CardDesc>
-          <InfoBox
-            $badgeBg="#f3f4f6"
-            $badgeColor="#4b5563"
-          >
-            <span className="label">동네평균만</span>
-            <span>
-              개별 가게 비교 데이터 없음 · 동네 평균: 한국전력공사 법정동별
-              전력사용량 추세만 제공
-            </span>
-          </InfoBox>
+          <CardDesc>
+            {data?.activityAnomaly || '현재 사용 패턴은 평년 범위 내입니다.'}
+          </CardDesc>
           <SourceText>
             출처: 한국전력공사·전력거래소 평년 패턴 대비 분석
           </SourceText>
@@ -405,27 +490,26 @@ export default function AiOperationWarning() {
 
         {/* 4. 안전 리스크 체크 */}
         <WarningCard
-          $bgColor="#fffdf5"
-          $borderColor="#fef3c7"
+          $bgColor={safetyStyle.cardBg}
+          $borderColor={safetyStyle.cardBorder}
         >
           <CardHeader>
             <CardTitle>
               <ShieldAlert
                 size={18}
-                color="#d97706"
+                color={safetyStyle.iconColor}
               />{' '}
               안전 리스크 체크
             </CardTitle>
             <StatusTag
-              $bgColor="#fef3c7"
-              $color="#d97706"
+              $bgColor={safetyStyle.badgeBg}
+              $color={safetyStyle.badgeColor}
             >
-              주의
+              {safetyStyle.label}
             </StatusTag>
           </CardHeader>
           <CardDesc>
-            최근 리뷰에서 '냄새·연기' 표현 반복. 가스 사용 업종 환기·밸브 점검
-            권장.
+            {data?.safetyCheck || '안전 관련 특이사항이 없습니다.'}
           </CardDesc>
           <SourceText>
             출처: 한국가스안전공사 가스사고 현황 + 이음 리뷰·신고 키워드
@@ -434,21 +518,19 @@ export default function AiOperationWarning() {
       </GridContainer>
 
       {/* AI 점장 판단 요약 */}
-      <AiSummaryBox>
-        <Sparkles
-          size={18}
-          color="#16a34a"
-          style={{ marginTop: '2px' }}
-        />
-        <AiSummaryContent>
-          <h5>AI 점장 판단</h5>
-          <p>
-            다음 달 <strong>전력 사용 급증 시기</strong>가 다가오고, 리뷰에서{' '}
-            <strong>냄새·연기</strong> 신호가 반복돼요. 지금 환기·밸브 점검과
-            냉방 효율 준비를 함께 해두시길 권장해요.
-          </p>
-        </AiSummaryContent>
-      </AiSummaryBox>
+      {data?.aiJudgement && (
+        <AiSummaryBox>
+          <Sparkles
+            size={18}
+            color="#16a34a"
+            style={{ marginTop: '2px', flexShrink: 0 }}
+          />
+          <AiSummaryContent>
+            <h5>AI 점장 판단</h5>
+            <p>{data.aiJudgement}</p>
+          </AiSummaryContent>
+        </AiSummaryBox>
+      )}
 
       {/* 하단 푸터 */}
       <Footer>
@@ -456,9 +538,6 @@ export default function AiOperationWarning() {
           <Info size={14} /> 산업부 공공데이터는 연 단위 갱신으로, 실시간 측정이
           아닌 계절·구조적 위험 패턴 분석에 활용됩니다.
         </FooterText>
-        <MoreButton>
-          더보기 <ChevronRight size={16} />
-        </MoreButton>
       </Footer>
     </CardContainer>
   );

@@ -274,15 +274,23 @@ function Sidebar({ approvalStatus }) {
   };
 
   const handleSubMenuClick = (item, subItem) => {
-    if (location.pathname !== item.path) {
-      // AI 매니저 페이지가 아니면 먼저 페이지 이동 후 이동
-      navigate(`${item.path}#${subItem.sectionId}`);
-    } else {
-      // 이미 AI 매니저 페이지라면 한 페이지 내 스크롤
-      const targetElement = document.getElementById(subItem.sectionId);
-      if (targetElement) {
-        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setActiveSection(subItem.sectionId);
+    if (subItem.path) {
+      navigate(subItem.path);
+      return;
+    }
+
+    // 2. sectionId 기반 스크롤 메뉴인 경우 (예: AI 점장 보고, 생활권 매칭 등)
+    if (subItem.sectionId) {
+      if (location.pathname !== item.path) {
+        // AI 매니저 페이지가 아니면 페이지 이동 후 해당 section 위치로 이동
+        navigate(`${item.path}#${subItem.sectionId}`);
+      } else {
+        // 이미 AI 매니저 페이지에 있다면 해시 스크롤 이동
+        const targetElement = document.getElementById(subItem.sectionId);
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setActiveSection(subItem.sectionId);
+        }
       }
     }
   };
@@ -328,20 +336,25 @@ function Sidebar({ approvalStatus }) {
                     {/* 하위 서브메뉴(children)가 있는 경우 렌더링 */}
                     {item.children && isActive && (
                       <SubMenuWrapper>
-                        {item.children.map((subItem) => (
-                          <SubMenuItem
-                            key={subItem.id}
-                            $active={activeSection === subItem.sectionId}
-                            onClick={() => handleSubMenuClick(item, subItem)}
-                          >
-                            <IconWrapper
-                              $active={activeSection === subItem.sectionId}
+                        {item.children.map((subItem) => {
+                          // subItem.path가 있으면 현재 URL과 일치하는지, 없으면 activeSection과 일치하는지 판단
+                          const isSubActive = subItem.path
+                            ? location.pathname === subItem.path
+                            : activeSection === subItem.sectionId;
+
+                          return (
+                            <SubMenuItem
+                              key={subItem.id}
+                              $active={isSubActive}
+                              onClick={() => handleSubMenuClick(item, subItem)}
                             >
-                              {subItem.icon}
-                            </IconWrapper>
-                            {subItem.name}
-                          </SubMenuItem>
-                        ))}
+                              <IconWrapper $active={isSubActive}>
+                                {subItem.icon}
+                              </IconWrapper>
+                              {subItem.name}
+                            </SubMenuItem>
+                          );
+                        })}
                       </SubMenuWrapper>
                     )}
                   </div>

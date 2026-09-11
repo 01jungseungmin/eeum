@@ -100,7 +100,7 @@ export const OWNER_MENU_CONFIG = [
           {
             id: 'ai-plan',
             name: '플랜 관리',
-            sectionId: 'section-ai-plan',
+            path: '/ai-manager/plan',
             icon: <CreditCard {...iconProps} />,
           },
         ],
@@ -335,6 +335,17 @@ const SUB_PAGE_CONFIG = {
     id: 'ai-care-detail',
     name: 'AI 고객 케어 상세',
     subtitle: '다시 안내하면 좋을 고객 분석과 AI 준비 메시지 현황을 보여줘요.',
+  },
+  '/ai-manager/location': {
+    id: 'ai-location-detail',
+    name: '생활권 매칭 상세',
+    subtitle:
+      '우리 가게와 잘 맞는 주변 생활권 고객을 찾아 노출 대상을 추천해요.',
+  },
+  '/ai-manager/plan': {
+    id: 'ai-plan-management',
+    name: '플랜 관리',
+    subtitle: '매장 성장을 돕는 최적의 AI 매니저 플랜을 선택하고 변경하세요.',
   },
 };
 

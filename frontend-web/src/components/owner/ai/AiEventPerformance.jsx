@@ -7,6 +7,7 @@ import {
   Tag,
   Lightbulb,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -184,7 +185,20 @@ const CreateEventButton = styled.button`
   }
 `;
 
-export default function AiEventPerformance() {
+export default function AiEventPerformance({ data }) {
+  const navigate = useNavigate();
+
+  // 소수점 수치 % 변환 계산 (예: 0.114 -> 11.4%)
+  const conversionRate =
+    data?.orderConversionRate != null
+      ? (data.orderConversionRate * 100).toFixed(1)
+      : '0';
+
+  const newCustomerRatio =
+    data?.newCustomerRatio != null
+      ? (data.newCustomerRatio * 100).toFixed(0)
+      : '0';
+
   return (
     <CardContainer id="section-ai-event">
       <Header>
@@ -197,7 +211,7 @@ export default function AiEventPerformance() {
             <p>지난 이벤트 결과 분석</p>
           </TitleArea>
         </HeaderLeft>
-        <MoreButton>
+        <MoreButton onClick={() => navigate('/ai-manager/event')}>
           더보기 <ChevronRight size={16} />
         </MoreButton>
       </Header>
@@ -207,34 +221,30 @@ export default function AiEventPerformance() {
         <StatCard>
           <StatTitle>상품 조회수</StatTitle>
           <StatValue>
-            <span className="old">210</span>
-            <span className="arrow">→</span>
-            318 <span className="unit">회</span>
+            {data?.productViewCount?.toLocaleString() ?? 0}{' '}
+            <span className="unit">회</span>
           </StatValue>
         </StatCard>
 
         <StatCard>
           <StatTitle>주문 전환율</StatTitle>
           <StatValue>
-            <span className="old">8.2</span>
-            <span className="arrow">→</span>
-            11.4 <span className="unit">%</span>
+            {conversionRate} <span className="unit">%</span>
           </StatValue>
         </StatCard>
 
         <StatCard>
           <StatTitle>신규 고객 비중</StatTitle>
           <StatValue>
-            <span className="old">22</span>
-            <span className="arrow">→</span>
-            31 <span className="unit">%</span>
+            {newCustomerRatio} <span className="unit">%</span>
           </StatValue>
         </StatCard>
 
         <StatCard>
           <StatTitle>단골 재주문</StatTitle>
           <StatValue>
-            14 <span className="unit">건</span>
+            {data?.regularReorderCount?.toLocaleString() ?? 0}{' '}
+            <span className="unit">건</span>
           </StatValue>
         </StatCard>
       </StatsGrid>
@@ -247,24 +257,32 @@ export default function AiEventPerformance() {
         <AiSummaryContent>
           <h5>AI 요약</h5>
           <p>
-            신규 고객 유입에는 효과가 있었지만, 단골 재방문 효과는 낮았습니다.
+            {data?.aiSummary ||
+              data?.emptyMessage ||
+              '이벤트 성과 데이터 수집 중입니다.'}
           </p>
         </AiSummaryContent>
       </AiSummaryBox>
 
-      {/* 팁 박스 */}
-      <TipBox>
-        <Lightbulb
-          size={16}
-          color="#d97706"
-        />
-        <div>
-          이번 주에는 <span>단골 전용 메시지</span> 와 함께 운영해보세요.
-        </div>
-      </TipBox>
+      {/* 추천 액션 / 팁 박스 */}
+      {data?.nextEventRecommendation?.reason && (
+        <TipBox>
+          <Lightbulb
+            size={16}
+            color="#d97706"
+          />
+          <div>{data.nextEventRecommendation.reason}</div>
+        </TipBox>
+      )}
 
       {/* 다음 이벤트 만들기 버튼 */}
-      <CreateEventButton>
+      <CreateEventButton
+        onClick={() =>
+          navigate('/ai-manager/event/create', {
+            state: { recommendation: data?.nextEventRecommendation || null },
+          })
+        }
+      >
         <Tag size={16} /> 다음 이벤트 만들기
       </CreateEventButton>
     </CardContainer>

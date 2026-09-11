@@ -1,17 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Users,
-  Sparkles,
-  ShoppingCart,
-  Heart,
-  MessageSquare,
-  Send,
-  Megaphone,
-} from 'lucide-react';
+import { ArrowLeft, Users, Sparkles, Send, Megaphone } from 'lucide-react';
 import CustomerCareCard from '../../../components/owner/ai/CustomerCareCard';
+import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { CARE_TYPE_CONFIG } from '../../../constants/aiManager'; // CARE_TYPE_CONFIG import 필요
 
 const PageContainer = styled.div`
   display: flex;
@@ -210,49 +204,80 @@ const FooterNote = styled.p`
   margin: 12px 0 0 0;
 `;
 
-// 데이터 리스트
-const CARE_ITEMS = [
-  {
-    id: 'card-1',
-    icon: ShoppingCart,
-    iconBgColor: '#ecfdf5',
-    iconColor: '#059669',
-    priority: '우선순위 1',
-    title: '구매 관심이 높은 고객 2명',
-    tag: '장바구니 담기 · 반복 조회',
-    description:
-      '장바구니에 상품을 담았지만 아직 주문하지 않은 고객, 같은 상품을 여러 번 확인한 고객이에요.',
-    message:
-      '담아두신 김치찌개 세트가 오늘 점심 포장 할인 중입니다. 필요하실 때 편하게 이용해보세요.',
-  },
-  {
-    id: 'card-2',
-    icon: Heart,
-    iconBgColor: '#fef2f2',
-    iconColor: '#ef4444',
-    priority: '우선순위 2',
-    title: '한동안 방문이 없는 단골 5명',
-    tag: '3주 이상 미방문',
-    description: '최근 3주간 주문이 없는 기존 단골 고객이에요.',
-    message:
-      '오랜만이에요. 자주 찾아주셨던 메뉴가 이번 주 다시 준비되었습니다.',
-  },
-  {
-    id: 'card-3',
-    icon: MessageSquare,
-    iconBgColor: '#eff6ff',
-    iconColor: '#3b82f6',
-    priority: '우선순위 3',
-    title: '문의 후 망설이는 고객 2명',
-    tag: '문의 후 미주문',
-    description: '문의까지 했지만 주문으로 이어지지 않은 고객이에요.',
-    message:
-      '남겨주신 문의 관련해 안내드려요. 궁금하신 점 있으시면 편하게 말씀해 주세요.',
-  },
-];
+const LoadingText = styled.div`
+  padding: 40px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+`;
 
 export default function AiCareDetailPage() {
   const navigate = useNavigate();
+
+  // API 상태 관리
+  const [careList, setCareList] = useState([]);
+  const [summaryData, setSummaryData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // 모달 제어
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [modalErrorMessage, setModalErrorMessage] = useState('');
+
+  useEffect(() => {
+    const fetchPageData = async () => {
+      try {
+        setLoading(true);
+
+        // 조회할 careType 목록 정의
+        const careTypes = [
+          'CART_INTEREST',
+          'INACTIVE_REGULAR',
+          'INQUIRY_HESITATION',
+        ];
+
+        // 3가지 케어 카드 단건 조회와 활동 요약 조회를 동시에 요청
+        const [careResults, summaryRes] = await Promise.allSettled([
+          Promise.all(
+            careTypes.map((type) =>
+              aiManagerApi.getCustomerCareCardByType(type),
+            ),
+          ),
+        ]);
+
+        // 1. 케어 카드 데이터 설정
+        if (careResults.status === 'fulfilled') {
+          // Promise.all로 묶인 응답에서 data.data만 추출
+          const cardsData = careResults.value
+            .filter((res) => res?.data?.success)
+            .map((res) => res.data.data);
+
+          setCareList(cardsData);
+        }
+
+        // 2. 활동 요약 데이터 설정
+        if (
+          summaryRes.status === 'fulfilled' &&
+          summaryRes.value?.data?.success
+        ) {
+          setSummaryData(summaryRes.value.data.data);
+        } else if (summaryRes.status === 'rejected') {
+          const errResponse = summaryRes.reason?.response?.data;
+          if (errResponse?.error?.code === 'AI_001') {
+            setModalErrorMessage(errResponse.error.message);
+            setIsUpgradeModalOpen(true);
+          }
+        }
+      } catch (error) {
+        console.error('페이지 데이터 로딩 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPageData();
+  }, []);
+
+  const excludedCount = careList[0]?.recentlyNotifiedExcludedCount ?? 0;
 
   return (
     <PageContainer>
@@ -276,36 +301,80 @@ export default function AiCareDetailPage() {
       </HeaderArea>
 
       <MainGrid>
-        {/* 리스트를 매핑으로 처리 */}
+        {/* 좌측 카드 리스트 (API 연동 데이터) */}
         <CardListContainer>
-          {CARE_ITEMS.map((item) => (
-            <CustomerCareCard
-              key={item.id}
-              data={item}
-              variant="detail"
-            />
-          ))}
+          {loading ? (
+            <LoadingText>
+              고객 케어 상세 분석을 불러오는 중입니다...
+            </LoadingText>
+          ) : (
+            careList.map((item, index) => {
+              const config =
+                CARE_TYPE_CONFIG[item.careType] ||
+                CARE_TYPE_CONFIG.CART_INTEREST;
+              const cardId = item.careType || `care-card-${index}`;
+
+              const formattedData = {
+                id: cardId,
+                careType: item.careType,
+                icon: config.icon,
+                iconBgColor: config.iconBgColor,
+                iconColor: config.iconColor,
+                priority: item.priority
+                  ? `우선순위 ${item.priority}`
+                  : `우선순위 ${index + 1}`,
+                title: `${item.title || config.defaultTitle} ${item.targetCustomerCount ?? 0}명`,
+                description: item.reason || config.defaultDesc,
+                message: item.preparedMessage || null,
+                sendable: item.sendable ?? false,
+                secondaryAction:
+                  item.careType === 'INQUIRY_HESITATION' ||
+                  config.secondaryAction,
+                targetCustomerCount: item.targetCustomerCount ?? 0,
+              };
+
+              return (
+                <CustomerCareCard
+                  key={cardId}
+                  data={formattedData}
+                  variant="detail"
+                />
+              );
+            })
+          )}
         </CardListContainer>
 
+        {/* 우측 사이드 패널 */}
         <SidePanel>
           <SummaryCard>
-            <h3>이번 주 전송 현황</h3>
+            <h3>{summaryData?.period || '최근 30일'} 전송 현황</h3>
             <SummaryList>
               <SummaryRow>
-                <span className="label">전송 예약</span>
-                <span className="value">2건</span>
+                <span className="label">전송 완료</span>
+                <span className="value">
+                  {loading ? '-' : `${summaryData?.sentCount ?? 0}건`}
+                </span>
               </SummaryRow>
               <SummaryRow>
                 <span className="label">대기 중 초안</span>
-                <span className="value">1건</span>
+                <span className="value">
+                  {loading ? '-' : `${summaryData?.draftCount ?? 0}건`}
+                </span>
               </SummaryRow>
               <SummaryRow>
-                <span className="label">자동 제외 고객</span>
-                <span className="value">4명</span>
+                <span className="label">단골 안부 메시지</span>
+                <span className="value">
+                  {loading ? '-' : `${summaryData?.regularMessageCount ?? 0}건`}
+                </span>
               </SummaryRow>
+
               <SummaryRow>
                 <span className="label">발송 후 재방문</span>
-                <span className="value">4명</span>
+                <span className="value">
+                  {loading
+                    ? '-'
+                    : `${summaryData?.revisitAfterMessageCount ?? 0}명`}
+                </span>
               </SummaryRow>
             </SummaryList>
           </SummaryCard>
@@ -314,7 +383,7 @@ export default function AiCareDetailPage() {
             <PrimaryButton onClick={() => navigate('/ai-manager/chat')}>
               <Send size={16} /> AI 점장에게 물어보기
             </PrimaryButton>
-            <SecondaryButton>
+            <SecondaryButton onClick={() => navigate('/ai-manager/notice')}>
               <Megaphone size={16} /> 공지 문구 만들기
             </SecondaryButton>
           </ActionButtonGroup>
@@ -322,8 +391,17 @@ export default function AiCareDetailPage() {
       </MainGrid>
 
       <FooterNote>
-        상세 행동 로그는 노출하지 않고, 요약된 관계 신호만 제공합니다.
+        ⓘ 최근 7일 내 알림을 받은 고객 {excludedCount}명은 피로도 방지 차원에서
+        자동 제외됐습니다. 상세 행동 로그는 노출하지 않고, 요약된 관계 신호만
+        제공합니다.
       </FooterNote>
+
+      {/* 플랜 업그레이드 안내 모달 */}
+      <PlanUpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        errorMessage={modalErrorMessage}
+      />
     </PageContainer>
   );
 }

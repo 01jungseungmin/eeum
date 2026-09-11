@@ -61,7 +61,6 @@ const Description = styled.p`
   line-height: 1.5;
 `;
 
-/* 추가된 스타일 컴포넌트 */
 const AskAiButton = styled.button`
   display: flex;
   align-items: center;
@@ -144,7 +143,6 @@ const CountSub = styled.span`
   z-index: 1;
 `;
 
-/* 배경 투명 아이콘 컴포넌트 정의 */
 const CheckIconBg = styled(CheckCircle2)`
   position: absolute;
   right: -10px;
@@ -152,8 +150,27 @@ const CheckIconBg = styled(CheckCircle2)`
   color: rgba(255, 255, 255, 0.08);
 `;
 
-export default function AiManagerReport() {
+// 날짜 포맷 함수 (예: 2026-08-31T17:21:04 -> "오늘 17:21 기준")
+const formatReportTime = (isoString) => {
+  if (!isoString) return '오늘 기준';
+  try {
+    const date = new Date(isoString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `오늘 ${hours}:${minutes} 기준`;
+  } catch {
+    return '오늘 기준';
+  }
+};
+
+export default function AiManagerReport({
+  todoCount,
+  reportedAt,
+  privacyNotice,
+}) {
   const navigate = useNavigate();
+
+  const formattedTime = formatReportTime(reportedAt);
 
   return (
     <CardContainer id="section-ai-report">
@@ -165,7 +182,7 @@ export default function AiManagerReport() {
         <Description>
           확인 후 전송·등록만 해주세요. AI는 임의로 발송하지 않습니다.
           <br />
-          오늘 오전 8:00 기준으로 정리된 영업 전 보고입니다.
+          {formattedTime}으로 정리된 영업 전 보고입니다.
         </Description>
 
         {/* AI 점장에게 직접 물어보기 버튼 */}
@@ -184,7 +201,9 @@ export default function AiManagerReport() {
         </AskAiButton>
 
         <FooterNote>
-          ⓘ 고객 동의 범위 내에서 제공되는 집계 신호를 바탕으로 작성됐습니다.
+          ⓘ{' '}
+          {privacyNotice ||
+            '고객 동의 범위 내에서 제공되는 신호 바탕으로 작성됐습니다.'}
         </FooterNote>
       </ContentLeft>
 
@@ -192,7 +211,8 @@ export default function AiManagerReport() {
         <CheckIconBg size={80} />
         <CountTitle>오늘 처리할 항목</CountTitle>
         <CountNumber>
-          8<span>건</span>
+          {todoCount ?? 0}
+          <span>건</span>
         </CountNumber>
         <CountSub>검토 후 전송·등록 대기 중</CountSub>
       </CountBox>

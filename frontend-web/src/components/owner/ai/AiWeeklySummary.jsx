@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import {
   BarChart3,
@@ -10,6 +10,7 @@ import {
   ShoppingBag,
   CheckCircle,
 } from 'lucide-react';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -148,7 +149,43 @@ const FooterText = styled.p`
   margin: 0;
 `;
 
+const LoadingText = styled.div`
+  font-size: 14px;
+  color: #6b7280;
+  padding: 20px 0;
+  text-align: center;
+`;
+
 export default function AiWeeklySummary() {
+  const [summaryData, setSummaryData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        const response = await aiManagerApi.getActivitySummary();
+
+        if (response.data.success) {
+          setSummaryData(response.data.data);
+        }
+      } catch (error) {
+        console.error('AI 활동 요약 데이터를 불러오는 중 오류 발생:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSummary();
+  }, []);
+
+  if (loading) {
+    return (
+      <CardContainer id="section-ai-summary">
+        <LoadingText>데이터를 불러오는 중입니다...</LoadingText>
+      </CardContainer>
+    );
+  }
+
   return (
     <CardContainer id="section-ai-summary">
       {/* 헤더 */}
@@ -157,8 +194,10 @@ export default function AiWeeklySummary() {
           <BarChart3 size={20} />
         </IconBox>
         <TitleArea>
-          <h3>이번 주 AI 점장 활동</h3>
-          <p>2026.05.26 ~ 2026.06.01 · AI가 처리한 일과 고객 반응</p>
+          <h3>AI 점장 활동 요약</h3>
+          <p>
+            {summaryData?.period || '최근 30일'} · AI가 처리한 일과 고객 반응
+          </p>
         </TitleArea>
       </Header>
 
@@ -173,7 +212,8 @@ export default function AiWeeklySummary() {
           </StatIconBox>
           <StatText>
             <div className="val">
-              12<span>건</span>
+              {summaryData?.reviewReplyDraftCount ?? 0}
+              <span>건</span>
             </div>
             <div className="label">리뷰 답글 초안</div>
           </StatText>
@@ -188,7 +228,8 @@ export default function AiWeeklySummary() {
           </StatIconBox>
           <StatText>
             <div className="val">
-              7<span>건</span>
+              {summaryData?.inquiryReplyDraftCount ?? 0}
+              <span>건</span>
             </div>
             <div className="label">문의 답변 초안</div>
           </StatText>
@@ -203,7 +244,8 @@ export default function AiWeeklySummary() {
           </StatIconBox>
           <StatText>
             <div className="val">
-              18<span>건</span>
+              {summaryData?.regularMessageCount ?? 0}
+              <span>건</span>
             </div>
             <div className="label">단골 메시지</div>
           </StatText>
@@ -218,7 +260,8 @@ export default function AiWeeklySummary() {
           </StatIconBox>
           <StatText>
             <div className="val">
-              3<span>건</span>
+              {summaryData?.inactiveAlertCount ?? 0}
+              <span>건</span>
             </div>
             <div className="label">이탈 고객 알림</div>
           </StatText>
@@ -234,10 +277,10 @@ export default function AiWeeklySummary() {
             <Repeat
               size={18}
               color="#16a34a"
-            />{' '}
+            />
             단골 메시지 발송 후 재방문
           </RowLeft>
-          <RowValue>4명</RowValue>
+          <RowValue>{summaryData?.revisitAfterMessageCount ?? 0}명</RowValue>
         </ResponseRow>
 
         <ResponseRow>
@@ -245,10 +288,12 @@ export default function AiWeeklySummary() {
             <ShoppingBag
               size={18}
               color="#16a34a"
-            />{' '}
+            />
             이벤트 알림 후 주문 전환
           </RowLeft>
-          <RowValue>3건</RowValue>
+          <RowValue>
+            {summaryData?.orderConversionAfterEventCount ?? 0}건
+          </RowValue>
         </ResponseRow>
 
         <ResponseRow>
@@ -256,10 +301,12 @@ export default function AiWeeklySummary() {
             <CheckCircle
               size={18}
               color="#16a34a"
-            />{' '}
+            />
             미답변 문의
           </RowLeft>
-          <RowValue>0건 유지</RowValue>
+          <RowValue>
+            {summaryData?.unansweredInquiryRemainingCount ?? 0}건 유지
+          </RowValue>
         </ResponseRow>
       </ResponseSection>
 

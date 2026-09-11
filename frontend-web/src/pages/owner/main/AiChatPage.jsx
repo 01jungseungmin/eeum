@@ -5,29 +5,31 @@ import {
   ArrowLeft,
   Info,
   Sparkles,
-  Tag,
-  Megaphone,
-  Star,
-  Heart,
-  MessageCircle,
-  TrendingUp,
-  ShieldCheck,
-  Edit3,
-  ArrowUp,
-  Bot,
-  User,
+  Loader2,
+  ExternalLink,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
+
+// API 및 모달 경로
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
+
+// 상수로 분리한 데이터 (.jsx)
+import {
+  INITIAL_CHAT_MESSAGES,
+  ACTION_ROUTES,
+} from '../../../constants/aiChatConstants';
 
 const PageContainer = styled.div`
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 100px); /* 전체 화면 높이에 맞춰 조절 */
+  height: calc(100vh - 100px);
   max-width: 1200px;
   margin: 0 auto;
   position: relative;
 `;
 
-/* AI 매니저로 돌아가기 버튼 */
 const BackButton = styled.button`
   display: inline-flex;
   align-items: center;
@@ -47,7 +49,6 @@ const BackButton = styled.button`
   }
 `;
 
-/* 안내 배너 */
 const InfoBanner = styled.div`
   background-color: #f0fdf4;
   border-radius: 10px;
@@ -60,13 +61,13 @@ const InfoBanner = styled.div`
   margin-bottom: 16px;
 `;
 
-/* 추천 질문 칩 가로 스크롤 영역 */
 const ChipScrollContainer = styled.div`
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 12px;
   margin-bottom: 16px;
+  flex-shrink: 0;
 
   &::-webkit-scrollbar {
     display: none;
@@ -91,9 +92,13 @@ const ChipButton = styled.button`
     background-color: #f9fafb;
     border-color: #d1d5db;
   }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;
 
-/* 채팅 메시지 출력 영역 */
 const ChatMessageArea = styled.div`
   flex: 1;
   overflow-y: auto;
@@ -123,7 +128,7 @@ const AiAvatar = styled.div`
 `;
 
 const MessageBubble = styled.div`
-  max-width: 60%;
+  max-width: 65%;
   background-color: ${(props) => (props.$isUser ? '#374151' : '#ffffff')};
   color: ${(props) => (props.$isUser ? '#ffffff' : '#1f2937')};
   border: ${(props) => (props.$isUser ? 'none' : '1px solid #f3f4f6')};
@@ -134,192 +139,162 @@ const MessageBubble = styled.div`
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
-`;
-
-/* 하단 입력 폼 영역 */
-const InputAreaContainer = styled.div`
-  margin-top: auto;
-  padding-top: 16px;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 12px;
 `;
 
-const NoticeText = styled.span`
+const ActionButtonGroup = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+`;
+
+const ActionButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #dcfce7;
+    border-color: #86efac;
+  }
+`;
+
+const OutOfScopeBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #d97706;
+  background-color: #fef3c7;
+  padding: 4px 8px;
+  border-radius: 6px;
+  width: fit-content;
+  font-weight: 600;
+`;
+
+const NoticeText = styled.p`
   font-size: 12px;
   color: #9ca3af;
   text-align: center;
+  margin: 16px 0 0 0;
 `;
-
-const InputBoxWrapper = styled.form`
-  width: 100%;
-  background-color: #f3f4f6;
-  border-radius: 28px;
-  padding: 6px 8px 6px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-`;
-
-const StyledInput = styled.input`
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-size: 14px;
-  color: #111827;
-
-  &::placeholder {
-    color: #9ca3af;
-  }
-`;
-
-const SendButton = styled.button`
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: ${(props) => (props.$hasText ? '#3b82f6' : '#34d399')};
-  color: #ffffff;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    opacity: 0.9;
-  }
-`;
-
-// 추천 질문 데이터 리스트
-const QUICK_QUESTIONS = [
-  {
-    icon: (
-      <Tag
-        size={14}
-        color="#d97706"
-      />
-    ),
-    text: '이번 주 이벤트 뭐 할까요?',
-  },
-  {
-    icon: (
-      <Megaphone
-        size={14}
-        color="#2563eb"
-      />
-    ),
-    text: '오늘 공지 문구 써줘',
-  },
-  {
-    icon: (
-      <Star
-        size={14}
-        color="#ca8a04"
-      />
-    ),
-    text: '우리 가게 리뷰 요약해줘',
-  },
-  {
-    icon: (
-      <Heart
-        size={14}
-        color="#e11d48"
-      />
-    ),
-    text: '단골 고객 메시지 써줘',
-  },
-  {
-    icon: (
-      <MessageCircle
-        size={14}
-        color="#16a34a"
-      />
-    ),
-    text: '미답변 문의 답변 초안 만들어줘',
-  },
-  {
-    icon: (
-      <TrendingUp
-        size={14}
-        color="#0284c7"
-      />
-    ),
-    text: '이번 이벤트 성과 요약해줘',
-  },
-  {
-    icon: (
-      <ShieldCheck
-        size={14}
-        color="#16a34a"
-      />
-    ),
-    text: '에너지·안전 점검 항목 알려줘',
-  },
-  {
-    icon: (
-      <Edit3
-        size={14}
-        color="#4b5563"
-      />
-    ),
-    text: '답글 초안 써줘',
-  },
-];
 
 export default function AiChatPage() {
   const navigate = useNavigate();
   const chatEndRef = useRef(null);
-  const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      sender: 'ai',
-      text: '안녕하세요 사장님!\n리뷰 답글, 공지 문구, 이벤트 추천, 고객 메시지, 문의 답변을 도와드릴 수 있어요.\n아래 질문을 눌러보거나 직접 입력해 주세요 😊',
-    },
-  ]);
 
-  // 자동 스크롤 하단 이동
+  const [isLoading, setIsLoading] = useState(false);
+  const [quickQuestions, setQuickQuestions] = useState([]); // API 질문 목록 상태
+  const [messages, setMessages] = useState(INITIAL_CHAT_MESSAGES);
+
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [upgradeErrorMessage, setUpgradeErrorMessage] = useState('');
+
+  // 고정 추천 질문 목록 조회
+  useEffect(() => {
+    const fetchQuickQuestions = async () => {
+      try {
+        const response = await aiManagerApi.getQuickQuestions();
+        if (response.data?.success) {
+          setQuickQuestions(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('추천 질문 조회 실패:', error);
+      }
+    };
+
+    fetchQuickQuestions();
+  }, []);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isLoading]);
 
-  // 메시지 전송 핸들러
-  const handleSend = (textToSend) => {
-    const query = textToSend || inputText;
-    if (!query.trim()) return;
-
-    // 사용자 메시지 추가
-    const userMsg = { id: Date.now(), sender: 'user', text: query };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputText('');
-
-    // AI 모의 답변 생성 (1초 후)
-    setTimeout(() => {
-      const aiMsg = {
-        id: Date.now() + 1,
-        sender: 'ai',
-        text: `'${query}'에 대해 요청하신 내용을 바탕으로 작성을 완료했습니다! 추가로 수정하고 싶으신 부분이 있다면 편하게 말씀해 주세요.`,
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    }, 800);
+  // 액션 버튼 이동 처리
+  const handleActionClick = (actionType) => {
+    const targetRoute = ACTION_ROUTES[actionType];
+    if (targetRoute) {
+      navigate(targetRoute);
+    } else {
+      console.warn('미정의된 ActionType:', actionType);
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    handleSend();
+  // 질문 칩 선택 시 API 전송
+  const handleSend = async (qItem) => {
+    if (isLoading || !qItem) return;
+
+    const payload = {
+      quickQuestionId: qItem.id,
+      text: qItem.question,
+    };
+
+    const userMsg = {
+      id: Date.now(),
+      sender: 'user',
+      text: qItem.question,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
+    try {
+      const response = await aiManagerApi.sendChatMessage(payload);
+
+      if (response.data?.success) {
+        const resData = response.data.data;
+
+        const aiMsg = {
+          id: Date.now() + 1,
+          sender: 'ai',
+          text: resData?.text || '답변이 완료되었습니다.',
+          actions: resData?.actions || [],
+          outOfScope: resData?.outOfScope || false,
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+      }
+    } catch (error) {
+      const errResponse = error.response?.data;
+
+      if (errResponse?.error?.code === 'AI_001') {
+        setUpgradeErrorMessage(errResponse.error.message);
+        setIsUpgradeModalOpen(true);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + 1,
+            sender: 'ai',
+            text:
+              errResponse?.error?.message ||
+              '메시지 전송 중 오류가 발생했습니다.',
+          },
+        ]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <PageContainer>
-      {/* 돌아가기 버튼 */}
       <BackButton onClick={() => navigate('/ai-manager')}>
         <ArrowLeft size={16} /> AI 매니저로 돌아가기
       </BackButton>
 
-      {/* 상단 안내 배너 */}
       <InfoBanner>
         <Info size={16} />
         <span>
@@ -328,20 +303,30 @@ export default function AiChatPage() {
         </span>
       </InfoBanner>
 
-      {/* 추천 질문 칩 스크롤 바 */}
+      {/* API로 로드한 질문 칩 렌더링 */}
       <ChipScrollContainer>
-        {QUICK_QUESTIONS.map((q, idx) => (
+        {quickQuestions.map((q) => (
           <ChipButton
-            key={idx}
-            onClick={() => handleSend(q.text)}
+            key={q.id}
+            onClick={() => handleSend(q)}
+            disabled={isLoading}
           >
-            {q.icon}
-            {q.text}
+            {q.generative ? (
+              <Sparkles
+                size={14}
+                color="#10b981"
+              />
+            ) : (
+              <HelpCircle
+                size={14}
+                color="#6b7280"
+              />
+            )}
+            {q.question}
           </ChipButton>
         ))}
       </ChipScrollContainer>
 
-      {/* 채팅 메시지 출력 영역 */}
       <ChatMessageArea>
         {messages.map((msg) => (
           <MessageRow
@@ -354,34 +339,57 @@ export default function AiChatPage() {
               </AiAvatar>
             )}
             <MessageBubble $isUser={msg.sender === 'user'}>
-              {msg.text}
+              {msg.outOfScope && (
+                <OutOfScopeBadge>
+                  <AlertCircle size={14} /> 답변 범위 외 질문
+                </OutOfScopeBadge>
+              )}
+
+              <div>{msg.text}</div>
+
+              {msg.actions && msg.actions.length > 0 && (
+                <ActionButtonGroup>
+                  {msg.actions.map((act, index) => (
+                    <ActionButton
+                      key={index}
+                      onClick={() => handleActionClick(act.actionType)}
+                    >
+                      {act.label} <ExternalLink size={14} />
+                    </ActionButton>
+                  ))}
+                </ActionButtonGroup>
+              )}
             </MessageBubble>
           </MessageRow>
         ))}
+
+        {isLoading && (
+          <MessageRow $isUser={false}>
+            <AiAvatar>
+              <Sparkles size={20} />
+            </AiAvatar>
+            <MessageBubble $isUser={false}>
+              <Loader2
+                size={18}
+                style={{ animation: 'spin 1s linear infinite' }}
+              />
+            </MessageBubble>
+          </MessageRow>
+        )}
+
         <div ref={chatEndRef} />
       </ChatMessageArea>
 
-      {/* 하단 입력창 */}
-      <InputAreaContainer>
-        <NoticeText>
-          저는 이음 안에서의 가게 운영, 고객 응대, 공지, 이벤트, 리뷰, 예약,
-          안전 점검과 관련된 내용만 도와드릴 수 있어요.
-        </NoticeText>
-        <InputBoxWrapper onSubmit={handleSubmit}>
-          <StyledInput
-            type="text"
-            placeholder="리뷰·공지·이벤트·고객 메시지에 대해 물어보세요"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-          />
-          <SendButton
-            type="submit"
-            $hasText={!!inputText.trim()}
-          >
-            <ArrowUp size={20} />
-          </SendButton>
-        </InputBoxWrapper>
-      </InputAreaContainer>
+      <NoticeText>
+        저는 이음 안에서의 가게 운영, 고객 응대, 공지, 이벤트, 리뷰, 예약, 안전
+        점검과 관련된 내용만 도와드릴 수 있어요.
+      </NoticeText>
+
+      <PlanUpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        errorMessage={upgradeErrorMessage}
+      />
     </PageContainer>
   );
 }

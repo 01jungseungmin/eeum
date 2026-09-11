@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import {
-  Users,
-  ChevronRight,
-  ShoppingCart,
-  Heart,
-  MessageSquare,
-} from 'lucide-react';
+import { Users, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { CARE_TYPE_CONFIG } from '../../../constants/aiManager';
+
 import CustomerCareCard from './CustomerCareCard';
 import CustomerCareModal from './modal/CustomerCareModal';
 
@@ -75,6 +73,10 @@ const CardGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const FooterInfo = styled.p`
@@ -83,69 +85,54 @@ const FooterInfo = styled.p`
   margin: 16px 0 0;
 `;
 
-// 카드 목록 데이터
-const CARD_DATA_LIST = [
-  {
-    id: 'card-1',
-    icon: ShoppingCart,
-    iconBgColor: '#e0f2fe',
-    iconColor: '#0284c7',
-    priority: '우선순위 1',
-    title: '구매 관심이 높은 고객 2명',
-    description:
-      '장바구니에 상품을 담았지만 아직 주문하지 않은 고객, 같은 상품을 여러 번 확인한 고객',
-    bannerText:
-      '장바구니에 상품을 담은 뒤 아직 주문하지 않았고, 이전에 비슷한 메뉴를 이용한 이력이 있는 고객입니다.',
-    message:
-      '담아두신 김치찌개 세트가 오늘 점심 포장 할인 중입니다. 필요하실 때 편하게 이용해보세요.',
-    secondaryAction: false,
-  },
-  {
-    id: 'card-2',
-    icon: Heart,
-    iconBgColor: '#fce7f3',
-    iconColor: '#db2777',
-    priority: '우선순위 2',
-    title: '한동안 방문이 없는 단골 5명',
-    description: '최근 3주간 주문이 없는 기존 단골 고객',
-    bannerText: '최근 3주간 주문 이력이 없는 단골 고객입니다.',
-    message:
-      '오랜만이에요. 자주 찾아주셨던 메뉴가 이번 주 다시 준비되었습니다.',
-    secondaryAction: false,
-  },
-  {
-    id: 'card-3',
-    icon: MessageSquare,
-    iconBgColor: '#f3e8ff',
-    iconColor: '#9333ea',
-    priority: '우선순위 3',
-    title: '문의 후 망설이는 고객 2명',
-    description: '문의까지 했지만 주문으로 이어지지 않은 고객',
-    message: null,
-    secondaryAction: true,
-  },
-];
+const LoadingText = styled.div`
+  padding: 40px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+`;
 
 export default function AiCustomerCare() {
   const navigate = useNavigate();
 
-  // 모달 상태
+  const [careList, setCareList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const [modalState, setModalState] = useState({
     isOpen: false,
     step: 'review',
     cardData: null,
   });
-
-  // 발송 완료 상태 저장
   const [sentStatus, setSentStatus] = useState({});
 
-  /* Action 핸들러 */
+  // 컴포넌트 마운트 시 전체 조회 API 호출
+  useEffect(() => {
+    const fetchCustomerCareCards = async () => {
+      try {
+        setLoading(true);
+        const res = await aiManagerApi.getCustomerCareCards();
+
+        // Response 구조: { success: true, data: [ ... ] }
+        const resultData = res?.data?.data || res?.data || [];
+        if (Array.isArray(resultData)) {
+          setCareList(resultData);
+        }
+      } catch (error) {
+        console.error('AI 고객 케어 목록 조회 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCustomerCareCards();
+  }, []);
+
   const handleCardAction = (cardData) => {
     if (cardData.secondaryAction) {
-      // 답변 초안 모달 혹은 페이지 이동 등의 동작 연결
+      navigate('/ai-manager/care');
       return;
     }
-    if (sentStatus[cardData.id]) return;
+    if (sentStatus[cardData.id] || !cardData.sendable) return;
 
     setModalState({
       isOpen: true,
@@ -165,6 +152,9 @@ export default function AiCustomerCare() {
     setModalState({ isOpen: false, step: 'review', cardData: null });
   };
 
+  // 피로도 제외 인원 수 추출 (첫 번째 카드 데이터 기준)
+  const excludedCount = careList[0]?.recentlyNotifiedExcludedCount ?? 0;
+
   return (
     <CareContainer id="section-ai-care">
       <Header>
@@ -182,24 +172,52 @@ export default function AiCustomerCare() {
         </MoreButton>
       </Header>
 
-      <CardGrid>
-        {CARD_DATA_LIST.map((item) => (
-          <CustomerCareCard
-            key={item.id}
-            data={item}
-            isSent={!!sentStatus[item.id]}
-            onActionClick={handleCardAction}
-          />
-        ))}
-      </CardGrid>
+      {loading ? (
+        <LoadingText>고객 케어 데이터를 불러오는 중입니다...</LoadingText>
+      ) : (
+        <CardGrid>
+          {careList.map((item, index) => {
+            const config =
+              CARE_TYPE_CONFIG[item.careType] || CARE_TYPE_CONFIG.CART_INTEREST;
+            const cardId = item.careType || `care-card-${index}`;
+
+            const formattedData = {
+              id: cardId,
+              careType: item.careType,
+              icon: config.icon,
+              iconBgColor: config.iconBgColor,
+              iconColor: config.iconColor,
+              priority: item.priority
+                ? `우선순위 ${item.priority}`
+                : `우선순위 ${index + 1}`,
+              title: `${item.title || config.defaultTitle} ${item.targetCustomerCount ?? 0}명`,
+              description: item.reason || config.defaultDesc, // API: reason (사유/설명)
+              message: item.preparedMessage || null, // API: preparedMessage (AI 작성 메시지)
+              sendable: item.sendable ?? false,
+              secondaryAction:
+                item.careType === 'INQUIRY_HESITATION' ||
+                config.secondaryAction,
+              targetCustomerCount: item.targetCustomerCount ?? 0,
+            };
+
+            return (
+              <CustomerCareCard
+                key={cardId}
+                data={formattedData}
+                isSent={!!sentStatus[cardId]}
+                onActionClick={handleCardAction}
+              />
+            );
+          })}
+        </CardGrid>
+      )}
 
       <FooterInfo>
-        ⓘ 최근 7일 내 알림을 받은 고객 4명은 피로도 방지 차원에서 자동
-        제외됐습니다. 상세 행동 로그는 노출하지 않고, 요약된 관계 신호만
+        ⓘ 최근 7일 내 알림을 받은 고객 {excludedCount}명은 피로도 방지 차원에서
+        자동 제외됐습니다. 상세 행동 로그는 노출하지 않고, 요약된 관계 신호만
         제공합니다.
       </FooterInfo>
 
-      {/* 모달 */}
       <CustomerCareModal
         isOpen={modalState.isOpen}
         step={modalState.step}

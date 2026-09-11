@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { MapPin, ChevronRight, Crown, Users } from 'lucide-react';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi'; // 파일 경로에 맞게 수정
+import { useNavigate } from 'react-router-dom';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -85,12 +87,13 @@ const ChartContent = styled.div`
   margin: 8px 0;
 `;
 
-/* CSS conic-gradient 기반 도넛 차트 */
+/* score -> $score 로 수정하여 전달된 prop을 정상 인식하도록 함 */
 const DonutChart = styled.div`
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: conic-gradient(#34d399 0% 92%, #e5e7eb 92% 100%);
+  background: ${({ $score }) =>
+    `conic-gradient(#34d399 0% ${$score}%, #e5e7eb ${$score}% 100%)`};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -201,6 +204,63 @@ const SubmitButton = styled.button`
 `;
 
 export default function AiLocationMatching() {
+  const [matchData, setMatchData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchLocalMatch = async () => {
+      try {
+        const response = await aiManagerApi.getLocalMatchAnalysis();
+        if (response.data && response.data.success) {
+          setMatchData(response.data.data);
+        }
+      } catch (error) {
+        console.error('생활권 매칭 데이터 조회 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLocalMatch();
+  }, []);
+
+  if (loading) return <div>로딩 중...</div>;
+  if (!matchData) return null;
+
+  const {
+    totalScore,
+    segments,
+    matchReason,
+    estimatedTargetCount,
+    hasData,
+    emptyMessage,
+  } = matchData;
+
+  // 데이터가 없을 때의 예외 처리
+  if (!hasData) {
+    return (
+      <CardContainer id="section-ai-location">
+        <Header>
+          <HeaderLeft>
+            <IconBox>
+              <MapPin size={20} />
+            </IconBox>
+            <div>
+              <TitleArea>
+                <h3>생활권 매칭 매니저</h3>
+              </TitleArea>
+            </div>
+          </HeaderLeft>
+        </Header>
+        <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px 0' }}>
+          {emptyMessage || '분석할 데이터가 부족합니다.'}
+        </p>
+      </CardContainer>
+    );
+  }
+
   return (
     <CardContainer id="section-ai-location">
       <Header>
@@ -216,7 +276,7 @@ export default function AiLocationMatching() {
             <SubText>매칭 점수</SubText>
           </div>
         </HeaderLeft>
-        <MoreButton>
+        <MoreButton onClick={() => navigate('/ai-manager/location')}>
           더보기 <ChevronRight size={16} />
         </MoreButton>
       </Header>
@@ -231,29 +291,31 @@ export default function AiLocationMatching() {
             justifyContent: 'center',
           }}
         >
-          <DonutChart />
+          <DonutChart $score={totalScore} />
           <DonutText>
-            92<span>점</span>
+            {totalScore}
+            <span>점</span>
           </DonutText>
         </div>
         <ScoreDesc>
-          <h4>매칭 점수가 아주 높아요</h4>
-          <p>
-            주변 생활권 고객의 관심사와 잘 맞아요. 지금 노출하면 효과가 커요.
-          </p>
+          <h4>
+            {totalScore >= 80 ? '매칭 점수가 아주 높아요' : '매칭 분석 완료'}
+          </h4>
+          <p>{matchReason}</p>
         </ScoreDesc>
       </ChartContent>
 
-      {/* 태그 목록 */}
-      <TagSection>
-        <TagTitle>매칭 이유</TagTitle>
-        <TagGroup>
-          <Tag>#서울마포구</Tag>
-          <Tag>#한식관심</Tag>
-          <Tag>#점심이벤트진행중</Tag>
-          <Tag>#단골고객多</Tag>
-        </TagGroup>
-      </TagSection>
+      {/* 태그 목록 (segments 배열 동적 바인딩) */}
+      {segments && segments.length > 0 && (
+        <TagSection>
+          <TagTitle>매칭 이유</TagTitle>
+          <TagGroup>
+            {segments.map((tag, index) => (
+              <Tag key={index}>#{tag}</Tag>
+            ))}
+          </TagGroup>
+        </TagSection>
+      )}
 
       {/* Pro 배너 */}
       <ProBanner>
@@ -266,8 +328,8 @@ export default function AiLocationMatching() {
         </div>
       </ProBanner>
 
-      <SubmitButton>
-        <Users size={16} /> 노출 대상 확인하기
+      <SubmitButton onClick={() => navigate('/ai-manager/location')}>
+        <Users size={16} /> 노출 대상 확인하기 ({estimatedTargetCount}명)
       </SubmitButton>
     </CardContainer>
   );

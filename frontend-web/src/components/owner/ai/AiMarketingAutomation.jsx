@@ -7,6 +7,7 @@ import {
   Send,
   RefreshCw,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -162,6 +163,7 @@ const RefreshButton = styled.button`
 
 export default function AiMarketingAutomation() {
   const [activeTab, setActiveTab] = useState('event');
+  const navigate = useNavigate();
 
   return (
     <CardContainer id="section-ai-marketing">
@@ -175,7 +177,7 @@ export default function AiMarketingAutomation() {
             <p>공지·문구 생성 엔진</p>
           </TitleArea>
         </HeaderLeft>
-        <MoreButton>
+        <MoreButton onClick={() => navigate('/ai-manager/marketing')}>
           더보기 <ChevronRight size={16} />
         </MoreButton>
       </Header>
@@ -217,7 +219,7 @@ export default function AiMarketingAutomation() {
 
       {/* 하단 버튼 그룹 */}
       <ActionRow>
-        <SubmitButton>
+        <SubmitButton onClick={() => navigate('/ai-manager/notice')}>
           <Send size={16} /> 공지 등록하기
         </SubmitButton>
         <RefreshButton>
