@@ -81,6 +81,7 @@ class PaymentServiceTest {
                 ownerRevenueService,
                 paymentCancellationService,
                 paymentWebhookProcessor,
+                new PaymentVerificationProcessor(orderRepository, paymentRepository, ownerRevenueService, eventPublisher),
                 aiPlanSubscriptionService
         );
     }

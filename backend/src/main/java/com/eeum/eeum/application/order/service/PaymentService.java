@@ -62,6 +62,7 @@ public class PaymentService {
     private final OwnerRevenueService ownerRevenueService;
     private final PaymentCancellationService paymentCancellationService;
     private final PaymentWebhookProcessor paymentWebhookProcessor;
+    private final PaymentVerificationProcessor paymentVerificationProcessor;
     private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
     private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
@@ -72,13 +73,18 @@ public class PaymentService {
     /** 서명 실패를 DB 이력으로 남기는 최소 간격 — 구간당 1건. */
     private static final Duration SIGNATURE_FAILURE_RECORD_COOLDOWN = Duration.ofMinutes(10);
 
-    @Transactional
     public void verifyPayment(Long accountId, PaymentCompleteRequestDto request) {
+        // prepare는 짧게 잠금·검증 후 커밋한다. PortOne 호출은 그 어떤 DB 락도 쥐지 않는다.
+        Long orderId = paymentVerificationProcessor.prepare(accountId, request);
+        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
+                OperationFailureCategory.EXTERNAL_API, "PaymentService.verifyPayment.getPayment",
+                request.getPaymentId(), "orderId=" + orderId,
+                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
         redisLockService.executeWithLock(
-                LockKeys.orderNumber(request.getOrderNumber()),
+                LockKeys.order(orderId),
                 PAYMENT_LOCK_LEASE_TIME,
                 ErrorCode.LOCK_PAYMENT_FAILED,
-                () -> verifyPaymentWithLock(accountId, request)
+                () -> paymentVerificationProcessor.apply(accountId, request, paymentInfo)
         );
     }
 
@@ -114,12 +120,18 @@ public class PaymentService {
             return;
         }
 
+        Long orderId = paymentRepository.findOrderIdByPortonePaymentId(paymentId).orElse(null);
+        if (orderId == null) {
+            if (paymentId.startsWith(com.eeum.eeum.application.ai.service.AiPlanPaymentCommandExecutor.AI_PLAN_PAYMENT_PREFIX)) {
+                aiPlanSubscriptionService.handleWebhook(paymentId);
+                return;
+            }
+            log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}", paymentId);
+            return;
+        }
         redisLockService.executeWithLock(
-                LockKeys.portonePayment(paymentId),
-                PAYMENT_LOCK_LEASE_TIME,
-                ErrorCode.LOCK_PAYMENT_FAILED,
-                () -> handleWebhookWithLock(request, paymentId)
-        );
+                LockKeys.order(orderId), PAYMENT_LOCK_LEASE_TIME, ErrorCode.LOCK_PAYMENT_FAILED,
+                () -> handleWebhookWithLock(orderId, paymentId));
     }
 
     /** 기존 단위 테스트와 구버전 Webhook의 최소 호환 진입점. HTTP 엔드포인트는 사용하지 않는다. */
@@ -203,24 +215,7 @@ public class PaymentService {
         payment.requestRefund(request.getReason());
     }
 
-    private void handleWebhookWithLock(PaymentWebhookRequestDto request, String paymentId) {
-        /*
-         * 지금 구조에서는 Payment.portonePaymentId에 주문 생성 시 paymentId가 저장되어 있어야
-         * webhook paymentId로 Payment를 찾을 수 있음.
-         */
-        Long orderId = paymentRepository.findOrderIdByPortonePaymentId(paymentId).orElse(null);
-
-        if (orderId == null) {
-            // AI 플랜 구독 결제(ai-plan- prefix)는 AI 플랜 서비스로 위임
-            if (paymentId != null && paymentId
-                    .startsWith(com.eeum.eeum.application.ai.service.AiPlanPaymentCommandExecutor.AI_PLAN_PAYMENT_PREFIX)) {
-                aiPlanSubscriptionService.handleWebhook(paymentId);
-                return;
-            }
-            log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}",
-                paymentId);
-            return;
-        }
+    private void handleWebhookWithLock(Long orderId, String paymentId) {
 
         PortOnePaymentInfo externalPayment = recordPortOneFailure(
                 OperationFailureCategory.EXTERNAL_API, "PaymentService.handleWebhook.getPayment",
@@ -294,110 +289,6 @@ public class PaymentService {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    private void validatePaymentAmount(
-            Order order,
-            PortOnePaymentInfo paymentInfo
-    ) {
-        if (paymentInfo == null) {
-            log.warn("결제 검증 실패 — PortOne 조회 결과 없음: orderNumber={}", order.getOrderNumber());
-            throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
-        }
-
-        if (paymentInfo.getAmount() == null
-                || paymentInfo.getAmount().compareTo(order.getTotalPrice()) != 0) {
-            log.warn("결제 검증 실패 — 금액 불일치: orderNumber={}, 주문금액={}, 실결제금액={}",
-                    order.getOrderNumber(), order.getTotalPrice(), paymentInfo.getAmount());
-            throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-        }
-    }
-
-    private void verifyPaymentWithLock(
-            Long accountId,
-            PaymentCompleteRequestDto request
-    ) {
-        Order order = orderRepository
-                .findByOrderNumberWithPessimisticLock(request.getOrderNumber())
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-        if (!order.getAccount().getAccountId().equals(accountId)) {
-            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-        }
-
-        Payment payment = paymentRepository
-                .findByOrderIdWithPessimisticLock(order.getOrderId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-        if (payment.getStatus() == PaymentStatus.PAID) {
-            throw new BusinessException(ErrorCode.PAYMENT_DUPLICATE);
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw new BusinessException(ErrorCode.ORDER_EXPIRED);
-        }
-
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            log.warn("결제 검증 실패 — Payment 상태가 PENDING이 아님: orderNumber={}, paymentStatus={}",
-                    order.getOrderNumber(), payment.getStatus());
-            throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
-        }
-
-        // 주문 생성 시 발급해 프론트에 내려준 merchant paymentId와 일치하는지 검증한다.
-        // 이 확인 없이 클라이언트가 보낸 paymentId를 신뢰하면, 같은 금액의 타인 결제(paymentId)를
-        // 다른 주문에 붙여 결제 완료 처리하는 도용이 가능하다(금액 일치만으로는 막지 못함).
-        if (payment.getPortonePaymentId() == null
-                || !payment.getPortonePaymentId().equals(request.getPaymentId())) {
-            log.warn("결제 검증 실패 — paymentId 불일치: orderNumber={}, 발급된 paymentId={}, 요청 paymentId={}",
-                    order.getOrderNumber(), payment.getPortonePaymentId(), request.getPaymentId());
-            throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
-        }
-
-        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
-                OperationFailureCategory.EXTERNAL_API,
-                "PaymentService.verifyPayment.getPayment",
-                request.getPaymentId(),
-                "orderNumber=" + order.getOrderNumber(),
-                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
-
-        validatePaymentAmount(order, paymentInfo);
-
-         if (!"PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
-             log.warn("결제 검증 실패 — PortOne 결제 상태가 PAID가 아님: orderNumber={}, portoneStatus={}",
-                     order.getOrderNumber(), paymentInfo.getStatus());
-             // 여기서 payment.fail()/expirePendingOrder()를 호출해도, 아래 throw로 본 트랜잭션이
-             // 전부 롤백되어 효과가 없다(게다가 order/payment 행에 비관적 락을 쥔 채라 별도 트랜잭션으로
-             // 분리하면 같은 행에서 락 대기 데드락이 난다). 결제 미완료 주문의 만료는 PENDING 15분 경과 시
-             // OrderExpirationScheduler가 처리하는 것을 안전망으로 사용한다.
-             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
-         }
-
-        payment.markAsPaid(paymentInfo.getPgProvider());
-        order.markAsPaid();
-        ownerRevenueService.recordPaidOrder(order, payment);
-        publishPaidEvents(order);
-
-        log.info("결제 검증 완료: orderNumber={}, paymentId={}",
-                order.getOrderNumber(), request.getPaymentId());
-    }
-
-    // 온라인 결제 완료 시점에 알림 이벤트를 발행한다.
-    // - 사장에게 NEW_ORDER (결제가 끝난 주문만 알림)
-    // - 고객에게 PAYMENT_COMPLETED
-    private void publishPaidEvents(Order order) {
-        eventPublisher.publishEvent(new OrderPlacedEvent(
-                order.getStore().getAccount().getAccountId(),
-                order.getAccount().getName(),
-                order.getStore().getName(),
-                order.getOrderNumber(),
-                order.getOrderId()));
-
-        eventPublisher.publishEvent(new OrderPaidEvent(
-                order.getAccount().getAccountId(),
-                order.getStore().getName(),
-                order.getOrderNumber(),
-                order.getTotalPrice(),
-                order.getOrderId()));
     }
 
     /**
