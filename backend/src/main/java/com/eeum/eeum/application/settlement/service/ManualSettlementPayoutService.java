@@ -42,8 +42,13 @@ public class ManualSettlementPayoutService {
                 .findByWeeklySettlementIdOrderByOwnerRevenueId(weeklySettlementId).stream()
                 .map(item -> item.getOwnerRevenue().getOrder().getOrderId())
                 .toList();
-        if (includedOrderIds.isEmpty() || cancellationOperationRepository.existsUncompletedByOrderIds(
+        if (includedOrderIds.isEmpty()) {
+            // 지급할 항목이 없다. 상태가 잘못된 것과 원인이 달라 코드를 나눈다.
+            throw new BusinessException(ErrorCode.SETTLEMENT_NO_PAYOUT_TARGET);
+        }
+        if (cancellationOperationRepository.existsUncompletedByOrderIds(
                 includedOrderIds, PaymentCancellationStatus.COMPLETED)) {
+            // 취소가 진행 중인 주문이 섞여 있다. 지급을 시작하면 과지급이 된다.
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         settlement.claim(admin, claimToken, expiresAt, LocalDateTime.now(), LocalDateTime.now());

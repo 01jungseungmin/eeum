@@ -21,8 +21,8 @@ class WeeklySettlementTest {
         // given
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim("worker-a", now.plusMinutes(1), now, now);
-        settlement.claim("worker-b", now.plusMinutes(10), now.plusMinutes(2), now.plusMinutes(2));
+        settlement.claim(null, "worker-a", now.plusMinutes(1), now, now);
+        settlement.claim(null, "worker-b", now.plusMinutes(10), now.plusMinutes(2), now.plusMinutes(2));
 
         // when / then
         assertThatThrownBy(() -> settlement.completeManually(
@@ -40,7 +40,7 @@ class WeeklySettlementTest {
         // given
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim("worker-a", now.plusMinutes(10), now, now);
+        settlement.claim(null, "worker-a", now.plusMinutes(10), now, now);
 
         // when
         settlement.completeManually(mock(Account.class), "worker-a", "manual-transfer-1", now.plusMinutes(1));
@@ -54,7 +54,7 @@ class WeeklySettlementTest {
     void 만료된_claim은_실패를_수동검토로_전이할_수_없다() {
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim("worker-a", now.plusMinutes(1), now, now);
+        settlement.claim(null, "worker-a", now.plusMinutes(1), now, now);
         settlement.markFailed("worker-a", "PAYOUT_FAILED", "실패", now.plusSeconds(30));
 
         assertThatThrownBy(() -> settlement.requireManualReview(

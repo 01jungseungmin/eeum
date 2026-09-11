@@ -159,10 +159,6 @@ public class WeeklySettlement extends BaseEntity {
     }
 
     /** 기존 도메인 단위 테스트 호환용. 실제 지급 claim은 관리자 식별자를 반드시 전달한다. */
-    @Deprecated(forRemoval = true)
-    public void claim(String claimToken, LocalDateTime claimExpiresAt, LocalDateTime requestedAt, LocalDateTime now) {
-        claim(null, claimToken, claimExpiresAt, requestedAt, now);
-    }
 
     public void requireManualReview(
             String claimToken,

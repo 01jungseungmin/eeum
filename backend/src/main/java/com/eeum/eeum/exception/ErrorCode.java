@@ -149,6 +149,9 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // 상태 위반(SETTLEMENT_002)과 구분한다.
     SETTLEMENT_CONCURRENT_MODIFICATION("SETTLEMENT_004", "정산 상태가 변경되었습니다. 다시 시도해 주세요", HttpStatus.CONFLICT),
 
+    // 지급할 항목이 없는 정산이다. 상태 위반(SETTLEMENT_002)과 원인이 다르다.
+    SETTLEMENT_NO_PAYOUT_TARGET("SETTLEMENT_005", "지급할 정산 항목이 없습니다", HttpStatus.BAD_REQUEST),
+
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
     PAYMENT_AMOUNT_MISMATCH("PAYMENT_002", "결제 금액이 일치하지 않습니다", HttpStatus.BAD_REQUEST),
@@ -174,6 +177,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
 
     // PG는 취소됐는데 내부 반영이 실패한 경우. 롤백하지 않고 수동 검토로 격리한다.
     PAYMENT_CANCELLATION_MANUAL_REVIEW("PAYMENT_016", "취소 처리에 관리자 확인이 필요합니다", HttpStatus.CONFLICT),
+
+    // PG 요청 결과를 아직 확인하지 못한 유예 구간. 아무것도 격리되지 않았으므로
+    // "관리자 확인"과 구분한다 — 잠시 후 재시도하면 해소되는 상태다.
+    PAYMENT_CANCELLATION_IN_PROGRESS("PAYMENT_017", "취소 처리가 진행 중입니다. 잠시 후 다시 확인해 주세요", HttpStatus.CONFLICT),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),
