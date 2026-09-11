@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.order.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,6 +9,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Schema(description = "PortOne Webhook 요청")
 public class PaymentWebhookRequestDto {
 
@@ -18,6 +20,7 @@ public class PaymentWebhookRequestDto {
     @Getter
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Data {
         private String paymentId;
     }
