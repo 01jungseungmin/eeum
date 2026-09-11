@@ -129,21 +129,7 @@ public class PaymentService {
             log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}", paymentId);
             return;
         }
-        redisLockService.executeWithLock(
-                LockKeys.order(orderId), PAYMENT_LOCK_LEASE_TIME, ErrorCode.LOCK_PAYMENT_FAILED,
-                () -> handleWebhookWithLock(orderId, paymentId));
-    }
-
-    /** 기존 단위 테스트와 구버전 Webhook의 최소 호환 진입점. HTTP 엔드포인트는 사용하지 않는다. */
-    @Deprecated(forRemoval = true)
-    public void handleWebhook(String rawBody, String signature) {
-        HttpHeaders headers = new HttpHeaders();
-        if (signature != null) {
-            headers.add("webhook-id", "legacy-test");
-            headers.add("webhook-timestamp", "0");
-            headers.add("webhook-signature", "v1," + signature);
-        }
-        handleWebhook(rawBody, headers);
+        handleWebhookByExternalStatus(orderId, paymentId);
     }
 
     @Transactional(readOnly = true)
@@ -172,31 +158,27 @@ public class PaymentService {
      * 여기에 트랜잭션을 걸면 외부 호출이 다시 트랜잭션 안으로 들어온다.
      */
     public void cancelPayment(Long accountId, Long paymentId) {
-        Long orderId = resolveOwnOrderId(accountId, paymentId);
-        String reason = resolveCancelReason(accountId, paymentId);
-
-        paymentCancellationService.cancel(
-                orderId, PaymentCancellationTrigger.CUSTOMER_CANCEL, reason);
-    }
-
-    @Transactional(readOnly = true)
-    protected Long resolveOwnOrderId(Long accountId, Long paymentId) {
+        /*
+         * 한 번만 읽는다. 이전에는 orderId와 reason을 각각 조회했는데, 두 조회 사이에
+         * refundReason이 바뀌면 서로 다른 시점의 값이 섞인다. 게다가 두 메서드는 같은 빈
+         * 안에서 호출돼 @Transactional이 프록시를 타지 못해 애초에 무효였다.
+         *
+         * 취소 대상의 최종 판정은 PaymentCancellationService가 주문 락과 비관적 락 아래에서
+         * 다시 한다. 여기서 보는 값은 "이 사용자가 이 결제를 취소 요청할 수 있는가"까지다.
+         */
         Payment payment = paymentRepository
                 .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
         if (payment.getStatus() != PaymentStatus.PAID) {
             throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
-        return payment.getOrder().getOrderId();
-    }
 
-    @Transactional(readOnly = true)
-    protected String resolveCancelReason(Long accountId, Long paymentId) {
-        return paymentRepository
-                .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
-                .map(Payment::getRefundReason)
-                .filter(StringUtils::hasText)
-                .orElse("고객 요청 취소");
+        String reason = StringUtils.hasText(payment.getRefundReason())
+                ? payment.getRefundReason()
+                : "고객 요청 취소";
+
+        paymentCancellationService.cancel(
+                payment.getOrder().getOrderId(), PaymentCancellationTrigger.CUSTOMER_CANCEL, reason);
     }
 
     @Transactional
@@ -215,7 +197,18 @@ public class PaymentService {
         payment.requestRefund(request.getReason());
     }
 
-    private void handleWebhookWithLock(Long orderId, String paymentId) {
+    /**
+     * 외부 결제 상태에 따라 Webhook을 분기한다.
+     *
+     * <p><b>여기서 주문 락을 잡지 않는다.</b> 취소 분기가 호출하는
+     * {@link PaymentCancellationService#cancel}이 같은 {@code LockKeys.order} 키를 스스로 잡는데,
+     * {@link com.eeum.eeum.common.service.RedisLockService}는 {@code SET NX} 기반이라 재진입을
+     * 지원하지 않는다. 바깥에서 감싸면 안쪽 획득이 반드시 실패해 외부 취소 Webhook이
+     * 영구히 반영되지 않는다. 그래서 락은 실제로 필요한 분기가 각자 잡는다.
+     *
+     * <p>덤으로 PortOne 조회가 어떤 락도 쥐지 않은 채 수행된다.
+     */
+    private void handleWebhookByExternalStatus(Long orderId, String paymentId) {
 
         PortOnePaymentInfo externalPayment = recordPortOneFailure(
                 OperationFailureCategory.EXTERNAL_API, "PaymentService.handleWebhook.getPayment",
@@ -224,7 +217,7 @@ public class PaymentService {
 
         if ("CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
             // PG가 이미 취소됐으므로 재호출하지 않는다. Payment·Order·재고·정산은 공통 취소
-            // 작업이 짧은 독립 트랜잭션으로 함께 반영한다.
+            // 작업이 짧은 독립 트랜잭션으로 함께 반영한다. 주문 락은 cancel()이 잡는다.
             paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
                     "PortOne 외부 취소 Webhook", true);
             return;
@@ -240,7 +233,10 @@ public class PaymentService {
             return;
         }
 
-        paymentWebhookProcessor.applyPaidWebhook(orderId, paymentId, externalPayment);
+        // 결제 완료 반영만 주문 락이 필요하다 — verify 경로와 같은 키를 쓴다.
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId), PAYMENT_LOCK_LEASE_TIME, ErrorCode.LOCK_PAYMENT_FAILED,
+                () -> paymentWebhookProcessor.applyPaidWebhook(orderId, paymentId, externalPayment));
     }
 
     private void validateWebhookSignature(String rawBody, HttpHeaders headers) {
