@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -81,7 +82,8 @@ public class PaymentCancellationProcessor {
         }
         if (operation != null && operation.isPgOutcomeUnknown()) {
             return new PaymentCancellationPlan(operation.getPaymentCancellationOperationId(),
-                    payment.getPortonePaymentId(), payment.getAmount(), operation.getReason(), false, true);
+                    payment.getPortonePaymentId(), payment.getAmount(), operation.getReason(), false, true,
+                    operation.getRequestedAt());
         }
 
         boolean externalPendingCancellation = trigger == PaymentCancellationTrigger.PORTONE_WEBHOOK
@@ -117,7 +119,7 @@ public class PaymentCancellationProcessor {
                 payment.getPortonePaymentId(),
                 payment.getAmount(),
                 reason,
-                operation.isPgCancelled(), false);
+                operation.isPgCancelled(), false, operation.getRequestedAt());
     }
 
     /**
@@ -158,6 +160,12 @@ public class PaymentCancellationProcessor {
         // prepare와 같은 Order → Payment → Operation 순서로 잠근다.
         PaymentCancellationOperation operation = getOperation(operationId);
 
+        // PG 취소가 확정되기 전에는 내부 결제·주문·정산을 절대 바꾸지 않는다.
+        // 이 메서드는 public이라 오케스트레이터 밖의 호출도 이 경계를 우회할 수 없다.
+        if (!operation.isPgCancelled()) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
+        }
+
         if (payment.getStatus() == PaymentStatus.PAID) {
             if (trigger == PaymentCancellationTrigger.OWNER_REFUND_APPROVAL) {
                 payment.completeRefund();
@@ -197,6 +205,27 @@ public class PaymentCancellationProcessor {
         operation.requireManualReview(failureCode, failureReason);
         log.error("취소 수동 검토 필요 — operationId={}, orderId={}, code={}, reason={}",
                 operationId, operation.getOrder().getOrderId(), failureCode, failureReason);
+    }
+
+    /**
+     * 응답 유실 뒤 유예 시간까지 지나도록 PG 결과가 확정되지 않은 작업을 운영 대기열로 보낸다.
+     *
+     * <p>현재 상태를 비관적으로 다시 잠그고 확인하므로, 선행 요청이 그 사이 성공을 반영한
+     * 경우에는 아무 변경도 하지 않는다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean requireManualReviewForStalePgRequest(Long operationId, Duration gracePeriod) {
+        PaymentCancellationOperation operation = getOperation(operationId);
+        boolean marked = operation.requireManualReviewForUnknownPg(
+                gracePeriod,
+                LocalDateTime.now(),
+                "PG_CANCEL_OUTCOME_UNKNOWN",
+                "PortOne 취소 요청 후 최종 응답을 확인하지 못했습니다.");
+        if (marked) {
+            log.error("PG 취소 결과 유실 — 수동 검토 필요: operationId={}, orderId={}",
+                    operationId, operation.getOrder().getOrderId());
+        }
+        return marked;
     }
 
     /** PortOne이 REQUESTED만 돌려준 경우. 완료로 확정하지 않고 상태만 남긴다. */

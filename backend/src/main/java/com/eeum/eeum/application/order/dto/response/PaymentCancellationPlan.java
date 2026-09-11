@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.order.dto.response;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 준비 단계가 확정한, 외부 PG 호출에 필요한 값.
@@ -17,6 +18,7 @@ public record PaymentCancellationPlan(
         BigDecimal amount,
         String reason,
         boolean alreadyPgCancelled,
-        boolean pgOutcomeUnknown
+        boolean pgOutcomeUnknown,
+        LocalDateTime pgRequestedAt
 ) {
 }

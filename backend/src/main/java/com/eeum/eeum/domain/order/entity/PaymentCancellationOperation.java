@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -207,6 +208,32 @@ public class PaymentCancellationOperation extends BaseEntity {
 
     public boolean isPgOutcomeUnknown() {
         return status == PaymentCancellationStatus.PG_CANCEL_REQUESTED;
+    }
+
+    /**
+     * PG 요청 응답을 받지 못한 작업이 복구 유예 시간을 넘겼는지 판별한다.
+     *
+     * <p>유예 중에는 선행 요청이 아직 PortOne 응답을 처리하고 있을 수 있으므로 상태를
+     * 바꾸지 않는다. 유예가 지나도록 확정되지 않은 경우에만 운영 수습 대기열로 넘긴다.
+     */
+    public boolean isPgOutcomeUnknownFor(Duration gracePeriod, LocalDateTime now) {
+        return isPgOutcomeUnknown()
+                && requestedAt != null
+                && !requestedAt.plus(gracePeriod).isAfter(now);
+    }
+
+    /** PG 요청 결과를 잃어버린 오래된 작업만 수동 검토로 전환한다. */
+    public boolean requireManualReviewForUnknownPg(
+            Duration gracePeriod,
+            LocalDateTime now,
+            String failureCode,
+            String failureReason
+    ) {
+        if (!isPgOutcomeUnknownFor(gracePeriod, now)) {
+            return false;
+        }
+        requireManualReview(failureCode, failureReason);
+        return true;
     }
 
     private static String truncate(String value) {

@@ -43,6 +43,12 @@ public class PaymentCancellationService {
     private static final Duration CANCEL_LOCK_LEASE_TIME = Duration.ofSeconds(30);
 
     /**
+     * PG 요청 뒤 응답이 유실됐다고 보기 전까지 기다리는 시간.
+     * 이 시간 안의 재시도는 최초 호출이 결과를 반영할 수 있게 상태를 그대로 보존한다.
+     */
+    private static final Duration PG_OUTCOME_RECOVERY_GRACE_PERIOD = Duration.ofMinutes(2);
+
+    /**
      * 내부 반영 재시도 횟수.
      *
      * <p>마감 스케줄러와 부딪혀 나는 충돌은 다시 읽으면 풀린다. 그런 일시적 경합까지
@@ -96,8 +102,19 @@ public class PaymentCancellationService {
             return;
         }
         if (plan.pgOutcomeUnknown()) {
-            // 이미 PG를 호출했을 수 있는 작업이다. 여기서 상태를 MANUAL_REVIEW로 바꾸면
-            // 선행 호출이 받은 성공 응답을 반영하지 못한다. 상태는 유지하고 재호출만 막는다.
+            // 이미 PG를 호출했을 수 있는 작업이다. 유예 중에는 선행 호출이 성공 응답을
+            // 반영할 수 있게 보존하되, 응답 유실 상태가 오래 지속되면 반드시 수습 대기열에 남긴다.
+            boolean markedForManualReview = processor.requireManualReviewForStalePgRequest(
+                    plan.operationId(), PG_OUTCOME_RECOVERY_GRACE_PERIOD);
+            if (markedForManualReview) {
+                operationFailureRecorder.record(
+                        OperationFailureCategory.REFUND,
+                        "PaymentCancellationService.cancel",
+                        "order", String.valueOf(orderId),
+                        "PG_CANCEL_OUTCOME_UNKNOWN",
+                        "PortOne 취소 요청 결과가 유예 시간 내 확정되지 않아 수동 검토로 격리했습니다.",
+                        "trigger=" + trigger + ", operationId=" + plan.operationId());
+            }
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
         }
 
