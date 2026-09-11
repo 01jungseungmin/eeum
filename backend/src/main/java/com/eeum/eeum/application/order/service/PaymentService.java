@@ -65,7 +65,9 @@ public class PaymentService {
     private final PaymentVerificationProcessor paymentVerificationProcessor;
     private final com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
 
-    private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofSeconds(10);
+    // PortOne Webhook/REST의 연결·읽기 timeout(각 30초)보다 충분히 길게 둔다.
+    // DB 락은 이 구간에 잡지 않으며, 같은 주문의 상태 변경 진입만 직렬화한다.
+    private static final Duration PAYMENT_LOCK_LEASE_TIME = Duration.ofMinutes(2);
 
     /** Webhook 서명 실패 누적 카운터의 집계 구간. */
     private static final Duration SIGNATURE_FAILURE_COUNT_WINDOW = Duration.ofHours(1);
@@ -74,18 +76,30 @@ public class PaymentService {
     private static final Duration SIGNATURE_FAILURE_RECORD_COOLDOWN = Duration.ofMinutes(10);
 
     public void verifyPayment(Long accountId, PaymentCompleteRequestDto request) {
-        // prepare는 짧게 잠금·검증 후 커밋한다. PortOne 호출은 그 어떤 DB 락도 쥐지 않는다.
-        Long orderId = paymentVerificationProcessor.prepare(accountId, request);
-        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
-                OperationFailureCategory.EXTERNAL_API, "PaymentService.verifyPayment.getPayment",
-                request.getPaymentId(), "orderId=" + orderId,
-                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
+        // 식별자 해소는 상태를 바꾸지 않는 짧은 조회다. 이후부터 외부 조회까지 같은 주문 락을
+        // 유지해, PG가 이미 PAID인 동안 사장이 PENDING 주문을 거절하는 경합을 막는다.
+        Long orderId = orderRepository.findByOrderNumber(request.getOrderNumber())
+                .map(Order::getOrderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         redisLockService.executeWithLock(
                 LockKeys.order(orderId),
                 PAYMENT_LOCK_LEASE_TIME,
                 ErrorCode.LOCK_PAYMENT_FAILED,
-                () -> paymentVerificationProcessor.apply(accountId, request, paymentInfo)
+                () -> verifyPaymentWithOrderLock(accountId, request, orderId)
         );
+    }
+
+    private void verifyPaymentWithOrderLock(Long accountId, PaymentCompleteRequestDto request, Long expectedOrderId) {
+        // prepare/apply는 각각 짧은 트랜잭션이다. PortOne 호출은 두 트랜잭션 사이에만 존재한다.
+        Long preparedOrderId = paymentVerificationProcessor.prepare(accountId, request);
+        if (!expectedOrderId.equals(preparedOrderId)) {
+            throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+        }
+        PortOnePaymentInfo paymentInfo = recordPortOneFailure(
+                OperationFailureCategory.EXTERNAL_API, "PaymentService.verifyPayment.getPayment",
+                request.getPaymentId(), "orderId=" + preparedOrderId,
+                () -> portOnePaymentClient.getPayment(request.getPaymentId()));
+        paymentVerificationProcessor.apply(accountId, request, paymentInfo);
     }
 
     public void handleWebhook(String rawBody, HttpHeaders headers) {

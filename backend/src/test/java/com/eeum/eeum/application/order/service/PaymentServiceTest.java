@@ -140,6 +140,7 @@ class PaymentServiceTest {
 
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
                 .thenReturn(Optional.of(payment));
         when(portOnePaymentClient.getPayment(portonePaymentId)).thenReturn(paymentInfo);
@@ -183,6 +184,7 @@ class PaymentServiceTest {
         // 주문 락까지 가지 않는다 — 쓰이지 않는 스텁은 UnnecessaryStubbingException이 된다.
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
                 .thenReturn(Optional.of(payment));
 
@@ -222,6 +224,7 @@ class PaymentServiceTest {
         // 주문 락까지 가지 않는다 — 쓰이지 않는 스텁은 UnnecessaryStubbingException이 된다.
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
                 .thenReturn(Optional.of(payment));
 
