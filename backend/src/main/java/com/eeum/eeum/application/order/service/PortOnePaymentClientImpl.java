@@ -79,7 +79,8 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
                     .uri("/payments/{paymentId}/cancel", paymentId)
                     .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret());
             if (idempotencyKey != null) {
-                request.header("Idempotency-Key", "\"" + idempotencyKey + "\"");
+                // 값을 그대로 보낸다. 따옴표로 감싸면 키 자체가 달라져 재시도가 멱등하지 않다.
+                request.header("Idempotency-Key", idempotencyKey);
             }
             response = request
                     .body(Map.of(
@@ -106,9 +107,8 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
         PortOneCancelResponse.Cancellation cancellation = response.getCancellation();
         return new PortOneCancelResult(
                 cancellation.getStatus(),
-                cancellation.getId(),
-                cancellation.getCancelledAmount(),
-                null);
+                cancellation.getId() != null ? cancellation.getId() : cancellation.getPgCancellationId(),
+                cancellation.resolveCancelledAmount());
     }
 
     private long toPortOneAmount(BigDecimal amount) {

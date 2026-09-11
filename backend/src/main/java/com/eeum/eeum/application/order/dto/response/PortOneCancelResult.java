@@ -12,14 +12,15 @@ import java.math.BigDecimal;
  *
  * @param status           PortOne 취소 상태 (SUCCEEDED / REQUESTED / FAILED)
  * @param cancellationId   취소 식별자. 재조회·대사에 쓴다
- * @param cancelledAmount  이번 요청으로 취소된 금액
- * @param totalCancelledAmount 결제 건의 누적 취소 금액. 부분 취소 차액 계산의 근거다
+ * @param cancelledAmount  이번 요청으로 취소된 금액. 응답에서 읽지 못하면 null이다
+ *
+ * <p>누적 취소 금액은 담지 않는다 — 부분 취소가 범위 밖이라 쓰이는 곳이 없고,
+ * 항상 null인 필드를 두면 "채워져 있다"고 오해할 여지만 남는다.
  */
 public record PortOneCancelResult(
         String status,
         String cancellationId,
-        BigDecimal cancelledAmount,
-        BigDecimal totalCancelledAmount
+        BigDecimal cancelledAmount
 ) {
 
     public static final String SUCCEEDED = "SUCCEEDED";

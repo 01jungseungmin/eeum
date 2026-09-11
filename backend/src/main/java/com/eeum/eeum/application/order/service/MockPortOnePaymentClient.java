@@ -54,6 +54,6 @@ public class MockPortOnePaymentClient implements PortOnePaymentClient {
                 paymentId, amount, reason);
         // Mock은 항상 즉시 완료를 돌려준다. REQUESTED 경로 검증은 계약 테스트가 담당한다.
         return new PortOneCancelResult(
-                PortOneCancelResult.SUCCEEDED, "mock-cancellation-" + paymentId, amount, amount);
+                PortOneCancelResult.SUCCEEDED, "mock-cancellation-" + paymentId, amount);
     }
 }

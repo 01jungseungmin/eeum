@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 
 /**
@@ -130,34 +131,73 @@ public class PaymentCancellationService {
                         "PG_CANCEL_OUTCOME_UNKNOWN",
                         "PortOne 취소 요청 결과가 유예 시간 내 확정되지 않아 수동 검토로 격리했습니다.",
                         "trigger=" + trigger + ", operationId=" + plan.operationId());
+                throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
             }
-            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+            // 아직 유예 구간이다 — 격리된 것이 없으므로 "관리자 확인"이라고 말하지 않는다.
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_IN_PROGRESS);
         }
 
         if (!plan.alreadyPgCancelled() && !pgAlreadyCancelled) {
             PortOneCancelResult result = callPortOne(plan, orderId);
 
             // SUCCEEDED만 취소 완료로 확정한다. REQUESTED는 아직 돈이 돌아갔다고 말할 수 없다.
-            if (!result.isSucceeded() || result.cancelledAmount() == null
-                    || result.cancelledAmount().compareTo(plan.amount()) != 0) {
-                processor.recordPendingPgStatus(plan.operationId(), result);
+            if (!result.isSucceeded()) {
+                isolateUnconfirmedCancellation(plan, orderId, trigger, result,
+                        "PG_CANCEL_NOT_CONFIRMED",
+                        "PortOne 취소 상태가 SUCCEEDED가 아님: " + result.status());
+            }
+
+            // 전액 취소를 요청했는데 부분만 취소됐다면 원장·정산 금액과 어긋난다.
+            BigDecimal cancelledAmount = result.cancelledAmount();
+            if (cancelledAmount != null && cancelledAmount.compareTo(plan.amount()) != 0) {
+                isolateUnconfirmedCancellation(plan, orderId, trigger, result,
+                        "PG_CANCEL_AMOUNT_MISMATCH",
+                        "요청 금액 " + plan.amount() + " / 취소 금액 " + cancelledAmount);
+            }
+
+            if (cancelledAmount == null) {
+                /*
+                 * 금액을 읽지 못했다고 취소를 막지는 않는다. 우리는 언제나 전액 취소만
+                 * 요청하고 PortOne이 SUCCEEDED를 반환했으므로 취소 자체는 성립한다.
+                 * 다만 응답 형태가 바뀌었을 가능성이 있으니 대사할 수 있게 이력은 남긴다.
+                 */
+                log.warn("PortOne 취소 응답에 금액이 없음 — 금액 대조 생략: orderId={}, cancellationId={}",
+                        orderId, result.cancellationId());
                 operationFailureRecorder.record(
                         OperationFailureCategory.REFUND,
                         "PaymentCancellationService.cancel",
                         "order", String.valueOf(orderId),
-                        "PG_CANCEL_AMOUNT_MISMATCH",
-                        "PortOne 취소 상태 또는 금액이 전액 취소 조건과 다름: " + result.status(),
+                        "PG_CANCEL_AMOUNT_UNVERIFIED",
+                        "PortOne 취소 응답에서 취소 금액을 읽지 못했습니다.",
                         "trigger=" + trigger + ", cancellationId=" + result.cancellationId());
-                throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
             }
             processor.markPgCancelled(plan.operationId(), result);
         } else if (!plan.alreadyPgCancelled()) {
             // 외부에서 이미 취소된 건. PG 호출 없이 확정 사실만 기록한다.
             processor.markPgCancelled(plan.operationId(),
-                    new PortOneCancelResult(PortOneCancelResult.SUCCEEDED, null, plan.amount(), plan.amount()));
+                    new PortOneCancelResult(PortOneCancelResult.SUCCEEDED, null, plan.amount()));
         }
 
         applyWithRetry(plan, trigger, reason, orderId);
+    }
+
+    /** 취소가 확정되지 않은 건을 운영 대기열로 보내고 요청을 중단한다. */
+    private void isolateUnconfirmedCancellation(
+            PaymentCancellationPlan plan,
+            Long orderId,
+            PaymentCancellationTrigger trigger,
+            PortOneCancelResult result,
+            String failureCode,
+            String failureReason
+    ) {
+        processor.recordPendingPgStatus(plan.operationId(), result);
+        operationFailureRecorder.record(
+                OperationFailureCategory.REFUND,
+                "PaymentCancellationService.cancel",
+                "order", String.valueOf(orderId),
+                failureCode, failureReason,
+                "trigger=" + trigger + ", cancellationId=" + result.cancellationId());
+        throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
     }
 
     private PortOneCancelResult callPortOne(PaymentCancellationPlan plan, Long orderId) {
