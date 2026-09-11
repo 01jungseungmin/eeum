@@ -179,13 +179,8 @@ class PaymentServiceTest {
         ReflectionTestUtils.setField(request, "paymentId", portonePaymentId);
         ReflectionTestUtils.setField(request, "orderNumber", orderNumber);
 
-        doAnswer(invocation -> {
-            Runnable runnable = invocation.getArgument(3);
-            runnable.run();
-            return null;
-        }).when(redisLockService).executeWithLock(
-                anyString(), any(Duration.class), any(ErrorCode.class), any(Runnable.class));
-
+        // 락 스텁을 두지 않는다. prepare가 주문·결제 상태를 먼저 검증해 여기서 예외가 나므로
+        // 주문 락까지 가지 않는다 — 쓰이지 않는 스텁은 UnnecessaryStubbingException이 된다.
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
@@ -223,13 +218,8 @@ class PaymentServiceTest {
         ReflectionTestUtils.setField(request, "paymentId", portonePaymentId);
         ReflectionTestUtils.setField(request, "orderNumber", orderNumber);
 
-        doAnswer(invocation -> {
-            Runnable runnable = invocation.getArgument(3);
-            runnable.run();
-            return null;
-        }).when(redisLockService).executeWithLock(
-                anyString(), any(Duration.class), any(ErrorCode.class), any(Runnable.class));
-
+        // 락 스텁을 두지 않는다. prepare가 주문·결제 상태를 먼저 검증해 여기서 예외가 나므로
+        // 주문 락까지 가지 않는다 — 쓰이지 않는 스텁은 UnnecessaryStubbingException이 된다.
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
