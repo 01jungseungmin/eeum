@@ -2,6 +2,7 @@ package com.eeum.eeum.application.order.dto.response;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonAlias;
 
 import java.math.BigDecimal;
 
@@ -22,7 +23,7 @@ public class PortOneCancelResponse {
     public static class Cancellation {
         private String id;
         private String status;
-        private BigDecimal totalAmount;
+        @JsonAlias({"amount", "cancelledAmount"})
         private BigDecimal cancelledAmount;
     }
 }

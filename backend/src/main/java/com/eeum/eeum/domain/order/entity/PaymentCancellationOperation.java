@@ -162,6 +162,9 @@ public class PaymentCancellationOperation extends BaseEntity {
      * ({@code PENDING})로 되돌리고 실패 사유만 남긴다.
      */
     public void markPgFailed(String failureCode, String failureReason) {
+        if (status != PaymentCancellationStatus.PG_CANCEL_REQUESTED) {
+            return;
+        }
         this.status = PaymentCancellationStatus.PENDING;
         this.failureCode = failureCode;
         this.failureReason = truncate(failureReason);

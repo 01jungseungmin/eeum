@@ -148,13 +148,15 @@ public class PaymentCancellationProcessor {
      */
     @Transactional
     public void applyCancellation(Long operationId, PaymentCancellationTrigger trigger, String reason) {
-        PaymentCancellationOperation operation = getOperation(operationId);
-        Long orderId = operation.getOrder().getOrderId();
+        Long orderId = cancellationOperationRepository.findOrderIdByOperationId(operationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS));
 
         Order order = orderRepository.findByIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        // prepare와 같은 Order → Payment → Operation 순서로 잠근다.
+        PaymentCancellationOperation operation = getOperation(operationId);
 
         if (payment.getStatus() == PaymentStatus.PAID) {
             if (trigger == PaymentCancellationTrigger.OWNER_REFUND_APPROVAL) {

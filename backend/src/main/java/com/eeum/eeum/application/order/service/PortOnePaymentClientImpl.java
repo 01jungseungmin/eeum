@@ -107,9 +107,8 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
         return new PortOneCancelResult(
                 cancellation.getStatus(),
                 cancellation.getId(),
-                cancellation.getCancelledAmount() != null
-                        ? cancellation.getCancelledAmount() : amount,
-                cancellation.getTotalAmount());
+                cancellation.getCancelledAmount(),
+                null);
     }
 
     private long toPortOneAmount(BigDecimal amount) {

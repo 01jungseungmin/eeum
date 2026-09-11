@@ -96,8 +96,8 @@ public class PaymentCancellationService {
             return;
         }
         if (plan.pgOutcomeUnknown()) {
-            processor.requireManualReview(plan.operationId(), "PG_OUTCOME_UNKNOWN",
-                    "이전 PG 취소 요청의 최종 결과를 확인해야 합니다.");
+            // 이미 PG를 호출했을 수 있는 작업이다. 여기서 상태를 MANUAL_REVIEW로 바꾸면
+            // 선행 호출이 받은 성공 응답을 반영하지 못한다. 상태는 유지하고 재호출만 막는다.
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
         }
 

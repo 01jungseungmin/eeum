@@ -17,11 +17,12 @@ public interface WeeklySettlementRepository extends JpaRepository<WeeklySettleme
 
     @Modifying
     @Query(value = """
-        INSERT IGNORE INTO weekly_settlement
+        INSERT INTO weekly_settlement
         (store_id, period_start_at, period_end_at, payment_amount, pg_fee_amount, platform_fee_amount,
          payout_amount, status, payout_idempotency_key, version, created_at, modified_at)
         VALUES (:storeId, :periodStartAt, :periodEndAt, 0, 0, 0, 0, 'PAYOUT_PENDING',
                 :idempotencyKey, 0, NOW(6), NOW(6))
+        ON DUPLICATE KEY UPDATE weekly_settlement_id = weekly_settlement_id
         """, nativeQuery = true)
     int insertIfAbsent(
             @Param("storeId") Long storeId,
