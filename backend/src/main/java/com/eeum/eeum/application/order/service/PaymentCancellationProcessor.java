@@ -6,6 +6,9 @@ import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.entity.PaymentCancellationOperation;
+import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
+import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
+import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
@@ -44,6 +47,8 @@ public class PaymentCancellationProcessor {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentCancellationOperationRepository cancellationOperationRepository;
+    private final OwnerRevenueRepository ownerRevenueRepository;
+    private final WeeklySettlementRepository weeklySettlementRepository;
     private final OwnerRevenueService ownerRevenueService;
     private final OrderService orderService;
     private final ApplicationEventPublisher eventPublisher;
@@ -149,6 +154,18 @@ public class PaymentCancellationProcessor {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        OwnerRevenue revenue = ownerRevenueRepository.findByOrder_OrderId(orderId).orElse(null);
+        if (revenue != null) {
+            // 정산 항목이 있으면 claim과 같은 WeeklySettlement 락을 먼저 잡는다. 항목이 아직
+            // 없으면 원장을 잠가 마감 스케줄러가 부분 취소 작업보다 먼저 포함시키지 못하게 한다.
+            boolean settlementLocked = weeklySettlementRepository
+                    .findByOwnerRevenueIdWithPessimisticLock(revenue.getOwnerRevenueId())
+                    .isPresent();
+            if (!settlementLocked) {
+                ownerRevenueRepository.findByIdWithPessimisticLock(revenue.getOwnerRevenueId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+            }
+        }
         PaymentCancellationOperation operation = cancellationOperationRepository
                 .findByOrderIdWithPessimisticLock(orderId)
                 .orElseGet(() -> cancellationOperationRepository.save(

@@ -46,6 +46,16 @@ public interface OwnerRevenueRepository extends JpaRepository<OwnerRevenue, Long
     @Query("""
         SELECT r
         FROM OwnerRevenue r
+        WHERE r.ownerRevenueId IN :ownerRevenueIds
+        ORDER BY r.ownerRevenueId ASC
+    """)
+    List<OwnerRevenue> findAllByIdInWithPessimisticLock(
+            @Param("ownerRevenueIds") List<Long> ownerRevenueIds);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT r
+        FROM OwnerRevenue r
         WHERE r.order.orderId = :orderId
     """)
     Optional<OwnerRevenue> findByOrderIdWithPessimisticLock(@Param("orderId") Long orderId);

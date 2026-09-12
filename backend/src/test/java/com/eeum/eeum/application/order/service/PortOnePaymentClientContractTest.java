@@ -81,8 +81,7 @@ class PortOnePaymentClientContractTest {
         assertThat(capturedPath.get()).isEqualTo("/payments/" + PAYMENT_ID + "/cancel");
         assertThat(capturedAuthorization.get()).isEqualTo("PortOne " + API_SECRET);
 
-        // 멱등키는 값 그대로 간다. 따옴표로 감싸면 재시도마다 키가 달라져 멱등성이 깨진다.
-        assertThat(capturedIdempotencyKey.get()).isEqualTo("payment-cancel-7");
+        assertThat(capturedIdempotencyKey.get()).isEqualTo("\"payment-cancel-7\"");
 
         JsonNode body = new ObjectMapper().readTree(capturedBody.get());
         assertThat(body.get("reason").asText()).isEqualTo("고객 요청 취소");

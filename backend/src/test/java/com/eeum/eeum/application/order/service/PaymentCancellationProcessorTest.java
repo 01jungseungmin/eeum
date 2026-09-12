@@ -8,6 +8,8 @@ import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentCancellationOperationRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
+import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
+import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,8 @@ class PaymentCancellationProcessorTest {
     @Mock private OrderRepository orderRepository;
     @Mock private PaymentRepository paymentRepository;
     @Mock private PaymentCancellationOperationRepository cancellationOperationRepository;
+    @Mock private OwnerRevenueRepository ownerRevenueRepository;
+    @Mock private WeeklySettlementRepository weeklySettlementRepository;
     @Mock private OwnerRevenueService ownerRevenueService;
     @Mock private OrderService orderService;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -40,6 +44,7 @@ class PaymentCancellationProcessorTest {
     void setUp() {
         processor = new PaymentCancellationProcessor(
                 orderRepository, paymentRepository, cancellationOperationRepository,
+                ownerRevenueRepository, weeklySettlementRepository,
                 ownerRevenueService, orderService, eventPublisher);
     }
 
