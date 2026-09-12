@@ -3,7 +3,6 @@ package com.eeum.eeum.application.settlement.service;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlement;
-import com.eeum.eeum.domain.settlement.entity.WeeklySettlementItem;
 import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
 import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementItemRepository;
@@ -39,9 +38,7 @@ public class ManualSettlementPayoutService {
         WeeklySettlement settlement = weeklySettlementRepository.findByIdWithPessimisticLock(weeklySettlementId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
         List<Long> includedOrderIds = weeklySettlementItemRepository
-                .findByWeeklySettlementIdOrderByOwnerRevenueId(weeklySettlementId).stream()
-                .map(item -> item.getOwnerRevenue().getOrder().getOrderId())
-                .toList();
+                .findOrderIdsByWeeklySettlementId(weeklySettlementId);
         if (includedOrderIds.isEmpty()) {
             // 지급할 항목이 없다. 상태가 잘못된 것과 원인이 달라 코드를 나눈다.
             throw new BusinessException(ErrorCode.SETTLEMENT_NO_PAYOUT_TARGET);
@@ -65,9 +62,9 @@ public class ManualSettlementPayoutService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
         // claim은 먼저 검증하되 COMPLETED 전이는 포함 원장이 모두 SETTLED가 된 뒤에 한다.
         settlement.validateManualCompletion(admin, claimToken, payoutReference, LocalDateTime.now());
-        for (WeeklySettlementItem item : weeklySettlementItemRepository
-                .findByWeeklySettlementIdOrderByOwnerRevenueId(weeklySettlementId)) {
-            OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(item.getOwnerRevenue().getOwnerRevenueId())
+        for (Long ownerRevenueId : weeklySettlementItemRepository
+                .findOwnerRevenueIdsByWeeklySettlementId(weeklySettlementId)) {
+            OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(ownerRevenueId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
             revenue.markSettled();
         }

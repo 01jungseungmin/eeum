@@ -276,6 +276,21 @@ class PaymentCancellationServiceTest {
                 eq("PG_CANCEL_OUTCOME_UNKNOWN"), anyString(), anyString());
     }
 
+    @Test
+    void 응답이_유실된_취소도_확정_Webhook이_오면_내부에_반영한다() {
+        // given — 최초 취소 요청의 응답은 없었지만 PG가 보낸 CANCELLED Webhook은 확정 신호다.
+        when(processor.prepare(eq(ORDER_ID), any(), anyString())).thenReturn(plan(false, true));
+
+        // when
+        service.cancel(ORDER_ID, PaymentCancellationTrigger.PORTONE_WEBHOOK, "외부 취소", true);
+
+        // then
+        verify(processor).markPgCancelled(eq(OPERATION_ID), any());
+        verify(processor).applyCancellation(
+                eq(OPERATION_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK), anyString());
+        verify(processor, never()).requireManualReviewForStalePgRequest(any(), any());
+    }
+
     private PaymentCancellationPlan plan(boolean alreadyPgCancelled, boolean pgOutcomeUnknown) {
         return new PaymentCancellationPlan(
                 OPERATION_ID, "portone-1", AMOUNT, "사유",

@@ -91,6 +91,22 @@ public class PaymentCancellationService {
         cancel(orderId, trigger, reason, false);
     }
 
+    /**
+     * 외부 부분 취소는 현재 전액 취소 작업으로 금액을 안전하게 역산할 수 없다.
+     * 지급 claim이 이 주문을 포함하지 못하도록 작업을 수동 검토로 격리한다.
+     */
+    public void recordExternalPartialCancellation(Long orderId) {
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId),
+                CANCEL_LOCK_LEASE_TIME,
+                ErrorCode.LOCK_ORDER_FAILED,
+                () -> {
+                    processor.recordExternalPartialCancellation(orderId);
+                    return null;
+                }
+        );
+    }
+
     private void cancelWithLock(
             Long orderId,
             PaymentCancellationTrigger trigger,
@@ -118,7 +134,14 @@ public class PaymentCancellationService {
             // 이미 완료된 취소 — 멱등하게 무시한다.
             return;
         }
-        if (plan.pgOutcomeUnknown()) {
+        boolean pgCancellationConfirmed = plan.alreadyPgCancelled();
+        if (plan.pgOutcomeUnknown() && pgAlreadyCancelled) {
+            // 최초 PG 요청의 응답은 유실됐어도 PortOne CANCELLED Webhook은 확정 신호다.
+            // 이 신호를 수동 검토로 버리면 고객 환불 뒤 내부 원장만 PAID로 남는다.
+            processor.markPgCancelled(plan.operationId(),
+                    new PortOneCancelResult(PortOneCancelResult.SUCCEEDED, null, plan.amount()));
+            pgCancellationConfirmed = true;
+        } else if (plan.pgOutcomeUnknown()) {
             // 이미 PG를 호출했을 수 있는 작업이다. 유예 중에는 선행 호출이 성공 응답을
             // 반영할 수 있게 보존하되, 응답 유실 상태가 오래 지속되면 반드시 수습 대기열에 남긴다.
             boolean markedForManualReview = processor.requireManualReviewForStalePgRequest(
@@ -137,7 +160,7 @@ public class PaymentCancellationService {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_IN_PROGRESS);
         }
 
-        if (!plan.alreadyPgCancelled() && !pgAlreadyCancelled) {
+        if (!pgCancellationConfirmed && !pgAlreadyCancelled) {
             PortOneCancelResult result = callPortOne(plan, orderId);
 
             // SUCCEEDED만 취소 완료로 확정한다. REQUESTED는 아직 돈이 돌아갔다고 말할 수 없다.
@@ -172,7 +195,7 @@ public class PaymentCancellationService {
                         "trigger=" + trigger + ", cancellationId=" + result.cancellationId());
             }
             processor.markPgCancelled(plan.operationId(), result);
-        } else if (!plan.alreadyPgCancelled()) {
+        } else if (!pgCancellationConfirmed) {
             // 외부에서 이미 취소된 건. PG 호출 없이 확정 사실만 기록한다.
             processor.markPgCancelled(plan.operationId(),
                     new PortOneCancelResult(PortOneCancelResult.SUCCEEDED, null, plan.amount()));

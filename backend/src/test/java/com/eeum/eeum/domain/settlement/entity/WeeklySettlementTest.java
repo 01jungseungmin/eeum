@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class WeeklySettlementTest {
 
@@ -21,12 +22,12 @@ class WeeklySettlementTest {
         // given
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim(null, "worker-a", now.plusMinutes(1), now, now);
-        settlement.claim(null, "worker-b", now.plusMinutes(10), now.plusMinutes(2), now.plusMinutes(2));
+        settlement.claim(admin(1L), "worker-a", now.plusMinutes(1), now, now);
+        settlement.claim(admin(2L), "worker-b", now.plusMinutes(10), now.plusMinutes(2), now.plusMinutes(2));
 
         // when / then
         assertThatThrownBy(() -> settlement.completeManually(
-                mock(Account.class), "worker-a", "manual-transfer-1", now.plusMinutes(3)))
+                admin(1L), "worker-a", "manual-transfer-1", now.plusMinutes(3)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
@@ -40,10 +41,11 @@ class WeeklySettlementTest {
         // given
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim(null, "worker-a", now.plusMinutes(10), now, now);
+        Account admin = admin(1L);
+        settlement.claim(admin, "worker-a", now.plusMinutes(10), now, now);
 
         // when
-        settlement.completeManually(mock(Account.class), "worker-a", "manual-transfer-1", now.plusMinutes(1));
+        settlement.completeManually(admin, "worker-a", "manual-transfer-1", now.plusMinutes(1));
 
         // then
         assertThat(settlement.getStatus()).isEqualTo(WeeklySettlementStatus.COMPLETED);
@@ -54,7 +56,7 @@ class WeeklySettlementTest {
     void 만료된_claim은_실패를_수동검토로_전이할_수_없다() {
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim(null, "worker-a", now.plusMinutes(1), now, now);
+        settlement.claim(admin(1L), "worker-a", now.plusMinutes(1), now, now);
         settlement.markFailed("worker-a", "PAYOUT_FAILED", "실패", now.plusSeconds(30));
 
         assertThatThrownBy(() -> settlement.requireManualReview(
@@ -74,5 +76,11 @@ class WeeklySettlementTest {
 
     private BigDecimal amount(String value) {
         return new BigDecimal(value);
+    }
+
+    private Account admin(Long accountId) {
+        Account account = mock(Account.class);
+        when(account.getAccountId()).thenReturn(accountId);
+        return account;
     }
 }

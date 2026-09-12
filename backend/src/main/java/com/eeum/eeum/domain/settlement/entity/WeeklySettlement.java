@@ -147,7 +147,7 @@ public class WeeklySettlement extends BaseEntity {
                 || (status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
                 && this.claimExpiresAt != null
                 && !this.claimExpiresAt.isAfter(now));
-        if (!canClaim || !StringUtils.hasText(claimToken) || claimExpiresAt == null
+        if (!canClaim || claimedBy == null || !StringUtils.hasText(claimToken) || claimExpiresAt == null
                 || requestedAt == null || !claimExpiresAt.isAfter(now)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
@@ -157,8 +157,6 @@ public class WeeklySettlement extends BaseEntity {
         this.claimedBy = claimedBy;
         this.payoutRequestedAt = requestedAt;
     }
-
-    /** 기존 도메인 단위 테스트 호환용. 실제 지급 claim은 관리자 식별자를 반드시 전달한다. */
 
     public void requireManualReview(
             String claimToken,
@@ -194,8 +192,8 @@ public class WeeklySettlement extends BaseEntity {
             Account completedBy, String claimToken, String payoutReference, LocalDateTime completedAt
     ) {
         validateActiveClaim(claimToken, completedAt);
-        if (completedBy == null || (claimedBy != null
-                && !Objects.equals(claimedBy.getAccountId(), completedBy.getAccountId()))
+        if (completedBy == null || claimedBy == null
+                || !Objects.equals(claimedBy.getAccountId(), completedBy.getAccountId())
                 || !StringUtils.hasText(payoutReference)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }

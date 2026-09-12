@@ -142,6 +142,24 @@ public class PaymentCancellationProcessor {
                 "PG에서 이미 취소됐으나 정산 지급이 시작되어 자동 반영하지 않았습니다.");
     }
 
+    /** 외부 부분 취소는 전액 취소 원장으로 자동 반영하지 않고 지급 전에 격리한다. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordExternalPartialCancellation(Long orderId) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        PaymentCancellationOperation operation = cancellationOperationRepository
+                .findByOrderIdWithPessimisticLock(orderId)
+                .orElseGet(() -> cancellationOperationRepository.save(
+                        PaymentCancellationOperation.start(
+                                order, payment, PaymentCancellationTrigger.PORTONE_WEBHOOK,
+                                "PortOne 외부 부분 취소", payment.getAmount())));
+        operation.requireManualReview(
+                "PARTIAL_CANCEL_RECONCILIATION_REQUIRED",
+                "PortOne 부분 취소 금액을 수동 대사하기 전까지 정산 지급을 차단합니다.");
+    }
+
     /**
      * 2단계 — PG 취소가 확정된 사실만 먼저 커밋한다.
      *

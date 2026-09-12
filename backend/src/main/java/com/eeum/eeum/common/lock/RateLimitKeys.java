@@ -62,6 +62,11 @@ public final class RateLimitKeys {
         return "rate-limit:webhook-signature-fail:record";
     }
 
+    /** Standard Webhooks event id의 짧은 중복 수신 차단 키. */
+    public static String webhookReplay(String webhookId) {
+        return "webhook:portone:received:" + (webhookId == null ? "" : webhookId);
+    }
+
     private static String normalize(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }

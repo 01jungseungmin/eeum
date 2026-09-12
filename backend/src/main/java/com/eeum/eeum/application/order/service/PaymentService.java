@@ -38,6 +38,7 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -74,6 +75,11 @@ public class PaymentService {
 
     /** 서명 실패를 DB 이력으로 남기는 최소 간격 — 구간당 1건. */
     private static final Duration SIGNATURE_FAILURE_RECORD_COOLDOWN = Duration.ofMinutes(10);
+
+    // PortOne은 실패한 Webhook을 최대 256분까지 재전송한다. 재전송에서도 최초 event
+    // timestamp가 유지되므로, 그 범위를 넘는 작은 허용값을 쓰면 정상 이벤트를 버리게 된다.
+    private static final Duration WEBHOOK_TIMESTAMP_TOLERANCE = Duration.ofHours(5);
+    private static final Duration WEBHOOK_REPLAY_WINDOW = Duration.ofHours(6);
 
     public void verifyPayment(Long accountId, PaymentCompleteRequestDto request) {
         // 식별자 해소는 상태를 바꾸지 않는 짧은 조회다. 이후부터 외부 조회까지 같은 주문 락을
@@ -118,32 +124,43 @@ public class PaymentService {
          * 4. 서명 불일치 시 Webhook 처리 중단
          * 5. 실패 로그 기록 및 401/400 계열 예외 처리
          */
-        validateWebhookSignature(rawBody, headers);
-
-        PaymentWebhookRequestDto request = parseWebhookBody(rawBody);
-
-        // [3단계] 여기부터는 서명 검증을 통과한 요청이다 — 실패는 빠짐없이 기록한다.
-        String paymentId = request.resolvedPaymentId();
-        if (paymentId == null || paymentId.isBlank()) {
-            log.warn("paymentId 없는 Webhook 수신");
-            operationFailureRecorder.record(
-                    OperationFailureCategory.PAYMENT_WEBHOOK,
-                    "PaymentService.handleWebhook",
-                    null, null,
-                    "WEBHOOK_NO_PAYMENT_ID", "Webhook에 paymentId가 없음", maskWebhookBody(rawBody));
+        String webhookId = validateWebhookSignature(rawBody, headers);
+        String replayKey = RateLimitKeys.webhookReplay(webhookId);
+        if (!rateLimitService.tryAcquireCooldown(replayKey, WEBHOOK_REPLAY_WINDOW)) {
+            log.info("중복 PortOne Webhook 무시: webhookId={}", webhookId);
             return;
         }
+        try {
+            PaymentWebhookRequestDto request = parseWebhookBody(rawBody);
 
-        Long orderId = paymentRepository.findOrderIdByPortonePaymentId(paymentId).orElse(null);
-        if (orderId == null) {
-            if (paymentId.startsWith(com.eeum.eeum.application.ai.service.AiPlanPaymentCommandExecutor.AI_PLAN_PAYMENT_PREFIX)) {
-                aiPlanSubscriptionService.handleWebhook(paymentId);
+            // [3단계] 여기부터는 서명 검증을 통과한 요청이다 — 실패는 빠짐없이 기록한다.
+            String paymentId = request.resolvedPaymentId();
+            if (paymentId == null || paymentId.isBlank()) {
+                log.warn("paymentId 없는 Webhook 수신");
+                operationFailureRecorder.record(
+                        OperationFailureCategory.PAYMENT_WEBHOOK,
+                        "PaymentService.handleWebhook",
+                        null, null,
+                        "WEBHOOK_NO_PAYMENT_ID", "Webhook에 paymentId가 없음", maskWebhookBody(rawBody));
                 return;
             }
-            log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}", paymentId);
-            return;
+
+            Long orderId = paymentRepository.findOrderIdByPortonePaymentId(paymentId).orElse(null);
+            if (orderId == null) {
+                if (paymentId.startsWith(com.eeum.eeum.application.ai.service.AiPlanPaymentCommandExecutor.AI_PLAN_PAYMENT_PREFIX)) {
+                    aiPlanSubscriptionService.handleWebhook(paymentId);
+                    return;
+                }
+                log.warn("등록되지 않은 paymentId Webhook 수신: paymentId={}", paymentId);
+                return;
+            }
+            handleWebhookByExternalStatus(orderId, paymentId);
+        } catch (RuntimeException e) {
+            // 처리 실패는 PortOne 재전송으로 복구해야 한다. 성공 여부와 무관하게 event id를
+            // 완료 처리하면 일시적인 PG 조회·DB·락 실패가 영구 유실된다.
+            rateLimitService.releaseCooldown(replayKey);
+            throw e;
         }
-        handleWebhookByExternalStatus(orderId, paymentId);
     }
 
     @Transactional(readOnly = true)
@@ -237,12 +254,13 @@ public class PaymentService {
             return;
         }
         if ("PARTIAL_CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
+            paymentCancellationService.recordExternalPartialCancellation(orderId);
             operationFailureRecorder.record(
                     OperationFailureCategory.REFUND,
                     "PaymentService.handleWebhook.partialCancel",
                     "order", String.valueOf(orderId),
                     "PARTIAL_CANCEL_NOT_SUPPORTED",
-                    "부분 취소는 자동 반영 대상이 아님 — 수동 확인 필요",
+                    "부분 취소를 수동 검토로 격리해 정산 지급을 차단했습니다.",
                     "paymentId=" + paymentId + ", externalStatus=" + externalPayment.getStatus());
             return;
         }
@@ -253,7 +271,7 @@ public class PaymentService {
                 () -> paymentWebhookProcessor.applyPaidWebhook(orderId, paymentId, externalPayment));
     }
 
-    private void validateWebhookSignature(String rawBody, HttpHeaders headers) {
+    private String validateWebhookSignature(String rawBody, HttpHeaders headers) {
         String secret = portOneProperties.webhookSecret();
         if (!StringUtils.hasText(secret)) {
             // 서버 설정 오류다. 공격자가 반복 유발할 수 있으므로 2단계와 같은 제한 기록을 쓴다.
@@ -270,11 +288,26 @@ public class PaymentService {
             log.warn("서명 헤더 없는 Webhook 수신");
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
         }
+        if (!isTimestampWithinTolerance(timestamp)) {
+            recordWebhookSignatureFailure("Webhook timestamp 허용 범위 초과", rawBody);
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
+        }
         if (!matchesStandardWebhookSignature(secret, webhookId, timestamp, rawBody, signatures)) {
             // [2단계] 서명은 왔는데 맞지 않는다 — 시크릿 로테이션 사고일 수도, 공격일 수도 있다.
             // 카운터로 전량 집계하고 이력은 구간당 1건만 남긴다.
             recordWebhookSignatureFailure("서명 불일치", rawBody);
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_INVALID);
+        }
+        return webhookId;
+    }
+
+    private boolean isTimestampWithinTolerance(String timestamp) {
+        try {
+            Instant occurredAt = Instant.ofEpochSecond(Long.parseLong(timestamp));
+            return !occurredAt.isBefore(Instant.now().minus(WEBHOOK_TIMESTAMP_TOLERANCE))
+                    && !occurredAt.isAfter(Instant.now().plus(WEBHOOK_TIMESTAMP_TOLERANCE));
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 

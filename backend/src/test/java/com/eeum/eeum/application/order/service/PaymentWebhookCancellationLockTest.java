@@ -35,6 +35,7 @@ import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -108,6 +109,9 @@ class PaymentWebhookCancellationLockTest {
 
         when(paymentRepository.findOrderIdByPortonePaymentId(PAYMENT_ID))
                 .thenReturn(Optional.of(ORDER_ID));
+        // 같은 webhook-id 재전송 차단을 통과시킨다. mock 기본값(false)이면 모든 Webhook이
+        // 중복으로 무시돼 아래 검증이 전부 무의미해진다.
+        when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(true);
     }
 
     @Test
@@ -148,20 +152,33 @@ class PaymentWebhookCancellationLockTest {
     }
 
     @Test
-    void 부분_취소_Webhook은_자동_반영하지_않고_이력만_남긴다() {
-        // given — 부분 취소는 누적 취소 금액 차액 계산이 필요해 이번 범위가 아니다
+    void 부분_취소_Webhook은_정산_지급을_막도록_수동_검토로_격리한다() {
+        // given
         givenExternalStatus("PARTIAL_CANCELLED");
 
         // when
         paymentService.handleWebhook(RAW_BODY, signedHeaders());
 
         // then
+        verify(paymentCancellationService).recordExternalPartialCancellation(ORDER_ID);
         verify(operationFailureRecorder).record(
                 any(), eq("PaymentService.handleWebhook.partialCancel"),
                 eq("order"), eq(String.valueOf(ORDER_ID)),
                 eq("PARTIAL_CANCEL_NOT_SUPPORTED"), anyString(), anyString());
         verify(paymentWebhookProcessor, org.mockito.Mockito.never())
                 .applyPaidWebhook(any(), any(), any());
+    }
+
+    @Test
+    void Webhook_처리가_실패하면_재전송을_위해_replay_키를_반납한다() {
+        // given
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenThrow(new RuntimeException("temporary failure"));
+
+        // when / then
+        assertThatThrownBy(() -> paymentService.handleWebhook(RAW_BODY, signedHeaders()))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(rateLimitService).releaseCooldown(org.mockito.ArgumentMatchers.startsWith("webhook:portone:received:"));
     }
 
     // ─────────────────── 헬퍼 ───────────────────
@@ -178,7 +195,9 @@ class PaymentWebhookCancellationLockTest {
 
     private HttpHeaders signedHeaders() {
         String webhookId = "webhook-1";
-        String timestamp = "1700000000";
+        // 고정 시각을 쓰면 Webhook replay 방지의 timestamp 허용 범위에 걸린다.
+        // 시각 검증 자체는 PaymentServiceTest가 따로 본다 — 여기서는 통과만 시킨다.
+        String timestamp = String.valueOf(java.time.Instant.now().getEpochSecond());
         HttpHeaders headers = new HttpHeaders();
         headers.add("webhook-id", webhookId);
         headers.add("webhook-timestamp", timestamp);
