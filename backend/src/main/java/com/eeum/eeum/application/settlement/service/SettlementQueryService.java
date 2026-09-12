@@ -13,10 +13,36 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Service @RequiredArgsConstructor
+@Service
+@RequiredArgsConstructor
 public class SettlementQueryService {
-    private final StoreRepository storeRepository; private final OwnerRevenueRepository ownerRevenueRepository; private final WeeklySettlementRepository weeklySettlementRepository;
-    @Transactional(readOnly = true) public Page<OwnerRevenueResponseDto> getOwnerRevenues(Long accountId, Pageable pageable) { Long storeId = storeRepository.findStoreIdByAccountId(accountId).orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND)); return ownerRevenueRepository.findByStore_StoreIdOrderByCreatedAtDesc(storeId, pageable).map(OwnerRevenueResponseDto::from); }
-    @Transactional(readOnly = true) public Page<WeeklySettlementResponseDto> getOwnerWeeklySettlements(Long accountId, Pageable pageable) { Long storeId = storeRepository.findStoreIdByAccountId(accountId).orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND)); return weeklySettlementRepository.findByStore_StoreIdOrderByPeriodEndAtDesc(storeId, pageable).map(WeeklySettlementResponseDto::from); }
-    @Transactional(readOnly = true) public Page<WeeklySettlementResponseDto> getAdminWeeklySettlements(Pageable pageable) { return weeklySettlementRepository.findAllByOrderByPeriodEndAtDesc(pageable).map(WeeklySettlementResponseDto::from); }
+
+    private final StoreRepository storeRepository;
+    private final OwnerRevenueRepository ownerRevenueRepository;
+    private final WeeklySettlementRepository weeklySettlementRepository;
+
+    @Transactional(readOnly = true)
+    public Page<OwnerRevenueResponseDto> getOwnerRevenues(Long accountId, Pageable pageable) {
+        Long storeId = resolveStoreId(accountId);
+        return ownerRevenueRepository.findByStore_StoreIdOrderByCreatedAtDesc(storeId, pageable)
+                .map(OwnerRevenueResponseDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WeeklySettlementResponseDto> getOwnerWeeklySettlements(Long accountId, Pageable pageable) {
+        Long storeId = resolveStoreId(accountId);
+        return weeklySettlementRepository.findByStore_StoreIdOrderByPeriodEndAtDesc(storeId, pageable)
+                .map(WeeklySettlementResponseDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WeeklySettlementResponseDto> getAdminWeeklySettlements(Pageable pageable) {
+        return weeklySettlementRepository.findAllByOrderByPeriodEndAtDesc(pageable)
+                .map(WeeklySettlementResponseDto::from);
+    }
+
+    private Long resolveStoreId(Long accountId) {
+        return storeRepository.findStoreIdByAccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+    }
 }

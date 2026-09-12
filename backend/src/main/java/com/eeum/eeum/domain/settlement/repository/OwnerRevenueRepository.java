@@ -16,8 +16,6 @@ import org.springframework.data.domain.Pageable;
 
 public interface OwnerRevenueRepository extends JpaRepository<OwnerRevenue, Long> {
 
-    boolean existsByOrder_OrderId(Long orderId);
-
     Optional<OwnerRevenue> findByOrder_OrderId(Long orderId);
 
     Page<OwnerRevenue> findByStore_StoreIdOrderByCreatedAtDesc(Long storeId, Pageable pageable);
