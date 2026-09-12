@@ -2,7 +2,6 @@ package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.service.PaymentCancellationService;
-import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
 import com.eeum.eeum.application.store.dto.response.StoreOrderResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
@@ -42,8 +41,8 @@ public class StoreOrderService {
     private final ApplicationEventPublisher eventPublisher;
     private final RedisLockService redisLockService;
     private final PaymentCancellationService paymentCancellationService;
-    private final OwnerRevenueService ownerRevenueService;
     private final OwnerOrderCancellationAuthorizer cancellationAuthorizer;
+    private final StoreOrderCompletionProcessor completionProcessor;
 
     private static final Duration ORDER_LOCK_LEASE_TIME = Duration.ofSeconds(10);
 
@@ -126,43 +125,14 @@ public class StoreOrderService {
                 order.getOrderId()));
     }
 
-    @Transactional
+    /**
+     * 거래완료. 현장결제 수납과 수익 원장 생성이 걸려 있어 취소·환불과 같은 주문 락을 쓴다.
+     * 락 없이 처리하면 취소가 먼저 커밋된 주문에 지급 원장이 생긴다.
+     */
     public void completeOrder(Long ownerId, Long orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-        validateOwnerOrder(ownerId, order);
-
-        if (order.getStatus() != OrderStatus.READY) {
-            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
-        }
-
-        order.complete();
-
-        Payment payment = paymentRepository.findByOrder_OrderId(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-        if (payment.getPaymentMethod() == PaymentMethod.CASH_ON_SITE) {
-            if (payment.getStatus() != PaymentStatus.NOT_PAID) {
-                throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
-            }
-
-            payment.markAsPaid("CASH_ON_SITE");
-        } else {
-            if (payment.getStatus() != PaymentStatus.PAID) {
-                throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
-            }
-        }
-
-        ownerRevenueService.recordPaidOrder(order, payment);
-        ownerRevenueService.markOrderCompleted(order);
-
-        eventPublisher.publishEvent(new OrderStatusChangedEvent(
-                order.getAccount().getAccountId(),
-                order.getStore().getName(),
-                order.getOrderNumber(),
-                "거래완료",
-                order.getOrderId()));
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId), ORDER_LOCK_LEASE_TIME, ErrorCode.LOCK_ORDER_FAILED,
+                () -> completionProcessor.complete(ownerId, orderId));
     }
 
     public void rejectOrder(Long ownerId, Long orderId, String reason) {

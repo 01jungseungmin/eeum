@@ -3,6 +3,7 @@ package com.eeum.eeum.application.store.service;
 import com.eeum.eeum.application.order.service.OrderService;
 import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
+import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.order.entity.Order;
@@ -36,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -60,8 +62,8 @@ class StoreOrderServiceTest {
     @Mock private PortOnePaymentClient portOnePaymentClient;
     @Mock private com.eeum.eeum.application.order.service.PaymentCancellationService paymentCancellationService;
     @Mock private com.eeum.eeum.application.operation.service.OperationFailureRecorder operationFailureRecorder;
-    @Mock private com.eeum.eeum.application.settlement.service.OwnerRevenueService ownerRevenueService;
     @Mock private OwnerOrderCancellationAuthorizer cancellationAuthorizer;
+    @Mock private StoreOrderCompletionProcessor completionProcessor;
 
     private static final Long ORDER_ID = 1L;
     private static final Long OWNER_ID = 200L;
@@ -167,165 +169,33 @@ class StoreOrderServiceTest {
     // ──────────────────── completeOrder ────────────────────
 
     @Test
-    void 주문_완료_처리_성공_온라인결제() {
-        // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-        when(customer.getAccountId()).thenReturn(CUSTOMER_ID);
-
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.READY);
-        Payment payment = createPayment(order, customer, PaymentMethod.CARD, PaymentStatus.PAID);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrder_OrderId(ORDER_ID)).thenReturn(Optional.of(payment));
+    void 거래완료는_주문_락_안에서_수행된다() {
+        // given — 현장결제 수납과 원장 생성이 걸려 있어 취소·환불과 같은 락을 써야 한다
+        stubLockToRunImmediately();
 
         // when
         storeOrderService.completeOrder(OWNER_ID, ORDER_ID);
 
         // then
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.COMPLETED);
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-        verify(eventPublisher).publishEvent(any(OrderStatusChangedEvent.class));
+        verify(redisLockService).executeWithLock(
+                eq(LockKeys.order(ORDER_ID)), any(Duration.class), any(ErrorCode.class), any(Runnable.class));
+        verify(completionProcessor).complete(OWNER_ID, ORDER_ID);
     }
 
     @Test
-    void 주문_완료_처리_성공_현장결제() {
+    void 주문_락을_잡지_못하면_거래완료를_처리하지_않는다() {
         // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-        when(customer.getAccountId()).thenReturn(CUSTOMER_ID);
+        doThrow(new BusinessException(ErrorCode.LOCK_ORDER_FAILED))
+                .when(redisLockService).executeWithLock(
+                        anyString(), any(Duration.class), any(ErrorCode.class), any(Runnable.class));
 
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.READY);
-        Payment payment = createPayment(order, customer, PaymentMethod.CASH_ON_SITE, PaymentStatus.NOT_PAID);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrder_OrderId(ORDER_ID)).thenReturn(Optional.of(payment));
-
-        // when
-        storeOrderService.completeOrder(OWNER_ID, ORDER_ID);
-
-        // then
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.COMPLETED);
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-        verify(eventPublisher).publishEvent(any(OrderStatusChangedEvent.class));
-    }
-
-    @Test
-    void 주문_완료_처리_시_주문이_없으면_ORDER_NOT_FOUND() {
-        // given
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.empty());
-
-        // when & then
+        // when / then
         assertThatThrownBy(() -> storeOrderService.completeOrder(OWNER_ID, ORDER_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.ORDER_NOT_FOUND);
-    }
+                .isEqualTo(ErrorCode.LOCK_ORDER_FAILED);
 
-    @Test
-    void 주문_완료_처리_시_상점주가_아니면_STORE_ACCESS_DENIED() {
-        // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.READY);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-
-        // when & then
-        assertThatThrownBy(() -> storeOrderService.completeOrder(999L, ORDER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.STORE_ACCESS_DENIED);
-    }
-
-    @Test
-    void 주문_완료_처리_시_상태가_READY가_아니면_ORDER_INVALID_STATUS() {
-        // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.CONFIRMED);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-
-        // when & then
-        assertThatThrownBy(() -> storeOrderService.completeOrder(OWNER_ID, ORDER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
-
-        verify(paymentRepository, never()).findByOrder_OrderId(any());
-    }
-
-    @Test
-    void 주문_완료_처리_시_결제정보가_없으면_PAYMENT_NOT_FOUND() {
-        // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.READY);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrder_OrderId(ORDER_ID)).thenReturn(Optional.empty());
-
-        // when & then
-        assertThatThrownBy(() -> storeOrderService.completeOrder(OWNER_ID, ORDER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
-    }
-
-    @Test
-    void 주문_완료_처리_시_현장결제가_이미_결제됐으면_ORDER_INVALID_STATUS() {
-        // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.READY);
-        Payment payment = createPayment(order, customer, PaymentMethod.CASH_ON_SITE, PaymentStatus.PAID);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrder_OrderId(ORDER_ID)).thenReturn(Optional.of(payment));
-
-        // when & then
-        assertThatThrownBy(() -> storeOrderService.completeOrder(OWNER_ID, ORDER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
-    }
-
-    @Test
-    void 주문_완료_처리_시_온라인결제가_PAID가_아니면_PAYMENT_NOT_COMPLETED() {
-        // given
-        Account owner = mock(Account.class);
-        when(owner.getAccountId()).thenReturn(OWNER_ID);
-        Account customer = mock(Account.class);
-
-        Store store = createStore(owner);
-        Order order = createOrder(store, customer, OrderStatus.READY);
-        Payment payment = createPayment(order, customer, PaymentMethod.CARD, PaymentStatus.PENDING);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrder_OrderId(ORDER_ID)).thenReturn(Optional.of(payment));
-
-        // when & then
-        assertThatThrownBy(() -> storeOrderService.completeOrder(OWNER_ID, ORDER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.PAYMENT_NOT_COMPLETED);
+        verify(completionProcessor, never()).complete(any(), any());
     }
 
     // ──────────────────── rejectOrder ────────────────────
