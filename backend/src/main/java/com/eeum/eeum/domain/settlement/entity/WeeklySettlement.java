@@ -106,7 +106,15 @@ public class WeeklySettlement extends BaseEntity {
     @Column(name = "version", nullable = false)
     private Long version;
 
-    public static WeeklySettlement create(
+    /**
+     * 생성 입력 검증.
+     *
+     * <p>운영 경로는 마감 경쟁을 피하려고 네이티브 upsert
+     * ({@code WeeklySettlementRepository.insertIfAbsent})로 행을 만든다. 그 경로도 이
+     * 검증을 거치도록 팩토리에서 떼어 냈다 — 검증이 팩토리 안에만 있으면 실제 생성 경로가
+     * 아무 검사도 받지 않는다.
+     */
+    public static void validateCreation(
             Store store,
             LocalDateTime periodStartAt,
             LocalDateTime periodEndAt,
@@ -116,6 +124,15 @@ public class WeeklySettlement extends BaseEntity {
                 || !periodStartAt.isBefore(periodEndAt) || !StringUtils.hasText(payoutIdempotencyKey)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
+    }
+
+    public static WeeklySettlement create(
+            Store store,
+            LocalDateTime periodStartAt,
+            LocalDateTime periodEndAt,
+            String payoutIdempotencyKey
+    ) {
+        validateCreation(store, periodStartAt, periodEndAt, payoutIdempotencyKey);
         WeeklySettlement settlement = new WeeklySettlement();
         settlement.store = store;
         settlement.periodStartAt = periodStartAt;
@@ -264,6 +281,31 @@ public class WeeklySettlement extends BaseEntity {
             throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
         }
         validateClaimToken(claimToken);
+    }
+
+    /**
+     * 지급 직전 대사. 포함된 항목의 합계가 이 정산의 합계와 같은지 확인한다.
+     *
+     * <p>합계는 {@link #addRevenue}/{@link #removeRevenue}의 증분 연산으로 유지된다.
+     * 증분이 한 번이라도 어긋나면 실제로 지급해야 할 금액과 다른 돈이 나간다. 그래서
+     * 지급을 확정하기 전에 항목 원본에서 다시 더한 값과 맞춰 본다.
+     */
+    public void reconcileWithItemAmounts(
+            BigDecimal paymentSum,
+            BigDecimal pgFeeSum,
+            BigDecimal platformFeeSum,
+            BigDecimal payoutSum
+    ) {
+        if (paymentSum == null || pgFeeSum == null || platformFeeSum == null || payoutSum == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_AMOUNT_MISMATCH);
+        }
+        validateAmountSnapshot(paymentSum, pgFeeSum, platformFeeSum, payoutSum);
+        if (paymentAmount.compareTo(paymentSum) != 0
+                || pgFeeAmount.compareTo(pgFeeSum) != 0
+                || platformFeeAmount.compareTo(platformFeeSum) != 0
+                || payoutAmount.compareTo(payoutSum) != 0) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_AMOUNT_MISMATCH);
+        }
     }
 
     private static void validateAmountSnapshot(

@@ -169,6 +169,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
 - `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
 - `NotificationOutboxScheduler` — 1초 주기, `notification_outbox`의 대기 행을 처리해 알림 생성 (한 번에 100건, 재시도 5회 초과 시 FAILED) / 매일 04:20 완료분(24시간 경과) 정리. 알림 생성은 비동기 이벤트가 아니라 이 경로다 — 원 트랜잭션에서 outbox에 기록하고 여기서 꺼내 쓴다
+- `WeeklySettlementClosingScheduler` — 매주 월 00:00(Asia/Seoul), 유보기간이 지난 `OwnerRevenue`를 그 주의 `WeeklySettlement`으로 마감. 원장 ID마다 별도 트랜잭션이라 한 건이 실패해도 나머지는 진행하고, 실패·지연 포함은 `OperationFailureRecorder`(SCHEDULER)에 남긴다
 - `WebSocketSessionReconciliationScheduler` — 30초 주기, 붙어 있는 WebSocket 세션의 계정 상태·토큰 세대를 DB와 대조해 회수된 연결 종료. **분산 잠금을 걸지 않는다**(`@InstanceLocalSchedule`) — 세션은 JVM 안에만 있어 한 대만 돌면 나머지 인스턴스 세션이 방치된다
 
 ### Redis 키 패턴
@@ -211,6 +212,7 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - **notification** — `Notification`, `NotificationSettings`; push via FCM, real-time via SSE
 - **favorite** — Polymorphic `Favorite` keyed by `FavoriteRefType`
 - **region** — `Region` (administrative region lookup), `Location` for GPS coordinate storage
+- **settlement** — `OwnerRevenue`(주문 1건당 수익 원장), `WeeklySettlement`/`WeeklySettlementItem`(상점별 주간 지급). 수수료율은 `settlement.fee.pg-rate`/`platform-rate` 설정값이며 코드 상수가 아니다 — 숫자만 바꾸면 이후 생성 원장부터 적용된다. **현장결제(`CASH_ON_SITE`)는 원장을 만들지 않는다** — 플랫폼이 받은 적 없는 돈이라 지급 대상이 아니다. 지급은 관리자 수동(claim → complete)이며 claim 토큰으로 fencing 한다
 - **used** — `UsedProduct` (C2C 중고거래 게시글). 거래 상태(`SELLING`/`RESERVED`/`SOLD`)·관리자 숨김(`hidden`)·Soft Delete(`deletedAt`)를 독립된 세 축으로 관리한다. 카테고리는 `CategoryType.USED`를 재사용하고, 거래 희망 지역은 작성 시점 `Region`을 복사해 고정한다.
 
 ### Key design patterns
