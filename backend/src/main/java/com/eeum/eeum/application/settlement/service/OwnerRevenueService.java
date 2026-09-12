@@ -3,6 +3,7 @@ package com.eeum.eeum.application.settlement.service;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlement;
@@ -18,43 +19,70 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 주문 결제만 사장 매출 원장으로 연결한다. AI 플랜 결제는 Order가 없으므로 이 진입점에 들어올 수 없다.
+ *
+ * <p>원장은 <b>플랫폼이 대신 받아 두었다가 사장에게 보내줄 돈</b>의 기록이다. 그래서
+ * 플랫폼을 거치지 않은 결제(현장결제)는 원장을 만들지 않는다 — 자세한 이유는
+ * {@link #isPayoutEligible(Payment)} 참고.
  */
 @Service
 @RequiredArgsConstructor
 public class OwnerRevenueService {
 
-    private static final BigDecimal ZERO_FEE = BigDecimal.ZERO;
-
     private final OwnerRevenueRepository ownerRevenueRepository;
     private final WeeklySettlementRepository weeklySettlementRepository;
     private final WeeklySettlementItemRepository weeklySettlementItemRepository;
+    private final SettlementFeePolicy settlementFeePolicy;
 
+    /**
+     * 지급 대상 결제인지 판별한다.
+     *
+     * <p>현장결제는 손님이 매장에서 사장에게 직접 돈을 낸다. 플랫폼은 그 돈을 받은 적이
+     * 없으므로 사장에게 보내줄 것도 없다. 원장을 만들면 주간 정산이 그 금액을 지급 대상으로
+     * 잡아 <b>사장이 같은 주문 대금을 두 번 받는다.</b>
+     */
+    private boolean isPayoutEligible(Payment payment) {
+        return payment.getPaymentMethod() != PaymentMethod.CASH_ON_SITE;
+    }
+
+    /**
+     * @return 생성되었거나 이미 존재하는 원장. 지급 대상이 아닌 결제수단이면 {@code null}.
+     */
     @Transactional
     public OwnerRevenue recordPaidOrder(Order order, Payment payment) {
         if (order == null || payment == null || payment.getStatus() != PaymentStatus.PAID) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
+        if (!isPayoutEligible(payment)) {
+            return null;
+        }
 
         return ownerRevenueRepository.findByOrder_OrderId(order.getOrderId())
-                .orElseGet(() -> ownerRevenueRepository.save(OwnerRevenue.create(
-                        order,
-                        payment,
-                        payment.getAmount(),
-                        ZERO_FEE,
-                        ZERO_FEE,
-                        payment.getAmount()
-                )));
+                .orElseGet(() -> {
+                    SettlementFeePolicy.Breakdown breakdown =
+                            settlementFeePolicy.breakdown(payment.getAmount());
+                    return ownerRevenueRepository.save(OwnerRevenue.create(
+                            order,
+                            payment,
+                            breakdown.paymentAmount(),
+                            breakdown.pgFeeAmount(),
+                            breakdown.platformFeeAmount(),
+                            breakdown.payoutAmount()
+                    ));
+                });
     }
 
     @Transactional
-    public void markOrderCompleted(Order order) {
+    public void markOrderCompleted(Order order, Payment payment) {
         if (order == null || order.getStatus() != OrderStatus.COMPLETED) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        if (payment == null || !isPayoutEligible(payment)) {
+            // 원장이 없는 결제수단이다. 채울 지급 가능 시각도 없다.
+            return;
         }
         OwnerRevenue revenue = ownerRevenueRepository.findByOrder_OrderId(order.getOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
