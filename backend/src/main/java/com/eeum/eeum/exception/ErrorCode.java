@@ -140,6 +140,10 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ORDER_INVALID_STATUS("ORDER_007", "유효하지 않은 주문 상태 입니다.", HttpStatus.BAD_REQUEST),
     ORDER_REFUND_NOT_ALLOWED("ORDER_008", "환불 요청할 수 없는 주문 상태입니다", HttpStatus.BAD_REQUEST),
 
+    // 환불 계좌 입력 계약이 없어 취소를 끝까지 처리할 수 없는 결제수단(가상계좌)을 막는다.
+    ORDER_PAYMENT_METHOD_NOT_SUPPORTED("ORDER_009",
+            "현재 지원하지 않는 결제수단입니다", HttpStatus.BAD_REQUEST),
+
     // ===================== 정산 (SETTLEMENT) =====================
     SETTLEMENT_INVALID_AMOUNT("SETTLEMENT_001", "정산 금액 구성이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
     SETTLEMENT_INVALID_STATUS("SETTLEMENT_002", "처리할 수 없는 정산 상태입니다", HttpStatus.CONFLICT),
@@ -151,6 +155,15 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
 
     // 지급할 항목이 없는 정산이다. 상태 위반(SETTLEMENT_002)과 원인이 다르다.
     SETTLEMENT_NO_PAYOUT_TARGET("SETTLEMENT_005", "지급할 정산 항목이 없습니다", HttpStatus.BAD_REQUEST),
+
+    // 정산에 포함된 주문 중 마무리되지 않은 취소 작업이 있어 지급을 막은 경우.
+    // 상태 위반(SETTLEMENT_002)과 섞으면 어느 주문 때문인지 알 수 없어 코드를 나눈다.
+    SETTLEMENT_BLOCKED_BY_CANCELLATION("SETTLEMENT_006",
+            "정산에 포함된 주문의 취소 처리가 끝나지 않아 지급할 수 없습니다", HttpStatus.CONFLICT),
+
+    // 정산 합계와 포함 항목의 합이 어긋난 경우. 금액이 맞지 않는 지급은 절대 진행하지 않는다.
+    SETTLEMENT_AMOUNT_MISMATCH("SETTLEMENT_007",
+            "정산 합계가 포함된 항목의 합과 일치하지 않습니다", HttpStatus.CONFLICT),
 
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
