@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.settlement.service;
 
 import com.eeum.eeum.application.settlement.dto.response.BlockingCancellationResponseDto;
+import com.eeum.eeum.application.order.service.PaymentCancellationService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.order.entity.Order;
@@ -46,6 +47,7 @@ class ManualSettlementPayoutServiceTest {
     @Mock private WeeklySettlementItemRepository weeklySettlementItemRepository;
     @Mock private OwnerRevenueRepository ownerRevenueRepository;
     @Mock private PaymentCancellationOperationRepository cancellationOperationRepository;
+    @Mock private PaymentCancellationService paymentCancellationService;
     @Mock private Account admin;
     @Mock private WeeklySettlement settlement;
 
@@ -58,7 +60,8 @@ class ManualSettlementPayoutServiceTest {
                 accountRepository,
                 weeklySettlementItemRepository,
                 ownerRevenueRepository,
-                cancellationOperationRepository);
+                cancellationOperationRepository,
+                paymentCancellationService);
     }
 
     @Test
@@ -205,6 +208,36 @@ class ManualSettlementPayoutServiceTest {
         assertThat(blocking).hasSize(1);
         assertThat(blocking.get(0).orderId()).isEqualTo(ORDER_ID);
         assertThat(blocking.get(0).status()).isEqualTo(PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED);
+    }
+
+    @Test
+    void 정산에_포함된_주문의_확정된_취소만_내부_반영을_재시도한다() {
+        // given
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(admin.isAdmin()).thenReturn(true);
+        givenIncludedOrders();
+
+        // when
+        service.applyConfirmedCancellation(ADMIN_ID, SETTLEMENT_ID, ORDER_ID);
+
+        // then
+        verify(paymentCancellationService).applyConfirmedManualReviewCancellation(ORDER_ID);
+    }
+
+    @Test
+    void 정산에_포함되지_않은_주문의_취소는_해소할_수_없다() {
+        // given
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(admin.isAdmin()).thenReturn(true);
+        when(weeklySettlementItemRepository.findOrderIdsByWeeklySettlementId(SETTLEMENT_ID))
+                .thenReturn(List.of());
+
+        // when / then
+        assertThatThrownBy(() -> service.applyConfirmedCancellation(ADMIN_ID, SETTLEMENT_ID, ORDER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        verify(paymentCancellationService, never()).applyConfirmedManualReviewCancellation(any());
     }
 
     // ─────────────────── 헬퍼 ───────────────────

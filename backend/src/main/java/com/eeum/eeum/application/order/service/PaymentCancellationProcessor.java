@@ -249,6 +249,26 @@ public class PaymentCancellationProcessor {
     }
 
     /**
+     * PG 취소 확정 뒤 내부 반영이 실패한 수동 검토 건을 다시 반영한다.
+     * 외부 API를 호출하지 않으며, 성공 여부가 불명확하거나 부분 취소인 건은 여기로
+     * 들어올 수 없다.
+     */
+    @Transactional
+    public void applyConfirmedManualReviewCancellation(Long orderId) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        paymentRepository.findByOrderIdWithPessimisticLock(order.getOrderId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        PaymentCancellationOperation operation = cancellationOperationRepository
+                .findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS));
+
+        operation.resumeConfirmedPgCancellation();
+        applyCancellation(operation.getPaymentCancellationOperationId(),
+                operation.getTriggerType(), operation.getReason());
+    }
+
+    /**
      * 4단계(실패 경로) — 사람이 확인해야 할 건으로 격리한다.
      *
      * <p>{@code REQUIRES_NEW}인 이유는, 3단계 트랜잭션이 롤백되는 와중에 호출되기 때문이다.

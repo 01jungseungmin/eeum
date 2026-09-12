@@ -15,6 +15,27 @@ import static org.mockito.Mockito.when;
 class PaymentCancellationOperationTest {
 
     @Test
+    void PG_취소가_확정된_수동검토_작업만_내부반영_재시도를_허용한다() {
+        // given
+        Order order = mock(Order.class);
+        Payment payment = mock(Payment.class);
+        when(payment.getOrder()).thenReturn(order);
+        when(payment.getAmount()).thenReturn(BigDecimal.valueOf(10_000));
+        PaymentCancellationOperation operation = PaymentCancellationOperation.start(
+                order, payment, PaymentCancellationTrigger.CUSTOMER_CANCEL,
+                "고객 취소", BigDecimal.valueOf(10_000));
+        operation.markPgRequested(PaymentCancellationTrigger.CUSTOMER_CANCEL, "고객 취소", LocalDateTime.now());
+        operation.markPgCancelled("cancel-1", "SUCCEEDED", LocalDateTime.now());
+        operation.requireManualReview("INTERNAL_APPLY_FAILED", "내부 반영 실패");
+
+        // when
+        operation.resumeConfirmedPgCancellation();
+
+        // then
+        assertThat(operation.isPgCancelled()).isTrue();
+    }
+
+    @Test
     void PG_응답_유실_작업은_유예_시간_후에만_수동검토로_격리된다() {
         // given
         Order order = mock(Order.class);

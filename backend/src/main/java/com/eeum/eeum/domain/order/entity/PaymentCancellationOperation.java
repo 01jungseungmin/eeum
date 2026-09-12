@@ -190,6 +190,21 @@ public class PaymentCancellationOperation extends BaseEntity {
         this.failureReason = truncate(failureReason);
     }
 
+    /**
+     * PG 전액 취소가 이미 확정됐지만 내부 반영만 실패한 작업을 재개한다.
+     *
+     * <p>관리자가 임의로 차단을 해제하면 고객 환불 뒤에도 원장이 지급될 수 있다. 따라서
+     * PortOne이 {@code SUCCEEDED}를 남긴 작업만 {@code PG_CANCELLED} 단계로 되돌린다.
+     * 부분 취소·응답 유실처럼 금액 또는 최종 결과가 불명확한 작업은 계속 수동 검토다.
+     */
+    public void resumeConfirmedPgCancellation() {
+        if (status != PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED
+                || !"SUCCEEDED".equals(pgStatus)) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
+        }
+        this.status = PaymentCancellationStatus.PG_CANCELLED;
+    }
+
     public void recordPgStatus(String pgCancellationId, String pgStatus) {
         this.pgCancellationId = pgCancellationId;
         this.pgStatus = pgStatus;

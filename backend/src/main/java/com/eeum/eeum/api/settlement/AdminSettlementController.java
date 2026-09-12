@@ -74,4 +74,16 @@ public class AdminSettlementController {
         return ResponseEntity.ok(ApiResponse.success(
                 payoutService.getBlockingCancellations(SecurityUtil.getCurrentAccountId(), id)));
     }
+
+    @Operation(summary = "확정된 취소의 내부 반영 재시도",
+            description = "PG가 SUCCEEDED를 반환했으나 내부 반영이 실패한 전액 취소만 재시도합니다. "
+                    + "부분 취소나 PG 결과 미확정 작업은 자동 해제하지 않습니다.")
+    @PostMapping("/{id}/blocking-cancellations/{orderId}/reconcile")
+    public ResponseEntity<ApiResponse<Void>> reconcileConfirmedCancellation(
+            @PathVariable @Positive Long id,
+            @PathVariable @Positive Long orderId
+    ) {
+        payoutService.applyConfirmedCancellation(SecurityUtil.getCurrentAccountId(), id, orderId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 }

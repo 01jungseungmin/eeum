@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.settlement.service;
 
 import com.eeum.eeum.application.settlement.dto.response.BlockingCancellationResponseDto;
+import com.eeum.eeum.application.order.service.PaymentCancellationService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.order.entity.PaymentCancellationOperation;
@@ -37,6 +38,7 @@ public class ManualSettlementPayoutService {
     private final WeeklySettlementItemRepository weeklySettlementItemRepository;
     private final OwnerRevenueRepository ownerRevenueRepository;
     private final PaymentCancellationOperationRepository cancellationOperationRepository;
+    private final PaymentCancellationService paymentCancellationService;
 
     /**
      * 지급 작업을 선점한다.
@@ -103,6 +105,21 @@ public class ManualSettlementPayoutService {
         return findUncompletedCancellations(includedOrderIds).stream()
                 .map(BlockingCancellationResponseDto::from)
                 .toList();
+    }
+
+    /**
+     * PG 전액 취소가 확정됐지만 내부 반영 실패로 지급을 막는 작업을 재시도한다.
+     * 성공 여부나 금액이 불명확한 작업은 자동으로 차단을 풀지 않는다.
+     */
+    public void applyConfirmedCancellation(Long adminAccountId, Long weeklySettlementId, Long orderId) {
+        requireAdmin(adminAccountId);
+        boolean included = weeklySettlementItemRepository
+                .findOrderIdsByWeeklySettlementId(weeklySettlementId)
+                .contains(orderId);
+        if (!included) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        paymentCancellationService.applyConfirmedManualReviewCancellation(orderId);
     }
 
     private Account requireAdmin(Long adminAccountId) {

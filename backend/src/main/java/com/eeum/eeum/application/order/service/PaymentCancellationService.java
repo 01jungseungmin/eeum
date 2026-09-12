@@ -107,6 +107,22 @@ public class PaymentCancellationService {
         );
     }
 
+    /**
+     * 관리자가 확인한 PG 전액 취소의 내부 반영만 재시도한다.
+     * PortOne 호출은 하지 않고, 기존 취소·환불 경로와 같은 주문 락을 쓴다.
+     */
+    public void applyConfirmedManualReviewCancellation(Long orderId) {
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId),
+                CANCEL_LOCK_LEASE_TIME,
+                ErrorCode.LOCK_ORDER_FAILED,
+                () -> {
+                    processor.applyConfirmedManualReviewCancellation(orderId);
+                    return null;
+                }
+        );
+    }
+
     private void cancelWithLock(
             Long orderId,
             PaymentCancellationTrigger trigger,

@@ -31,18 +31,20 @@ public class WeeklySettlementClosingScheduler {
         LocalDateTime periodEndAt = LocalDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                 .toLocalDate().atStartOfDay();
         LocalDateTime periodStartAt = periodEndAt.minusWeeks(1);
-        List<Long> eligibleIds = ownerRevenueRepository.findEligibleIds(OwnerRevenueStatus.ACCRUED, periodEndAt);
+        List<Long> lateIds = ownerRevenueRepository.findLateEligibleIds(OwnerRevenueStatus.ACCRUED, periodStartAt);
+        for (Long ownerRevenueId : lateIds) {
+            // 기간 밖 원장은 현재 주차에 섞지 않는다. 지급 누락을 숨기지도 않고 운영
+            // 수습 대기열에 남겨 별도 재마감 또는 수동 지급 절차를 선택하게 한다.
+            recordFailure(ownerRevenueId, "SETTLEMENT_OUTSIDE_PERIOD",
+                    "지난 정산 기간에 포함되지 않은 원장입니다. 별도 정산 수습이 필요합니다.",
+                    periodStartAt, periodEndAt);
+        }
+        List<Long> eligibleIds = ownerRevenueRepository.findEligibleIds(
+                OwnerRevenueStatus.ACCRUED, periodStartAt, periodEndAt);
 
         for (Long ownerRevenueId : eligibleIds) {
             try {
-                if (weeklySettlementClosingService.closeEligibleRevenue(
-                        ownerRevenueId, periodStartAt, periodEndAt)) {
-                    // 지난 마감에서 빠진 원장이 이번 주기에 섞여 들어갔다. 조용히 넘기면
-                    // 정산 행의 기간과 실제 포함 원장이 어긋난 채로 남는다.
-                    recordFailure(ownerRevenueId, "SETTLEMENT_LATE_INCLUSION",
-                            "지난 마감에서 누락된 원장이 이번 주기 정산에 포함됨",
-                            periodStartAt, periodEndAt);
-                }
+                weeklySettlementClosingService.closeEligibleRevenue(ownerRevenueId, periodStartAt, periodEndAt);
             } catch (RuntimeException e) {
                 // 돈이 걸린 경로다. 로그만 남기면 마감에서 빠진 원장을 아무도 모른다.
                 log.warn("주간 정산 마감 제외: ownerRevenueId={}", ownerRevenueId, e);
@@ -56,6 +58,10 @@ public class WeeklySettlementClosingScheduler {
         }
     }
 
+    private String payload(LocalDateTime periodStartAt, LocalDateTime periodEndAt) {
+        return "periodStartAt=" + periodStartAt + ", periodEndAt=" + periodEndAt;
+    }
+
     private void recordFailure(
             Long ownerRevenueId, String code, String message,
             LocalDateTime periodStartAt, LocalDateTime periodEndAt
@@ -66,9 +72,5 @@ public class WeeklySettlementClosingScheduler {
                 "WeeklySettlementClosingScheduler.closeWeeklySettlements",
                 "ownerRevenue", String.valueOf(ownerRevenueId),
                 code, message, payload(periodStartAt, periodEndAt));
-    }
-
-    private String payload(LocalDateTime periodStartAt, LocalDateTime periodEndAt) {
-        return "periodStartAt=" + periodStartAt + ", periodEndAt=" + periodEndAt;
     }
 }

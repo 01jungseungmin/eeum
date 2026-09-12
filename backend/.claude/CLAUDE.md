@@ -169,7 +169,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
 - `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
 - `NotificationOutboxScheduler` — 1초 주기, `notification_outbox`의 대기 행을 처리해 알림 생성 (한 번에 100건, 재시도 5회 초과 시 FAILED) / 매일 04:20 완료분(24시간 경과) 정리. 알림 생성은 비동기 이벤트가 아니라 이 경로다 — 원 트랜잭션에서 outbox에 기록하고 여기서 꺼내 쓴다
-- `WeeklySettlementClosingScheduler` — 매주 월 00:00(Asia/Seoul), 유보기간이 지난 `OwnerRevenue`를 그 주의 `WeeklySettlement`으로 마감. 원장 ID마다 별도 트랜잭션이라 한 건이 실패해도 나머지는 진행하고, 실패·지연 포함은 `OperationFailureRecorder`(SCHEDULER)에 남긴다
+- `WeeklySettlementClosingScheduler` — 매주 월 00:00(Asia/Seoul), 해당 주차에 유보기간이 지난 `OwnerRevenue`만 그 주의 `WeeklySettlement`으로 마감. 기간을 지난 누락 원장은 현재 주차에 섞지 않고 `OperationFailureRecorder`(SCHEDULER)에 별도 수습 대상으로 남긴다. 원장 ID마다 별도 트랜잭션이라 한 건이 실패해도 나머지는 진행한다
 - `WebSocketSessionReconciliationScheduler` — 30초 주기, 붙어 있는 WebSocket 세션의 계정 상태·토큰 세대를 DB와 대조해 회수된 연결 종료. **분산 잠금을 걸지 않는다**(`@InstanceLocalSchedule`) — 세션은 JVM 안에만 있어 한 대만 돌면 나머지 인스턴스 세션이 방치된다
 
 ### Redis 키 패턴

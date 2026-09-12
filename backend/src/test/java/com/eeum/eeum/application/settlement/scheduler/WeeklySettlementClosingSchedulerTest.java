@@ -48,6 +48,24 @@ class WeeklySettlementClosingSchedulerTest {
     }
 
     @Test
+    void 기간을_지난_누락_원장은_현재_주차에_넣지_않고_수습_이력으로_남긴다() {
+        // given
+        when(ownerRevenueRepository.findLateEligibleIds(eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class)))
+                .thenReturn(List.of(9L));
+
+        // when
+        scheduler.closeWeeklySettlements();
+
+        // then
+        verify(operationFailureRecorder).record(
+                eq(OperationFailureCategory.SCHEDULER),
+                eq("WeeklySettlementClosingScheduler.closeWeeklySettlements"),
+                eq("ownerRevenue"), eq("9"),
+                eq("SETTLEMENT_OUTSIDE_PERIOD"), anyString(), anyString());
+        verify(weeklySettlementClosingService, never()).closeEligibleRevenue(eq(9L), any(), any());
+    }
+
+    @Test
     void 마감에서_빠진_원장은_운영_실패_이력에_남는다() {
         // given — 돈이 걸린 경로다. 로그만 남기면 누락을 아무도 모른다.
         givenEligible(1L);
@@ -66,23 +84,6 @@ class WeeklySettlementClosingSchedulerTest {
     }
 
     @Test
-    void 지난_마감에서_누락된_원장이_뒤늦게_포함되면_이력에_남는다() {
-        // given — 정산 행의 기간과 실제 포함 원장이 어긋난 채로 남으면 안 된다
-        givenEligible(1L);
-        when(weeklySettlementClosingService.closeEligibleRevenue(eq(1L), any(), any())).thenReturn(true);
-
-        // when
-        scheduler.closeWeeklySettlements();
-
-        // then
-        verify(operationFailureRecorder).record(
-                eq(OperationFailureCategory.SCHEDULER),
-                eq("WeeklySettlementClosingScheduler.closeWeeklySettlements"),
-                eq("ownerRevenue"), eq("1"),
-                eq("SETTLEMENT_LATE_INCLUSION"), anyString(), anyString());
-    }
-
-    @Test
     void 제때_마감된_원장은_이력을_남기지_않는다() {
         // given
         givenEligible(1L);
@@ -97,8 +98,11 @@ class WeeklySettlementClosingSchedulerTest {
     }
 
     private void givenEligible(Long... ownerRevenueIds) {
-        when(ownerRevenueRepository.findEligibleIds(
+        when(ownerRevenueRepository.findLateEligibleIds(
                 eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(ownerRevenueRepository.findEligibleIds(
+                eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of(ownerRevenueIds));
     }
 }

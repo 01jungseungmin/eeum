@@ -90,24 +90,25 @@ class WeeklySettlementClosingServiceTest {
     }
 
     @Test
-    void 지난_마감에서_누락된_원장은_지연_포함으로_보고된다() {
+    void 지난_마감에서_누락된_원장은_현재_주차에_포함하지_않는다() {
         // given — 이번 주기 시작 전에 이미 지급 가능했던 원장
         OwnerRevenue revenue = revenue(PERIOD_START.minusDays(3));
-        givenLocked(revenue, settlement());
+        when(ownerRevenueRepository.findById(REVENUE_ID)).thenReturn(Optional.of(revenue));
 
         // when
         boolean lateInclusion = service.closeEligibleRevenue(REVENUE_ID, PERIOD_START, PERIOD_END);
 
-        // then — 정산 행의 기간이 포함 원장을 설명하지 못하므로 호출자가 기록해야 한다
-        assertThat(lateInclusion).isTrue();
-        verify(weeklySettlementItemRepository).save(any(WeeklySettlementItem.class));
+        // then — 기간 밖 원장을 현재 주차에 섞으면 정산 기간이 거짓이 된다
+        assertThat(lateInclusion).isFalse();
+        verify(weeklySettlementRepository, never()).insertIfAbsent(anyLong(), any(), any(), anyString());
+        verify(weeklySettlementItemRepository, never()).save(any(WeeklySettlementItem.class));
     }
 
     @Test
     void 아직_유보기간이_남은_원장은_마감하지_않는다() {
         // given
         OwnerRevenue revenue = revenue(PERIOD_END.plusDays(1));
-        givenLocked(revenue, settlement());
+        when(ownerRevenueRepository.findById(REVENUE_ID)).thenReturn(Optional.of(revenue));
 
         // when
         boolean lateInclusion = service.closeEligibleRevenue(REVENUE_ID, PERIOD_START, PERIOD_END);
@@ -123,7 +124,7 @@ class WeeklySettlementClosingServiceTest {
         // given — 잠그기 전에 다른 실행이 먼저 마감했다
         OwnerRevenue revenue = revenue(PERIOD_START.plusDays(2));
         revenue.markSettlementPending(PERIOD_END);
-        givenLocked(revenue, settlement());
+        when(ownerRevenueRepository.findById(REVENUE_ID)).thenReturn(Optional.of(revenue));
 
         // when
         boolean lateInclusion = service.closeEligibleRevenue(REVENUE_ID, PERIOD_START, PERIOD_END);

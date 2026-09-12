@@ -24,12 +24,26 @@ public interface OwnerRevenueRepository extends JpaRepository<OwnerRevenue, Long
         SELECT r.ownerRevenueId
         FROM OwnerRevenue r
         WHERE r.status = :status
-          AND r.settleableAt < :settleableAt
+          AND r.settleableAt >= :periodStartAt
+          AND r.settleableAt < :periodEndAt
         ORDER BY r.ownerRevenueId ASC
     """)
     List<Long> findEligibleIds(
             @Param("status") OwnerRevenueStatus status,
-            @Param("settleableAt") LocalDateTime settleableAt
+            @Param("periodStartAt") LocalDateTime periodStartAt,
+            @Param("periodEndAt") LocalDateTime periodEndAt
+    );
+
+    @Query("""
+        SELECT r.ownerRevenueId
+        FROM OwnerRevenue r
+        WHERE r.status = :status
+          AND r.settleableAt < :periodStartAt
+        ORDER BY r.ownerRevenueId ASC
+    """)
+    List<Long> findLateEligibleIds(
+            @Param("status") OwnerRevenueStatus status,
+            @Param("periodStartAt") LocalDateTime periodStartAt
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
