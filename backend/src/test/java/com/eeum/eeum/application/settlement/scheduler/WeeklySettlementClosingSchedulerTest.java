@@ -23,6 +23,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** 누락 정산 수습의 한 건 실패가 이후 마감을 중단하지 않게 고정한다.
+ *
+ * 수습 표시는 원장별 예외 격리와 실패 이력 기록을 통해 나머지 원장과 분리한다.
+ */
 @ExtendWith(MockitoExtension.class)
 class WeeklySettlementClosingSchedulerTest {
 
@@ -65,6 +69,28 @@ class WeeklySettlementClosingSchedulerTest {
                 eq("ownerRevenue"), eq("9"),
                 eq("SETTLEMENT_OUTSIDE_PERIOD"), anyString(), anyString());
         verify(weeklySettlementClosingService, never()).closeEligibleRevenue(eq(9L), any(), any());
+    }
+
+    @Test
+    void 누락_원장_하나의_수습_실패가_정상_마감을_중단시키지_않는다() {
+        // 기간 밖 원장 표시가 예외를 전파하면 이후 누락 원장과 이번 주 정상 마감이 모두 중단됐다.
+        // 원장별 수습 실패는 이력으로 격리하고 뒤의 원장 마감은 계속해야 한다.
+        when(ownerRevenueRepository.findLateEligibleIds(eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class)))
+                .thenReturn(List.of(9L, 10L));
+        when(ownerRevenueRepository.findEligibleIds(
+                eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(List.of(1L));
+        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class)))
+                .thenThrow(new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+
+        scheduler.closeWeeklySettlements();
+
+        verify(weeklySettlementClosingService).markLateRevenueReported(eq(10L), any(LocalDateTime.class));
+        verify(weeklySettlementClosingService).closeEligibleRevenue(eq(1L), any(), any());
+        verify(operationFailureRecorder).record(
+                eq(OperationFailureCategory.SCHEDULER),
+                eq("WeeklySettlementClosingScheduler.closeWeeklySettlements"),
+                eq("ownerRevenue"), eq("9"), any(Throwable.class), anyString());
     }
 
     @Test

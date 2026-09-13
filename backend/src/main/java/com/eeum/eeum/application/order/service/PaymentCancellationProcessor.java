@@ -108,6 +108,13 @@ public class PaymentCancellationProcessor {
                 && order.getStatus() != OrderStatus.PAID) {
             throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
         }
+        if (trigger == PaymentCancellationTrigger.CUSTOMER_CANCEL
+                && order.getStatus() != OrderStatus.PENDING
+                && order.getStatus() != OrderStatus.PAID
+                && order.getStatus() != OrderStatus.CONFIRMED
+                && order.getStatus() != OrderStatus.READY) {
+            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+        }
 
         // 정산 지급이 시작된 거래는 PG를 건드리기 전에 막는다. 통과 후의 경합은 4단계가 격리한다.
         ownerRevenueService.assertCancellableBeforePayout(orderId);

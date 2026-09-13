@@ -36,6 +36,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** 원장 포함 결과가 호출자에게 정확히 전달되게 고정한다.
+ *
+ * 항목 생성 뒤 false를 반환하면 누락 원장 복구 API가 경합을 성공으로 오인할 수 있다.
+ */
 @ExtendWith(MockitoExtension.class)
 class WeeklySettlementClosingServiceTest {
 
@@ -66,10 +70,10 @@ class WeeklySettlementClosingServiceTest {
         givenLocked(revenue, settlement);
 
         // when
-        boolean lateInclusion = service.closeEligibleRevenue(REVENUE_ID, PERIOD_START, PERIOD_END);
+        boolean included = service.closeEligibleRevenue(REVENUE_ID, PERIOD_START, PERIOD_END);
 
         // then
-        assertThat(lateInclusion).isFalse();
+        assertThat(included).isTrue();
         assertThat(revenue.getStatus()).isEqualTo(OwnerRevenueStatus.SETTLEMENT_PENDING);
         assertThat(settlement.getPayoutAmount()).isEqualByComparingTo("10000");
         verify(weeklySettlementItemRepository).save(any(WeeklySettlementItem.class));

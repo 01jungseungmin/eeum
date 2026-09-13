@@ -147,8 +147,11 @@ public class ManualSettlementPayoutService {
         LocalDateTime periodStartAt = revenue.getSettleableAt()
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                 .toLocalDate().atStartOfDay();
-        weeklySettlementClosingService.closeEligibleRevenue(
+        boolean included = weeklySettlementClosingService.closeEligibleRevenue(
                 ownerRevenueId, periodStartAt, periodStartAt.plusWeeks(1));
+        if (!included) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CONCURRENT_MODIFICATION);
+        }
     }
 
     private Account requireAdmin(Long adminAccountId) {

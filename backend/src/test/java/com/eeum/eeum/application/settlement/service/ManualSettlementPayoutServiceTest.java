@@ -36,6 +36,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** 누락 원장 재마감의 실제 포함 결과를 검증한다.
+ *
+ * 경합으로 포함하지 못한 경우에도 성공 응답을 내지 않도록 재시도 가능한 오류로 고정한다.
+ */
 @ExtendWith(MockitoExtension.class)
 class ManualSettlementPayoutServiceTest {
 
@@ -259,6 +263,25 @@ class ManualSettlementPayoutServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
         verify(weeklySettlementClosingService, never()).closeEligibleRevenue(any(), any(), any());
+    }
+
+    @Test
+    void 누락_원장이_경합으로_마감되지_않으면_복구_성공으로_응답하지_않는다() {
+        // 재마감 결과를 무시하면 다른 작업이 원장을 먼저 변경한 뒤에도 관리자 API가 성공으로 끝난다.
+        // 포함 실패는 재시도 가능한 경합 오류로 돌려 운영자가 성공으로 오인하지 않아야 한다.
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(admin.isAdmin()).thenReturn(true);
+        OwnerRevenue revenue = org.mockito.Mockito.mock(OwnerRevenue.class);
+        LocalDateTime settleableAt = LocalDateTime.now().minusWeeks(2);
+        when(revenue.getStatus()).thenReturn(com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.ACCRUED);
+        when(revenue.getSettleableAt()).thenReturn(settleableAt);
+        when(ownerRevenueRepository.findById(1L)).thenReturn(Optional.of(revenue));
+        when(weeklySettlementClosingService.closeEligibleRevenue(eq(1L), any(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.recoverLateRevenue(ADMIN_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SETTLEMENT_CONCURRENT_MODIFICATION);
     }
 
     // ─────────────────── 헬퍼 ───────────────────

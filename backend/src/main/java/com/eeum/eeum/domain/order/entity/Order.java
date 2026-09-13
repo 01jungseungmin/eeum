@@ -5,6 +5,8 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.OrderType;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -116,6 +118,12 @@ public class Order extends BaseEntity {
     }
 
     public void cancel(String reason) {
+        if (status != OrderStatus.PENDING
+                && status != OrderStatus.PAID
+                && status != OrderStatus.CONFIRMED
+                && status != OrderStatus.READY) {
+            throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+        }
         this.status = OrderStatus.CANCELLED;
         this.cancelledAt = LocalDateTime.now();
         this.cancelReason = reason;

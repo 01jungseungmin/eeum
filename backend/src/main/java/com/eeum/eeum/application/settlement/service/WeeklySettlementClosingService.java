@@ -58,7 +58,7 @@ public class WeeklySettlementClosingService {
         revenue.markSettlementPending(periodEndAt);
         weeklySettlementItemRepository.save(WeeklySettlementItem.create(settlement, revenue));
 
-        return false;
+        return true;
     }
 
     /** 기간 밖 누락 원장을 운영 수습 대상으로 한 번만 표시한다. */
