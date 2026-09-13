@@ -35,9 +35,11 @@ public class WeeklySettlementClosingScheduler {
         for (Long ownerRevenueId : lateIds) {
             // 기간 밖 원장은 현재 주차에 섞지 않는다. 지급 누락을 숨기지도 않고 운영
             // 수습 대기열에 남겨 별도 재마감 또는 수동 지급 절차를 선택하게 한다.
-            recordFailure(ownerRevenueId, "SETTLEMENT_OUTSIDE_PERIOD",
-                    "지난 정산 기간에 포함되지 않은 원장입니다. 별도 정산 수습이 필요합니다.",
-                    periodStartAt, periodEndAt);
+            if (weeklySettlementClosingService.markLateRevenueReported(ownerRevenueId, periodStartAt)) {
+                recordFailure(ownerRevenueId, "SETTLEMENT_OUTSIDE_PERIOD",
+                        "지난 정산 기간에 포함되지 않은 원장입니다. 별도 정산 수습이 필요합니다.",
+                        periodStartAt, periodEndAt);
+            }
         }
         List<Long> eligibleIds = ownerRevenueRepository.findEligibleIds(
                 OwnerRevenueStatus.ACCRUED, periodStartAt, periodEndAt);

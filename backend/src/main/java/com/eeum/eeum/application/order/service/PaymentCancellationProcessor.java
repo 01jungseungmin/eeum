@@ -186,7 +186,8 @@ public class PaymentCancellationProcessor {
     @Transactional
     public void markPgCancelled(Long operationId, PortOneCancelResult result) {
         PaymentCancellationOperation operation = getOperation(operationId);
-        operation.markPgCancelled(result.cancellationId(), result.status(), LocalDateTime.now());
+        operation.markPgCancelled(
+                result.cancellationId(), result.status(), result.cancelledAmount(), LocalDateTime.now());
     }
 
     /** PG 호출 자체가 실패한 경우. 돈이 움직이지 않았으므로 재시도 가능한 상태로 되돌린다. */
@@ -307,7 +308,7 @@ public class PaymentCancellationProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordPendingPgStatus(Long operationId, PortOneCancelResult result) {
         PaymentCancellationOperation operation = getOperation(operationId);
-        operation.recordPgStatus(result.cancellationId(), result.status());
+        operation.recordPgStatus(result.cancellationId(), result.status(), result.cancelledAmount());
         operation.requireManualReview(
                 "PG_CANCEL_NOT_CONFIRMED",
                 "PortOne 취소 상태가 SUCCEEDED가 아님: " + result.status());

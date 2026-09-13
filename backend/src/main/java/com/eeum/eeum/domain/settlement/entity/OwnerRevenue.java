@@ -71,6 +71,10 @@ public class OwnerRevenue extends BaseEntity {
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
 
+    /** 기간 밖 누락 원장을 운영 수습 대기열에 한 번만 기록한 시각. */
+    @Column(name = "late_settlement_reported_at")
+    private LocalDateTime lateSettlementReportedAt;
+
     public static OwnerRevenue create(
             Order order,
             Payment payment,
@@ -112,6 +116,15 @@ public class OwnerRevenue extends BaseEntity {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         this.settleableAt = order.getCompletedAt().plusDays(7);
+    }
+
+    public boolean markLateSettlementReported(LocalDateTime periodStartAt, LocalDateTime now) {
+        if (status != OwnerRevenueStatus.ACCRUED || settleableAt == null
+                || !settleableAt.isBefore(periodStartAt) || lateSettlementReportedAt != null) {
+            return false;
+        }
+        lateSettlementReportedAt = now;
+        return true;
     }
 
     public void markSettlementPending(LocalDateTime now) {

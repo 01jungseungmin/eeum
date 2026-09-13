@@ -2,6 +2,8 @@ package com.eeum.eeum.domain.order.entity;
 
 import com.eeum.eeum.domain.order.enums.PaymentCancellationStatus;
 import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -9,6 +11,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -25,7 +28,7 @@ class PaymentCancellationOperationTest {
                 order, payment, PaymentCancellationTrigger.CUSTOMER_CANCEL,
                 "고객 취소", BigDecimal.valueOf(10_000));
         operation.markPgRequested(PaymentCancellationTrigger.CUSTOMER_CANCEL, "고객 취소", LocalDateTime.now());
-        operation.markPgCancelled("cancel-1", "SUCCEEDED", LocalDateTime.now());
+        operation.markPgCancelled("cancel-1", "SUCCEEDED", BigDecimal.valueOf(10_000), LocalDateTime.now());
         operation.requireManualReview("INTERNAL_APPLY_FAILED", "내부 반영 실패");
 
         // when
@@ -60,5 +63,26 @@ class PaymentCancellationOperationTest {
                 .isTrue();
         assertThat(operation.getStatus()).isEqualTo(PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED);
         assertThat(operation.getFailureCode()).isEqualTo("PG_CANCEL_OUTCOME_UNKNOWN");
+    }
+
+    @Test
+    void 부분_취소는_SUCCEEDED여도_전액_취소_재처리를_허용하지_않는다() {
+        // given — PG 상태만 SUCCEEDED이고 취소 금액은 전액보다 작다.
+        Order order = mock(Order.class);
+        Payment payment = mock(Payment.class);
+        when(payment.getOrder()).thenReturn(order);
+        when(payment.getAmount()).thenReturn(BigDecimal.valueOf(10_000));
+        PaymentCancellationOperation operation = PaymentCancellationOperation.start(
+                order, payment, PaymentCancellationTrigger.CUSTOMER_CANCEL,
+                "고객 취소", BigDecimal.valueOf(10_000));
+        operation.markPgRequested(PaymentCancellationTrigger.CUSTOMER_CANCEL, "고객 취소", LocalDateTime.now());
+        operation.recordPgStatus("cancel-1", "SUCCEEDED", BigDecimal.valueOf(3_000));
+        operation.requireManualReview("PG_CANCEL_AMOUNT_MISMATCH", "부분 취소");
+
+        // when / then
+        assertThatThrownBy(operation::resumeConfirmedPgCancellation)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
     }
 }

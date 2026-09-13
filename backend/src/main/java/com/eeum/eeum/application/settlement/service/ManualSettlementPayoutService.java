@@ -21,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,6 +41,7 @@ public class ManualSettlementPayoutService {
     private final OwnerRevenueRepository ownerRevenueRepository;
     private final PaymentCancellationOperationRepository cancellationOperationRepository;
     private final PaymentCancellationService paymentCancellationService;
+    private final WeeklySettlementClosingService weeklySettlementClosingService;
 
     /**
      * 지급 작업을 선점한다.
@@ -120,6 +123,28 @@ public class ManualSettlementPayoutService {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         paymentCancellationService.applyConfirmedManualReviewCancellation(orderId);
+    }
+
+    /**
+     * 누락 원장을 지급 가능해진 원래 주차로 다시 마감한다.
+     * 이미 완료된 주차의 합계를 덮어쓰는 것은 금지하며, 그런 건은 별도 지급 보정 절차로
+     * 수습해야 한다.
+     */
+    @Transactional
+    public void recoverLateRevenue(Long adminAccountId, Long ownerRevenueId) {
+        requireAdmin(adminAccountId);
+        OwnerRevenue revenue = ownerRevenueRepository.findById(ownerRevenueId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        if (revenue.getStatus() != com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.ACCRUED
+                || revenue.getSettleableAt() == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+
+        LocalDateTime periodStartAt = revenue.getSettleableAt()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .toLocalDate().atStartOfDay();
+        weeklySettlementClosingService.closeEligibleRevenue(
+                ownerRevenueId, periodStartAt, periodStartAt.plusWeeks(1));
     }
 
     private Account requireAdmin(Long adminAccountId) {

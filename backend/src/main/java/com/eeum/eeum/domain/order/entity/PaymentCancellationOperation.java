@@ -81,6 +81,10 @@ public class PaymentCancellationOperation extends BaseEntity {
     @Column(name = "pg_status", length = 30)
     private String pgStatus;
 
+    /** PG가 취소 금액까지 원 요청 전액과 일치한다고 확인한 경우에만 true다. */
+    @Column(name = "full_cancellation_confirmed", nullable = false)
+    private boolean fullCancellationConfirmed;
+
     @Column(name = "failure_code", length = 100)
     private String failureCode;
 
@@ -143,7 +147,9 @@ public class PaymentCancellationOperation extends BaseEntity {
     }
 
     /** PortOne이 SUCCEEDED로 확정한 경우만 호출한다. */
-    public void markPgCancelled(String pgCancellationId, String pgStatus, LocalDateTime now) {
+    public void markPgCancelled(
+            String pgCancellationId, String pgStatus, BigDecimal cancelledAmount, LocalDateTime now
+    ) {
         if (status != PaymentCancellationStatus.PG_CANCEL_REQUESTED
                 && status != PaymentCancellationStatus.PG_CANCELLED) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
@@ -151,6 +157,9 @@ public class PaymentCancellationOperation extends BaseEntity {
         this.status = PaymentCancellationStatus.PG_CANCELLED;
         this.pgCancellationId = pgCancellationId;
         this.pgStatus = pgStatus;
+        this.fullCancellationConfirmed = "SUCCEEDED".equals(pgStatus)
+                && cancelledAmount != null
+                && requestedAmount.compareTo(cancelledAmount) == 0;
         this.pgCancelledAt = now;
     }
 
@@ -199,15 +208,18 @@ public class PaymentCancellationOperation extends BaseEntity {
      */
     public void resumeConfirmedPgCancellation() {
         if (status != PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED
-                || !"SUCCEEDED".equals(pgStatus)) {
+                || !fullCancellationConfirmed) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
         }
         this.status = PaymentCancellationStatus.PG_CANCELLED;
     }
 
-    public void recordPgStatus(String pgCancellationId, String pgStatus) {
+    public void recordPgStatus(String pgCancellationId, String pgStatus, BigDecimal cancelledAmount) {
         this.pgCancellationId = pgCancellationId;
         this.pgStatus = pgStatus;
+        this.fullCancellationConfirmed = "SUCCEEDED".equals(pgStatus)
+                && cancelledAmount != null
+                && requestedAmount.compareTo(cancelledAmount) == 0;
     }
 
     // ===================== 조회 =====================

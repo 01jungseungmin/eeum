@@ -44,6 +44,10 @@ public class WeeklySettlementClosingService {
                         storeId, periodStartAt, periodEndAt)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
 
+        if (settlement.getStatus() != com.eeum.eeum.domain.settlement.enums.WeeklySettlementStatus.PAYOUT_PENDING) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+
         // 정산 행을 먼저 잠근 뒤 원장을 current read 한다. 취소 경로도 이 순서를 공유한다.
         OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(ownerRevenueId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
@@ -55,6 +59,14 @@ public class WeeklySettlementClosingService {
         weeklySettlementItemRepository.save(WeeklySettlementItem.create(settlement, revenue));
 
         return false;
+    }
+
+    /** 기간 밖 누락 원장을 운영 수습 대상으로 한 번만 표시한다. */
+    @Transactional
+    public boolean markLateRevenueReported(Long ownerRevenueId, LocalDateTime periodStartAt) {
+        OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(ownerRevenueId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        return revenue.markLateSettlementReported(periodStartAt, LocalDateTime.now());
     }
 
     private boolean isEligibleForPeriod(

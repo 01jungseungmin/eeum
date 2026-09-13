@@ -86,4 +86,15 @@ public class AdminSettlementController {
         payoutService.applyConfirmedCancellation(SecurityUtil.getCurrentAccountId(), id, orderId);
         return ResponseEntity.ok(ApiResponse.success());
     }
+
+    @Operation(summary = "누락 수익 원장을 원래 주차로 재마감",
+            description = "현재 주차에 섞지 않고 지급 가능 시각이 속한 원래 주차로 다시 마감합니다. "
+                    + "이미 지급 완료된 주차는 변경하지 않습니다.")
+    @PostMapping("/late-revenues/{ownerRevenueId}/recover")
+    public ResponseEntity<ApiResponse<Void>> recoverLateRevenue(
+            @PathVariable @Positive Long ownerRevenueId
+    ) {
+        payoutService.recoverLateRevenue(SecurityUtil.getCurrentAccountId(), ownerRevenueId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 }

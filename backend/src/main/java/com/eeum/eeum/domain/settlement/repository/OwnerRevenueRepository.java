@@ -39,6 +39,7 @@ public interface OwnerRevenueRepository extends JpaRepository<OwnerRevenue, Long
         FROM OwnerRevenue r
         WHERE r.status = :status
           AND r.settleableAt < :periodStartAt
+          AND r.lateSettlementReportedAt IS NULL
         ORDER BY r.ownerRevenueId ASC
     """)
     List<Long> findLateEligibleIds(

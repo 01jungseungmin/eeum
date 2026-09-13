@@ -61,7 +61,8 @@ class ManualSettlementPayoutServiceTest {
                 weeklySettlementItemRepository,
                 ownerRevenueRepository,
                 cancellationOperationRepository,
-                paymentCancellationService);
+                paymentCancellationService,
+                org.mockito.Mockito.mock(WeeklySettlementClosingService.class));
     }
 
     @Test
