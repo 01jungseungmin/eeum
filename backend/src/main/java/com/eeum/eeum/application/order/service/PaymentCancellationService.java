@@ -195,20 +195,12 @@ public class PaymentCancellationService {
             }
 
             if (cancelledAmount == null) {
-                /*
-                 * 금액을 읽지 못했다고 취소를 막지는 않는다. 우리는 언제나 전액 취소만
-                 * 요청하고 PortOne이 SUCCEEDED를 반환했으므로 취소 자체는 성립한다.
-                 * 다만 응답 형태가 바뀌었을 가능성이 있으니 대사할 수 있게 이력은 남긴다.
-                 */
-                log.warn("PortOne 취소 응답에 금액이 없음 — 금액 대조 생략: orderId={}, cancellationId={}",
-                        orderId, result.cancellationId());
-                operationFailureRecorder.record(
-                        OperationFailureCategory.REFUND,
-                        "PaymentCancellationService.cancel",
-                        "order", String.valueOf(orderId),
+                // 상태만 SUCCEEDED여도 취소 금액을 읽지 못하면 부분 취소인지 증명할 수 없다.
+                // 전액 주문·원장을 취소하면 고객 환불액보다 사장 지급액을 더 차감할 수 있어
+                // 재조회 또는 운영 대사가 끝날 때까지 자동 반영하지 않는다.
+                isolateUnconfirmedCancellation(plan, orderId, trigger, result,
                         "PG_CANCEL_AMOUNT_UNVERIFIED",
-                        "PortOne 취소 응답에서 취소 금액을 읽지 못했습니다.",
-                        "trigger=" + trigger + ", cancellationId=" + result.cancellationId());
+                        "PortOne 취소 응답에서 취소 금액을 읽지 못했습니다.");
             }
             processor.markPgCancelled(plan.operationId(), result);
         } else if (!pgCancellationConfirmed) {
@@ -229,7 +221,7 @@ public class PaymentCancellationService {
             String failureCode,
             String failureReason
     ) {
-        processor.recordPendingPgStatus(plan.operationId(), result);
+        processor.recordPendingPgStatus(plan.operationId(), result, failureCode, failureReason);
         operationFailureRecorder.record(
                 OperationFailureCategory.REFUND,
                 "PaymentCancellationService.cancel",

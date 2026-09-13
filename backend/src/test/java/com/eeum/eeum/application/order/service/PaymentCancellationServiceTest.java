@@ -22,8 +22,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.function.Supplier;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -127,7 +127,7 @@ class PaymentCancellationServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
 
-        verify(processor).recordPendingPgStatus(eq(OPERATION_ID), any());
+        verify(processor).recordPendingPgStatus(eq(OPERATION_ID), any(), anyString(), anyString());
         verify(processor, never()).applyCancellation(any(), any(), anyString());
     }
 
@@ -150,20 +150,22 @@ class PaymentCancellationServiceTest {
     }
 
     @Test
-    void 취소_금액을_읽지_못해도_취소를_막지는_않고_이력만_남긴다() {
-        // given — 응답 형태가 바뀌어 금액이 비었다. 전액 취소만 요청하므로 취소 자체는 성립한다.
+    void 취소_금액을_읽지_못하면_전액_취소로_반영하지_않고_격리한다() {
+        // given — 응답 형태가 바뀌면 부분 취소 여부를 증명할 수 없다.
         when(portOnePaymentClient.cancelPayment(anyString(), any(), anyString(), anyString()))
                 .thenReturn(new PortOneCancelResult("SUCCEEDED", "c-4", null));
 
-        // when
-        assertThatCode(() -> service.cancel(ORDER_ID, PaymentCancellationTrigger.CUSTOMER_CANCEL, "사유"))
-                .doesNotThrowAnyException();
+        // when / then
+        assertThatThrownBy(() -> service.cancel(ORDER_ID, PaymentCancellationTrigger.CUSTOMER_CANCEL, "사유"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
 
-        // then — 대사할 수 있게 기록은 남기되 정상 처리한다
+        // then — 재조회·대사 전에는 전액 주문/원장을 바꾸지 않는다.
         verify(operationFailureRecorder).record(
                 eq(OperationFailureCategory.REFUND), anyString(), eq("order"), eq(String.valueOf(ORDER_ID)),
                 eq("PG_CANCEL_AMOUNT_UNVERIFIED"), anyString(), anyString());
-        verify(processor).applyCancellation(any(), any(), anyString());
+        verify(processor, never()).applyCancellation(any(), any(), anyString());
     }
 
     @Test

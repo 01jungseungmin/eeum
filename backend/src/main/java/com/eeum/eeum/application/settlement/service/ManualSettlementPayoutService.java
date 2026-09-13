@@ -135,8 +135,12 @@ public class ManualSettlementPayoutService {
         requireAdmin(adminAccountId);
         OwnerRevenue revenue = ownerRevenueRepository.findById(ownerRevenueId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        LocalDateTime currentPeriodStartAt = LocalDateTime.now()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .toLocalDate().atStartOfDay();
         if (revenue.getStatus() != com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.ACCRUED
-                || revenue.getSettleableAt() == null) {
+                || revenue.getSettleableAt() == null
+                || !revenue.getSettleableAt().isBefore(currentPeriodStartAt)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
 

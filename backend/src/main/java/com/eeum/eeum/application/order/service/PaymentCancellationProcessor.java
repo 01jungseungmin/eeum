@@ -304,14 +304,14 @@ public class PaymentCancellationProcessor {
         return marked;
     }
 
-    /** PortOne이 REQUESTED만 돌려준 경우. 완료로 확정하지 않고 상태만 남긴다. */
+    /** PG 결과 또는 취소 금액이 확정되지 않은 경우. 상태·원인을 남기고 자동 반영을 막는다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordPendingPgStatus(Long operationId, PortOneCancelResult result) {
+    public void recordPendingPgStatus(
+            Long operationId, PortOneCancelResult result, String failureCode, String failureReason
+    ) {
         PaymentCancellationOperation operation = getOperation(operationId);
         operation.recordPgStatus(result.cancellationId(), result.status(), result.cancelledAmount());
-        operation.requireManualReview(
-                "PG_CANCEL_NOT_CONFIRMED",
-                "PortOne 취소 상태가 SUCCEEDED가 아님: " + result.status());
+        operation.requireManualReview(failureCode, failureReason);
     }
 
     private PaymentCancellationOperation getOperation(Long operationId) {

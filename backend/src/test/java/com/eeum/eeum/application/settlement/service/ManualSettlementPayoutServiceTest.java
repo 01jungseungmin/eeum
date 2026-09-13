@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +49,7 @@ class ManualSettlementPayoutServiceTest {
     @Mock private OwnerRevenueRepository ownerRevenueRepository;
     @Mock private PaymentCancellationOperationRepository cancellationOperationRepository;
     @Mock private PaymentCancellationService paymentCancellationService;
+    @Mock private WeeklySettlementClosingService weeklySettlementClosingService;
     @Mock private Account admin;
     @Mock private WeeklySettlement settlement;
 
@@ -62,7 +64,7 @@ class ManualSettlementPayoutServiceTest {
                 ownerRevenueRepository,
                 cancellationOperationRepository,
                 paymentCancellationService,
-                org.mockito.Mockito.mock(WeeklySettlementClosingService.class));
+                weeklySettlementClosingService);
     }
 
     @Test
@@ -239,6 +241,24 @@ class ManualSettlementPayoutServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
         verify(paymentCancellationService, never()).applyConfirmedManualReviewCancellation(any());
+    }
+
+    @Test
+    void 미래_지급가능_원장은_누락_정산으로_재마감할_수_없다() {
+        // given
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(admin.isAdmin()).thenReturn(true);
+        OwnerRevenue revenue = org.mockito.Mockito.mock(OwnerRevenue.class);
+        when(revenue.getStatus()).thenReturn(com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus.ACCRUED);
+        when(revenue.getSettleableAt()).thenReturn(LocalDateTime.now().plusDays(1));
+        when(ownerRevenueRepository.findById(1L)).thenReturn(Optional.of(revenue));
+
+        // when / then
+        assertThatThrownBy(() -> service.recoverLateRevenue(ADMIN_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        verify(weeklySettlementClosingService, never()).closeEligibleRevenue(any(), any(), any());
     }
 
     // ─────────────────── 헬퍼 ───────────────────
