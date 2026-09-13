@@ -82,7 +82,8 @@ public class PaymentCancellationOperation extends BaseEntity {
     private String pgStatus;
 
     /** PG가 취소 금액까지 원 요청 전액과 일치한다고 확인한 경우에만 true다. */
-    @Column(name = "full_cancellation_confirmed", nullable = false)
+    @Column(name = "full_cancellation_confirmed", nullable = false,
+            columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
     private boolean fullCancellationConfirmed;
 
     @Column(name = "failure_code", length = 100)
