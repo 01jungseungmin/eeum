@@ -72,6 +72,8 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 - 복잡한 조건 쿼리는 QueryDSL 사용 — JPQL 문자열 직접 작성 금지
 - 의존성 주입은 `@RequiredArgsConstructor` 생성자 주입 — 필드 `@Autowired` 금지
 - Controller는 엔티티를 직접 반환 금지 — Service에서 DTO로 변환 후 반환
+- 주석에 Javadoc HTML 태그 금지 — `<p>`, `<b>`, `{@code}`, `{@link}` 대신 평문
+  (`@param`/`@return`/`@throws`는 유지). 상세 기준은 `### 주석 작성 규칙`
 
 ### 엔티티 작성 규칙
 - `@NoArgsConstructor(access = AccessLevel.PROTECTED)` + `@Getter` — Setter 금지
@@ -147,6 +149,17 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
   테스트 → 최종 전체 리뷰 순서를 지키고, 이전 Gate의 위반을 다음 단계로 넘기지 않는다.
 - 완성 구현에서 공개 범위, 권한, 상태 전이, 삭제, 외부 계약처럼 결과를 바꾸는 정책이 미정이면
   TODO나 임의 값으로 진행하지 않고 사용자 결정을 받는다.
+
+### 주석 작성 규칙
+- 주석은 "왜"만 쓴다. 코드를 읽어서 알 수 있는 "무엇을"은 쓰지 않는다.
+- 길이 상한: 클래스 Javadoc 6줄, 메서드 Javadoc 4줄, 인라인 `//` 2줄.
+  넘어야 한다면 주석이 아니라 참조 문서가 필요하다는 신호다 —
+  `.claude/skills/references/`에 항목을 만들고 코드에서는 한 줄로 가리킨다.
+- Javadoc HTML 태그 금지 — `<p>`는 빈 주석 줄로, `<b>`·`{@code}`·`{@link}`는 평문으로.
+  `@param`/`@return`/`@throws`는 구조 정보라 유지하되, 내용이 이름의 반복이면 태그째 지운다.
+- 이 CLAUDE.md나 참조 문서에 이미 있는 규칙은 코드 주석에서 반복하지 않고 가리키기만 한다.
+- 주석만 고치는 변경은 코드 변경과 섞지 않고 `docs:` 커밋으로 분리한다.
+- 상세 기준·정리 대상 목록은 `.claude/skills/references/comment-style.md`를 따른다.
 
 ### 테스트 작성 규칙
 - JUnit5 + Mockito + AssertJ 조합 (Spring Boot test starter에 포함)
