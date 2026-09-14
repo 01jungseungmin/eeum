@@ -204,6 +204,7 @@ public class PaymentCancellationProcessor {
         reconcileExternalPartialCancellation(orderId, cumulativeCancelledAmount, null, null);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileExternalPartialCancellation(
             Long orderId, BigDecimal cumulativeCancelledAmount, BigDecimal pgFeeRate, BigDecimal platformFeeRate
     ) {

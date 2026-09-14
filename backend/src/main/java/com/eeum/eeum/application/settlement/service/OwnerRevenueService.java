@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -117,10 +118,6 @@ public class OwnerRevenueService {
                 .orElse(null);
         OwnerRevenue revenue = ownerRevenueRepository.findByOrderIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
-        if (revenue.getPgFeeRate() == null || revenue.getPlatformFeeRate() == null) {
-            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
-        }
-
         // 락을 쥔 뒤 다시 읽는다. 여기서 나오는 값이 판단의 근거다.
         WeeklySettlementItem item = weeklySettlementItemRepository
                 .findByOwnerRevenue_OwnerRevenueId(revenue.getOwnerRevenueId())
@@ -189,6 +186,7 @@ public class OwnerRevenueService {
         reconcilePartialCancellation(orderId, breakdown, null, null);
     }
 
+    @Transactional
     public void reconcilePartialCancellation(
             Long orderId, SettlementFeePolicy.Breakdown breakdown,
             BigDecimal requestedPgRate, BigDecimal requestedPlatformRate
