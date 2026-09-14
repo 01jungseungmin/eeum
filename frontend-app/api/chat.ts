@@ -31,8 +31,8 @@ export const chatApi = {
   },
 
   // 4. 채팅방 참여자 초대 (POST /chat/rooms/{roomId}/participants)
-  inviteParticipants: async (roomId: string | number, userIds: number[]) => {
-    const response = await client.post(`/chat/rooms/${roomId}/participants`, { userIds });
+  inviteParticipants: async (roomId: string | number, accountIds: number[]) => {
+    const response = await client.post(`/chat/rooms/${roomId}/participants`, { accountIds });
     return response.data;
   },
 
