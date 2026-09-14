@@ -46,10 +46,11 @@ export default function FavoritesScreen() {
   const [stores, setStores] = useState<FavoriteStore[]>([]);
   const [usedProducts, setUsedProducts] = useState<FavoriteUsedProduct[]>([]);
 
-  // 탭별로 페이지 커서를 따로 들고 있어야 탭을 오갈 때 처음부터 다시 받지 않는다.
-  const [cursors, setCursors] = useState<Record<TabKey, { page: number; hasNext: boolean }>>({
-    STORE: { page: 0, hasNext: true },
-    USED_PRODUCT: { page: 0, hasNext: true },
+  // 탭별로 커서를 따로 들고 있어야 탭을 오갈 때 처음부터 다시 받지 않는다.
+  type TabCursor = { cursorValue: string | null; cursorId: number | null; hasNext: boolean };
+  const [cursors, setCursors] = useState<Record<TabKey, TabCursor>>({
+    STORE: { cursorValue: null, cursorId: null, hasNext: true },
+    USED_PRODUCT: { cursorValue: null, cursorId: null, hasNext: true },
   });
   const [loaded, setLoaded] = useState<Record<TabKey, boolean>>({
     STORE: false,
@@ -59,16 +60,16 @@ export default function FavoritesScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const fetchPage = useCallback(async (tab: TabKey, page: number) => {
+  const fetchPage = useCallback(async (tab: TabKey, cursorValue: string | null, cursorId: number | null) => {
     return tab === 'STORE'
-      ? favoriteApi.getMyFavoriteStores({ page, size: PAGE_SIZE })
-      : favoriteApi.getMyFavoriteUsedProducts({ page, size: PAGE_SIZE });
+      ? favoriteApi.getMyFavoriteStores({ cursorValue, cursorId, size: PAGE_SIZE })
+      : favoriteApi.getMyFavoriteUsedProducts({ cursorValue, cursorId, size: PAGE_SIZE });
   }, []);
 
   const loadFirstPage = useCallback(async (tab: TabKey) => {
     try {
       setIsLoading(true);
-      const result = await fetchPage(tab, 0);
+      const result = await fetchPage(tab, null, null);
 
       if (tab === 'STORE') {
         setStores(result.content as FavoriteStore[]);
@@ -76,7 +77,10 @@ export default function FavoritesScreen() {
         setUsedProducts(result.content as FavoriteUsedProduct[]);
       }
 
-      setCursors(prev => ({ ...prev, [tab]: { page: 0, hasNext: result.hasNext } }));
+      setCursors(prev => ({
+        ...prev,
+        [tab]: { cursorValue: result.nextCursorValue, cursorId: result.nextCursorId, hasNext: result.hasNext },
+      }));
       setLoaded(prev => ({ ...prev, [tab]: true }));
     } catch (error) {
       console.error('찜 목록 API 에러:', error);
@@ -92,8 +96,7 @@ export default function FavoritesScreen() {
 
     try {
       setIsLoadingMore(true);
-      const nextPage = cursor.page + 1;
-      const result = await fetchPage(activeTab, nextPage);
+      const result = await fetchPage(activeTab, cursor.cursorValue, cursor.cursorId);
 
       if (activeTab === 'STORE') {
         setStores(prev => [...prev, ...(result.content as FavoriteStore[])]);
@@ -103,7 +106,7 @@ export default function FavoritesScreen() {
 
       setCursors(prev => ({
         ...prev,
-        [activeTab]: { page: nextPage, hasNext: result.hasNext },
+        [activeTab]: { cursorValue: result.nextCursorValue, cursorId: result.nextCursorId, hasNext: result.hasNext },
       }));
     } catch (error) {
       console.error('찜 목록 추가 로드 실패:', error);

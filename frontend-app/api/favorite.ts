@@ -56,39 +56,37 @@ export interface FavoriteRef {
   createdAt: string;
 }
 
-/** 무한 스크롤용 페이지. 서버가 Slice를 주므로 totalElements는 없다. */
-export interface FavoritePage<T> {
+/** 무한 스크롤용 커서 슬라이스. 백엔드 CursorSlice<T> 응답 그대로. */
+export interface FavoriteSlice<T> {
   content: T[];
-  page: number;
-  size: number;
   hasNext: boolean;
+  nextCursorValue: string | null;
+  nextCursorId: number | null;
 }
 
-export interface PageParams {
-  page?: number;
+export interface CursorParams {
+  cursorValue?: string | null;
+  cursorId?: number | null;
   size?: number;
 }
 
 const DEFAULT_SIZE = 20;
 
-/**
- * Spring Slice 응답을 화면에서 쓰기 좋은 형태로 정리한다.
- *
- * Slice.hasNext()는 Jackson 기본 규칙(get/is 접두사)에 걸리지 않아 JSON에 실리지 않는다.
- * 대신 직렬화되는 `last`를 뒤집어 쓰고, 그마저 없으면 받아온 개수로 판단한다.
- */
-const toPage = <T>(raw: any, requestedSize: number): FavoritePage<T> => {
-  const content: T[] = raw?.content ?? [];
-  const size = raw?.size ?? requestedSize;
-  const hasNext =
-    typeof raw?.last === 'boolean' ? !raw.last : content.length >= size;
+const toSlice = <T>(raw: any): FavoriteSlice<T> => ({
+  content: raw?.content ?? [],
+  hasNext: raw?.hasNext ?? false,
+  nextCursorValue: raw?.nextCursorValue ?? null,
+  nextCursorId: raw?.nextCursorId ?? null,
+});
 
-  return {
-    content,
-    page: raw?.number ?? 0,
-    size,
-    hasNext,
-  };
+/** cursorValue/cursorId는 둘 다 있거나 둘 다 없어야 하므로, null이면 아예 보내지 않는다. */
+const buildCursorQuery = ({ cursorValue, cursorId, size }: CursorParams) => {
+  const params: Record<string, string | number> = { size: size ?? DEFAULT_SIZE };
+  if (cursorValue != null && cursorId != null) {
+    params.cursorValue = cursorValue;
+    params.cursorId = cursorId;
+  }
+  return params;
 };
 
 export const favoriteApi = {
@@ -151,29 +149,20 @@ export const favoriteApi = {
   // ===================== 내 찜 목록 =====================
 
   /** 내 찜 전체 목록 (refType/refId만 담긴 경량 응답) */
-  getMyFavorites: async ({
-    page = 0,
-    size = DEFAULT_SIZE,
-  }: PageParams = {}): Promise<FavoritePage<FavoriteRef>> => {
-    const res = await client.get('/favorites/me/all', { params: { page, size } });
-    return toPage<FavoriteRef>(res.data.data, size);
+  getMyFavorites: async (params: CursorParams = {}): Promise<FavoriteSlice<FavoriteRef>> => {
+    const res = await client.get('/favorites/me/all', { params: buildCursorQuery(params) });
+    return toSlice<FavoriteRef>(res.data.data);
   },
 
   /** 상점 찜 목록 (평점·썸네일 등 상점 정보 포함) */
-  getMyFavoriteStores: async ({
-    page = 0,
-    size = DEFAULT_SIZE,
-  }: PageParams = {}): Promise<FavoritePage<FavoriteStore>> => {
-    const res = await client.get('/favorites/me/store', { params: { page, size } });
-    return toPage<FavoriteStore>(res.data.data, size);
+  getMyFavoriteStores: async (params: CursorParams = {}): Promise<FavoriteSlice<FavoriteStore>> => {
+    const res = await client.get('/favorites/me/store', { params: buildCursorQuery(params) });
+    return toSlice<FavoriteStore>(res.data.data);
   },
 
   /** 중고 게시글 찜 목록 (관리자가 숨긴 글은 서버에서 제외된다) */
-  getMyFavoriteUsedProducts: async ({
-    page = 0,
-    size = DEFAULT_SIZE,
-  }: PageParams = {}): Promise<FavoritePage<FavoriteUsedProduct>> => {
-    const res = await client.get('/favorites/me/used', { params: { page, size } });
-    return toPage<FavoriteUsedProduct>(res.data.data, size);
+  getMyFavoriteUsedProducts: async (params: CursorParams = {}): Promise<FavoriteSlice<FavoriteUsedProduct>> => {
+    const res = await client.get('/favorites/me/used', { params: buildCursorQuery(params) });
+    return toSlice<FavoriteUsedProduct>(res.data.data);
   },
 };
