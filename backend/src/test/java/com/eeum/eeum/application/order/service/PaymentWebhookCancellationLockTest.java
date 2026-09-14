@@ -152,7 +152,7 @@ class PaymentWebhookCancellationLockTest {
     }
 
     @Test
-    void 부분_취소_Webhook은_정산_지급을_막도록_수동_검토로_격리한다() {
+    void 부분_취소_Webhook은_누적_취소액을_정산에_반영한다() {
         // given
         givenExternalStatus("PARTIAL_CANCELLED");
 
@@ -160,11 +160,7 @@ class PaymentWebhookCancellationLockTest {
         paymentService.handleWebhook(RAW_BODY, signedHeaders());
 
         // then
-        verify(paymentCancellationService).recordExternalPartialCancellation(ORDER_ID);
-        verify(operationFailureRecorder).record(
-                any(), eq("PaymentService.handleWebhook.partialCancel"),
-                eq("order"), eq(String.valueOf(ORDER_ID)),
-                eq("PARTIAL_CANCEL_NOT_SUPPORTED"), anyString(), anyString());
+        verify(paymentCancellationService).reconcileExternalPartialCancellation(eq(ORDER_ID), any());
         verify(paymentWebhookProcessor, org.mockito.Mockito.never())
                 .applyPaidWebhook(any(), any(), any());
     }

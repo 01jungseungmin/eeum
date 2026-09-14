@@ -91,17 +91,25 @@ public class PaymentCancellationService {
         cancel(orderId, trigger, reason, false);
     }
 
-    /**
-     * 외부 부분 취소는 현재 전액 취소 작업으로 금액을 안전하게 역산할 수 없다.
-     * 지급 claim이 이 주문을 포함하지 못하도록 작업을 수동 검토로 격리한다.
-     */
-    public void recordExternalPartialCancellation(Long orderId) {
+    /** 외부 부분 취소의 누적 금액을 원장과 정산 항목에 반영한다. */
+    public void reconcileExternalPartialCancellation(Long orderId, BigDecimal cumulativeCancelledAmount) {
         redisLockService.executeWithLock(
                 LockKeys.order(orderId),
                 CANCEL_LOCK_LEASE_TIME,
                 ErrorCode.LOCK_ORDER_FAILED,
                 () -> {
-                    processor.recordExternalPartialCancellation(orderId);
+                    if (cumulativeCancelledAmount == null || cumulativeCancelledAmount.signum() <= 0) {
+                        processor.recordExternalPartialCancellation(orderId);
+                        throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+                    }
+                    try {
+                        processor.reconcileExternalPartialCancellation(orderId, cumulativeCancelledAmount);
+                    } catch (BusinessException e) {
+                        if (e.getErrorCode() == ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED) {
+                            processor.recordExternalPartialCancellation(orderId);
+                        }
+                        throw e;
+                    }
                     return null;
                 }
         );

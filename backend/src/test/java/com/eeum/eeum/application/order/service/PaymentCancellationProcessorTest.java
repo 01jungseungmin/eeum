@@ -47,13 +47,14 @@ class PaymentCancellationProcessorTest {
     @Mock private OwnerRevenueService ownerRevenueService;
     @Mock private OrderService orderService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.eeum.eeum.application.settlement.service.SettlementFeePolicy settlementFeePolicy;
 
     @BeforeEach
     void setUp() {
         processor = new PaymentCancellationProcessor(
                 orderRepository, paymentRepository, cancellationOperationRepository,
                 ownerRevenueRepository, weeklySettlementRepository,
-                ownerRevenueService, orderService, eventPublisher);
+                ownerRevenueService, orderService, eventPublisher, settlementFeePolicy);
     }
 
     @Test
@@ -88,13 +89,8 @@ class PaymentCancellationProcessorTest {
         Payment payment = org.mockito.Mockito.mock(Payment.class);
         when(order.getStatus()).thenReturn(OrderStatus.COMPLETED);
         when(payment.getStatus()).thenReturn(PaymentStatus.PAID);
-        when(payment.getOrder()).thenReturn(order);
-        when(payment.getAmount()).thenReturn(BigDecimal.TEN);
         when(orderRepository.findByIdWithPessimisticLock(orderId)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(orderId)).thenReturn(Optional.of(payment));
-        when(cancellationOperationRepository.findByOrderIdWithPessimisticLock(orderId)).thenReturn(Optional.empty());
-        when(cancellationOperationRepository.save(org.mockito.ArgumentMatchers.any(PaymentCancellationOperation.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThatThrownBy(() -> processor.prepare(orderId, PaymentCancellationTrigger.CUSTOMER_CANCEL, "고객 취소"))
                 .isInstanceOf(BusinessException.class)

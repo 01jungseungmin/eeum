@@ -61,6 +61,7 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
                 .paymentId(response.getId())
                 .status(response.getStatus())
                 .amount(response.getAmount().getTotal())
+                .cancelledAmount(response.getCancelledAmount())
                 .pgProvider(response.getPgProvider())
                 .build();
     }

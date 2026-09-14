@@ -200,7 +200,8 @@ public class PaymentService {
         Payment payment = paymentRepository
                 .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
-        if (payment.getStatus() != PaymentStatus.PAID) {
+        if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
 
@@ -254,14 +255,14 @@ public class PaymentService {
             return;
         }
         if ("PARTIAL_CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
-            paymentCancellationService.recordExternalPartialCancellation(orderId);
-            operationFailureRecorder.record(
-                    OperationFailureCategory.REFUND,
-                    "PaymentService.handleWebhook.partialCancel",
-                    "order", String.valueOf(orderId),
-                    "PARTIAL_CANCEL_NOT_SUPPORTED",
-                    "부분 취소를 수동 검토로 격리해 정산 지급을 차단했습니다.",
-                    "paymentId=" + paymentId + ", externalStatus=" + externalPayment.getStatus());
+            if (externalPayment.getCancelledAmount() != null
+                    && externalPayment.getCancelledAmount().compareTo(externalPayment.getAmount()) == 0) {
+                paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
+                        "PortOne 외부 전액 취소 Webhook", true);
+                return;
+            }
+            paymentCancellationService.reconcileExternalPartialCancellation(
+                    orderId, externalPayment.getCancelledAmount());
             return;
         }
 

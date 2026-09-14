@@ -3,6 +3,7 @@ package com.eeum.eeum.application.order.service;
 import com.eeum.eeum.application.order.dto.response.PaymentCancellationPlan;
 import com.eeum.eeum.application.order.dto.response.PortOneCancelResult;
 import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
+import com.eeum.eeum.application.settlement.service.SettlementFeePolicy;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.entity.PaymentCancellationOperation;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
@@ -52,6 +54,7 @@ public class PaymentCancellationProcessor {
     private final OwnerRevenueService ownerRevenueService;
     private final OrderService orderService;
     private final ApplicationEventPublisher eventPublisher;
+    private final SettlementFeePolicy settlementFeePolicy;
 
     /**
      * 1단계 — 취소 대상을 확정하고 외부 호출을 준비한다.
@@ -78,8 +81,17 @@ public class PaymentCancellationProcessor {
 
         // 이미 끝난 취소는 다시 하지 않는다 — 네 진입점이 같은 주문에 겹쳐 들어와도 한 번만 돈다.
         if (operation != null && operation.isCompleted()) {
-            log.info("이미 완료된 취소 작업 — 재요청 무시: orderId={}, trigger={}", orderId, trigger);
-            return null;
+            BigDecimal alreadyCancelled = payment.getCancelledAmount() == null
+                    ? BigDecimal.ZERO : payment.getCancelledAmount();
+            if (alreadyCancelled.compareTo(payment.getAmount()) < 0
+                    && (payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED
+                    || trigger != PaymentCancellationTrigger.PORTONE_WEBHOOK)) {
+                operation.reopenForRemainingCancellation(
+                        payment.getRemainingAmount(), trigger, reason);
+            } else {
+                log.info("이미 완료된 취소 작업 — 재요청 무시: orderId={}, trigger={}", orderId, trigger);
+                return null;
+            }
         }
         if (operation != null && operation.isManualReviewRequired()) {
             // 사람이 수습 중인 건을 자동 경로가 다시 건드리면 상태가 더 꼬인다.
@@ -93,7 +105,9 @@ public class PaymentCancellationProcessor {
 
         boolean externalPendingCancellation = trigger == PaymentCancellationTrigger.PORTONE_WEBHOOK
                 && payment.getStatus() == PaymentStatus.PENDING;
-        if (payment.getStatus() != PaymentStatus.PAID && !externalPendingCancellation) {
+        if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED
+                && !externalPendingCancellation) {
             throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
         if (trigger == PaymentCancellationTrigger.OWNER_REFUND_APPROVAL
@@ -121,7 +135,7 @@ public class PaymentCancellationProcessor {
 
         if (operation == null) {
             operation = PaymentCancellationOperation.start(
-                    order, payment, trigger, reason, payment.getAmount());
+                    order, payment, trigger, reason, payment.getRemainingAmount());
             operation = cancellationOperationRepository.save(operation);
         }
         operation.markPgRequested(trigger, reason, LocalDateTime.now());
@@ -129,7 +143,7 @@ public class PaymentCancellationProcessor {
         return new PaymentCancellationPlan(
                 operation.getPaymentCancellationOperationId(),
                 payment.getPortonePaymentId(),
-                payment.getAmount(),
+                payment.getRemainingAmount(),
                 reason,
                 operation.isPgCancelled(), false, operation.getRequestedAt());
     }
@@ -154,7 +168,7 @@ public class PaymentCancellationProcessor {
                 "PG에서 이미 취소됐으나 정산 지급이 시작되어 자동 반영하지 않았습니다.");
     }
 
-    /** 외부 부분 취소는 전액 취소 원장으로 자동 반영하지 않고 지급 전에 격리한다. */
+    /** 외부 부분 취소 금액을 확인할 수 없을 때 수동 검토로 격리한다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordExternalPartialCancellation(Long orderId) {
         Order order = orderRepository.findByIdWithPessimisticLock(orderId)
@@ -182,6 +196,35 @@ public class PaymentCancellationProcessor {
         operation.requireManualReview(
                 "PARTIAL_CANCEL_RECONCILIATION_REQUIRED",
                 "PortOne 부분 취소 금액을 수동 대사하기 전까지 정산 지급을 차단합니다.");
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void reconcileExternalPartialCancellation(Long orderId, java.math.BigDecimal cumulativeCancelledAmount) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if (cumulativeCancelledAmount == null
+                || cumulativeCancelledAmount.signum() <= 0
+                || cumulativeCancelledAmount.compareTo(payment.getAmount()) >= 0) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        }
+        BigDecimal alreadyCancelled = payment.getCancelledAmount() == null
+                ? BigDecimal.ZERO : payment.getCancelledAmount();
+        if (cumulativeCancelledAmount.compareTo(alreadyCancelled) <= 0) {
+            return;
+        }
+        SettlementFeePolicy.Breakdown breakdown = settlementFeePolicy.breakdown(
+                payment.getAmount().subtract(cumulativeCancelledAmount));
+        ownerRevenueService.reconcilePartialCancellation(orderId, breakdown);
+        payment.markPartiallyRefunded(cumulativeCancelledAmount);
+        PaymentCancellationOperation operation = cancellationOperationRepository
+                .findByOrderIdWithPessimisticLock(orderId)
+                .orElseGet(() -> cancellationOperationRepository.save(
+                        PaymentCancellationOperation.start(order, payment,
+                                PaymentCancellationTrigger.PORTONE_WEBHOOK,
+                                "PortOne 외부 부분 취소", payment.getAmount())));
+        operation.markPartialReconciled(cumulativeCancelledAmount, LocalDateTime.now());
     }
 
     /**
@@ -229,7 +272,8 @@ public class PaymentCancellationProcessor {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
         }
 
-        if (payment.getStatus() == PaymentStatus.PAID) {
+        if (payment.getStatus() == PaymentStatus.PAID
+                || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED) {
             if (trigger == PaymentCancellationTrigger.OWNER_REFUND_APPROVAL) {
                 payment.completeRefund();
             } else {
