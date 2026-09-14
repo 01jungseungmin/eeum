@@ -11,6 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
+import { getNotificationRoute } from '../utils/notificationRoute';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -47,13 +48,14 @@ export default function RootLayout() {
 
     // [리스너 2] 유저가 스마트폰 상단 알림 배너를 클릭했을 때
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      // 백엔드가 FCM Payload의 'data' 영역에 담아 보낸 linkUrl을 추출
-      const linkUrl = response.notification.request.content.data?.linkUrl;
-      console.log('🚀 알림 클릭됨, 이동할 주소:', linkUrl);
-      
-      if (linkUrl) {
-        // 해당 주소로 유저를 즉시 리다이렉트
-        router.push(linkUrl as any);
+      // 백엔드가 FCM Payload의 'data' 영역에 담아 보낸 정보를 앱 라우트로 변환
+      const data = response.notification.request.content.data;
+      const route = getNotificationRoute(data);
+
+      if (route) {
+        router.push(route as any);
+      } else {
+        console.warn('⚠️ 알림 클릭: 이동할 화면을 찾지 못함', data);
       }
     });
 
