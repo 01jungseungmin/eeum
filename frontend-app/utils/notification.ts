@@ -32,7 +32,6 @@ export async function registerForPushNotificationsAsync() {
     // 3. Firebase 기반의 FCM 디바이스 토큰 추출
     // projectId는 expo 설정(app.json)의 주인을 따릅니다.
     token = (await Notifications.getDevicePushTokenAsync()).data;
-    console.log('🔥 발급된 FCM 디바이스 토큰:', token);
 
     // 4. 안드로이드 기기일 경우 알림 채널(Channel) 필수 설정
     if (Platform.OS === 'android') {

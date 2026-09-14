@@ -63,7 +63,6 @@ export default function LoginScreen() {
         if (accessToken && refreshToken) {
           // 안전하게 저장
           await saveTokens(accessToken, refreshToken);
-          console.log('로그인 성공! Access & Refresh 토큰 저장 완료');
           await registerForPushNotificationsAsync();
           router.replace('/(tabs)'); 
         } else {
@@ -87,7 +86,6 @@ export default function LoginScreen() {
     try {
       // 1. 카카오톡 앱을 열어서 로그인을 시도하고, 카카오 토큰을 받아온다.
       const result = await KakaoLogin.login();
-      console.log('카카오 인증 성공! 토큰:', result.accessToken);
 
       // 2. 백엔드 API 호출
     const response = await client.post('/auth/login/oauth', {
@@ -101,8 +99,6 @@ export default function LoginScreen() {
       
       if (signupRequired) {
         // 신규 유저: 회원가입 화면으로 보내기
-        console.log('신규 유저입니다. 회원가입 화면으로 이동합니다. 임시 토큰:', tempToken);
-        
         router.push({
           pathname: '/signup',
           params: { tempToken: tempToken }
@@ -110,8 +106,6 @@ export default function LoginScreen() {
 
       } else {
         // 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기
-        console.log('기존 유저 로그인 성공! 진짜 토큰:', accessToken);
-        
         await saveTokens(accessToken, refreshToken);
         await registerForPushNotificationsAsync();
         router.replace('/(tabs)');
@@ -141,8 +135,6 @@ export default function LoginScreen() {
       const { successResponse } = await NaverLogin.login();
     
     if (successResponse) {
-      console.log('네이버 인증 성공! 발급된 키:', successResponse.accessToken);
-
       // 2. 백엔드 API 호출
       const response = await client.post('/auth/login/oauth', {
         provider: 'NAVER',
@@ -155,17 +147,13 @@ export default function LoginScreen() {
         
         if (signupRequired) {
           // 신규 유저: 회원가입 화면으로 보내기!
-          console.log('네이버 신규 유저입니다. 회원가입으로 이동. 임시 토큰:', tempToken);
-          
           router.push({
             pathname: '/signup',
             params: { tempToken: tempToken }
           });
-          
+
         } else {
           // 기존 유저: 진짜 토큰 저장하고 홈 화면으로 가기
-          console.log('우리 서버 토큰 발급 성공!', accessToken);
-          
           await saveTokens(accessToken, refreshToken);
           await registerForPushNotificationsAsync();
           router.replace('/(tabs)');
