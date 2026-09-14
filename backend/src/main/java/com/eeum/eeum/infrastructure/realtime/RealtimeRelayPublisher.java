@@ -7,7 +7,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-/** 실시간 전달을 Redis로 중계한다 — 모든 인스턴스에서 발행한다. */
+/**
+ * 실시간 전달을 Redis로 중계한다 — 모든 인스턴스에서 발행한다.
+ *
+ * 인메모리 STOMP 브로커와 SseEmitter는 커넥션을 받은 JVM 안에만 있는데, 이벤트는 그 요청을
+ * 처리한 아무 인스턴스에서나 발생한다. 두 곳이 다르면 전달이 사라진다.
+ * 실시간 인스턴스도 자기가 발행한 것을 다시 받아 처리한다 — 경로를 하나로 두면
+ * "어디서 발생했는가"를 따질 필요가 없다. 전달 실패는 삼킨다(본 작업은 이미 커밋됐다).
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

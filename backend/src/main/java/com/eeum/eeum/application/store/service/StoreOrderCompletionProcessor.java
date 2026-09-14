@@ -19,8 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 거래완료 처리의 DB 단계만 담당한다.
  *
- * StoreOrderService에서 분리한 이유는 프록시다. 같은 빈 안에서 호출하면
- * 또 @Transactional이 적용되지 않아 주문 락 안에서 트랜잭션이 열리지 않는다.
+ * StoreOrderService에서 분리한 이유는 프록시다. 같은 빈 안에서 호출하면 @Transactional이
+ * 적용되지 않아 주문 락 안에서 트랜잭션이 열리지 않는다.
  *
  * 거래완료는 현장결제를 PAID로 바꾸고 수익 원장을 만드는 돈이 걸린 전이다.
  * 그래서 취소·환불 경로와 같은 Order → Payment 순서로 비관적 락을 잡고, 상태

@@ -13,7 +13,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** unread 카운트 조회/무효화 전담 — Redis만 만진다. */
+/**
+ * unread 카운트 조회·무효화 전담 — Redis만 만진다.
+ *
+ * DB를 읽어 캐시를 다시 쓰는 일은 UnreadSnapshotRebuilder에 있다. 트랜잭션이 필요한 쪽을
+ * 그쪽에 몰아 두면 캐시 히트로 끝나는 조회는 EntityManager도 DB 커넥션도 건드리지 않는다.
+ * 알림 배지는 대시보드가 페이지마다 부르는 경로라 이 차이가 그대로 커넥션 풀 여유가 된다.
+ * 전체 카운트 키와 카테고리별 hash 키는 항상 같은 DB 스냅샷으로 함께 교체된다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

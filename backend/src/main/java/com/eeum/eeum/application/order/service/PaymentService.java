@@ -185,7 +185,7 @@ public class PaymentService {
      * "누가 어떤 결제를 취소할 수 있는가"만 판단한다 — 네 진입점이 각자 취소를 구현하면
      * 경로마다 금전 처리가 갈린다.
      *
-     * 또 @Transactional을 걸지 않는다. 취소 절차 안에서 PortOne을 호출하므로
+     * 여기에 @Transactional을 걸지 않는다. 취소 절차 안에서 PortOne을 호출하므로
      * 여기에 트랜잭션을 걸면 외부 호출이 다시 트랜잭션 안으로 들어온다.
      */
     public void cancelPayment(Long accountId, Long paymentId) {

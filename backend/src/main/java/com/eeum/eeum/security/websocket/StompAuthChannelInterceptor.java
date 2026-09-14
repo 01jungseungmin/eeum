@@ -26,7 +26,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    /** 허용 destination 화이트리스트. */
+    /**
+     * 허용 destination 화이트리스트. 반드시 전체 일치로 판정한다.
+     *
+     * 구독 매칭이 AntPathMatcher라 /sub/chat/rooms/**를 구독하면 모든 방의 메시지를 받는다.
+     * 접두사만 보고 통과시키면 이 구독이 검증 없이 흘러간다.
+     * SEND를 /pub만 허용하는 것도 같은 이유다 — /sub로 직접 SEND하면 브로커가 그대로
+     * 구독자에게 중계해 메시지를 위조할 수 있다.
+     */
     private static final Pattern CHAT_ROOM_SUBSCRIBE_DESTINATION =
             Pattern.compile("/sub/chat/rooms/(\\d{1,18})(?:/(?:read|typing|closed))?");
 

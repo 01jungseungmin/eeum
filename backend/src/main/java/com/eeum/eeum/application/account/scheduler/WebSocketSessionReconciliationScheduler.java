@@ -19,7 +19,14 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** 계정 상태·토큰 세대와 세션을 대조하는 백스톱. 세션이 JVM에만 있어 인스턴스별로 실행한다. */
+/**
+ * 붙어 있는 WebSocket 세션을 계정 상태·토큰 세대와 대조해 끊는 백스톱.
+ *
+ * 정상 경로는 제재 시점의 즉시 종료다. 대조를 택한 이유는 왜 놓쳤는지와 무관하게
+ * 복구되기 때문이다 — 채널을 튼튼히 해도 인스턴스 재시작이나 분단은 못 덮는다.
+ * 토큰 세대까지 보는 건 비밀번호 재설정·사장 승인이 계정을 ACTIVE로 남겨서다.
+ * 분산 잠금을 걸지 않는다 — 세션은 JVM 안에만 있어 한 대만 돌면 나머지가 방치된다.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

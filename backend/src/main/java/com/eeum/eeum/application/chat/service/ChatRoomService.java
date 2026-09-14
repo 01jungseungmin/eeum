@@ -89,7 +89,15 @@ public class ChatRoomService {
 
     // ===================== 채팅방 생성 =====================
 
-    /** 중고거래 문의방을 멱등하게 생성한다. 상품 행 잠금이 연속 요청을 직렬화한다. */
+    /**
+     * 중고거래 1:1 문의방 생성. 같은 상품에 활성 방이 있으면 그 방을 돌려준다(멱등).
+     *
+     * 가게 단톡방이 중복을 409로 막는 것과 의도적으로 다르다 — 그쪽은 사장의 명시적 개설이라
+     * 알려야 하지만, 여기는 대화 진입이 목적이라 기존 방으로 들여보내는 게 맞다.
+     * 잠금 순서는 account → used_product → chat_room이고 uk_chat_room_active_ref가 최종 방어선이다.
+     * Redis 락을 쓰지 않는 이유: 즉시 실패하므로 연타 시 두 번째가 기존 방 대신 오류를 받아
+     * 멱등 계약이 깨진다. 상품 행 잠금은 대기하므로 커밋을 기다렸다 기존 방을 돌려받는다.
+     */
     public ChatRoomResponseDto createUsedProductInquiry(Long buyerId, Long usedProductId) {
         try {
             return createInquiryRoom(buyerId, usedProductId);

@@ -10,7 +10,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** 계정별 WebSocket 세션 레지스트리 — 제재·탈퇴 시 이미 열린 연결을 끊기 위해 필요하다. */
+/**
+ * 계정별 WebSocket 세션 레지스트리 — 제재·탈퇴 시 이미 열린 연결을 끊기 위해 필요하다.
+ *
+ * 인바운드 프레임에는 상태 검사가 있지만 수신은 인바운드가 아니라, 이미 구독한 연결은
+ * 메시지·읽음·타이핑을 계속 받는다. 인터셉터로는 막을 수 없다.
+ * 세션은 커넥션을 받은 JVM에만 있어 다른 인스턴스의 세션은 끊지 못한다(WebSocketConfig 전제).
+ * 계정 바인딩은 세션 등록보다 늦다 — 등록은 HTTP 업그레이드 직후, 계정은 CONNECT 인증 후다.
+ */
 @Slf4j
 @Component
 public class WebSocketSessionRegistry {

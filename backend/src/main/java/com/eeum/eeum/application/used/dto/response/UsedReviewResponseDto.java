@@ -45,7 +45,15 @@ public class UsedReviewResponseDto {
     @Schema(description = "수정 일시")
     private final LocalDateTime modifiedAt;
 
-    /** 비공개 게시글의 제목은 제3자에게만 감추고, 후기 자체는 평판 보호를 위해 노출한다. */
+    /**
+     * 후기 응답. 후기 자체는 글이 삭제·숨김돼도 노출한다 — 거르면 판매자가 나쁜 후기가 달린
+     * 글을 지워 평판을 세탁할 수 있다. 비공개 글의 제목만 제3자에게 감춘다.
+     *
+     * 당사자(작성자·판매자)에게는 감추지 않는다. 감추는 목적이 제3자 유출 차단인데, 감추면
+     * 각자 자기 목록에서 대상을 알 수 없게 된다. 숨김 글은 상세 조회에서 이미 소유자에게 열려 있다.
+     *
+     * @param viewerId 조회 주체. 비회원 조회에서는 null이다.
+     */
     public static UsedReviewResponseDto from(UsedReview review, Long viewerId) {
         UsedProduct product = review.getUsedProduct();
         boolean party = viewerId != null
