@@ -11,11 +11,19 @@ import { chatApi } from '../../api/chat';
 
 export default function ChatListScreen() {
   const router = useRouter();
-  
+
   // 상태가 아주 심플해졌습니다. '내 채팅방' 목록만 관리합니다.
   const [myRooms, setMyRooms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // 커서 페이징 상태 (cursorValue + cursorRoomId)
+  const [cursor, setCursor] = useState<{ value: string | null; roomId: number | null; hasNext: boolean }>({
+    value: null,
+    roomId: null,
+    hasNext: true,
+  });
 
   // 화면에 들어올 때마다 데이터를 새로고침합니다.
   useFocusEffect(
@@ -27,14 +35,29 @@ export default function ChatListScreen() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 백엔드에서 내가 참여 중인 채팅방 목록만 가져옵니다.
-      const data = await chatApi.getRooms();
-      console.log("🔥 채팅방 목록 데이터 원본:", JSON.stringify(data[0], null, 2));
-      setMyRooms(data);
+      // 백엔드에서 내가 참여 중인 채팅방 목록 첫 페이지를 가져옵니다.
+      const result = await chatApi.getRooms();
+      setMyRooms(result.content);
+      setCursor({ value: result.nextCursorValue, roomId: result.nextCursorId, hasNext: result.hasNext });
     } catch (error) {
       console.error('목록 로딩 에러:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadMoreRooms = async () => {
+    if (!cursor.hasNext || isLoading || isLoadingMore) return;
+
+    try {
+      setIsLoadingMore(true);
+      const result = await chatApi.getRooms(cursor.value, cursor.roomId);
+      setMyRooms(prev => [...prev, ...result.content]);
+      setCursor({ value: result.nextCursorValue, roomId: result.nextCursorId, hasNext: result.hasNext });
+    } catch (error) {
+      console.error('채팅방 목록 추가 로드 실패:', error);
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
@@ -117,6 +140,11 @@ export default function ChatListScreen() {
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#1B854A" />}
+          onEndReached={loadMoreRooms}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            isLoadingMore ? <ActivityIndicator style={{ marginVertical: 20 }} color="#1B854A" /> : null
+          }
           ListEmptyComponent={
             <View style={styles.centerEmpty}>
               <Ionicons name="chatbubbles-outline" size={60} color="#DDD" style={{ marginBottom: 16 }} />

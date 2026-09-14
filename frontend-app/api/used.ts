@@ -23,8 +23,18 @@ export interface UsedProductListParams {
   status?: UsedProductStatus[];
   /** Spring 정렬 표기. 예: 'createdAt,desc' */
   sort?: string;
-  page?: number;
   size?: number;
+  /** 커서 페이징. 둘 다 있어야 다음 페이지로 취급되고, 없으면 첫 페이지. */
+  cursorValue?: string | null;
+  cursorId?: number | null;
+}
+
+/** 백엔드 CursorSlice<T> 응답 공통 형태 */
+export interface UsedProductSlice {
+  content: UsedProductSummary[];
+  hasNext: boolean;
+  nextCursorValue: string | null;
+  nextCursorId: number | null;
 }
 
 export interface CreateUsedProductReq {
@@ -37,16 +47,34 @@ export interface CreateUsedProductReq {
 }
 
 export const usedApi = {
-  // 동네 중고 게시글 목록 조회
-  getUsedProducts: async (params: UsedProductListParams = {}) => {
-    const { categoryId, ...rest } = params;
+  // 동네 중고 게시글 목록 조회 (cursorValue+cursorId 기반 커서 페이징)
+  getUsedProducts: async (params: UsedProductListParams = {}): Promise<UsedProductSlice> => {
+    const { categoryId, cursorValue, cursorId, ...rest } = params;
 
-    return await client.get('/used', {
+    const query: any = {
+      ...rest,
       // categoryId가 null이면(전체보기) 파라미터 자체를 빼야 한다.
-      params: { ...rest, ...(categoryId ? { categoryId } : {}) },
+      ...(categoryId ? { categoryId } : {}),
+    };
+    // cursorValue/cursorId는 둘 다 있어야 하고, 없으면 아예 빼야 첫 페이지로 취급된다.
+    if (cursorValue != null && cursorId != null) {
+      query.cursorValue = cursorValue;
+      query.cursorId = cursorId;
+    }
+
+    const response = await client.get('/used', {
+      params: query,
       // status는 ?status=A&status=B 형태로 반복해야 서버 List 바인딩에 맞는다.
       paramsSerializer: { indexes: null },
     });
+
+    const raw = response.data?.data;
+    return {
+      content: raw?.content ?? [],
+      hasNext: raw?.hasNext ?? false,
+      nextCursorValue: raw?.nextCursorValue ?? null,
+      nextCursorId: raw?.nextCursorId ?? null,
+    };
   },
 
   createUsedProduct: async (data: CreateUsedProductReq) => {
