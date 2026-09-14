@@ -113,6 +113,7 @@ public class Payment extends BaseEntity {
         this.cancelledAt = LocalDateTime.now();
     }
 
+    /** 누적 취소액을 저장해 중복 Webhook이 금액을 다시 차감하지 않게 한다. */
     public void markPartiallyRefunded(BigDecimal cumulativeCancelledAmount) {
         if (cumulativeCancelledAmount == null || cumulativeCancelledAmount.signum() <= 0
                 || cumulativeCancelledAmount.compareTo(amount) >= 0
@@ -123,6 +124,7 @@ public class Payment extends BaseEntity {
         this.status = PaymentStatus.PARTIALLY_REFUNDED;
     }
 
+    /** 다음 취소 요청이 원 결제액을 초과하지 않도록 남은 금액을 계산한다. */
     public BigDecimal getRemainingAmount() {
         return amount.subtract(cancelledAmount);
     }

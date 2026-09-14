@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.order.service;
 
 import com.eeum.eeum.application.settlement.service.OwnerRevenueService;
+import com.eeum.eeum.application.settlement.service.SettlementFeePolicy;
 import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.entity.PaymentCancellationOperation;
@@ -47,7 +48,7 @@ class PaymentCancellationProcessorTest {
     @Mock private OwnerRevenueService ownerRevenueService;
     @Mock private OrderService orderService;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private com.eeum.eeum.application.settlement.service.SettlementFeePolicy settlementFeePolicy;
+    @Mock private SettlementFeePolicy settlementFeePolicy;
 
     @BeforeEach
     void setUp() {

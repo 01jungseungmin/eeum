@@ -198,8 +198,9 @@ public class PaymentCancellationProcessor {
                 "PortOne 부분 취소 금액을 수동 대사하기 전까지 정산 지급을 차단합니다.");
     }
 
+    /** 외부 누적 취소액을 원장과 정산에 반영해 이후 요율 변경의 소급을 막는다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void reconcileExternalPartialCancellation(Long orderId, java.math.BigDecimal cumulativeCancelledAmount) {
+    public void reconcileExternalPartialCancellation(Long orderId, BigDecimal cumulativeCancelledAmount) {
         Order order = orderRepository.findByIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)

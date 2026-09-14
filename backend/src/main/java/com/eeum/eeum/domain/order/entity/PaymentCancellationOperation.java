@@ -131,6 +131,7 @@ public class PaymentCancellationOperation extends BaseEntity {
         return operation;
     }
 
+    /** 부분 취소 완료 후 남은 금액의 전액 취소를 같은 멱등 작업으로 재개한다. */
     public void reopenForRemainingCancellation(
             BigDecimal remainingAmount, PaymentCancellationTrigger triggerType, String reason
     ) {
@@ -248,6 +249,7 @@ public class PaymentCancellationOperation extends BaseEntity {
                 && requestedAmount.compareTo(cancelledAmount) == 0;
     }
 
+    /** 외부 부분 취소를 내부 원장에 반영한 뒤 작업을 완료 상태로 기록한다. */
     public void markPartialReconciled(BigDecimal cumulativeCancelledAmount, LocalDateTime now) {
         if (cumulativeCancelledAmount == null || cumulativeCancelledAmount.signum() <= 0
                 || now == null
