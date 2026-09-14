@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 
 import { Text } from '../../components/CustomText'; 
 import { userApi, MyInfoResponse } from '../../api/user';
+import { uploadImageAssets } from '../../utils/imageUpload';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -70,10 +71,17 @@ export default function EditProfileScreen() {
 
     setIsSaving(true);
     try {
+      // 새로 고른 로컬 이미지(file://)만 업로드하고, 기존 서버 URL은 그대로 둔다.
+      let uploadedProfileImageUrl = profileImage || '';
+      if (profileImage && !profileImage.startsWith('http')) {
+        const [objectKey] = await uploadImageAssets([profileImage], 'PROFILE');
+        uploadedProfileImageUrl = objectKey;
+      }
+
       // 정보 수정 API 스펙에 맞춰 닉네임과 프로필 이미지만 전송합니다.
       await userApi.updateProfile({
         nickname: nickname,
-        profileImageUrl: profileImage || '' 
+        profileImageUrl: uploadedProfileImageUrl
       });
 
       Alert.alert('성공', '회원정보가 성공적으로 수정되었습니다.');
