@@ -5,6 +5,8 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.RefundStatus;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -40,6 +42,10 @@ public class Payment extends BaseEntity {
 
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "cancelled_amount", nullable = false, precision = 10, scale = 2,
+            columnDefinition = "DECIMAL(10,2) NOT NULL DEFAULT 0")
+    private BigDecimal cancelledAmount = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -104,7 +110,24 @@ public class Payment extends BaseEntity {
 
     public void cancel() {
         this.status = PaymentStatus.CANCELLED;
+        this.cancelledAmount = this.amount;
         this.cancelledAt = LocalDateTime.now();
+    }
+
+    /** 누적 취소액을 저장해 중복 Webhook이 금액을 다시 차감하지 않게 한다. */
+    public void markPartiallyRefunded(BigDecimal cumulativeCancelledAmount) {
+        if (cumulativeCancelledAmount == null || cumulativeCancelledAmount.signum() <= 0
+                || cumulativeCancelledAmount.compareTo(amount) >= 0
+                || cumulativeCancelledAmount.compareTo(cancelledAmount) < 0) {
+            throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+        this.cancelledAmount = cumulativeCancelledAmount;
+        this.status = PaymentStatus.PARTIALLY_REFUNDED;
+    }
+
+    /** 다음 취소 요청이 원 결제액을 초과하지 않도록 남은 금액을 계산한다. */
+    public BigDecimal getRemainingAmount() {
+        return amount.subtract(cancelledAmount);
     }
 
     public void fail(String reason) {

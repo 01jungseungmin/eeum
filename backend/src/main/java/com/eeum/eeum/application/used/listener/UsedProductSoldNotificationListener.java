@@ -11,18 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/**
- * 거래 완료 후 구매자에게 후기 작성을 요청한다.
- *
- * <p>{@code NotificationType.USED_REVIEW}는 "리뷰 요청"이다 — 후기가 등록됐다는 알림이 아니다.
- * 그래서 수신자는 후기를 쓸 사람(구매자)이고, 발송 시점은 판매완료다.
- *
- * <p>AFTER_COMMIT으로 받는다. 판매완료가 롤백되면 후기를 쓸 수 없는 거래인데
- * 알림만 남는 상황을 막는다.
- *
- * <p>참조는 후기(USED_REVIEW)가 아니라 게시글이다 — 이 시점에는 후기가 아직 없어서
- * 가리킬 대상이 없고, 사용자가 이동해야 할 곳도 후기를 쓸 게시글이다.
- */
+/** 거래 완료 후 구매자에게 후기 작성을 요청한다. */
 @Component
 @RequiredArgsConstructor
 public class UsedProductSoldNotificationListener {

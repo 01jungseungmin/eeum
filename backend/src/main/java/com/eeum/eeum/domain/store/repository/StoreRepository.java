@@ -18,9 +18,9 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
     /**
      * 탈퇴 트랜잭션이 잠금 순서를 정할 때 쓰는 내 상점 ID.
      *
-     * <p><b>엔티티가 아니라 ID만 읽는다.</b> 엔티티로 읽으면 영속성 컨텍스트에 올라가고,
-     * 뒤이은 {@code findByIdWithPessimisticLock}이 잠금은 잡아도 1차 캐시의 낡은 인스턴스를
-     * 돌려준다. Store에는 {@code @Version}이 있어, 그 사이 다른 사용자의 찜으로 버전이 오르면
+     * 엔티티가 아니라 ID만 읽는다. 엔티티로 읽으면 영속성 컨텍스트에 올라가고,
+     * 뒤이은 findByIdWithPessimisticLock이 잠금은 잡아도 1차 캐시의 낡은 인스턴스를
+     * 돌려준다. Store에는 @Version이 있어, 그 사이 다른 사용자의 찜으로 버전이 오르면
      * 낡은 버전을 들고 flush하다 탈퇴 전체가 낙관적 잠금 예외로 실패한다.
      */
     @Query("SELECT s.storeId FROM Store s WHERE s.account.accountId = :accountId")

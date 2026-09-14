@@ -14,8 +14,8 @@ public interface OperationFailureLogRepositoryCustom {
     /**
      * 실패 이력 검색.
      *
-     * <p>검색 조건은 application DTO가 아니라 개별 파라미터로 받는다 —
-     * domain이 상위 레이어를 참조하면 {@code LayerRuleTest} 규칙에 걸린다.
+     * 검색 조건은 application DTO가 아니라 개별 파라미터로 받는다 —
+     * domain이 상위 레이어를 참조하면 LayerRuleTest 규칙에 걸린다.
      *
      * @param category null이면 전체 카테고리
      * @param from     null이면 하한 없음

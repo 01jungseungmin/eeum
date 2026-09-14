@@ -7,19 +7,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * 운영 중 발생한 실패를 한곳에 쌓는 통합 이력.
- *
- * <p>이전에는 결제 Webhook·환불·스케줄러 실패가 모두 SLF4J 로그로만 흘러가
- * "어제 환불이 몇 건 실패했나"에 답하려면 서버 로그를 뒤져야 했다.
- * 이 테이블은 그 질문에 쿼리 한 번으로 답하기 위한 것이다.
- *
- * <p>대상 참조는 polymorphic({@code refType} + {@code refId})으로 FK 없이 저장한다.
- * 실패 시점의 대상이 이후 삭제될 수 있고, 이력은 그와 무관하게 남아야 하기 때문이다.
- *
- * <p>Soft Delete 대상이 아니다. 보존 기간이 지난 행은
- * {@code OperationFailureLogCleanupScheduler}가 물리 삭제한다.
- */
+/** 운영 중 발생한 실패를 한곳에 쌓는 통합 이력. */
 @Entity
 @Table(
         name = "operation_failure_log",
@@ -49,7 +37,7 @@ public class OperationFailureLog extends BaseEntity {
     @Column(name = "category", nullable = false, length = 30)
     private OperationFailureCategory category;
 
-    /** 실패한 구체 작업명. 예: {@code PaymentService.handleWebhook}, {@code OrderExpirationScheduler.expireOrders} */
+    /** 실패한 구체 작업명. 예: PaymentService.handleWebhook, OrderExpirationScheduler.expireOrders */
     @Column(name = "operation", nullable = false, length = 200)
     private String operation;
 
@@ -69,7 +57,7 @@ public class OperationFailureLog extends BaseEntity {
 
     /**
      * 재현에 필요한 최소 컨텍스트(요청 본문 일부, 파라미터 등).
-     * <b>민감정보는 호출부에서 마스킹한 뒤 넘긴다.</b> 이 필드는 관리자 화면에 그대로 노출된다.
+     * 민감정보는 호출부에서 마스킹한 뒤 넘긴다. 이 필드는 관리자 화면에 그대로 노출된다.
      */
     @Column(name = "payload", length = PAYLOAD_MAX_LENGTH)
     private String payload;

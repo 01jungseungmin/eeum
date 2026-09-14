@@ -1,0 +1,4 @@
+interface:
+  display_name: "운영 준비도 점검"
+  short_description: "장애·복구·대사·관측성·Runbook 관점에서 출시 준비도를 점검합니다"
+  default_prompt: "Use $operational-readiness to assess the operational readiness of the current changes."

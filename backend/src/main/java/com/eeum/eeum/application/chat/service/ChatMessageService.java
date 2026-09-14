@@ -141,12 +141,12 @@ public class ChatMessageService {
     /**
      * 메시지 목록 (최신→과거) — 커서 무한 스크롤.
      *
-     * <p>커서는 발신 시각과 메시지 ID를 함께 담는다. 예전에는 시각 하나였고 조건이
-     * {@code sentAt < cursor}라, 같은 시각에 저장된 메시지가 경계에 걸리면 나머지가
+     * 커서는 발신 시각과 메시지 ID를 함께 담는다. 예전에는 시각 하나였고 조건이
+     * sentAt < cursor라, 같은 시각에 저장된 메시지가 경계에 걸리면 나머지가
      * 영구히 누락됐다.
      *
-     * @param cursorValue 직전 응답의 {@code nextCursorValue}. 첫 페이지면 null이다.
-     * @param cursorId    직전 응답의 {@code nextCursorId}. 첫 페이지면 null이다.
+     * @param cursorValue 직전 응답의 nextCursorValue. 첫 페이지면 null이다.
+     * @param cursorId    직전 응답의 nextCursorId. 첫 페이지면 null이다.
      */
     @Transactional(readOnly = true)
     public CursorSlice<ChatMessageResponseDto> getMessages(
@@ -223,11 +223,11 @@ public class ChatMessageService {
     /**
      * 알림 요청을 outbox에 남긴다 — 메시지 저장과 같은 트랜잭션에서 커밋된다.
      *
-     * <p>예전에는 여기서 Spring 이벤트를 발행하고 {@code AFTER_COMMIT} + {@code @Async}가
+     * 예전에는 여기서 Spring 이벤트를 발행하고 AFTER_COMMIT + @Async가
      * 알림을 만들었다. 비동기 풀이 포화되면 그 작업이 버려져 알림이 아예 생기지 않았고,
      * 메시지 전송은 성공으로 끝나 아무도 알아채지 못했다.
      *
-     * <p>브로드캐스트({@code ChatMessageBroadcastEvent})는 그대로 이벤트로 둔다.
+     * 브로드캐스트(ChatMessageBroadcastEvent)는 그대로 이벤트로 둔다.
      * 실시간 전달은 놓쳐도 다음 조회에서 복구되지만, 알림 레코드는 놓치면 복구되지 않는다.
      */
     private void publishSentEvent(

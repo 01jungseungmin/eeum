@@ -18,7 +18,7 @@ import org.springframework.scheduling.annotation.Async;
  * DB 커밋 후 단일 FIFO 비동기 워커에서 실행해, 외부 S3 호출이 요청 스레드를 점유하지 않게 한다.
  * TEXT/IMAGE / 삭제 / SYSTEM 메시지: 이 리스너가 처리
  *
- * <p>브로커로 직접 밀지 않고 Redis로 중계한다. 메시지는 REST·STOMP 아무 인스턴스에서나
+ * 브로커로 직접 밀지 않고 Redis로 중계한다. 메시지는 REST·STOMP 아무 인스턴스에서나
  * 만들어지지만 구독자는 실시간 인스턴스에만 붙어 있어, 직접 밀면 다른 인스턴스의 구독자에게
  * 닿지 못한다. 그래서 이 리스너는 모든 인스턴스에서 동작한다.
  */

@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.order.service;
 
+import com.eeum.eeum.application.order.dto.response.PortOneCancelResult;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
 import com.eeum.eeum.domain.ai.repository.AiPlanPaymentRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
@@ -48,8 +49,11 @@ public class MockPortOnePaymentClient implements PortOnePaymentClient {
     }
 
     @Override
-    public void cancelPayment(String paymentId, BigDecimal amount, String reason) {
+    public PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason, String idempotencyKey) {
         log.info("[LOCAL MOCK] PortOne 결제 취소 Mock 처리: paymentId={}, amount={}, reason={}",
                 paymentId, amount, reason);
+        // Mock은 항상 즉시 완료를 돌려준다. REQUESTED 경로 검증은 계약 테스트가 담당한다.
+        return new PortOneCancelResult(
+                PortOneCancelResult.SUCCEEDED, "mock-cancellation-" + paymentId, amount);
     }
 }

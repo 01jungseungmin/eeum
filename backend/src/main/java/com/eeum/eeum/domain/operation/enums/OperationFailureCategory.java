@@ -3,7 +3,7 @@ package com.eeum.eeum.domain.operation.enums;
 /**
  * 운영 실패 이력의 분류.
  *
- * <p>관리자 대시보드의 상단 필터 탭과 1:1로 대응한다.
+ * 관리자 대시보드의 상단 필터 탭과 1:1로 대응한다.
  * 새 값을 추가하면 프론트 필터 옵션도 함께 갱신해야 한다.
  */
 public enum OperationFailureCategory {

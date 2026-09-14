@@ -10,15 +10,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "14. Payment", description = "결제 API")
 @RestController
+@Validated
 @RequestMapping("/payments")
 @RequiredArgsConstructor
 public class PaymentController {
@@ -53,11 +57,9 @@ public class PaymentController {
     @PostMapping("/webhook")
     public ResponseEntity<Void> handleWebhook(
             @RequestBody String rawBody,
-            @RequestHeader(value = "X-PortOne-Webhook-Signature", required = false) String portoneSignature,
-            @RequestHeader(value = "Portone-Webhook-Signature", required = false) String legacySignature
+            @RequestHeader HttpHeaders headers
     ) {
-        String signature = portoneSignature != null ? portoneSignature : legacySignature;
-        paymentService.handleWebhook(rawBody, signature);
+        paymentService.handleWebhook(rawBody, headers);
         return ResponseEntity.ok().build();
     }
 
@@ -73,7 +75,7 @@ public class PaymentController {
     @Operation(summary = "내 결재 내역 상세 조회", description = "현재 로그인한 사용자의 결제 상세 내역을 조회합니다.")
     @GetMapping("/me/{paymentId}")
     public ResponseEntity<ApiResponse<PaymentResponseDto>> getPaymentDetail(
-            @PathVariable Long paymentId) {
+            @PathVariable @Positive Long paymentId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         return ResponseEntity.ok(ApiResponse.success(
                 paymentService.getPaymentDetail(accountId, paymentId)));
@@ -82,7 +84,7 @@ public class PaymentController {
     @Operation(summary = "결제 취소", description = "현재 로그인한 사용자의 결제를 즉시 취소합니다. 결제 상태가 취소 가능한 상태일 때만 처리됩니다.")
     @PatchMapping("/{paymentId}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancelPayment(
-            @PathVariable Long paymentId) {
+            @PathVariable @Positive Long paymentId) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         paymentService.cancelPayment(accountId, paymentId);
         return ResponseEntity.ok(ApiResponse.success(null));
@@ -91,7 +93,7 @@ public class PaymentController {
     @Operation(summary = "환불 요청", description = "현재 로그인한 사용자가 결제한 내역에 대해 환불을 요청합니다. 실제 환불 처리는 승인 이후 진행됩니다.")
     @PostMapping("/{paymentId}/refund")
     public ResponseEntity<ApiResponse<Void>> requestRefund(
-            @PathVariable Long paymentId,
+            @PathVariable @Positive Long paymentId,
             @Valid @RequestBody RefundRequestDto request) {
         Long accountId = SecurityUtil.getCurrentAccountId();
         paymentService.requestRefund(accountId, paymentId, request);

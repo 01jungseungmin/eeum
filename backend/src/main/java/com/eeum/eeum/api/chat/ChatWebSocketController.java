@@ -114,9 +114,9 @@ public class ChatWebSocketController {
     /**
      * payload Bean Validation 실패 — 클라이언트 잘못이므로 서버 오류로 뭉뚱그리지 않는다.
      *
-     * <p>이 핸들러가 없으면 아래 {@code Exception} 핸들러가 잡아 INTERNAL_ERROR로 응답한다.
+     * 이 핸들러가 없으면 아래 Exception 핸들러가 잡아 INTERNAL_ERROR로 응답한다.
      * 어떤 필드가 왜 틀렸는지 알 수 없어 클라이언트가 고칠 수 없다.
-     * 응답 형식은 REST의 {@code GlobalExceptionHandler.handleValidationException}과 맞춘다.
+     * 응답 형식은 REST의 GlobalExceptionHandler.handleValidationException과 맞춘다.
      */
     @MessageExceptionHandler(MethodArgumentNotValidException.class)
     @SendToUser("/sub/errors")

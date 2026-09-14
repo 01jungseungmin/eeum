@@ -9,7 +9,7 @@ import lombok.Getter;
 
 /**
  * 중고 게시글 이미지 항목.
- * 공용 {@code ImageUploadRequestDto}의 {@code isThumbnail}은 중고 게시글에서 무시된다 —
+ * 공용 ImageUploadRequestDto의 isThumbnail은 중고 게시글에서 무시된다 —
  * 대표는 "사진이 없던 게시글의 첫 장"으로 서비스가 정하고, 변경은 별도 API를 쓴다.
  * 무시하는 필드를 계약에 남겨두면 클라이언트가 지정한 대로 될 것이라 기대하므로 아예 없앤다.
  */

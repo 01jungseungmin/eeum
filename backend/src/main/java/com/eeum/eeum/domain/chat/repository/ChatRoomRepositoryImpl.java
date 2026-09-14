@@ -29,8 +29,8 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     /**
      * 채팅방 목록 정렬 — 최근 대화순, 대화 없는 방은 뒤로, 동률은 PK로 끊는다.
      *
-     * <p>실제 SQL과 응답 메타데이터가 같은 값에서 나오도록 여기 한 곳에서만 정한다.
-     * 이 값을 응답({@code CursorSlice.sort})에 그대로 실어 보내지 않으면
+     * 실제 SQL과 응답 메타데이터가 같은 값에서 나오도록 여기 한 곳에서만 정한다.
+     * 이 값을 응답(CursorSlice.sort)에 그대로 실어 보내지 않으면
      * 클라이언트가 응답만 보고는 어떤 순서인지 알 수 없다.
      */
     private static final Sort ROOM_LIST_SORT = Sort.by(
@@ -77,19 +77,7 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
         return toSlice(content, size);
     }
 
-    /**
-     * 커서(keyset) 페이징. OFFSET을 쓰지 않는다.
-     *
-     * <p>최근 대화순 목록은 메시지가 오는 순간 그 방이 맨 앞으로 올라온다. OFFSET은 그 밀림을
-     * 그대로 맞아 경계에 있던 방이 다음 페이지에서 중복으로 나온다.
-     *
-     * <p>다음 커서는 서버가 만들어 응답에 싣는다. 페이지 번호가 없는 계약이라
-     * {@link CursorSlice}로 돌려준다 — Slice로 돌리면 두 번째 페이지에도 number=0,
-     * first=true가 실려 응답이 실제 위치를 잘못 설명한다.
-     *
-     * <p>마지막 방의 대화 시각이 null이면 커서 값도 null이다 — 대화 없는 방 구간은
-     * 방 ID만으로 이어 읽는다.
-     */
+    /** 커서(keyset) 페이징. OFFSET을 쓰지 않는다. */
     private CursorSlice<ChatRoom> toSlice(List<ChatRoom> fetched, int size) {
         boolean hasNext = fetched.size() > size;
         List<ChatRoom> content = hasNext ? fetched.subList(0, size) : fetched;
@@ -105,13 +93,13 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepositoryCustom {
     }
 
     /**
-     * 커서 이후 구간. 정렬이 {@code lastMessageAt desc nulls last, chatroomId desc}이므로
+     * 커서 이후 구간. 정렬이 lastMessageAt desc nulls last, chatroomId desc이므로
      * "대화가 더 오래됐거나, 같으면 방 ID가 더 작거나, 아예 대화가 없는" 방들이다.
      *
-     * <p>세 번째 항(대화 없는 방)을 빼면 그 방들이 목록에서 통째로 사라진다 —
+     * 세 번째 항(대화 없는 방)을 빼면 그 방들이 목록에서 통째로 사라진다 —
      * NULL 비교는 참이 되지 않아 앞의 두 조건에 걸리지 않기 때문이다.
      *
-     * <p>커서 자신이 대화 없는 방이면 이미 NULL 구간에 들어선 것이라 ID로만 뒤로 간다.
+     * 커서 자신이 대화 없는 방이면 이미 NULL 구간에 들어선 것이라 ID로만 뒤로 간다.
      */
     private BooleanExpression afterCursor(ChatRoomCursor cursor) {
         if (cursor == null) {

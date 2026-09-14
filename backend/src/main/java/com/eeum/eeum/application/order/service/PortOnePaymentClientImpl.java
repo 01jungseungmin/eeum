@@ -1,5 +1,7 @@
 package com.eeum.eeum.application.order.service;
 
+import com.eeum.eeum.application.order.dto.response.PortOneCancelResponse;
+import com.eeum.eeum.application.order.dto.response.PortOneCancelResult;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentResponse;
 import com.eeum.eeum.config.PortOneProperties;
@@ -19,8 +21,8 @@ import java.util.Map;
 /**
  * PortOne 호출 어댑터.
  *
- * <p>책임은 외부 호출과 응답 해석까지다. 실패 이력은 남기지 않고
- * {@link PortOnePaymentException}으로 변환해 던지기만 한다 —
+ * 책임은 외부 호출과 응답 해석까지다. 실패 이력은 남기지 않고
+ * PortOnePaymentException으로 변환해 던지기만 한다 —
  * 기록은 업무 맥락을 아는 서비스 계층이 한 번만 한다.
  */
 @Slf4j
@@ -59,26 +61,34 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
                 .paymentId(response.getId())
                 .status(response.getStatus())
                 .amount(response.getAmount().getTotal())
+                .cancelledAmount(response.getCancelledAmount())
                 .pgProvider(response.getPgProvider())
                 .build();
     }
 
     @Override
-    public void cancelPayment(String paymentId, BigDecimal amount, String reason) {
+    public PortOneCancelResult cancelPayment(String paymentId, BigDecimal amount, String reason, String idempotencyKey) {
         // 금액 변환은 외부 호출이 아니다 — try 밖에 두어 PortOne 실패로 오분류되지 않게 한다.
         long cancelAmount = toPortOneAmount(amount);
 
+        PortOneCancelResponse response;
         try {
-            RestClient.create(portOneProperties.baseUrl())
+            // 응답 본문을 버리지 않는다. 취소 상태(SUCCEEDED/REQUESTED/FAILED)와 취소 식별자가
+            // 여기에만 있고, REQUESTED를 완료로 확정하면 미완료 취소가 완료로 기록된다.
+            RestClient.RequestBodySpec request = RestClient.create(portOneProperties.baseUrl())
                     .post()
                     .uri("/payments/{paymentId}/cancel", paymentId)
-                    .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret())
+                    .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret());
+            if (idempotencyKey != null) {
+                request.header("Idempotency-Key", "\"" + idempotencyKey + "\"");
+            }
+            response = request
                     .body(Map.of(
                             "reason", reason,
                             "amount", cancelAmount
                     ))
                     .retrieve()
-                    .toBodilessEntity();
+                    .body(PortOneCancelResponse.class);
 
         } catch (RuntimeException e) {
             log.error("PortOne 결제 취소 실패: paymentId={}", paymentId, e);
@@ -86,6 +96,19 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
                     "PortOne 결제 취소 실패: paymentId=" + paymentId
                             + ", amount=" + amount + ", reason=" + reason, e);
         }
+
+        if (response == null || response.getCancellation() == null) {
+            // 상태를 알 수 없는 응답을 성공으로 넘기면 취소되지 않은 결제가 취소로 기록된다.
+            log.warn("PortOne 취소 응답이 비어 있음: paymentId={}", paymentId);
+            throw new PortOnePaymentException(ErrorCode.PAYMENT_REFUND_FAILED,
+                    "PortOne 취소 응답이 비어 있음: paymentId=" + paymentId);
+        }
+
+        PortOneCancelResponse.Cancellation cancellation = response.getCancellation();
+        return new PortOneCancelResult(
+                cancellation.getStatus(),
+                cancellation.getId() != null ? cancellation.getId() : cancellation.getPgCancellationId(),
+                cancellation.resolveCancelledAmount());
     }
 
     private long toPortOneAmount(BigDecimal amount) {

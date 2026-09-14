@@ -40,6 +40,7 @@ class ImageUrlResponseAdviceTest {
         String objectKey = "used/7/thumb.webp";
         String presignedUrl = "https://signed.example/thumb";
         when(fileStorageService.isFinalObjectKey(objectKey)).thenReturn(true);
+        when(fileStorageService.isFinalObjectKey("https://legacy.example/thumb")).thenReturn(false);
         when(fileStorageService.resolveImageUrl(objectKey)).thenReturn(presignedUrl);
         ApiResponse<Map<String, String>> body = ApiResponse.<Map<String, String>>builder()
                 .success(true)

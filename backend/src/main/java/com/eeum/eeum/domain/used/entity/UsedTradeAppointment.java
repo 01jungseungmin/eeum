@@ -11,18 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * 최종 확정 거래 장소.
- *
- * <p>채팅에서 오간 LOCATION 메시지는 <b>제안</b>이다. 마지막으로 보낸 장소가 곧 합의된
- * 장소는 아니므로(상대가 거절했을 수 있다), 양쪽이 합의한 하나를 여기 따로 남긴다.
- *
- * <p><b>키를 채팅방으로 잡지 않는다.</b> {@code ChatRoom}은 종료할 수 있고, 종료되면
- * 같은 (상품, 구매자) 조합으로 방이 새로 생긴다. 방에 매달면 한 번 종료·재생성되는
- * 순간 거래는 이어지는데 약속만 사라진다. 거래의 실제 식별자는 상품과 구매자 쌍이다.
- *
- * <p>양쪽이 합의한 장소와 약속 시각을 함께 보관한다.
- */
+/** 최종 확정 거래 장소. */
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -104,7 +93,7 @@ public class UsedTradeAppointment extends BaseEntity {
     /**
      * 약속 장소 재조율. 거래당 한 건이므로 새 행을 만들지 않고 이 행을 고친다.
      *
-     * <p>이전 장소는 남기지 않는다 — 오간 제안은 채팅 메시지에 그대로 남아 있어
+     * 이전 장소는 남기지 않는다 — 오간 제안은 채팅 메시지에 그대로 남아 있어
      * 여기서 이력을 중복해 들고 있을 이유가 없다.
      */
     public void relocate(
@@ -149,10 +138,10 @@ public class UsedTradeAppointment extends BaseEntity {
     }
 
     /**
-     * 확정 장소는 게시글의 대략 위치와 달리 <b>비워둘 수 없다.</b> "여기서 만나기로 했다"를
+     * 확정 장소는 게시글의 대략 위치와 달리 비워둘 수 없다. "여기서 만나기로 했다"를
      * 담는 값이라 이름과 좌표가 없으면 존재할 이유가 없다.
      *
-     * <p>좌표 범위는 서버가 확인한다 — 프론트에서 검색 결과만 고르게 막아도 API를
+     * 좌표 범위는 서버가 확인한다 — 프론트에서 검색 결과만 고르게 막아도 API를
      * 직접 호출하면 임의 좌표가 들어온다.
      */
     private static void validatePlace(String placeName, Double latitude, Double longitude) {

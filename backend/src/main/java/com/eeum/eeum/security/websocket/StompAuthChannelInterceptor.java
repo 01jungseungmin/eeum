@@ -26,20 +26,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    /**
-     * 허용 destination 화이트리스트.
-     *
-     * <p>브로커가 {@code enableSimpleBroker("/sub")}이고 Spring의 구독 매칭은 AntPathMatcher다.
-     * 그래서 {@code /sub/chat/rooms/**}를 구독하면 <b>모든 방의 메시지를 받는다</b>.
-     * 접두사만 보고 형식이 안 맞으면 통과시키는 방식은 이 구독을 검증 없이 흘려보낸다 —
-     * 반드시 전체 일치로 판정하고, 목록에 없는 destination은 거부해야 한다.
-     *
-     * <p>SEND도 같은 이유로 {@code /pub}만 허용한다. {@code /sub}는 브로커 destination이라
-     * 클라이언트가 직접 SEND하면 브로커가 그대로 구독자에게 중계한다(위조 메시지 주입).
-     *
-     * <p>새 destination을 추가하면 이 패턴도 함께 넓혀야 한다. 넓히지 않으면 조용히 실패하는 대신
-     * 거부되므로 누락을 바로 알 수 있다.
-     */
+    /** 허용 destination 화이트리스트. */
     private static final Pattern CHAT_ROOM_SUBSCRIBE_DESTINATION =
             Pattern.compile("/sub/chat/rooms/(\\d{1,18})(?:/(?:read|typing|closed))?");
 
@@ -182,9 +169,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     }
 
     /**
-     * destination이 패턴과 <b>전체 일치</b>할 때만 roomId를 돌려준다. 아니면 null.
+     * destination이 패턴과 전체 일치할 때만 roomId를 돌려준다. 아니면 null.
      *
-     * <p>부분 일치나 접두사 검사로 바꾸면 안 된다 — 뒤에 무엇이 붙든 통과하게 되고,
+     * 부분 일치나 접두사 검사로 바꾸면 안 된다 — 뒤에 무엇이 붙든 통과하게 되고,
      * 그게 이 클래스가 막으려는 와일드카드 구독이다.
      */
     private Long matchRoomId(Pattern pattern, String destination) {

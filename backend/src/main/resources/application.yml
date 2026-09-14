@@ -35,7 +35,7 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration/common
     # 기존 테이블이 이미 존재하지만
     # flyway_schema_history가 없는 DB를 Flyway 체계에 편입
     baseline-on-migrate: true
@@ -85,6 +85,13 @@ business:
 
 kakao:
   rest-api-key: ${KAKAO_REST_API_KEY}
+
+# 정산 수수료율 — 0 이상 1 이하의 소수(0.033 = 3.3%). 현재는 수수료 없음.
+# 이 숫자만 바꾸면 이후 생성되는 수익 원장부터 새 수수료가 적용된다.
+settlement:
+  fee:
+    pg-rate: ${SETTLEMENT_PG_FEE_RATE:0}
+    platform-rate: ${SETTLEMENT_PLATFORM_FEE_RATE:0}
 
 portone:
   api-secret: ${PORTONE_API_SECRET}

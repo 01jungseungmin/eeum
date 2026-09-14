@@ -143,7 +143,7 @@ public class FileObjectLifecycleService {
 
     /**
      * 정리 실패를 기록한다. 한계를 넘긴 행은 CLEANUP_FAILED가 되어 이후 회차의
-     * {@link #claimExpiredUnattached}가 집지 않는다.
+     * #claimExpiredUnattached가 집지 않는다.
      *
      * @return 재시도를 포기했으면 true. 행이 이미 사라졌으면 남은 재시도가 없으므로 false
      */

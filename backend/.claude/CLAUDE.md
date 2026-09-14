@@ -72,6 +72,8 @@ exception/    ← ErrorCode enum, exception classes, GlobalExceptionHandler
 - 복잡한 조건 쿼리는 QueryDSL 사용 — JPQL 문자열 직접 작성 금지
 - 의존성 주입은 `@RequiredArgsConstructor` 생성자 주입 — 필드 `@Autowired` 금지
 - Controller는 엔티티를 직접 반환 금지 — Service에서 DTO로 변환 후 반환
+- 주석에 Javadoc HTML 태그 금지 — `<p>`, `<b>`, `{@code}`, `{@link}` 대신 평문
+  (`@param`/`@return`/`@throws`는 유지). 상세 기준은 `### 주석 작성 규칙`
 
 ### 엔티티 작성 규칙
 - `@NoArgsConstructor(access = AccessLevel.PROTECTED)` + `@Getter` — Setter 금지
@@ -128,6 +130,7 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - PortOne Mock 단위 테스트만으로 계약 검증을 완료했다고 판단하지 않는다.
 - 계약 변경은 실제 PortOne 호출 대신 공식 fixture와 로컬 HTTP Stub을 사용한 계약 테스트를 추가한다.
 - 사용자가 "결제·정산 전체 리뷰"를 요청하면 Git diff로 범위를 축소하지 않는다.
+- 결제·정산·PortOne의 출시·배포·장애 대응 준비도는 `/operational-readiness`를 사용해 시나리오 카탈로그와 대사·복구 경로를 점검한다.
 
 ### 페이징 선택 기준
 - 무한 스크롤 (모바일 앱): `CursorSlice<T>` (`common/dto/response/CursorSlice`)
@@ -145,8 +148,20 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
   Gate 1~7을 순서대로 적용한다.
 - 정책 결정 → Domain/Persistence → Application/Transaction → API/DTO → 교차 도메인·운영 →
   테스트 → 최종 전체 리뷰 순서를 지키고, 이전 Gate의 위반을 다음 단계로 넘기지 않는다.
+- Gate 5에서 외부 의존성, 배포, 스케줄러, 데이터 복구 또는 고객 영향 기능 변경이 있으면 `/operational-readiness`를 사용한다.
 - 완성 구현에서 공개 범위, 권한, 상태 전이, 삭제, 외부 계약처럼 결과를 바꾸는 정책이 미정이면
   TODO나 임의 값으로 진행하지 않고 사용자 결정을 받는다.
+
+### 주석 작성 규칙
+- 주석은 "왜"만 쓴다. 코드를 읽어서 알 수 있는 "무엇을"은 쓰지 않는다.
+- 길이 상한: 클래스 Javadoc 6줄, 메서드 Javadoc 4줄, 인라인 `//` 2줄.
+  넘어야 한다면 주석이 아니라 참조 문서가 필요하다는 신호다 —
+  `.claude/skills/references/`에 항목을 만들고 코드에서는 한 줄로 가리킨다.
+- Javadoc HTML 태그 금지 — `<p>`는 빈 주석 줄로, `<b>`·`{@code}`·`{@link}`는 평문으로.
+  `@param`/`@return`/`@throws`는 구조 정보라 유지하되, 내용이 이름의 반복이면 태그째 지운다.
+- 이 CLAUDE.md나 참조 문서에 이미 있는 규칙은 코드 주석에서 반복하지 않고 가리키기만 한다.
+- 주석만 고치는 변경은 코드 변경과 섞지 않고 `docs:` 커밋으로 분리한다.
+- 상세 기준·정리 대상 목록은 `.claude/skills/references/comment-style.md`를 따른다.
 
 ### 테스트 작성 규칙
 - JUnit5 + Mockito + AssertJ 조합 (Spring Boot test starter에 포함)
@@ -161,6 +176,10 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 
 ### 스케줄러 목록
 새 스케줄러 추가 전 반드시 기존 목록 확인 (위치: `application/{domain}/scheduler/`):
+
+새 스케줄러 또는 실행 주기 변경이 외부 의존성·데이터 복구·고객 상태에 영향을 주면
+`/operational-readiness`로 실패·중복 실행·재실행 경로를 점검한다.
+
 - `AccountCleanupScheduler` — 매일 03:00, 탈퇴 후 30일 경과 계정 **개인정보 파기(익명화)**. 계정 행은 남긴다 — 주문·결제·신고·후기 등 다수 테이블이 참조하고 일부는 보존 의무가 있어 물리 삭제할 수 없다. `Account.anonymize()`가 email·nickname·name·phone·password·FCM 토큰을 지우고 `anonymizedAt`을 남기며, 참조가 끊겨도 되는 자식(찜·활동지역·사업자정보·정산계좌)만 함께 삭제한다
 - `OrderExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 주문 만료 처리
 - `NotificationCleanupScheduler` — 매일 03:00 6개월 이전 알림 삭제 / 5분 주기 Redis unread 카운트 ↔ DB 정합성 보정
@@ -169,10 +188,15 @@ redisLockService.executeWithLock(LockKeys.ORDER + orderId, () -> { ... });
 - `AiPlanPaymentExpirationScheduler` — 1분 주기, 결제 대기(PENDING) 15분 경과 AI 플랜 결제 FAILED 처리
 - `OperationFailureLogCleanupScheduler` — 매일 04:00, 보존 기간(3개월) 지난 운영 실패 이력 물리 삭제
 - `NotificationOutboxScheduler` — 1초 주기, `notification_outbox`의 대기 행을 처리해 알림 생성 (한 번에 100건, 재시도 5회 초과 시 FAILED) / 매일 04:20 완료분(24시간 경과) 정리. 알림 생성은 비동기 이벤트가 아니라 이 경로다 — 원 트랜잭션에서 outbox에 기록하고 여기서 꺼내 쓴다
+- `WeeklySettlementClosingScheduler` — 매주 월 00:00(Asia/Seoul), 해당 주차에 유보기간이 지난 `OwnerRevenue`만 그 주의 `WeeklySettlement`으로 마감. 기간을 지난 누락 원장은 현재 주차에 섞지 않고 `OperationFailureRecorder`(SCHEDULER)에 별도 수습 대상으로 남긴다. 원장 ID마다 별도 트랜잭션이라 한 건이 실패해도 나머지는 진행한다
 - `WebSocketSessionReconciliationScheduler` — 30초 주기, 붙어 있는 WebSocket 세션의 계정 상태·토큰 세대를 DB와 대조해 회수된 연결 종료. **분산 잠금을 걸지 않는다**(`@InstanceLocalSchedule`) — 세션은 JVM 안에만 있어 한 대만 돌면 나머지 인스턴스 세션이 방치된다
 
 ### Redis 키 패턴
 새 키 추가 시 기존 패턴과 충돌 금지:
+
+인증·락·멱등성·Rate Limit 용도의 새 Redis 키 또는 TTL 변경은 `/operational-readiness`로
+Redis 유실·복구와 장애 시 고객 영향을 점검한다.
+
 - `refresh:{accountId}` — refresh token
 - `blacklist:access:{token}` — 로그아웃된 access token
 - `reauth:{accountId}` / `password-reset:{accountId}` — 일회용 토큰
@@ -211,6 +235,7 @@ Each domain lives in its own sub-package across `api/`, `application/`, and `dom
 - **notification** — `Notification`, `NotificationSettings`; push via FCM, real-time via SSE
 - **favorite** — Polymorphic `Favorite` keyed by `FavoriteRefType`
 - **region** — `Region` (administrative region lookup), `Location` for GPS coordinate storage
+- **settlement** — `OwnerRevenue`(주문 1건당 수익 원장), `WeeklySettlement`/`WeeklySettlementItem`(상점별 주간 지급). 수수료율은 `settlement.fee.pg-rate`/`platform-rate` 설정값이며 코드 상수가 아니다 — 숫자만 바꾸면 이후 생성 원장부터 적용된다. **현장결제(`CASH_ON_SITE`)는 원장을 만들지 않는다** — 플랫폼이 받은 적 없는 돈이라 지급 대상이 아니다. 지급은 관리자 수동(claim → complete)이며 claim 토큰으로 fencing 한다
 - **used** — `UsedProduct` (C2C 중고거래 게시글). 거래 상태(`SELLING`/`RESERVED`/`SOLD`)·관리자 숨김(`hidden`)·Soft Delete(`deletedAt`)를 독립된 세 축으로 관리한다. 카테고리는 `CategoryType.USED`를 재사용하고, 거래 희망 지역은 작성 시점 `Region`을 복사해 고정한다.
 
 ### Key design patterns
