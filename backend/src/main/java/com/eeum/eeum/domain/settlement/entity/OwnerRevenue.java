@@ -55,6 +55,12 @@ public class OwnerRevenue extends BaseEntity {
     @Column(name = "platform_fee_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal platformFeeAmount;
 
+    @Column(name = "pg_fee_rate", nullable = false, precision = 10, scale = 6)
+    private BigDecimal pgFeeRate;
+
+    @Column(name = "platform_fee_rate", nullable = false, precision = 10, scale = 6)
+    private BigDecimal platformFeeRate;
+
     @Column(name = "payout_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal payoutAmount;
 
@@ -83,6 +89,21 @@ public class OwnerRevenue extends BaseEntity {
             BigDecimal platformFeeAmount,
             BigDecimal payoutAmount
     ) {
+        return create(order, payment, paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount,
+                BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    /** 원장 생성 시점의 요율을 함께 저장해 설정 변경이 과거 원장에 소급되지 않게 한다. */
+    public static OwnerRevenue create(
+            Order order,
+            Payment payment,
+            BigDecimal paymentAmount,
+            BigDecimal pgFeeAmount,
+            BigDecimal platformFeeAmount,
+            BigDecimal payoutAmount,
+            BigDecimal pgFeeRate,
+            BigDecimal platformFeeRate
+    ) {
         if (order == null || payment == null
                 || payment.getStatus() != PaymentStatus.PAID
                 || payment.getOrder() == null
@@ -91,7 +112,9 @@ public class OwnerRevenue extends BaseEntity {
                 || !Objects.equals(order.getOrderId(), payment.getOrder().getOrderId())
                 || paymentAmount == null
                 || payment.getAmount() == null
-                || payment.getAmount().compareTo(paymentAmount) != 0) {
+                || payment.getAmount().compareTo(paymentAmount) != 0
+                || pgFeeRate == null || platformFeeRate == null
+                || pgFeeRate.signum() < 0 || platformFeeRate.signum() < 0) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
@@ -102,6 +125,8 @@ public class OwnerRevenue extends BaseEntity {
         revenue.paymentAmount = paymentAmount;
         revenue.pgFeeAmount = pgFeeAmount;
         revenue.platformFeeAmount = platformFeeAmount;
+        revenue.pgFeeRate = pgFeeRate;
+        revenue.platformFeeRate = platformFeeRate;
         revenue.payoutAmount = payoutAmount;
         revenue.status = OwnerRevenueStatus.ACCRUED;
         return revenue;
@@ -137,6 +162,7 @@ public class OwnerRevenue extends BaseEntity {
         this.status = OwnerRevenueStatus.SETTLEMENT_PENDING;
     }
 
+    /** 지급 전 부분 취소의 남은 금액만 반영해 원장 합계를 보정한다. */
     public void adjustAmounts(
             BigDecimal paymentAmount,
             BigDecimal pgFeeAmount,

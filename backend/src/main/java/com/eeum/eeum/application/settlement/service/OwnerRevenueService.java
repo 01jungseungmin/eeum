@@ -70,7 +70,9 @@ public class OwnerRevenueService {
                             breakdown.paymentAmount(),
                             breakdown.pgFeeAmount(),
                             breakdown.platformFeeAmount(),
-                            breakdown.payoutAmount()
+                            breakdown.payoutAmount(),
+                            breakdown.pgRate(),
+                            breakdown.platformRate()
                     ));
                 });
     }
@@ -176,6 +178,7 @@ public class OwnerRevenueService {
         }
     }
 
+    /** 지급 전 부분 취소를 원장과 주간 정산 항목에 원자적으로 반영한다. */
     @Transactional
     public void reconcilePartialCancellation(
             Long orderId, SettlementFeePolicy.Breakdown breakdown
@@ -188,6 +191,8 @@ public class OwnerRevenueService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
         WeeklySettlementItem item = weeklySettlementItemRepository
                 .findByOwnerRevenue_OwnerRevenueId(revenue.getOwnerRevenueId()).orElse(null);
+        SettlementFeePolicy.Breakdown fixedRateBreakdown = settlementFeePolicy.breakdown(
+                breakdown.paymentAmount(), revenue.getPgFeeRate(), revenue.getPlatformFeeRate());
         if (settlement != null && settlement.getStatus() != WeeklySettlementStatus.PAYOUT_PENDING) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED);
         }
@@ -198,10 +203,10 @@ public class OwnerRevenueService {
             throw new BusinessException(ErrorCode.SETTLEMENT_CONCURRENT_MODIFICATION);
         }
         if (item != null) {
-            settlement.replaceRevenueAmounts(item, breakdown.paymentAmount(), breakdown.pgFeeAmount(),
-                    breakdown.platformFeeAmount(), breakdown.payoutAmount());
+            settlement.replaceRevenueAmounts(item, fixedRateBreakdown.paymentAmount(), fixedRateBreakdown.pgFeeAmount(),
+                    fixedRateBreakdown.platformFeeAmount(), fixedRateBreakdown.payoutAmount());
         }
-        revenue.adjustAmounts(breakdown.paymentAmount(), breakdown.pgFeeAmount(),
-                breakdown.platformFeeAmount(), breakdown.payoutAmount());
+        revenue.adjustAmounts(fixedRateBreakdown.paymentAmount(), fixedRateBreakdown.pgFeeAmount(),
+                fixedRateBreakdown.platformFeeAmount(), fixedRateBreakdown.payoutAmount());
     }
 }
