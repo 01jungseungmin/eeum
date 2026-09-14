@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { apiClient } from '../apiClient';
 
 // 상점 도메인 관련 API 함수 모음집 (export)

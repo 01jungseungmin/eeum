@@ -173,7 +173,7 @@ export const aiManagerApi = {
       data,
     );
   },
-  createNoticeDraft: () => {
+  createReviewNoticeDraft: () => {
     return apiClient.patch('/owner/ai-manager/reviews-inquiries/notice-draft');
   },
   createReviewReplyDraft: (reviewId, confirmDelete = false) => {
