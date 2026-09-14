@@ -21,11 +21,11 @@ import java.util.List;
 
 /**
  * 탈퇴 처리의 공통 절차.
- * <p>
- * 본인 탈퇴({@code AccountService.withdraw})와 관리자 강제 탈퇴
- * ({@code AdminAccountService.forceDeleteAccount})가 같은 뒷정리를 해야 한다.
+ *
+ * 본인 탈퇴(AccountService.withdraw)와 관리자 강제 탈퇴
+ * (AdminAccountService.forceDeleteAccount)가 같은 뒷정리를 해야 한다.
  * 두 곳에 따로 적어두면 한쪽만 고쳐져 찜 카운트가 남는 식으로 어긋난다.
- * <p>
+ *
  * 호출 전제: 대상 Account 행을 이미 잠근 상태여야 한다(잠금 순서 account → store → favorite).
  */
 @Slf4j
@@ -78,8 +78,8 @@ public class AccountWithdrawalProcessor {
      * 탈퇴 트랜잭션이 건드릴 중고 게시글 행(예약 중인 내 글 + 내가 찜한 글)을
      * ID 오름차순으로 잠근다.
      *
-     * <p>여기서 엔티티를 올려도 뒤따르는 {@code cancelReservationsForSellerInactivation}의
-     * "잠근 뒤 재확인"은 깨지지 않는다. 그 보증이 필요했던 이유는 <b>잠금 없이 읽은</b>
+     * 여기서 엔티티를 올려도 뒤따르는 cancelReservationsForSellerInactivation의
+     * "잠근 뒤 재확인"은 깨지지 않는다. 그 보증이 필요했던 이유는 잠금 없이 읽은
      * 낡은 인스턴스를 재사용하는 것이었는데, 여기서는 FOR UPDATE로 읽으므로 그 순간부터
      * 커밋 시점까지 아무도 그 행을 바꿀 수 없다.
      */
@@ -95,9 +95,9 @@ public class AccountWithdrawalProcessor {
     /**
      * 탈퇴 트랜잭션이 건드릴 상점 행(자기 상점 + 찜한 상점)을 ID 오름차순으로 잠근다.
      *
-     * <p>중고 게시글과 마찬가지로 <b>ID만 읽어</b> 잠금 순서를 정한다. 자기 상점을 엔티티로
+     * 중고 게시글과 마찬가지로 ID만 읽어 잠금 순서를 정한다. 자기 상점을 엔티티로
      * 먼저 읽으면 영속성 컨텍스트에 올라가고, 뒤이은 잠금 조회가 그 낡은 인스턴스를 돌려준다.
-     * Store에는 {@code @Version}이 있어 그 사이 다른 사용자의 찜으로 버전이 오르면
+     * Store에는 @Version이 있어 그 사이 다른 사용자의 찜으로 버전이 오르면
      * 낡은 버전으로 flush하다 탈퇴 전체가 낙관적 잠금 예외로 실패한다.
      */
     private void lockStoresInIdOrder(Long accountId) {

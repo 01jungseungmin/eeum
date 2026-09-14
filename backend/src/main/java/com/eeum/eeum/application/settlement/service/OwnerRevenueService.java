@@ -25,9 +25,9 @@ import java.time.LocalDateTime;
 /**
  * 주문 결제만 사장 매출 원장으로 연결한다. AI 플랜 결제는 Order가 없으므로 이 진입점에 들어올 수 없다.
  *
- * <p>원장은 <b>플랫폼이 대신 받아 두었다가 사장에게 보내줄 돈</b>의 기록이다. 그래서
+ * 원장은 플랫폼이 대신 받아 두었다가 사장에게 보내줄 돈의 기록이다. 그래서
  * 플랫폼을 거치지 않은 결제(현장결제)는 원장을 만들지 않는다 — 자세한 이유는
- * {@link #isPayoutEligible(Payment)} 참고.
+ * #isPayoutEligible(Payment) 참고.
  */
 @Service
 @RequiredArgsConstructor
@@ -41,16 +41,16 @@ public class OwnerRevenueService {
     /**
      * 지급 대상 결제인지 판별한다.
      *
-     * <p>현장결제는 손님이 매장에서 사장에게 직접 돈을 낸다. 플랫폼은 그 돈을 받은 적이
+     * 현장결제는 손님이 매장에서 사장에게 직접 돈을 낸다. 플랫폼은 그 돈을 받은 적이
      * 없으므로 사장에게 보내줄 것도 없다. 원장을 만들면 주간 정산이 그 금액을 지급 대상으로
-     * 잡아 <b>사장이 같은 주문 대금을 두 번 받는다.</b>
+     * 잡아 사장이 같은 주문 대금을 두 번 받는다.
      */
     private boolean isPayoutEligible(Payment payment) {
         return payment.getPaymentMethod() != PaymentMethod.CASH_ON_SITE;
     }
 
     /**
-     * @return 생성되었거나 이미 존재하는 원장. 지급 대상이 아닌 결제수단이면 {@code null}.
+     * @return 생성되었거나 이미 존재하는 원장. 지급 대상이 아닌 결제수단이면 null.
      */
     @Transactional
     public OwnerRevenue recordPaidOrder(Order order, Payment payment) {
@@ -95,11 +95,11 @@ public class OwnerRevenueService {
     /**
      * 전액 취소를 원장에 반영한다.
      *
-     * <p>분기(항목 있음/없음)를 잠그지 않은 스냅샷으로 정하면, 스냅샷을 읽은 뒤 락을 잡기
+     * 분기(항목 있음/없음)를 잠그지 않은 스냅샷으로 정하면, 스냅샷을 읽은 뒤 락을 잡기
      * 전에 마감 스케줄러가 커밋했을 때 엉뚱한 분기로 들어간다. 그래서 스냅샷은 "어떤
      * 정산 행을 잠글지" 고르는 데만 쓰고, 실제 판단은 락을 쥔 뒤 다시 읽은 값으로 한다.
      *
-     * <p>잠금 순서는 어느 경로에서나 {@code WeeklySettlement → OwnerRevenue}다.
+     * 잠금 순서는 어느 경로에서나 WeeklySettlement → OwnerRevenue다.
      * 마감(WeeklySettlementClosingService)과 수동 지급(ManualSettlementPayoutService)도
      * 같은 순서를 쓴다.
      */
@@ -146,13 +146,13 @@ public class OwnerRevenueService {
     /**
      * PG 취소를 호출하기 전에 자동 취소가 가능한 거래인지 확인한다.
      *
-     * <p><b>원장 상태만 보면 부족하다.</b> 원장이 {@code SETTLEMENT_PENDING}이어도 그 원장이
-     * 속한 주간 정산이 이미 지급 중({@code PAYOUT_IN_PROGRESS})이거나 완료
-     * ({@code COMPLETED})일 수 있다. 그대로 PG를 취소하면 고객에게는 환불되고 사장에게는
+     * 원장 상태만 보면 부족하다. 원장이 SETTLEMENT_PENDING이어도 그 원장이
+     * 속한 주간 정산이 이미 지급 중(PAYOUT_IN_PROGRESS)이거나 완료
+     * (COMPLETED)일 수 있다. 그대로 PG를 취소하면 고객에게는 환불되고 사장에게는
      * 지급되어 과지급이 된다. 그래서 정산 행의 상태까지 함께 본다.
      *
-     * <p>여기서 통과해도 PG 호출과 내부 반영 사이의 경합은 남는다. 그 구간은
-     * {@code PaymentCancellationOperation}이 수동 검토로 격리한다.
+     * 여기서 통과해도 PG 호출과 내부 반영 사이의 경합은 남는다. 그 구간은
+     * PaymentCancellationOperation이 수동 검토로 격리한다.
      */
     @Transactional
     public void assertCancellableBeforePayout(Long orderId) {

@@ -139,11 +139,11 @@ public class ChatRoom extends BaseEntity {
     /**
      * 중고거래 1:1 문의방.
      *
-     * <p>이름을 두지 않는다 — 상대와 상품이 방을 식별하므로 목록·상세에서 그 둘로 표시한다.
+     * 이름을 두지 않는다 — 상대와 상품이 방을 식별하므로 목록·상세에서 그 둘로 표시한다.
      * 지역도 두지 않는다 — 공개 방 목록(GROUP/GROUP_STREET) 필터용 필드라 1:1 방과 무관하다.
      *
-     * <p>{@code lastMessageAt}은 첫 메시지 전까지 null이다. 내 채팅방 목록은
-     * {@code lastMessageAt DESC NULLS LAST}라 대화 없는 방은 목록 맨 뒤에 놓인다.
+     * lastMessageAt은 첫 메시지 전까지 null이다. 내 채팅방 목록은
+     * lastMessageAt DESC NULLS LAST라 대화 없는 방은 목록 맨 뒤에 놓인다.
      */
     public static ChatRoom createPrivateInquiry(
             Account buyer,

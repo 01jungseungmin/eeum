@@ -16,20 +16,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 
-/**
- * 운영 실패를 관리자에게 알린다.
- *
- * <p>이 알림은 "대시보드를 열어보라"는 신호다. 실패 내역 자체는
- * {@code GET /admin/operations/failures}에 이미 다 쌓여 있으므로, 여기서 건별 상세를 전부
- * 전달하려 하지 않는다.
- *
- * <p><b>분류 단위 쿨다운</b>이 이 리스너의 핵심이다. PortOne 장애처럼 하나의 원인으로
- * 실패가 초당 수십 건씩 쏟아지면, 스로틀 없이는 관리자 수 × 실패 건수만큼 알림이 생성된다.
- * 알림 테이블·FCM 발송·SSE가 동시에 폭증하고, 정작 다른 분류의 실패는 그 속에 묻힌다.
- * 그래서 분류별로 {@link #ALERT_COOLDOWN} 동안 1건만 내보낸다.
- *
- * <p>쿨다운에 막힌 실패도 이력에는 빠짐없이 남는다 — 알림만 생략될 뿐 유실되지 않는다.
- */
+/** 운영 실패를 관리자에게 알린다. */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -43,11 +30,11 @@ public class OperationFailureNotificationListener {
     private final RateLimitService rateLimitService;
 
     /**
-     * {@code @EventListener}인 이유: 이 이벤트는 {@code OperationFailureLogWriter}의
-     * 트랜잭션이 커밋된 <b>뒤</b>, 트랜잭션 밖에서 발행된다. 트랜잭션 리스너로 두면
+     * 또 @EventListener인 이유: 이 이벤트는 OperationFailureLogWriter의
+     * 트랜잭션이 커밋된 뒤, 트랜잭션 밖에서 발행된다. 트랜잭션 리스너로 두면
      * 활성 트랜잭션이 없어 아예 실행되지 않는다.
      *
-     * <p>{@code @Async}를 붙이지 않는다 — 발행 지점이 이미 비동기 스레드라 한 번 더
+     * 또 @Async를 붙이지 않는다 — 발행 지점이 이미 비동기 스레드라 한 번 더
      * 넘길 이유가 없고, 풀이 포화될 때 불필요한 압력만 더한다.
      */
     @EventListener

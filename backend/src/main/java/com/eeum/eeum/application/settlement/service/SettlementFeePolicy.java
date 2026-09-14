@@ -12,11 +12,11 @@ import java.math.RoundingMode;
 /**
  * 결제 금액을 수수료와 지급액으로 나눈다.
  *
- * <p>수수료율은 {@link SettlementFeeProperties}가 들고 있고 이 클래스는 계산만 한다.
+ * 수수료율은 SettlementFeeProperties가 들고 있고 이 클래스는 계산만 한다.
  * 수수료 체계를 바꿀 때 손대야 하는 곳은 설정값 하나뿐이다.
  *
- * <p>지급액은 비율로 따로 계산하지 않고 <b>뺄셈으로만</b> 만든다. DB CHECK 제약
- * ({@code payout = payment - pg - platform})을 반올림 오차 없이 항상 만족시키기 위해서다.
+ * 지급액은 비율로 따로 계산하지 않고 뺄셈으로만 만든다. DB CHECK 제약
+ * (payout = payment - pg - platform)을 반올림 오차 없이 항상 만족시키기 위해서다.
  */
 @Component
 @RequiredArgsConstructor
@@ -59,7 +59,7 @@ public class SettlementFeePolicy {
         return payment.multiply(rate).setScale(AMOUNT_SCALE, RoundingMode.HALF_UP).min(payment);
     }
 
-    /** 한 결제 건의 금액 분해 결과. 네 값은 항상 {@code payout = payment - pg - platform}을 만족한다. */
+    /** 한 결제 건의 금액 분해 결과. 네 값은 항상 payout = payment - pg - platform을 만족한다. */
     public record Breakdown(
             BigDecimal paymentAmount,
             BigDecimal pgFeeAmount,

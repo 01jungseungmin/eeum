@@ -10,19 +10,7 @@ import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
-/**
- * {@code @Scheduled} 작업에서 빠져나온 예외를 운영 실패 이력으로 남긴다.
- *
- * <p>이전에는 스케줄러가 던진 예외를 Spring 기본 핸들러가 로그로만 흘려보내
- * "어젯밤 주문 만료 배치가 돌긴 했나"에 답할 수 없었다.
- *
- * <p>ErrorHandler 방식을 쓴 이유: 스케줄러마다 try-catch를 넣으면 현재 9개 파일을 모두 고쳐야 하고
- * 앞으로 추가되는 스케줄러에서 빠뜨리기 쉽다. 여기서 한 번 등록하면 전부 자동으로 걸린다.
- * (AOP는 {@code spring-boot-starter-aop} 의존성이 추가로 필요해 선택하지 않았다.)
- *
- * <p>풀 크기는 1로 둔다 — Spring 기본값과 같아 기존 실행 순서·동시성이 그대로 유지된다.
- * 늘리면 지금까지 직렬 실행에 의존하던 스케줄러들이 병렬로 겹칠 수 있다.
- */
+/** 또 @Scheduled 작업에서 빠져나온 예외를 운영 실패 이력으로 남긴다. */
 @Slf4j
 @Configuration
 @RequiredArgsConstructor

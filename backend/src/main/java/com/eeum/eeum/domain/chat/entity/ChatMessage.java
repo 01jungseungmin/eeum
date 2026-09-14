@@ -102,10 +102,10 @@ public class ChatMessage extends BaseEntity {
     /**
      * 거래 장소 제안 메시지.
      *
-     * <p>여기 담기는 값은 <b>제안</b>이지 확정된 약속이 아니다. 마지막 LOCATION 메시지가
+     * 여기 담기는 값은 제안이지 확정된 약속이 아니다. 마지막 LOCATION 메시지가
      * 곧 합의된 장소는 아니므로(상대가 거절했을 수 있다), 확정 장소는 별도로 관리한다.
      *
-     * <p>{@code address}와 {@code placeId}는 카카오 장소 검색을 거치지 않고 지도에서
+     * address와 placeId는 카카오 장소 검색을 거치지 않고 지도에서
      * 직접 찍은 핀이면 없을 수 있어 선택값이다.
      */
     public static ChatMessage location(
@@ -150,7 +150,7 @@ public class ChatMessage extends BaseEntity {
     /**
      * 위치 메시지의 필수값과 좌표 범위를 확인한다.
      *
-     * <p>프론트에서 카카오 검색 결과만 고르도록 막아도 API를 직접 호출하면 임의 좌표가
+     * 프론트에서 카카오 검색 결과만 고르도록 막아도 API를 직접 호출하면 임의 좌표가
      * 들어온다. 클라이언트 제약은 UX일 뿐이므로 범위 검증은 서버가 맡는다.
      */
     private static String blankToNull(String value) {

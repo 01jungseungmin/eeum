@@ -11,48 +11,16 @@ import java.time.Duration;
 import java.util.concurrent.Executor;
 
 /**
- * 비동기 실행 풀.
+ * 비동기 실행 풀. 알림 저장과 FCM 전송을 분리해 포화 시 저장 작업을 버리지 않는다.
  *
- * <p>풀을 둘로 나눈다. 기준은 "포화됐을 때 버려도 되는 작업인가"다.
- *
- * <ul>
- *   <li>{@link #asyncTaskExecutor()} — 알림 <b>생성</b>(DB 저장)을 포함한 일반 비동기 작업.
- *       버리면 알림 레코드가 아예 생기지 않으므로 버릴 수 없다.</li>
- *   <li>{@link #notificationPushTaskExecutor()} — FCM 발송 전용. 이 시점에는 알림이 이미
- *       커밋돼 앱 목록에 보이므로, 포화 시 푸시만 건너뛰는 편이 낫다.</li>
- * </ul>
- *
- * <p>나누는 진짜 이유는 <b>CallerRunsPolicy의 전이 경로</b>다. 하나의 풀을 공유하면 포화 시
- * 요청 스레드가 FCM HTTP 호출과 SSE 소켓 write를 직접 수행한다. 둘 다 수 분까지 블로킹될 수 있고,
- * 그동안 그 스레드는 DB 커넥션을 쥐고 있다(afterCommit 시점에는 아직 반납 전이다).
- * 자원 예산 문서의 R1·R2·R3가 한꺼번에 터지는 경로다.
- *
- * <p>세 번째 풀 {@link #applicationTaskExecutor()}은 Spring MVC async 전용이다.
- * {@code @Async} 작업을 그 이름에 태우지 않는다 — 아래 주석 참고.
- *
- * <p>파라미터를 바꾸면 {@code .claude/skills/references/resource-budget.md}의 표도 함께 고친다.
+ * MVC async 풀도 별도로 둔다. 풀 파라미터를 바꾸면 resource-budget.md도 갱신한다.
  */
 @Slf4j
 @Configuration
 @EnableAsync
 public class AsyncConfig {
 
-    /**
-     * 일반 비동기 풀 — 한정자 없는 모든 {@code @Async}가 여기로 온다.
-     *
-     * <p>예전에는 이 빈 이름이 {@code applicationTaskExecutor}였다. 그 이름은 Spring MVC가
-     * async 처리용 executor를 <b>이름으로 찾는 자리</b>라, 알림 작업과 MVC async가 한 풀을
-     * 나눠 쓰게 된다. 알림이 밀리면 MVC async가 함께 밀리고, 그 반대도 마찬가지다.
-     * 이름을 분리하고 MVC용 풀을 따로 뒀다.
-     *
-     * <p>{@code @Primary}가 필요하다. Executor 빈이 둘 이상이면 한정자 없는 {@code @Async}가
-     * 유일 빈 해석에 실패하고, 이름이 {@code taskExecutor}인 빈도 없어
-     * <b>SimpleAsyncTaskExecutor로 조용히 내려앉는다</b> — 작업마다 새 스레드를 만드는 무제한 실행이다.
-     *
-     * <p>큐는 100이다. 500이면 max 16에 도달하기 전에 500개가 먼저 쌓인다 —
-     * {@code ThreadPoolExecutor}는 큐가 가득 차야 core를 넘겨 스레드를 늘리기 때문에,
-     * 큐가 크면 max 설정이 사실상 죽고 실제 동시 실행은 core 4개에 머문다.
-     */
+    /** 한정자 없는 @Async의 기본 풀. @Primary가 없으면 무제한 실행기로 폴백할 수 있다. */
     @Primary
     @Bean(name = "asyncTaskExecutor")
     public Executor asyncTaskExecutor() {
@@ -92,21 +60,7 @@ public class AsyncConfig {
         return executor;
     }
 
-    /**
-     * Spring MVC async 전용 풀 ({@code Callable}·{@code WebAsyncTask} 반환값 처리).
-     *
-     * <p>이 이름으로 직접 정의해야 한다. Boot의 자동 설정은
-     * {@code @ConditionalOnMissingBean(Executor.class)}라 우리가 Executor 빈을 하나라도
-     * 정의하는 순간 꺼진다 — 이름만 바꾸면 되살아나지 않고, MVC async가
-     * {@code SimpleAsyncTaskExecutor}(요청마다 새 스레드)로 떨어진다.
-     *
-     * <p>현재 이 앱의 MVC async는 SSE뿐이고 {@code SseEmitter}는 이 executor를 쓰지 않으므로
-     * 실질 사용량은 0이다. 그래도 작게 잡아 둔다 — 나중에 {@code Callable} 반환 엔드포인트가
-     * 생겼을 때 무제한 스레드로 시작하지 않게 하는 것이 목적이다.
-     *
-     * <p>거부 정책은 기본값({@code AbortPolicy})을 그대로 둔다. MVC async에서 CallerRuns는
-     * 요청 스레드가 직접 실행한다는 뜻이라 비동기로 뺀 이유 자체가 사라진다.
-     */
+    /** Spring MVC async 전용 풀. 무제한 스레드 폴백을 막기 위해 이름을 직접 등록한다. */
     @Bean(name = "applicationTaskExecutor")
     public Executor applicationTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -120,16 +74,7 @@ public class AsyncConfig {
         return executor;
     }
 
-    /**
-     * FCM 푸시 전용 풀.
-     *
-     * <p>포화 시 <b>버린다.</b> 이 작업이 도는 시점에는 알림이 이미 커밋돼 앱 알림 목록에 보이므로
-     * 잃는 것은 푸시 한 건이다. 반대로 CallerRuns로 흡수하면 제출 스레드가 FCM HTTP 응답을
-     * 기다리게 되고, 그 스레드가 요청 스레드일 수 있다.
-     *
-     * <p>{@code AbortPolicy} 대신 직접 처리하는 이유는 예외를 제출 지점으로 던지지 않기 위해서다.
-     * 푸시를 못 보낸 것이 원 요청을 실패시켜서는 안 된다.
-     */
+    /** FCM 푸시 전용 풀. 포화 시 푸시만 버리고 이미 저장된 알림은 보존한다. */
     @Bean(name = "notificationPushTaskExecutor")
     public Executor notificationPushTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

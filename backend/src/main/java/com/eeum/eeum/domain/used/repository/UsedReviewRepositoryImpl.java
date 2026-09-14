@@ -22,9 +22,9 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
     /**
      * 후기 목록 정렬 — 작성 최신순, 동률은 PK로 끊는다.
      *
-     * <p>tie-break가 없으면 createdAt 동률에서 페이지 경계 항목이 중복되거나 유실된다.
+     * tie-break가 없으면 createdAt 동률에서 페이지 경계 항목이 중복되거나 유실된다.
      *
-     * <p>이 값 하나가 실제 SQL(orderBy)과 응답 메타데이터({@code CursorSlice.sort}) 양쪽의 근거다.
+     * 이 값 하나가 실제 SQL(orderBy)과 응답 메타데이터(CursorSlice.sort) 양쪽의 근거다.
      * 두 곳에서 따로 정하면 갈린다.
      */
     private static final Sort REVIEW_SORT = Sort.by(
@@ -41,7 +41,7 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
     /**
      * 판매자가 받은 후기. 비회원도 볼 수 있는 판매자 평판이다.
      *
-     * <p>게시글의 삭제·숨김 여부로 거르지 않는다 — 거르면 판매자가 나쁜 후기가 달린 글을 지워
+     * 게시글의 삭제·숨김 여부로 거르지 않는다 — 거르면 판매자가 나쁜 후기가 달린 글을 지워
      * 평판을 세탁할 수 있다. 비공개 게시글의 제목 노출은 응답 단계에서 가린다.
      */
     @Override
@@ -56,7 +56,7 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
     }
 
     /**
-     * 응답이 게시글 제목·작성자 닉네임을 담고, 공개 여부 판정({@code isPubliclyVisible})이
+     * 응답이 게시글 제목·작성자 닉네임을 담고, 공개 여부 판정(isPubliclyVisible)이
      * 판매자 상태까지 본다. 셋 다 fetch join해야 한다 — 하나라도 빠지면 페이지 크기만큼
      * 추가 select가 나간다(N+1).
      */
@@ -86,12 +86,12 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
     /**
      * 커서(keyset) 페이징. OFFSET을 쓰지 않는다.
      *
-     * <p>최신순 목록은 새 행이 맨 앞에 꽂히므로 OFFSET은 페이지 사이 삽입 한 건에 통째로 밀린다 —
+     * 최신순 목록은 새 행이 맨 앞에 꽂히므로 OFFSET은 페이지 사이 삽입 한 건에 통째로 밀린다 —
      * 경계 항목이 다음 페이지에서 중복으로 나오거나(삽입), 건너뛰어진다(삭제).
      * 커서는 "이 행 다음부터"를 가리켜 그 사이 변화와 무관하다.
      *
-     * <p>다음 커서는 서버가 만들어 응답에 싣는다. 페이지 번호가 없는 계약이라
-     * {@link CursorSlice}로 돌려준다 — Slice로 돌리면 두 번째 페이지에도 number=0,
+     * 다음 커서는 서버가 만들어 응답에 싣는다. 페이지 번호가 없는 계약이라
+     * CursorSlice로 돌려준다 — Slice로 돌리면 두 번째 페이지에도 number=0,
      * first=true가 실려 응답이 실제 위치를 잘못 설명한다.
      */
     private CursorSlice<UsedReview> toSlice(
@@ -116,10 +116,10 @@ public class UsedReviewRepositoryImpl implements UsedReviewRepositoryCustom {
     }
 
     /**
-     * 커서 이후 구간. 정렬이 {@code createdAt desc, usedReviewId desc}이므로
+     * 커서 이후 구간. 정렬이 createdAt desc, usedReviewId desc이므로
      * "createdAt이 더 이르거나, 같으면 ID가 더 작은" 행들이다.
      *
-     * <p>두 번째 항(동률에서 ID로 끊기)이 빠지면 같은 시각에 등록된 후기들이
+     * 두 번째 항(동률에서 ID로 끊기)이 빠지면 같은 시각에 등록된 후기들이
      * 페이지 경계에서 중복되거나 누락된다 — tie-break 정렬만으로는 막을 수 없다.
      */
     private BooleanExpression afterCursor(UsedReviewCursor cursor) {

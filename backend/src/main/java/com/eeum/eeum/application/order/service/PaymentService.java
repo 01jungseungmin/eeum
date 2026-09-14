@@ -181,11 +181,11 @@ public class PaymentService {
     /**
      * 고객 결제 취소.
      *
-     * <p>취소 절차 자체는 {@link PaymentCancellationService}가 맡는다. 이 메서드는
+     * 취소 절차 자체는 PaymentCancellationService가 맡는다. 이 메서드는
      * "누가 어떤 결제를 취소할 수 있는가"만 판단한다 — 네 진입점이 각자 취소를 구현하면
      * 경로마다 금전 처리가 갈린다.
      *
-     * <p>{@code @Transactional}을 걸지 않는다. 취소 절차 안에서 PortOne을 호출하므로
+     * 또 @Transactional을 걸지 않는다. 취소 절차 안에서 PortOne을 호출하므로
      * 여기에 트랜잭션을 걸면 외부 호출이 다시 트랜잭션 안으로 들어온다.
      */
     public void cancelPayment(Long accountId, Long paymentId) {
@@ -232,13 +232,13 @@ public class PaymentService {
     /**
      * 외부 결제 상태에 따라 Webhook을 분기한다.
      *
-     * <p><b>여기서 주문 락을 잡지 않는다.</b> 취소 분기가 호출하는
-     * {@link PaymentCancellationService#cancel}이 같은 {@code LockKeys.order} 키를 스스로 잡는데,
-     * {@link com.eeum.eeum.common.service.RedisLockService}는 {@code SET NX} 기반이라 재진입을
+     * 여기서 주문 락을 잡지 않는다. 취소 분기가 호출하는
+     * PaymentCancellationService#cancel이 같은 LockKeys.order 키를 스스로 잡는데,
+     * com.eeum.eeum.common.service.RedisLockService는 SET NX 기반이라 재진입을
      * 지원하지 않는다. 바깥에서 감싸면 안쪽 획득이 반드시 실패해 외부 취소 Webhook이
      * 영구히 반영되지 않는다. 그래서 락은 실제로 필요한 분기가 각자 잡는다.
      *
-     * <p>덤으로 PortOne 조회가 어떤 락도 쥐지 않은 채 수행된다.
+     * 덤으로 PortOne 조회가 어떤 락도 쥐지 않은 채 수행된다.
      */
     private void handleWebhookByExternalStatus(Long orderId, String paymentId) {
 
@@ -336,9 +336,9 @@ public class PaymentService {
     }
 
     /**
-     * PortOne 호출 실패를 업무 맥락과 함께 <b>한 번만</b> 기록하고 예외를 그대로 다시 던진다.
+     * PortOne 호출 실패를 업무 맥락과 함께 한 번만 기록하고 예외를 그대로 다시 던진다.
      *
-     * <p>클라이언트({@code PortOnePaymentClientImpl})는 이력을 남기지 않는다. 양쪽에서 남기면
+     * 클라이언트(PortOnePaymentClientImpl)는 이력을 남기지 않는다. 양쪽에서 남기면
      * 실패 1건이 이력 2건이 되어 failureCount·분류별 실패율·알람 임계치가 전부 두 배로 어긋난다.
      * 기록을 서비스에 두면 orderId·orderNumber 같은 업무 정보까지 payload에 담을 수 있다.
      */
@@ -374,7 +374,7 @@ public class PaymentService {
     /**
      * [2단계] 서명 검증 실패의 제한 기록.
      *
-     * <p>발생량은 Redis 카운터로 전량 집계하고, DB 이력은 {@link #SIGNATURE_FAILURE_RECORD_COOLDOWN}당
+     * 발생량은 Redis 카운터로 전량 집계하고, DB 이력은 #SIGNATURE_FAILURE_RECORD_COOLDOWN당
      * 1건만 남긴다. 인증 없는 엔드포인트라 건별로 남기면 익명 요청만으로 테이블이 불어난다.
      * 대신 남기는 1건에 구간 누적 건수를 적어 규모를 알 수 있게 한다.
      */

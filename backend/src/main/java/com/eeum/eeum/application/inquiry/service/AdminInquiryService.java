@@ -101,18 +101,7 @@ public class AdminInquiryService {
         return InquiryAnswerResponseDto.from(saved);
     }
 
-    /**
-     * 관리자 답변 본문 정정.
-     *
-     * <p>삭제는 제공하지 않는다 — 사용자가 이미 알림으로 받아 본 답변이 통째로 사라지면
-     * 문의 스레드의 문맥이 끊긴다. 답변이 불필요해진 문의는 {@link #closeInquiry(Long)}로 닫는다.
-     *
-     * <p>수정 시각은 BaseEntity가 자동 갱신하며, 응답 DTO의 {@code edited} 플래그로 노출된다.
-     * 알림은 재발송하지 않는다 — 오타 정정마다 푸시가 나가면 알림 피로를 부른다.
-     *
-     * <p>종료된 문의의 답변도 정정할 수 있다 — 이미 사용자에게 노출된 잘못된 안내를 바로잡는 일은
-     * 문의를 다시 여는 것과 무관하다. 새 답변을 다는 것만 종료 상태에서 막힌다.
-     */
+    /** 관리자 답변 본문 정정. */
     @Transactional
     public InquiryAnswerResponseDto updateAnswer(
             Long inquiryId,

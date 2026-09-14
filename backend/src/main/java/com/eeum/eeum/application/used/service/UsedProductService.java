@@ -107,8 +107,8 @@ public class UsedProductService {
     /**
      * 내 동네 중고 목록 — 커서 무한 스크롤.
      *
-     * <p>페이지 번호를 쓰지 않는 이유는 새 글이 목록 맨 앞에 꽂혀, 스크롤 도중 등록된 한 건에
-     * 경계 항목이 중복되거나 누락되기 때문이다. {@code pageable}에서는 정렬과 크기만 쓴다.
+     * 페이지 번호를 쓰지 않는 이유는 새 글이 목록 맨 앞에 꽂혀, 스크롤 도중 등록된 한 건에
+     * 경계 항목이 중복되거나 누락되기 때문이다. pageable에서는 정렬과 크기만 쓴다.
      */
     @Transactional(readOnly = true)
     public CursorSlice<UsedProductSummaryResponseDto> getRegionProducts(
@@ -235,7 +235,7 @@ public class UsedProductService {
     /**
      * 예약 처리. 구매자 지정은 선택이다 — 상대 없이 "예약중"만 표시하는 흐름을 막지 않는다.
      *
-     * <p>잠금 순서는 수정·삭제와 같은 account → used_product다. 관리자 숨김·삭제 조치와
+     * 잠금 순서는 수정·삭제와 같은 account → used_product다. 관리자 숨김·삭제 조치와
      * 같은 행을 다투므로, 잠그지 않으면 사라진 글이 예약 상태로 되살아난다.
      */
     @Transactional
@@ -253,10 +253,10 @@ public class UsedProductService {
     /**
      * 판매완료 처리. 여기서 확정된 구매자가 후기 작성 자격의 근거가 된다.
      *
-     * <p>구매자를 생략하면 예약 때 지정해 둔 상대를 그대로 유지한다.
+     * 구매자를 생략하면 예약 때 지정해 둔 상대를 그대로 유지한다.
      * 앱 밖에서 성사된 거래는 구매자 없이 완료할 수 있고, 그 거래에는 후기가 붙지 않는다.
      *
-     * <p><b>생략한 경우에도 그 상대를 검증한다.</b> 예약 이후 탈퇴·정지했을 수 있는데,
+     * 생략한 경우에도 그 상대를 검증한다. 예약 이후 탈퇴·정지했을 수 있는데,
      * 그대로 확정하면 비활성 계정이 거래 구매자이자 후기 자격자로 남고 판매완료 알림까지 간다.
      * 검증 대상을 맞추기 위해 예약 상대를 미리 읽어 명시적으로 넘긴다.
      */
@@ -287,9 +287,9 @@ public class UsedProductService {
     /**
      * 사전 읽기 이후 예약 상대가 바뀌지 않았는지 확인한다.
      *
-     * <p>잠금 순서(account → used_product) 때문에 구매자 ID를 상품보다 먼저 읽어야 하는데,
+     * 잠금 순서(account → used_product) 때문에 구매자 ID를 상품보다 먼저 읽어야 하는데,
      * 그 사이 다른 상태 전이가 예약 상대를 바꿀 수 있다. 그대로 진행하면
-     * <b>잠그지도 검증하지도 않은 계정</b>이 구매자로 확정된다. 막고 재시도하게 한다.
+     * 잠그지도 검증하지도 않은 계정이 구매자로 확정된다. 막고 재시도하게 한다.
      */
     private void assertReservedBuyerUnchanged(UsedProduct product, Long expectedBuyerId) {
         Long currentBuyerId = product.getBuyer() == null
@@ -359,20 +359,7 @@ public class UsedProductService {
         // (NotificationService.deleteAllByRefTypeAndRefId를 여기에 배선하면 그 경로가 끊긴다.)
     }
 
-    /**
-     * 구매자로 지정할 계정을 잠그고 사용 가능 상태를 확인한다.
-     *
-     * <p>상태를 보는 이유: 존재만 확인하면 탈퇴·정지·익명화된 계정도 구매자로 확정되고,
-     * 그 계정으로 후기 요청 알림과 푸시가 나간다. 다른 쓰기 경로가 모두 actor에게
-     * {@code AccountWriteGuard}를 적용하는데 이 참조만 예외였다.
-     *
-     * <p>잠그는 이유: 상태를 판정하기 때문이다. 잠그지 않으면 확인 직후 탈퇴가 커밋돼
-     * 탈퇴한 계정이 구매자로 확정될 수 있다(문의방 생성의 판매자 잠금과 같은 이유).
-     *
-     * <p>두 계정을 잠그므로 순환 대기가 문제가 되는데, 호출부({@code changeTradeStatus})가
-     * 판매자·구매자를 ID 오름차순으로 잠가 막는다 — 서로를 구매자로 지정하는 두 거래가
-     * 동시에 들어와도 잠금 순서가 하나다.
-     */
+    /** 구매자로 지정할 계정을 잠그고 사용 가능 상태를 확인한다. */
     private Account lockAssignableBuyerOrThrow(Long buyerId) {
         Account buyer = accountRepository.findByIdWithLock(buyerId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
@@ -385,11 +372,11 @@ public class UsedProductService {
     /**
      * 이 상품으로 문의한 적이 있는 상대만 구매자로 지정할 수 있다.
      *
-     * <p>존재하는 계정이기만 하면 지정할 수 있으면, 판매자가 아무 계정이나 구매자로 세워
+     * 존재하는 계정이기만 하면 지정할 수 있으면, 판매자가 아무 계정이나 구매자로 세워
      * 후기 작성 권한과 판매완료 알림을 줄 수 있다. 지목당한 사람은 하지도 않은 거래의
      * 후기 요청을 받는다.
      *
-     * <p>실패 사유를 계정 상태와 구분하지 않는다 — 구분하면 판매자가 임의의 계정 ID로
+     * 실패 사유를 계정 상태와 구분하지 않는다 — 구분하면 판매자가 임의의 계정 ID로
      * 다른 사용자의 상태를 떠볼 수 있다.
      */
     private void assertInquiredThisProduct(Long usedProductId, Long buyerId) {

@@ -139,8 +139,8 @@ public class FavoriteService {
     /**
      * 내 찜 전체 목록(무한 스크롤).
      *
-     * <p>모바일 목록이므로 프로젝트 기준대로 Slice를 쓴다. 타입별 목록
-     * ({@code /me/store}, {@code /me/used})과 페이징 계약을 맞춘 것이기도 하다.
+     * 모바일 목록이므로 프로젝트 기준대로 Slice를 쓴다. 타입별 목록
+     * (/me/store, /me/used)과 페이징 계약을 맞춘 것이기도 하다.
      */
     @Transactional(readOnly = true)
     public CursorSlice<FavoriteResponseDto> getMyFavorites(
@@ -154,10 +154,10 @@ public class FavoriteService {
     }
 
     /**
-     * 내 찜 전체 목록(번호 페이징) — 레거시 경로 {@code GET /favorites/me} 전용.
+     * 내 찜 전체 목록(번호 페이징) — 레거시 경로 GET /favorites/me 전용.
      *
-     * <p>이미 배포된 계약이라 응답 형태를 바꿀 수 없어 남겨둔다. 상점 찜 목록과 같은 방식이다
-     * ({@link #getMyFavoriteStoresPaged}). 프론트가 {@code GET /favorites/me/all}로 옮기면
+     * 이미 배포된 계약이라 응답 형태를 바꿀 수 없어 남겨둔다. 상점 찜 목록과 같은 방식이다
+     * (#getMyFavoriteStoresPaged). 프론트가 GET /favorites/me/all로 옮기면
      * 이 메서드와 findByAccount_AccountIdOrderByCreatedAtDesc를 함께 지운다.
      */
     @Deprecated(forRemoval = true)
@@ -198,10 +198,10 @@ public class FavoriteService {
     }
 
     /**
-     * 상점 찜 목록(번호 페이징) — 레거시 경로 {@code GET /favorites/me/STORE} 전용.
+     * 상점 찜 목록(번호 페이징) — 레거시 경로 GET /favorites/me/STORE 전용.
      *
-     * <p>이미 배포된 계약이라 응답 형태를 바꿀 수 없어 남겨둔다. 신규 경로
-     * {@code GET /favorites/me/store}는 프로젝트 기준대로 Slice를 쓴다.
+     * 이미 배포된 계약이라 응답 형태를 바꿀 수 없어 남겨둔다. 신규 경로
+     * GET /favorites/me/store는 프로젝트 기준대로 Slice를 쓴다.
      * 프론트가 신규 경로로 옮기면 이 메서드와 findFavoriteStores를 함께 지운다.
      */
     @Deprecated(forRemoval = true)

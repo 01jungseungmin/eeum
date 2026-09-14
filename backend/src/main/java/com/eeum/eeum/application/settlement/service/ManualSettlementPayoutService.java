@@ -93,8 +93,8 @@ public class ManualSettlementPayoutService {
     /**
      * 이 정산의 지급을 막고 있는 취소 작업 목록.
      *
-     * <p>지급 차단은 의도된 격리지만, 무엇이 막고 있는지 볼 수 없으면 관리자가 해소할 수
-     * 없다. 차단 판단과 <b>같은 조회</b>를 그대로 노출한다.
+     * 지급 차단은 의도된 격리지만, 무엇이 막고 있는지 볼 수 없으면 관리자가 해소할 수
+     * 없다. 차단 판단과 같은 조회를 그대로 노출한다.
      */
     @Transactional(readOnly = true)
     public List<BlockingCancellationResponseDto> getBlockingCancellations(

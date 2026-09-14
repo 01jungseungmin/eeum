@@ -21,8 +21,8 @@ import java.util.Map;
 /**
  * PortOne 호출 어댑터.
  *
- * <p>책임은 외부 호출과 응답 해석까지다. 실패 이력은 남기지 않고
- * {@link PortOnePaymentException}으로 변환해 던지기만 한다 —
+ * 책임은 외부 호출과 응답 해석까지다. 실패 이력은 남기지 않고
+ * PortOnePaymentException으로 변환해 던지기만 한다 —
  * 기록은 업무 맥락을 아는 서비스 계층이 한 번만 한다.
  */
 @Slf4j

@@ -16,26 +16,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Duration;
 
-/**
- * 전액 취소의 <b>단일 진입점</b>.
- *
- * <p>고객 결제 취소, 사장 환불 승인, 사장 주문 거절, PortOne 취소 Webhook —
- * 네 경로가 모두 이 서비스를 호출한다. 취소 정책이 한 곳에만 있어야
- * "어떤 경로로 들어왔느냐"에 따라 금전 처리가 달라지는 일이 없다.
- *
- * <p><b>이 클래스에는 {@code @Transactional}이 없다.</b> 의도적이다. PortOne 호출을
- * 트랜잭션과 비관적 락 바깥에서 해야 외부 지연이 DB 커넥션과 주문 행을 붙잡지 않는다.
- * DB 작업은 {@link PaymentCancellationProcessor}의 짧은 트랜잭션들이 나눠 맡는다.
- *
- * <pre>
- *   Redis 주문 락
- *     ├─ TX1 prepare        : 대상 확정 + 작업 행 커밋
- *     ├─ (트랜잭션 밖) PortOne 취소
- *     ├─ TX2 markPgCancelled: PG 취소 확정 사실만 커밋
- *     └─ TX3 apply          : 결제·주문·재고·정산 반영
- *          실패 시 → TX(REQUIRES_NEW) requireManualReview
- * </pre>
- */
+/** 전액 취소의 단일 진입점. 외부 PG 호출은 트랜잭션 밖에서, 내부 반영은 단계별 트랜잭션에서 수행한다. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -52,7 +33,7 @@ public class PaymentCancellationService {
     /**
      * 내부 반영 재시도 횟수.
      *
-     * <p>마감 스케줄러와 부딪혀 나는 충돌은 다시 읽으면 풀린다. 그런 일시적 경합까지
+     * 마감 스케줄러와 부딪혀 나는 충돌은 다시 읽으면 풀린다. 그런 일시적 경합까지
      * 수동 검토로 넘기면 운영자가 볼 게 너무 많아져 진짜 사고가 묻힌다.
      */
     private static final int APPLY_MAX_ATTEMPTS = 3;
@@ -65,7 +46,7 @@ public class PaymentCancellationService {
     /**
      * 주문의 결제를 전액 취소한다.
      *
-     * <p>같은 주문에 대한 모든 취소·환불·상태 변경과 같은 락 키를 쓴다.
+     * 같은 주문에 대한 모든 취소·환불·상태 변경과 같은 락 키를 쓴다.
      *
      * @param pgAlreadyCancelled 외부에서 이미 취소된 결제인지. PortOne 취소 Webhook으로
      *                           들어온 건은 PG가 이미 취소된 상태라 다시 호출하면 안 된다.
@@ -266,7 +247,7 @@ public class PaymentCancellationService {
     /**
      * PG 취소가 확정된 뒤의 내부 반영.
      *
-     * <p>여기서부터는 <b>실패해도 롤백으로 끝내면 안 된다.</b> 고객 돈은 이미 돌아갔는데
+     * 여기서부터는 실패해도 롤백으로 끝내면 안 된다. 고객 돈은 이미 돌아갔는데
      * 내부에 취소 흔적이 없으면, 사장에게 그대로 지급되고 아무도 그 사실을 모른다.
      * 그래서 재시도로 수렴시키고, 그래도 안 되면 수동 검토로 격리한다.
      */

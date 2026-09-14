@@ -117,13 +117,13 @@ public class FavoriteController {
     /**
      * 내 찜 전체 목록 (레거시 경로).
      *
-     * <p>번호 페이징 응답이라 모바일 무한 스크롤 기준({@code Slice})과 어긋나지만, 이미 클라이언트가
-     * 쓰고 있어 그대로 얼려둔다. 프론트가 {@code /me/all}로 옮기면 이 핸들러와
+     * 번호 페이징 응답이라 모바일 무한 스크롤 기준(Slice)과 어긋나지만, 이미 클라이언트가
+     * 쓰고 있어 그대로 얼려둔다. 프론트가 /me/all로 옮기면 이 핸들러와
      * FavoriteService.getMyFavoritesPaged를 함께 지운다.
      *
-     * <p>상점 찜 목록과 달리 기존 URL({@code /me})이 kebab-case 규칙을 지키고 있어 URL만으로는
-     * 신·구를 구분할 수 없다. 그래서 타입별 목록({@code /me/store}, {@code /me/used})과 같은 결의
-     * {@code /me/all}을 신규 경로로 둔다.
+     * 상점 찜 목록과 달리 기존 URL(/me)이 kebab-case 규칙을 지키고 있어 URL만으로는
+     * 신·구를 구분할 수 없다. 그래서 타입별 목록(/me/store, /me/used)과 같은 결의
+     * /me/all을 신규 경로로 둔다.
      */
     @Deprecated(forRemoval = true)
     @SuppressWarnings("removal")   // 레거시 경로가 레거시 서비스 메서드를 부르는 것은 의도된 짝이다
@@ -169,11 +169,11 @@ public class FavoriteController {
     /**
      * 상점 찜 목록 (레거시 경로).
      *
-     * <p>대문자 {@code /me/STORE}는 URL 규칙(kebab-case) 위반이고 응답도 번호 페이징이지만,
-     * 이미 클라이언트가 쓰고 있어 그대로 얼려둔다. 프론트가 {@code /me/store}로 옮기면
+     * 대문자 /me/STORE는 URL 규칙(kebab-case) 위반이고 응답도 번호 페이징이지만,
+     * 이미 클라이언트가 쓰고 있어 그대로 얼려둔다. 프론트가 /me/store로 옮기면
      * 이 핸들러와 FavoriteService.getMyFavoriteStoresPaged를 함께 지운다.
      *
-     * <p>URL과 응답 타입을 한 번에 바꾸는 이유는 프론트 마이그레이션을 두 번 시키지 않기 위해서다.
+     * URL과 응답 타입을 한 번에 바꾸는 이유는 프론트 마이그레이션을 두 번 시키지 않기 위해서다.
      */
     @Deprecated(forRemoval = true)
     @SuppressWarnings("removal")   // 레거시 경로가 레거시 서비스 메서드를 부르는 것은 의도된 짝이다

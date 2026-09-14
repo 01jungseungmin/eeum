@@ -43,7 +43,8 @@ public class Payment extends BaseEntity {
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "cancelled_amount", nullable = false, precision = 10, scale = 2)
+    @Column(name = "cancelled_amount", nullable = false, precision = 10, scale = 2,
+            columnDefinition = "DECIMAL(10,2) NOT NULL DEFAULT 0")
     private BigDecimal cancelledAmount = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)

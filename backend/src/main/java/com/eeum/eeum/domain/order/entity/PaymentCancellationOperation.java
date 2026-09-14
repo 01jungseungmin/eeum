@@ -17,12 +17,12 @@ import java.time.LocalDateTime;
 /**
  * 전액 취소 작업 이력.
  *
- * <p><b>이 엔티티가 있는 이유.</b> PortOne 취소는 성공하면 되돌릴 수 없는데, 그 뒤의
+ * 이 엔티티가 있는 이유. PortOne 취소는 성공하면 되돌릴 수 없는데, 그 뒤의
  * 내부 반영(Payment·Order·재고·정산 원장)은 실패할 수 있다. 전부 한 트랜잭션에 두면
  * 내부 실패가 롤백을 일으켜 "고객은 환불받았는데 내부에는 아무 흔적이 없는" 상태가 된다.
  * 그래서 외부 호출 전에 이 행을 커밋해 두고, 단계마다 상태를 전이시킨다.
  *
- * <p>주문당 한 건이다. 네 진입점(고객 취소·환불 승인·주문 거절·외부 Webhook)이 모두
+ * 주문당 한 건이다. 네 진입점(고객 취소·환불 승인·주문 거절·외부 Webhook)이 모두
  * 이 행을 공유하므로, 재시도와 중복 요청이 같은 행에 수렴한다.
  */
 @Entity
@@ -199,7 +199,7 @@ public class PaymentCancellationOperation extends BaseEntity {
 
     /**
      * PG 호출 자체가 실패한 경우. 돈이 움직이지 않았으므로 다시 시도할 수 있는 상태
-     * ({@code PENDING})로 되돌리고 실패 사유만 남긴다.
+     * (PENDING)로 되돌리고 실패 사유만 남긴다.
      */
     public void markPgFailed(String failureCode, String failureReason) {
         if (status != PaymentCancellationStatus.PG_CANCEL_REQUESTED) {
@@ -213,7 +213,7 @@ public class PaymentCancellationOperation extends BaseEntity {
     /**
      * 사람이 확인해야 하는 상태로 격리한다.
      *
-     * <p>PG는 취소됐는데 내부 반영이 실패했거나, PortOne이 {@code REQUESTED}만 돌려줘
+     * PG는 취소됐는데 내부 반영이 실패했거나, PortOne이 REQUESTED만 돌려줘
      * 최종 상태가 확정되지 않은 경우다. 어느 쪽이든 자동 처리로 수렴시키지 않는다.
      */
     public void requireManualReview(String failureCode, String failureReason) {
@@ -228,8 +228,8 @@ public class PaymentCancellationOperation extends BaseEntity {
     /**
      * PG 전액 취소가 이미 확정됐지만 내부 반영만 실패한 작업을 재개한다.
      *
-     * <p>관리자가 임의로 차단을 해제하면 고객 환불 뒤에도 원장이 지급될 수 있다. 따라서
-     * PortOne이 {@code SUCCEEDED}를 남긴 작업만 {@code PG_CANCELLED} 단계로 되돌린다.
+     * 관리자가 임의로 차단을 해제하면 고객 환불 뒤에도 원장이 지급될 수 있다. 따라서
+     * PortOne이 SUCCEEDED를 남긴 작업만 PG_CANCELLED 단계로 되돌린다.
      * 부분 취소·응답 유실처럼 금액 또는 최종 결과가 불명확한 작업은 계속 수동 검토다.
      */
     public void resumeConfirmedPgCancellation() {
@@ -286,7 +286,7 @@ public class PaymentCancellationOperation extends BaseEntity {
     /**
      * PG 요청 응답을 받지 못한 작업이 복구 유예 시간을 넘겼는지 판별한다.
      *
-     * <p>유예 중에는 선행 요청이 아직 PortOne 응답을 처리하고 있을 수 있으므로 상태를
+     * 유예 중에는 선행 요청이 아직 PortOne 응답을 처리하고 있을 수 있으므로 상태를
      * 바꾸지 않는다. 유예가 지나도록 확정되지 않은 경우에만 운영 수습 대기열로 넘긴다.
      */
     public boolean isPgOutcomeUnknownFor(Duration gracePeriod, LocalDateTime now) {

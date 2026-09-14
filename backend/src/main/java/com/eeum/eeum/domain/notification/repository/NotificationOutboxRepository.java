@@ -23,12 +23,12 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
     /**
      * 처리 대상 한 행을 잠그고 읽는다.
      *
-     * <p>잠그지 않으면 "PENDING인지 확인 → 처리 → DONE" 사이에 다른 인스턴스가 같은 행을 읽어
-     * 같은 알림이 두 번 만들어진다. 폴링은 {@code @SchedulerLock}이 한 인스턴스로 좁히지만
+     * 잠그지 않으면 "PENDING인지 확인 → 처리 → DONE" 사이에 다른 인스턴스가 같은 행을 읽어
+     * 같은 알림이 두 번 만들어진다. 폴링은 @SchedulerLock이 한 인스턴스로 좁히지만
      * 그 lease는 시간이 지나면 스스로 풀리므로(lockAtMostFor), 배치가 길어지면 두 인스턴스가
      * 겹칠 수 있다 — 중복을 실제로 막는 것은 이 행 잠금이다.
      *
-     * <p>대기형 잠금이다(NOWAIT 아님). 즉시 실패시키면 잠금 경합이 처리 실패로 기록되어
+     * 대기형 잠금이다(NOWAIT 아님). 즉시 실패시키면 잠금 경합이 처리 실패로 기록되어
      * 시도 횟수가 오르고, 다섯 번이면 알림이 생성되지 않은 채 FAILED로 내려간다.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

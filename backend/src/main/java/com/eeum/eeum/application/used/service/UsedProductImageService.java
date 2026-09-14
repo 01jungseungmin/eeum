@@ -27,7 +27,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UsedProductImageService {
 
-    /** 게시글당 사진 상한. {@code IMAGE_LIMIT_EXCEEDED} 메시지와 맞춘 값이다. */
+    /** 게시글당 사진 상한. IMAGE_LIMIT_EXCEEDED 메시지와 맞춘 값이다. */
     private static final int MAX_IMAGE_COUNT = 10;
 
     private final AccountWriteGuard accountWriteGuard;

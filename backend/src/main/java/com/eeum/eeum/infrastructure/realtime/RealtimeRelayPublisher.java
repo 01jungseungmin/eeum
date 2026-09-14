@@ -7,18 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * 실시간 전달을 Redis로 중계한다 — <b>모든 인스턴스</b>에서 발행한다.
- *
- * <p>인메모리 STOMP 브로커와 SseEmitter는 커넥션을 받은 JVM 안에만 존재한다.
- * 반면 이벤트는 그 요청을 처리한 아무 인스턴스에서나 발생한다. 두 곳이 다르면 전달이 사라진다.
- * 그래서 발행은 Redis 채널로 하고, 실시간 커넥션을 가진 인스턴스가 구독해서 밀어낸다.
- *
- * <p>실시간 인스턴스에서도 자기가 발행한 것을 다시 받아 처리한다. 경로를 하나로 두면
- * "어디서 발생했는가"를 따질 필요가 없다.
- *
- * <p>전달 실패는 삼킨다 — 실시간 push는 부가 기능이고, 이미 커밋된 본 작업을 되돌릴 이유가 없다.
- */
+/** 실시간 전달을 Redis로 중계한다 — 모든 인스턴스에서 발행한다. */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -40,7 +29,7 @@ public class RealtimeRelayPublisher {
     /**
      * 계정의 실시간 연결 종료 신호.
      *
-     * <p>다른 중계와 달리 <b>부가 기능이 아니다.</b> 전달되지 않으면 제재된 계정의 구독이
+     * 다른 중계와 달리 부가 기능이 아니다. 전달되지 않으면 제재된 계정의 구독이
      * 계속 살아 있다. 다만 여기서 예외를 던져 원 작업(정지·탈퇴)을 되돌릴 수는 없으므로,
      * 최종 보장은 Redis Pub/Sub이 아니라 계정에 남긴 무효화 시각이 맡는다.
      */

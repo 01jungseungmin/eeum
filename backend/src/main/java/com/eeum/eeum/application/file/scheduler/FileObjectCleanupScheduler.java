@@ -90,7 +90,7 @@ public class FileObjectCleanupScheduler {
     /**
      * 시도 횟수를 올리고 한계 초과 여부를 돌려준다.
      *
-     * <p>이 호출도 DB 쓰기다. 여기서 예외가 새어 나가면 남은 실패 대상의 기록과 로그가
+     * 이 호출도 DB 쓰기다. 여기서 예외가 새어 나가면 남은 실패 대상의 기록과 로그가
      * 통째로 밀리므로 삼킨다 — 실패 이력을 남기려다 정리 자체를 멈추면 주객이 전도된다.
      */
     private boolean recordFailureQuietly(FileObjectCleanupTarget target) {
@@ -106,7 +106,7 @@ public class FileObjectCleanupScheduler {
     /**
      * 대상 하나가 아니라 저장소·DB 전체가 죽어서 난 실패인지 본다.
      *
-     * <p>전면 장애까지 시도 횟수에 세면 일시적 장애가 영구 유실로 바뀐다. 예를 들어
+     * 전면 장애까지 시도 횟수에 세면 일시적 장애가 영구 유실로 바뀐다. 예를 들어
      * 저장소 설정이 빠지거나 DB가 내려간 채로 다섯 회차(시간당 1회)만 지나면 그 사이
      * CLEANUP_PENDING이던 모든 행이 CLEANUP_FAILED로 내려가 되돌릴 경로가 없다.
      */

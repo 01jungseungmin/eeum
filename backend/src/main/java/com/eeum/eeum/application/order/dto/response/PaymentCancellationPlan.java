@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 /**
  * 준비 단계가 확정한, 외부 PG 호출에 필요한 값.
  *
- * <p>엔티티를 트랜잭션 밖으로 들고 나가면 지연 로딩과 detached 상태를 신경 써야 하므로
+ * 엔티티를 트랜잭션 밖으로 들고 나가면 지연 로딩과 detached 상태를 신경 써야 하므로
  * 필요한 값만 복사해 넘긴다.
  *
  * @param alreadyPgCancelled 이전 시도에서 PG 취소까지는 끝난 작업인지.

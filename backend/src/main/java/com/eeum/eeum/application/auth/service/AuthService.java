@@ -334,9 +334,9 @@ public class AuthService {
     /**
      * Refresh Token 재발급.
      *
-     * <p>Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
+     * Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
      *
-     * <p>제재와의 경쟁은 잠금이 아니라 <b>토큰 세대</b>로 푼다. 여기서 계정을 읽어 세대 N을
+     * 제재와의 경쟁은 잠금이 아니라 토큰 세대로 푼다. 여기서 계정을 읽어 세대 N을
      * 확인한 뒤 정지가 커밋돼 세대가 N+1이 되더라도, 이 요청이 발급하는 토큰은 N을 실은 채
      * 나가므로 다음 검증에서 걸린다. 행 잠금으로 직렬화할 필요가 없다.
      */

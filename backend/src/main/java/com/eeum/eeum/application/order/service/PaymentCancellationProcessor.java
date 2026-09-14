@@ -32,14 +32,14 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
- * 전액 취소의 <b>DB 단계</b>만 담당한다. 외부 호출은 하지 않는다.
+ * 전액 취소의 DB 단계만 담당한다. 외부 호출은 하지 않는다.
  *
- * <p>{@link PaymentCancellationService}가 이 클래스의 메서드를 단계별로 호출한다.
+ * PaymentCancellationService가 이 클래스의 메서드를 단계별로 호출한다.
  * 각 메서드가 짧은 독립 트랜잭션이라, 그 사이에 PortOne 호출을 트랜잭션·비관적 락
  * 바깥에서 수행할 수 있다.
  *
- * <p>오케스트레이터와 분리한 이유는 프록시다. 같은 빈 안에서 호출하면
- * {@code @Transactional}이 적용되지 않아 결국 하나의 긴 트랜잭션이 된다.
+ * 오케스트레이터와 분리한 이유는 프록시다. 같은 빈 안에서 호출하면
+ * 또 @Transactional이 적용되지 않아 결국 하나의 긴 트랜잭션이 된다.
  */
 @Slf4j
 @Service
@@ -59,10 +59,10 @@ public class PaymentCancellationProcessor {
     /**
      * 1단계 — 취소 대상을 확정하고 외부 호출을 준비한다.
      *
-     * <p>여기서 커밋된 작업 행이 "PortOne을 호출했을 수 있다"는 사실을 남긴다.
+     * 여기서 커밋된 작업 행이 "PortOne을 호출했을 수 있다"는 사실을 남긴다.
      * 이게 없으면 호출 직후 프로세스가 죽었을 때 흔적이 사라진다.
      *
-     * @return 외부 호출에 필요한 정보. {@code null}이면 이미 처리된 취소라 호출할 필요가 없다.
+     * @return 외부 호출에 필요한 정보. null이면 이미 처리된 취소라 호출할 필요가 없다.
      */
     @Transactional
     public PaymentCancellationPlan prepare(
@@ -238,7 +238,7 @@ public class PaymentCancellationProcessor {
     /**
      * 2단계 — PG 취소가 확정된 사실만 먼저 커밋한다.
      *
-     * <p>3단계(내부 반영)와 나누는 이유는, 내부 반영이 실패해도 "PG는 이미 취소됐다"가
+     * 3단계(내부 반영)와 나누는 이유는, 내부 반영이 실패해도 "PG는 이미 취소됐다"가
      * 남아야 하기 때문이다. 한 트랜잭션이면 롤백되면서 이 사실까지 사라진다.
      */
     @Transactional
@@ -258,8 +258,8 @@ public class PaymentCancellationProcessor {
     /**
      * 3단계 — 결제·주문·재고·정산 원장에 취소를 반영한다.
      *
-     * <p>결제 상태 전이는 경로마다 다르다. 사장이 환불 요청을 승인한 건은
-     * {@code REFUNDED}로, 나머지는 {@code CANCELLED}로 간다. 고객 화면과 정산 대사에서
+     * 결제 상태 전이는 경로마다 다르다. 사장이 환불 요청을 승인한 건은
+     * REFUNDED로, 나머지는 CANCELLED로 간다. 고객 화면과 정산 대사에서
      * "환불"과 "취소"를 구분해야 하므로 한쪽으로 뭉뚱그리지 않는다.
      */
     @Transactional
@@ -331,7 +331,7 @@ public class PaymentCancellationProcessor {
     /**
      * 4단계(실패 경로) — 사람이 확인해야 할 건으로 격리한다.
      *
-     * <p>{@code REQUIRES_NEW}인 이유는, 3단계 트랜잭션이 롤백되는 와중에 호출되기 때문이다.
+     * REQUIRES_NEW인 이유는, 3단계 트랜잭션이 롤백되는 와중에 호출되기 때문이다.
      * 같은 트랜잭션에 얹으면 이 기록까지 함께 사라져 격리가 성립하지 않는다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -345,7 +345,7 @@ public class PaymentCancellationProcessor {
     /**
      * 응답 유실 뒤 유예 시간까지 지나도록 PG 결과가 확정되지 않은 작업을 운영 대기열로 보낸다.
      *
-     * <p>현재 상태를 비관적으로 다시 잠그고 확인하므로, 선행 요청이 그 사이 성공을 반영한
+     * 현재 상태를 비관적으로 다시 잠그고 확인하므로, 선행 요청이 그 사이 성공을 반영한
      * 경우에는 아무 변경도 하지 않는다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
