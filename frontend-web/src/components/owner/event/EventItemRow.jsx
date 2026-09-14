@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Edit2, Trash2, CalendarOff } from 'lucide-react';
 
@@ -148,21 +147,6 @@ const RightActionGroup = styled.div`
   }
 `;
 
-const EndActionButton = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #f59e0b; /* 경고 느낌의 노란/주황색 계열 */
-  transition: color 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    color: #d97706;
-  }
-`;
-
 function EventItemRow({ evt, onEdit, onDelete, onEnd }) {
   const soldCount = evt?.soldCount || 0;
   const eventStock = evt?.eventStock || 0;
@@ -176,9 +160,6 @@ function EventItemRow({ evt, onEdit, onDelete, onEnd }) {
   const now = new Date();
   const startAt = evt?.startAt ? new Date(evt?.startAt) : null;
   const endAt = evt?.endAt ? new Date(evt?.endAt) : null;
-
-  let currentStatus = 'DONE'; // 기본값 종료
-  let statusText = '종료';
 
   if (evt?.eventStatus === 'ENDED' || isOut) {
     currentStatus = 'DONE';
@@ -231,7 +212,10 @@ function EventItemRow({ evt, onEdit, onDelete, onEnd }) {
         </StatusTextRow>
 
         <ProgressBarContainer>
-          <ProgressFill $percent={salePercent} $isFull={isOut} />
+          <ProgressFill
+            $percent={salePercent}
+            $isFull={isOut}
+          />
         </ProgressBarContainer>
       </EventInfoContent>
 
@@ -245,10 +229,16 @@ function EventItemRow({ evt, onEdit, onDelete, onEnd }) {
             <CalendarOff size={16} />
           </button>
         )}
-        <button onClick={() => onEdit(evt)} title="수정">
+        <button
+          onClick={() => onEdit(evt)}
+          title="수정"
+        >
           <Edit2 size={16} />
         </button>
-        <button onClick={() => onDelete(currentId)} title="삭제">
+        <button
+          onClick={() => onDelete(currentId)}
+          title="삭제"
+        >
           <Trash2 size={16} />
         </button>
       </RightActionGroup>

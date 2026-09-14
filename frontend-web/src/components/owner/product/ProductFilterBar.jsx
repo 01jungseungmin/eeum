@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { Search, Plus, ChevronDown } from 'lucide-react';
 
@@ -189,7 +189,10 @@ function ProductFilterBar({
   return (
     <FilterBarContainer>
       <SearchWrapper>
-        <Search className="search-icon" size={18} />
+        <Search
+          className="search-icon"
+          size={18}
+        />
         <SearchInput
           type="text"
           placeholder="상품명, 카테고리 검색..."
@@ -301,7 +304,10 @@ function ProductFilterBar({
       </DropdownContainer>
 
       <RegisterButton onClick={onOpenRegisterModal}>
-        <Plus size={16} strokeWidth={2.5} />
+        <Plus
+          size={16}
+          strokeWidth={2.5}
+        />
         <span>상품 등록</span>
       </RegisterButton>
     </FilterBarContainer>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Clock, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
 import ApprovalListContainer from '../../../components/admin/approval/ApprovalListContainer';

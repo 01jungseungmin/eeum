@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, Check } from 'lucide-react';
@@ -229,9 +229,6 @@ export default function AiPlanManagementPage() {
     fetchPlans();
   }, []);
 
-  const STORE_ID = import.meta.env.VITE_PORTONE_STORE_ID;
-  const CHANNEL_KEY = import.meta.env.VITE_PORTONE_CHANNEL_KEY;
-
   const handleSubscribe = async (plan) => {
     if (paymentLoading) {
       return;
@@ -249,7 +246,7 @@ export default function AiPlanManagementPage() {
         );
       }
 
-      const { paymentId, amount, planType } = response.data.data;
+      const { paymentId } = response.data.data;
 
       if (!paymentId) {
         throw new Error('결제 ID를 생성하지 못했습니다.');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { X, CreditCard } from 'lucide-react';
 import { approvalApi } from '../../../../api/owner/ApprovalApi';
@@ -244,7 +244,10 @@ function SettlementAccountModal({ onClose, onSuccess }) {
         {/* 모달 헤더 */}
         <ModalHeader>
           <HeaderTitle>
-            <CreditCard size={20} color="#00a651" />
+            <CreditCard
+              size={20}
+              color="#00a651"
+            />
             <h3>정산 계좌 등록/수정</h3>
           </HeaderTitle>
           <IconButton onClick={onClose}>
@@ -266,11 +269,17 @@ function SettlementAccountModal({ onClose, onSuccess }) {
               onChange={(e) => setBankName(e.target.value)}
               required
             >
-              <option value="" disabled>
+              <option
+                value=""
+                disabled
+              >
                 은행을 선택해 주세요
               </option>
               {BANK_OPTIONS.map((bank) => (
-                <option key={bank} value={bank}>
+                <option
+                  key={bank}
+                  value={bank}
+                >
                   {bank}
                 </option>
               ))}
@@ -303,10 +312,16 @@ function SettlementAccountModal({ onClose, onSuccess }) {
 
           {/* 하단 제어 버튼 */}
           <ButtonGroup>
-            <CancelButton type="button" onClick={onClose}>
+            <CancelButton
+              type="button"
+              onClick={onClose}
+            >
               취소
             </CancelButton>
-            <SubmitButton type="submit" disabled={loading}>
+            <SubmitButton
+              type="submit"
+              disabled={loading}
+            >
               {loading ? '저장 중...' : '계좌 저장하기'}
             </SubmitButton>
           </ButtonGroup>

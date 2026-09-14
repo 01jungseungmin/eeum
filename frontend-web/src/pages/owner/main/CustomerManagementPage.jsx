@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { customerApi } from '../../../api/owner/customerApi';
 import StatsCardGrid from '../../../components/owner/customer/StatsCardGrid';
@@ -170,7 +170,10 @@ export default function CustomerManagementPage() {
                 </tr>
               ) : filteredCustomers.length > 0 ? (
                 filteredCustomers.map((customer) => (
-                  <CustomerRow key={customer.customerId} customer={customer} />
+                  <CustomerRow
+                    key={customer.customerId}
+                    customer={customer}
+                  />
                 ))
               ) : (
                 <tr>

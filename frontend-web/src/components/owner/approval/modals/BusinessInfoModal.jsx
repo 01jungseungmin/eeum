@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { X, Store } from 'lucide-react';
 import { approvalApi } from '../../../../api/owner/ApprovalApi';
@@ -238,7 +238,10 @@ function BusinessInfoModal({ onClose, onSuccess }) {
         {/* 모달 헤더 */}
         <ModalHeader>
           <HeaderTitle>
-            <Store size={20} color="#00a651" />
+            <Store
+              size={20}
+              color="#00a651"
+            />
             <h3>상점 기본 정보 입력</h3>
           </HeaderTitle>
           <IconButton onClick={onClose}>
@@ -261,11 +264,17 @@ function BusinessInfoModal({ onClose, onSuccess }) {
               onChange={(e) => setCategoryId(e.target.value)}
               required
             >
-              <option value="" disabled>
+              <option
+                value=""
+                disabled
+              >
                 업종을 선택해 주세요
               </option>
               {CATEGORY_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
+                <option
+                  key={option.id}
+                  value={option.id}
+                >
                   {option.name}
                 </option>
               ))}
@@ -288,10 +297,16 @@ function BusinessInfoModal({ onClose, onSuccess }) {
 
           {/* 하단 버튼 바 */}
           <ButtonGroup>
-            <CancelButton type="button" onClick={onClose}>
+            <CancelButton
+              type="button"
+              onClick={onClose}
+            >
               취소
             </CancelButton>
-            <SubmitButton type="submit" disabled={loading}>
+            <SubmitButton
+              type="submit"
+              disabled={loading}
+            >
               {loading ? '저장 중...' : '정보 저장하기'}
             </SubmitButton>
           </ButtonGroup>

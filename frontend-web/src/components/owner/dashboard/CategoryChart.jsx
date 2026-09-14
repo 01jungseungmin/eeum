@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { PieChart, Pie, Cell } from 'recharts';
 
@@ -75,7 +74,10 @@ function CategoryChart() {
           justifyContent: 'center',
         }}
       >
-        <PieChart width={200} height={140}>
+        <PieChart
+          width={200}
+          height={140}
+        >
           <Pie
             data={data}
             cx="50%"
@@ -86,7 +88,10 @@ function CategoryChart() {
             dataKey="value"
           >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
+              <Cell
+                key={`cell-${index}`}
+                fill={entry.color}
+              />
             ))}
           </Pie>
         </PieChart>
@@ -94,7 +99,10 @@ function CategoryChart() {
 
       <LegendContainer>
         {data.map((item) => (
-          <LegendItem key={item.name} $color={item.color}>
+          <LegendItem
+            key={item.name}
+            $color={item.color}
+          >
             <div className="label-side">
               <span className="dot" />
               <span>{item.name}</span>

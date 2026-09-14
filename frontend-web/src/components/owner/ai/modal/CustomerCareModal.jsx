@@ -1,8 +1,6 @@
-import React from 'react';
 import styled from 'styled-components';
 import { X, Check, Users, Sparkles, ShieldCheck, Send } from 'lucide-react';
 
-/* --- 모달 공통 스타일 --- */
 const ModalOverlay = styled.div`
   position: fixed;
   inset: 0;

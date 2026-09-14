@@ -25,8 +25,6 @@ import {
   UserCheck,
   Settings,
   Sparkles,
-  MessageSquareText,
-  HeartHandshake,
   LogOut,
 } from 'lucide-react';
 

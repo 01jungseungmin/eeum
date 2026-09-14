@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { MapPin, ChevronRight, Crown, Users } from 'lucide-react';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi'; // 파일 경로에 맞게 수정

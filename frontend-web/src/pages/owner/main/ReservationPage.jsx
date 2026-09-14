@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import {
   ChevronLeft,
@@ -310,9 +310,21 @@ export default function ReservationPage() {
           count={totalCount}
           color="#4CA771"
         />
-        <SummaryCard title="확정" count={confirmedCount} color="#1a1a1a" />
-        <SummaryCard title="대기" count={pendingCount} color="#fab005" />
-        <SummaryCard title="시간대" count={timeSlots.length} color="#4c6ef5" />
+        <SummaryCard
+          title="확정"
+          count={confirmedCount}
+          color="#1a1a1a"
+        />
+        <SummaryCard
+          title="대기"
+          count={pendingCount}
+          color="#fab005"
+        />
+        <SummaryCard
+          title="시간대"
+          count={timeSlots.length}
+          color="#4c6ef5"
+        />
       </SummaryGrid>
 
       <ContentGrid>

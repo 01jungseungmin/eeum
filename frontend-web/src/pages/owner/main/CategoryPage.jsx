@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Plus } from 'lucide-react';
 
@@ -311,7 +311,11 @@ function CategoryPage() {
               setIsAddModalOpen(true);
             }}
           >
-            <Plus size={16} strokeWidth={2.5} /> 카테고리 추가
+            <Plus
+              size={16}
+              strokeWidth={2.5}
+            />{' '}
+            카테고리 추가
           </AddButton>
         </CardHeader>
 

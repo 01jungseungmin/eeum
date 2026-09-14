@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useLocation } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';

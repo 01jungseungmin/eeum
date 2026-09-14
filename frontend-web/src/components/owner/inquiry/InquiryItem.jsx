@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Clock, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { inquiryApi } from '../../../api/owner/inquiryApi';

@@ -1,7 +1,6 @@
 import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
-import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../../api/authApi';
 

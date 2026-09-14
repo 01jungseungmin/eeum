@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { productApi } from '../../../api/owner/productApi';
 import { categoryApi } from '../../../api/owner/categoryApi';

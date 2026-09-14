@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { X, Sparkles, ShieldCheck, Send, Check, Loader2 } from 'lucide-react';
 import { aiManagerApi } from '../../../../api/owner/aiManagerApi';
@@ -52,7 +52,7 @@ export default function ComplaintReplyModal({
       setIsSuccess(false);
       setIsLoading(false);
     }
-  }, [isOpen, modalConfig.initial]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -172,7 +172,6 @@ export default function ComplaintReplyModal({
   );
 }
 
-// --- Dynamic Keyframe Animation & Styled Components ---
 const Overlay = styled.div`
   position: fixed;
   top: 0;

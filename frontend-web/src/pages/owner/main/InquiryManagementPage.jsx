@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import SummaryCards from '../../../components/owner/inquiry/SummaryCards';
 import FilterBar from '../../../components/owner/inquiry/FilterBar';

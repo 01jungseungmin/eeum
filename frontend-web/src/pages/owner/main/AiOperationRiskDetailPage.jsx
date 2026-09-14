@@ -228,7 +228,10 @@ export default function AiOperationRiskDetailPage() {
               <RiskSafetySection data={data} />
             </LeftContainer>
 
-            <RiskSidebar data={data} />
+            <RiskSidebar
+              data={data}
+              key={data?.id}
+            />
           </MainContent>
         </>
       )}

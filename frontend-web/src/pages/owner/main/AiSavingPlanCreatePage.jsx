@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { ArrowLeft, Sparkles, Check, Leaf, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
 
-/* 기존 Styled Components 유지 */
 const Container = styled.div`
   max-width: 1080px;
   margin: 0 auto;

@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const CardsGrid = styled.div`
@@ -31,17 +30,26 @@ const CardValue = styled.div`
 export default function SummaryCards() {
   return (
     <CardsGrid>
-      <Card $bg="#ffffff" $borderColor="#e2e8f0">
+      <Card
+        $bg="#ffffff"
+        $borderColor="#e2e8f0"
+      >
         <CardLabel $color="#64748b">전체 신고</CardLabel>
         <CardValue>4</CardValue>
       </Card>
 
-      <Card $bg="#fffbeb" $borderColor="#fde68a">
+      <Card
+        $bg="#fffbeb"
+        $borderColor="#fde68a"
+      >
         <CardLabel $color="#b45309">검토중</CardLabel>
         <CardValue $color="#b45309">2</CardValue>
       </Card>
 
-      <Card $bg="#f0fdf4" $borderColor="#bbf7d0">
+      <Card
+        $bg="#f0fdf4"
+        $borderColor="#bbf7d0"
+      >
         <CardLabel $color="#15803d">처리완료</CardLabel>
         <CardValue $color="#15803d">2</CardValue>
       </Card>

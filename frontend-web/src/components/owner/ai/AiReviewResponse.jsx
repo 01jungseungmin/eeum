@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import {
   Star,
@@ -115,6 +115,11 @@ export default function AiReviewResponse() {
 
       {/* 동적 통합 모달 */}
       <ComplaintReplyModal
+        key={
+          modalState.isOpen
+            ? `${modalState.type}-${modalState.targetId}`
+            : 'closed'
+        }
         isOpen={modalState.isOpen}
         onClose={handleCloseModal}
         type={modalState.type}

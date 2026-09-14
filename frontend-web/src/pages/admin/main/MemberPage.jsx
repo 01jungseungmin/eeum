@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import styled from 'styled-components';
 import MemberOverview from '../../../components/admin/member/MemberOverview';
 import MemberFilterBar from '../../../components/admin/member/MemberFilterBar';

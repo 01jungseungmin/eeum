@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -434,8 +434,6 @@ export default function AiMarketingPage() {
   const [tone, setTone] = useState('lively');
   const [aiText, setAiText] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // 개요 정보 상태 (GET /owner/ai-manager/marketing)
   const [overviewData, setOverviewData] = useState([]);
 
   // 채널 활성화 상태

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import {
   Building2,
@@ -116,7 +116,6 @@ const BusinessInfoBox = () => {
   const fetchOwnerBusinessInfo = async () => {
     try {
       setLoading(true);
-
       const response = await accountApi.getOwnerAccountInfo();
 
       if (response.data.success) {
@@ -131,7 +130,11 @@ const BusinessInfoBox = () => {
   };
 
   useEffect(() => {
-    fetchOwnerBusinessInfo();
+    const initFetch = async () => {
+      await fetchOwnerBusinessInfo();
+    };
+
+    initFetch();
   }, []);
 
   if (loading) {
@@ -186,7 +189,10 @@ const BusinessInfoBox = () => {
   return (
     <Container>
       <Header>
-        <Building2 size={22} color="#2e7d32" />
+        <Building2
+          size={22}
+          color="#2e7d32"
+        />
         <Title>사업자 등록 정보</Title>
       </Header>
 

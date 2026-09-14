@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Plus, X } from 'lucide-react';
 import { productApi } from '../../../api/owner/productApi';
@@ -287,7 +287,6 @@ function ProductFormModal({
 
   // 🛠️ 옵션 관리를 위한 고도화 상태 설정
   const [options, setOptions] = useState([]);
-  const [originalOptions, setOriginalOptions] = useState([]);
   const [deletedOptionIds, setDeletedOptionIds] = useState([]); // 삭제된 기존 옵션그룹 ID 리스트
 
   // 마운트 시 기존의 상세 정보를 받아와 상태 세팅
@@ -325,9 +324,8 @@ function ProductFormModal({
               optionResponse.data.data || optionResponse.data || [];
 
             if (Array.isArray(serverOptions)) {
-              const mappedOptions = serverOptions.map((opt, index) => ({
+              const mappedOptions = serverOptions.map((opt) => ({
                 ...opt,
-                // 기존 데이터는 고유 서버 id를 메인 key로 세팅
                 id: opt.optionId || opt.id,
                 groupName: opt.groupName || '',
                 selectionType: opt.selectionType || 'SINGLE',
@@ -346,8 +344,6 @@ function ProductFormModal({
               );
 
               setOptions(sortedOptions);
-              // 깊은 복사로 원본을 보관하여 최종 수정 시 변동 추적에 활용
-              setOriginalOptions(JSON.parse(JSON.stringify(sortedOptions)));
             }
           }
 
@@ -770,7 +766,6 @@ function ProductFormModal({
                 setCategoryId={setCategoryId}
                 basePrice={basePrice}
                 setBasePrice={setBasePrice}
-                stockQuantity={stockQuantity}
                 categories={categories}
               />
             )}
@@ -817,7 +812,11 @@ function ProductFormModal({
                     className="add-btn"
                     onClick={handleAddOptionGroup}
                   >
-                    <Plus size={14} strokeWidth={2.5} /> 옵션 추가
+                    <Plus
+                      size={14}
+                      strokeWidth={2.5}
+                    />{' '}
+                    옵션 추가
                   </button>
                 </OptionHeader>
 
@@ -893,7 +892,11 @@ function ProductFormModal({
                         type="button"
                         onClick={() => handleAddOptionItem(group.id)}
                       >
-                        <Plus size={14} strokeWidth={2.5} /> 선택지 추가
+                        <Plus
+                          size={14}
+                          strokeWidth={2.5}
+                        />{' '}
+                        선택지 추가
                       </AddItemButton>
                     </OptionCard>
                   ))
@@ -902,7 +905,10 @@ function ProductFormModal({
             )}
 
             <FooterButtonGroup>
-              <CancelButton type="button" onClick={onClose}>
+              <CancelButton
+                type="button"
+                onClick={onClose}
+              >
                 취소
               </CancelButton>
               <SubmitButton type="submit">

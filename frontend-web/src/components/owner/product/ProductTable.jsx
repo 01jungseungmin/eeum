@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Eye, Pencil, Trash2 } from 'lucide-react';
 
@@ -239,10 +238,7 @@ function ProductTable({
               text: item.productType,
               color: '메뉴 상품',
             };
-            const statusInfo = STATUS_MAP[item.status] || {
-              text: item.status,
-              color: '비공개',
-            };
+
             const pickupTime = item.pickupTime || item.pickup;
 
             return (
@@ -366,21 +362,30 @@ function ProductTable({
                       title="상세보기"
                       onClick={() => onView(item.productId)}
                     >
-                      <Eye size={15} strokeWidth={2.3} />
+                      <Eye
+                        size={15}
+                        strokeWidth={2.3}
+                      />
                     </ActionButton>
                     <ActionButton
                       className="edit"
                       title="수정하기"
                       onClick={() => onEdit(item.productId)}
                     >
-                      <Pencil size={14} strokeWidth={2.3} />
+                      <Pencil
+                        size={14}
+                        strokeWidth={2.3}
+                      />
                     </ActionButton>
                     <ActionButton
                       className="delete"
                       title="삭제하기"
                       onClick={() => onDelete(item.productId)}
                     >
-                      <Trash2 size={15} strokeWidth={2.3} />
+                      <Trash2
+                        size={15}
+                        strokeWidth={2.3}
+                      />
                     </ActionButton>
                   </ActionContainer>
                 </Td>

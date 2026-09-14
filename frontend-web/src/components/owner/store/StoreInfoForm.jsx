@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Pencil, X, Save } from 'lucide-react';
-import StoreHoursForm from './StoreHoursForm'; // 분리된 영업시간 컴포넌트
+import StoreHoursForm from './StoreHoursForm';
 
 const Card = styled.div`
   background: white;

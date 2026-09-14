@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { X } from 'lucide-react';
 import { eventApi } from '../../../api/owner/eventApi';
@@ -458,7 +458,10 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
       <ModalContainer onClick={(e) => e.stopPropagation()}>
         <ModalHeader>
           <h2>{editingEvent ? '이벤트 정보 수정' : '새 이벤트 등록'}</h2>
-          <button className="close-btn" onClick={onClose}>
+          <button
+            className="close-btn"
+            onClick={onClose}
+          >
             <X size={20} />
           </button>
         </ModalHeader>
@@ -473,7 +476,10 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
             >
               <option value="">상품을 선택하세요</option>
               {productList.map((product) => (
-                <option key={product.productId} value={product.productId}>
+                <option
+                  key={product.productId}
+                  value={product.productId}
+                >
                   {product.name} — {product.price.toLocaleString()}원
                 </option>
               ))}
@@ -573,7 +579,11 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
           </FormGroupRow>
 
           <ButtonGroup>
-            <button type="button" className="cancel-btn" onClick={onClose}>
+            <button
+              type="button"
+              className="cancel-btn"
+              onClick={onClose}
+            >
               취소
             </button>
             <SubmitButton

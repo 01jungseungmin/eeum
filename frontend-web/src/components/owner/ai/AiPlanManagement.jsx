@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { CreditCard, Check, Minus, Crown } from 'lucide-react';
 

@@ -1,8 +1,6 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Star, MessageSquare, CheckCircle, Percent } from 'lucide-react';
 
-// --- Styled Components (최상단 위치) ---
 const StatsGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -74,8 +72,14 @@ export default function ReviewStats({ reviews }) {
     <StatsGrid>
       {/* 카드 1: 평균 평점 */}
       <StatCard>
-        <IconBox $bg="#fffbeb" $color="#d97706">
-          <Star size={22} fill="#d97706" />
+        <IconBox
+          $bg="#fffbeb"
+          $color="#d97706"
+        >
+          <Star
+            size={22}
+            fill="#d97706"
+          />
         </IconBox>
         <StatInfo>
           <StatLabel>평균 평점</StatLabel>
@@ -85,7 +89,10 @@ export default function ReviewStats({ reviews }) {
 
       {/* 카드 2: 전체 리뷰수 */}
       <StatCard>
-        <IconBox $bg="#edf2ff" $color="#4f46e5">
+        <IconBox
+          $bg="#edf2ff"
+          $color="#4f46e5"
+        >
           <MessageSquare size={22} />
         </IconBox>
         <StatInfo>
@@ -96,7 +103,10 @@ export default function ReviewStats({ reviews }) {
 
       {/* 카드 3: 만점 리뷰 비율 */}
       <StatCard>
-        <IconBox $bg="#f0fdf4" $color="#16a34a">
+        <IconBox
+          $bg="#f0fdf4"
+          $color="#16a34a"
+        >
           <CheckCircle size={22} />
         </IconBox>
         <StatInfo>
@@ -107,7 +117,10 @@ export default function ReviewStats({ reviews }) {
 
       {/* 카드 4: 답글 작성률 */}
       <StatCard>
-        <IconBox $bg="#fdf2f8" $color="#db2777">
+        <IconBox
+          $bg="#fdf2f8"
+          $color="#db2777"
+        >
           <Percent size={22} />
         </IconBox>
         <StatInfo>

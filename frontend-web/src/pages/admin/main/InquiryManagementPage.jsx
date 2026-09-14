@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import InquirySummaryCards from '../../../components/admin/inquiry/InquirySummaryCards';
 import InquiryTableList from '../../../components/admin/inquiry/InquiryTableList';

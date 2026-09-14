@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Search } from 'lucide-react';
 
@@ -120,7 +119,10 @@ export default function FilterBar({
   return (
     <FilterBarContainer>
       <SearchInputWrapper>
-        <Search className="search-icon" size={18} />
+        <Search
+          className="search-icon"
+          size={18}
+        />
         <SearchInput
           type="text"
           placeholder="고객명, 제목, 내용 검색..."

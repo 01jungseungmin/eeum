@@ -17,29 +17,6 @@ const Container = styled.div`
   margin: 0 auto;
 `;
 
-const FilterSection = styled.div`
-  display: flex;
-  gap: 10px;
-  margin-bottom: 24px;
-  align-items: center;
-  span {
-    font-size: 14px;
-    color: #666;
-    margin-right: 10px;
-  }
-`;
-
-const FilterBadge = styled.div`
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 13px;
-  cursor: pointer;
-  background-color: ${(props) =>
-    props.$active ? props.$color || '#00a651' : '#fff'};
-  color: ${(props) => (props.$active ? '#fff' : '#666')};
-  border: 1px solid ${(props) => (props.$active ? 'transparent' : '#eee')};
-`;
-
 const ApplySubmitButton = styled.button`
   display: flex;
   align-items: center;
