@@ -77,6 +77,7 @@ const buildRouteFromType = (item: any): string | null => {
         : '/mypage/reservations';
 
     case 'REVIEW':
+    case 'USED_REVIEW':
       return '/mypage/my-reviews';
 
     // 💡 2. 커뮤니티 알림 연결
@@ -138,14 +139,16 @@ export const getNotificationRoute = (item: NotificationItem | any): string | nul
       .replace(/^\/orders\//, '/order/')
       .replace(/^\/orders$/, '/mypage/history')
       .replace(/^\/products\//, '/product/')
+      .replace(/^\/chat\/rooms\/(\d+).*$/, '/chat/$1')
       .replace(/^\/chatrooms?\//, '/chat/')
       .replace(/^\/chats\//, '/chat/')
       .replace(/^\/inquiries\//, '/inquiry/')
       .replace(/^\/inquiries$/, '/inquiry')
-      .replace(/^\/community\/posts\//, '/community/') 
+      .replace(/^\/community\/posts\//, '/community/')
       .replace(/^\/posts\//, '/community/')
-      .replace(/^\/communities\//, '/community/') 
+      .replace(/^\/communities\//, '/community/')
       .replace(/^\/communities$/, '/mypage/my-community')
+      .replace(/^\/used\/\d+\/reviews$/, '/mypage/my-reviews')
       .replace(/^\/reviews.*/, '/mypage/my-reviews')
       .replace(/^\/reservations\/(\d+)$/, '/restaurant/reservation-detail?id=$1')
       .replace(/^\/reservations$/, '/mypage/reservations')
