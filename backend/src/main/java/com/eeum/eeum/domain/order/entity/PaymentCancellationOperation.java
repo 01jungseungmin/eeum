@@ -81,6 +81,9 @@ public class PaymentCancellationOperation extends BaseEntity {
     @Column(name = "pg_status", length = 30)
     private String pgStatus;
 
+    @Column(name = "pg_cancelled_amount", precision = 10, scale = 2)
+    private BigDecimal pgCancelledAmount;
+
     /** PG가 취소 금액까지 원 요청 전액과 일치한다고 확인한 경우에만 true다. */
     @Column(name = "full_cancellation_confirmed", nullable = false,
             columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
@@ -115,7 +118,7 @@ public class PaymentCancellationOperation extends BaseEntity {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
         }
         if (payment.getOrder() != order || payment.getAmount() == null
-                || payment.getAmount().compareTo(requestedAmount) != 0) {
+                || requestedAmount.compareTo(payment.getAmount()) > 0) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
         }
         PaymentCancellationOperation operation = new PaymentCancellationOperation();
@@ -126,6 +129,26 @@ public class PaymentCancellationOperation extends BaseEntity {
         operation.requestedAmount = requestedAmount;
         operation.status = PaymentCancellationStatus.PENDING;
         return operation;
+    }
+
+    public void reopenForRemainingCancellation(
+            BigDecimal remainingAmount, PaymentCancellationTrigger triggerType, String reason
+    ) {
+        if (status != PaymentCancellationStatus.COMPLETED
+                || remainingAmount == null || remainingAmount.signum() <= 0 || triggerType == null) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
+        }
+        this.requestedAmount = remainingAmount;
+        this.triggerType = triggerType;
+        this.reason = reason;
+        this.status = PaymentCancellationStatus.PENDING;
+        this.pgCancellationId = null;
+        this.pgStatus = null;
+        this.pgCancelledAmount = null;
+        this.fullCancellationConfirmed = false;
+        this.requestedAt = null;
+        this.pgCancelledAt = null;
+        this.completedAt = null;
     }
 
     // ===================== 상태 전이 =====================
@@ -158,6 +181,7 @@ public class PaymentCancellationOperation extends BaseEntity {
         this.status = PaymentCancellationStatus.PG_CANCELLED;
         this.pgCancellationId = pgCancellationId;
         this.pgStatus = pgStatus;
+        this.pgCancelledAmount = cancelledAmount;
         this.fullCancellationConfirmed = "SUCCEEDED".equals(pgStatus)
                 && cancelledAmount != null
                 && requestedAmount.compareTo(cancelledAmount) == 0;
@@ -218,9 +242,24 @@ public class PaymentCancellationOperation extends BaseEntity {
     public void recordPgStatus(String pgCancellationId, String pgStatus, BigDecimal cancelledAmount) {
         this.pgCancellationId = pgCancellationId;
         this.pgStatus = pgStatus;
+        this.pgCancelledAmount = cancelledAmount;
         this.fullCancellationConfirmed = "SUCCEEDED".equals(pgStatus)
                 && cancelledAmount != null
                 && requestedAmount.compareTo(cancelledAmount) == 0;
+    }
+
+    public void markPartialReconciled(BigDecimal cumulativeCancelledAmount, LocalDateTime now) {
+        if (cumulativeCancelledAmount == null || cumulativeCancelledAmount.signum() <= 0
+                || now == null
+                || (status == PaymentCancellationStatus.COMPLETED
+                && !"PARTIAL_CANCELLED".equals(pgStatus))) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
+        }
+        this.pgStatus = "PARTIAL_CANCELLED";
+        this.pgCancelledAmount = cumulativeCancelledAmount;
+        this.fullCancellationConfirmed = false;
+        this.status = PaymentCancellationStatus.COMPLETED;
+        this.completedAt = now;
     }
 
     // ===================== 조회 =====================

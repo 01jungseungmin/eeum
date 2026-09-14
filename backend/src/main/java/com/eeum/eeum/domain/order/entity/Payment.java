@@ -5,6 +5,8 @@ import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.RefundStatus;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -40,6 +42,9 @@ public class Payment extends BaseEntity {
 
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "cancelled_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal cancelledAmount = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -104,7 +109,22 @@ public class Payment extends BaseEntity {
 
     public void cancel() {
         this.status = PaymentStatus.CANCELLED;
+        this.cancelledAmount = this.amount;
         this.cancelledAt = LocalDateTime.now();
+    }
+
+    public void markPartiallyRefunded(BigDecimal cumulativeCancelledAmount) {
+        if (cumulativeCancelledAmount == null || cumulativeCancelledAmount.signum() <= 0
+                || cumulativeCancelledAmount.compareTo(amount) >= 0
+                || cumulativeCancelledAmount.compareTo(cancelledAmount) < 0) {
+            throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+        this.cancelledAmount = cumulativeCancelledAmount;
+        this.status = PaymentStatus.PARTIALLY_REFUNDED;
+    }
+
+    public BigDecimal getRemainingAmount() {
+        return amount.subtract(cancelledAmount);
     }
 
     public void fail(String reason) {
