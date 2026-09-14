@@ -89,7 +89,13 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         // 제재·탈퇴 시 이 연결을 찾아 끊을 수 있도록 계정에 묶는다.
         // 세션 자체는 HTTP 업그레이드 때 이미 등록돼 있고, 여기서 주인만 붙인다.
         // 세대를 함께 기록해 둔다 — 주기적 대조가 이 값과 DB를 비교해 회수된 연결을 끊는다.
-        sessionRegistry.bindAccount(accessor.getSessionId(), accountId, tokenVersion);
+        sessionRegistry.bindAccount(
+                accessor.getSessionId(),
+                accountId,
+                tokenVersion,
+                tokenService.accessTokenFingerprint(token),
+                jwtProvider.getExpiration(token).getTime()
+        );
         log.debug("WebSocket 인증 성공: accountId={}", accountId);
     }
 

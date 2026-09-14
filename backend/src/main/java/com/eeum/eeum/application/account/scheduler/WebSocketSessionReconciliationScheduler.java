@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** 계정 상태·토큰 세대와 세션을 대조하는 백스톱. 세션이 JVM에만 있어 인스턴스별로 실행한다. */
 @Slf4j
@@ -32,23 +34,36 @@ public class WebSocketSessionReconciliationScheduler {
     @Scheduled(fixedDelayString = "${eeum.realtime.session-reconcile-interval-ms:30000}")
     @InstanceLocalSchedule
     public void closeRevokedSessions() {
-        Map<Long, Long> webSocketConnections = sessionRegistry.connectedTokenVersions();
+        Map<String, WebSocketSessionRegistry.ConnectionCredentials> webSocketConnections =
+                sessionRegistry.connectedCredentials();
         Map<Long, SseEmitterManager.ConnectionCredentials> sseConnections =
                 sseEmitterManager.connectedCredentials();
         if (webSocketConnections.isEmpty() && sseConnections.isEmpty()) {
             return;
         }
 
-        Set<Long> accountIds = new HashSet<>(webSocketConnections.keySet());
+        Set<Long> accountIds = webSocketConnections.values().stream()
+                .map(WebSocketSessionRegistry.ConnectionCredentials::accountId)
+                .collect(Collectors.toCollection(HashSet::new));
         accountIds.addAll(sseConnections.keySet());
         List<AccountAuthState> states = accountRepository.findAuthStates(accountIds);
+        Map<Long, AccountAuthState> statesByAccount = states.stream()
+                .collect(Collectors.toMap(AccountAuthState::accountId, Function.identity()));
+
+        for (Map.Entry<String, WebSocketSessionRegistry.ConnectionCredentials> entry
+                : webSocketConnections.entrySet()) {
+            WebSocketSessionRegistry.ConnectionCredentials credentials = entry.getValue();
+            AccountAuthState state = statesByAccount.get(credentials.accountId());
+            if (state == null
+                    || !state.isUsable(credentials.tokenVersion())
+                    || tokenService.isFingerprintBlacklisted(credentials.tokenFingerprint())
+                    || credentials.tokenExpiresAtEpochMilli() <= System.currentTimeMillis()) {
+                sessionRegistry.closeIfCurrent(
+                        entry.getKey(), credentials, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
+            }
+        }
 
         for (AccountAuthState state : states) {
-            Long webSocketVersion = webSocketConnections.get(state.accountId());
-            if (webSocketVersion != null && !state.isUsable(webSocketVersion)) {
-                sessionRegistry.closeAll(state.accountId(), WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
-            }
-
             SseEmitterManager.ConnectionCredentials sseConnection = sseConnections.get(state.accountId());
             if (sseConnection != null && (!state.isUsable(sseConnection.tokenVersion())
                     || tokenService.isFingerprintBlacklisted(sseConnection.tokenFingerprint()))) {
@@ -57,12 +72,8 @@ public class WebSocketSessionReconciliationScheduler {
         }
 
         // 계정이 조회되지 않으면(물리 삭제 등) 붙어 있을 이유가 없다.
-        webSocketConnections.keySet().stream()
-                .filter(accountId -> states.stream().noneMatch(s -> s.accountId().equals(accountId)))
-                .forEach(accountId -> sessionRegistry.closeAll(
-                        accountId, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED));
         sseConnections.keySet().stream()
-                .filter(accountId -> states.stream().noneMatch(s -> s.accountId().equals(accountId)))
+                .filter(accountId -> !statesByAccount.containsKey(accountId))
                 .forEach(accountId -> sseEmitterManager.closeIfCurrent(
                         accountId, sseConnections.get(accountId)));
     }
