@@ -117,6 +117,9 @@ public class OwnerRevenueService {
                 .orElse(null);
         OwnerRevenue revenue = ownerRevenueRepository.findByOrderIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        if (revenue.getPgFeeRate() == null || revenue.getPlatformFeeRate() == null) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        }
 
         // 락을 쥔 뒤 다시 읽는다. 여기서 나오는 값이 판단의 근거다.
         WeeklySettlementItem item = weeklySettlementItemRepository
@@ -183,6 +186,13 @@ public class OwnerRevenueService {
     public void reconcilePartialCancellation(
             Long orderId, SettlementFeePolicy.Breakdown breakdown
     ) {
+        reconcilePartialCancellation(orderId, breakdown, null, null);
+    }
+
+    public void reconcilePartialCancellation(
+            Long orderId, SettlementFeePolicy.Breakdown breakdown,
+            BigDecimal requestedPgRate, BigDecimal requestedPlatformRate
+    ) {
         OwnerRevenue snapshot = ownerRevenueRepository.findByOrder_OrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
         WeeklySettlement settlement = weeklySettlementRepository
@@ -191,8 +201,15 @@ public class OwnerRevenueService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
         WeeklySettlementItem item = weeklySettlementItemRepository
                 .findByOwnerRevenue_OwnerRevenueId(revenue.getOwnerRevenueId()).orElse(null);
+        BigDecimal pgRate = revenue.getPgFeeRate() == null ? requestedPgRate : revenue.getPgFeeRate();
+        BigDecimal platformRate = revenue.getPlatformFeeRate() == null
+                ? requestedPlatformRate : revenue.getPlatformFeeRate();
+        if (pgRate == null || platformRate == null) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        }
+        revenue.recordFeeRates(pgRate, platformRate);
         SettlementFeePolicy.Breakdown fixedRateBreakdown = settlementFeePolicy.breakdown(
-                breakdown.paymentAmount(), revenue.getPgFeeRate(), revenue.getPlatformFeeRate());
+                breakdown.paymentAmount(), pgRate, platformRate);
         if (settlement != null && settlement.getStatus() != WeeklySettlementStatus.PAYOUT_PENDING) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED);
         }

@@ -55,10 +55,10 @@ public class OwnerRevenue extends BaseEntity {
     @Column(name = "platform_fee_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal platformFeeAmount;
 
-    @Column(name = "pg_fee_rate", nullable = false, precision = 10, scale = 6)
+    @Column(name = "pg_fee_rate", precision = 10, scale = 6)
     private BigDecimal pgFeeRate;
 
-    @Column(name = "platform_fee_rate", nullable = false, precision = 10, scale = 6)
+    @Column(name = "platform_fee_rate", precision = 10, scale = 6)
     private BigDecimal platformFeeRate;
 
     @Column(name = "payout_amount", nullable = false, precision = 10, scale = 2)
@@ -179,6 +179,17 @@ public class OwnerRevenue extends BaseEntity {
         this.pgFeeAmount = pgFeeAmount;
         this.platformFeeAmount = platformFeeAmount;
         this.payoutAmount = payoutAmount;
+    }
+
+    /** 수동 대사로 확정한 요율을 저장해 이후 재계산의 기준을 고정한다. */
+    public void recordFeeRates(BigDecimal pgFeeRate, BigDecimal platformFeeRate) {
+        if (pgFeeRate == null || platformFeeRate == null
+                || pgFeeRate.signum() < 0 || platformFeeRate.signum() < 0
+                || pgFeeRate.add(platformFeeRate).compareTo(BigDecimal.ONE) > 0) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_AMOUNT);
+        }
+        this.pgFeeRate = pgFeeRate;
+        this.platformFeeRate = platformFeeRate;
     }
 
     public void markSettled() {

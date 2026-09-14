@@ -63,12 +63,12 @@ class SettlementSchemaIntegrationTest extends IntegrationTestSupport {
         assertThat(paymentCancellation.get("is_nullable")).isEqualTo("NO");
         assertThat(String.valueOf(paymentCancellation.get("column_default")))
                 .isIn("0", "0.00", "0.0000");
-        assertThat(pgFeeRate.get("is_nullable")).isEqualTo("NO");
-        assertThat(platformFeeRate.get("is_nullable")).isEqualTo("NO");
+        assertThat(pgFeeRate.get("is_nullable")).isEqualTo("YES");
+        assertThat(platformFeeRate.get("is_nullable")).isEqualTo("YES");
         assertThat(lateReported.get("is_nullable")).isEqualTo("YES");
         assertThat(lateReported.get("data_type")).isEqualTo("datetime");
         assertThat(((Number) lateReported.get("datetime_precision")).intValue()).isEqualTo(6);
-        assertThat(appliedMigrationCount()).isEqualTo(4);
+        assertThat(appliedMigrationCount()).isEqualTo(5);
     }
 
     @Test
@@ -107,7 +107,7 @@ class SettlementSchemaIntegrationTest extends IntegrationTestSupport {
         return jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM flyway_schema_history
-                WHERE version IN ('13', '14', '15', '16')
+                WHERE version IN ('13', '14', '15', '16', '17')
                   AND success = 1
                 """, Long.class);
     }

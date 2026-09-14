@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -123,6 +124,22 @@ public class ManualSettlementPayoutService {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
         paymentCancellationService.applyConfirmedManualReviewCancellation(orderId);
+    }
+
+    /** 관리자가 확인한 누적 부분 취소액을 지급 전 원장과 정산 항목에 반영한다. */
+    public void reconcilePartialCancellation(
+            Long adminAccountId, Long weeklySettlementId, Long orderId, BigDecimal cumulativeCancelledAmount,
+            BigDecimal pgFeeRate, BigDecimal platformFeeRate
+    ) {
+        requireAdmin(adminAccountId);
+        boolean included = weeklySettlementItemRepository
+                .findOrderIdsByWeeklySettlementId(weeklySettlementId)
+                .contains(orderId);
+        if (!included) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        paymentCancellationService.reconcileExternalPartialCancellation(
+                orderId, cumulativeCancelledAmount, pgFeeRate, platformFeeRate);
     }
 
     /**

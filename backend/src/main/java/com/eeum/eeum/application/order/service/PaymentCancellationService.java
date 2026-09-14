@@ -93,6 +93,12 @@ public class PaymentCancellationService {
 
     /** 외부 부분 취소의 누적 금액을 원장과 정산 항목에 반영한다. */
     public void reconcileExternalPartialCancellation(Long orderId, BigDecimal cumulativeCancelledAmount) {
+        reconcileExternalPartialCancellation(orderId, cumulativeCancelledAmount, null, null);
+    }
+
+    public void reconcileExternalPartialCancellation(
+            Long orderId, BigDecimal cumulativeCancelledAmount, BigDecimal pgFeeRate, BigDecimal platformFeeRate
+    ) {
         redisLockService.executeWithLock(
                 LockKeys.order(orderId),
                 CANCEL_LOCK_LEASE_TIME,
@@ -103,7 +109,8 @@ public class PaymentCancellationService {
                         throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
                     }
                     try {
-                        processor.reconcileExternalPartialCancellation(orderId, cumulativeCancelledAmount);
+                        processor.reconcileExternalPartialCancellation(
+                                orderId, cumulativeCancelledAmount, pgFeeRate, platformFeeRate);
                     } catch (BusinessException e) {
                         if (e.getErrorCode() == ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED) {
                             processor.recordExternalPartialCancellation(orderId);

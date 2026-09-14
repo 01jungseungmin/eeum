@@ -201,6 +201,12 @@ public class PaymentCancellationProcessor {
     /** 외부 누적 취소액을 원장과 정산에 반영해 이후 요율 변경의 소급을 막는다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileExternalPartialCancellation(Long orderId, BigDecimal cumulativeCancelledAmount) {
+        reconcileExternalPartialCancellation(orderId, cumulativeCancelledAmount, null, null);
+    }
+
+    public void reconcileExternalPartialCancellation(
+            Long orderId, BigDecimal cumulativeCancelledAmount, BigDecimal pgFeeRate, BigDecimal platformFeeRate
+    ) {
         Order order = orderRepository.findByIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
@@ -217,7 +223,7 @@ public class PaymentCancellationProcessor {
         }
         SettlementFeePolicy.Breakdown breakdown = settlementFeePolicy.breakdown(
                 payment.getAmount().subtract(cumulativeCancelledAmount));
-        ownerRevenueService.reconcilePartialCancellation(orderId, breakdown);
+        ownerRevenueService.reconcilePartialCancellation(orderId, breakdown, pgFeeRate, platformFeeRate);
         payment.markPartiallyRefunded(cumulativeCancelledAmount);
         PaymentCancellationOperation operation = cancellationOperationRepository
                 .findByOrderIdWithPessimisticLock(orderId)
