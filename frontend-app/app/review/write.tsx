@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
 import { reviewApi } from '../../api/review';
+import { uploadImageAssets } from '../../utils/imageUpload';
 
 export default function ReviewWriteScreen() {
   const router = useRouter();
@@ -69,31 +70,33 @@ export default function ReviewWriteScreen() {
           await reviewApi.deleteReviewImage(storeIdNum, reviewIdNum, Number(initialImageId));
         }
         if (image) {
-          await reviewApi.addReviewImages(storeIdNum, reviewIdNum, [image.uri]);
+          const [objectKey] = await uploadImageAssets([image.uri], 'STORE');
+          await reviewApi.addReviewImages(storeIdNum, reviewIdNum, [objectKey]);
         }
         Alert.alert('성공', '리뷰가 성공적으로 수정되었습니다.');
-      } 
+      }
       else {
-        
+        const imageUrls = image ? await uploadImageAssets([image.uri], 'STORE') : [];
+
         if (reservationIdNum) {
           // 1. 방문 예약 리뷰일 때: 새 전용 API 호출
           const payload = {
             rating: rating,
             content: content,
-            imageUrls: image ? [image.uri] : [],
+            imageUrls,
           };
-          
+
           await reviewApi.createReservationReview(reservationIdNum, payload);
-        } 
+        }
         else {
           // 2. 일반 주문 리뷰일 때: 기존 API 호출
           const payload = {
             orderId: orderIdNum,
             rating: rating,
             content: content,
-            imageUrls: image ? [image.uri] : [],
+            imageUrls,
           };
-          
+
           await reviewApi.createReview(storeIdNum, payload);
         }
 

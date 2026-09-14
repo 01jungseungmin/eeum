@@ -14,6 +14,7 @@ import { Text } from '../../components/CustomText';
 import { useChatStomp } from '../../hooks/useChat';
 import { userApi } from '../../api/user';
 import { chatApi } from '../../api/chat';
+import { uploadImageAssets } from '../../utils/imageUpload';
 
 export default function ChatRoomScreen() {
   const router = useRouter();
@@ -171,8 +172,8 @@ export default function ChatRoomScreen() {
     if (!result.canceled) {
       const selectedImageUri = result.assets[0].uri;
       try {
-        const targetImageUrl = selectedImageUri; 
-        await chatApi.sendImageMessage(roomId, targetImageUrl);
+        const [objectKey] = await uploadImageAssets([selectedImageUri], 'CHAT');
+        await chatApi.sendImageMessage(roomId, objectKey);
       } catch (error) {
         console.error('이미지 전송 실패:', error);
         Alert.alert('오류', '사진 전송 중 문제가 발생했습니다.');

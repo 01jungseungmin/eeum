@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker'; 
 import { Text } from '../../components/CustomText';
 import { communityApi } from '../../api/community';
+import { uploadImageAssets } from '../../utils/imageUpload';
 
 const CATEGORY_MAP = [
   { id: 8, name: '자유게시판' },
@@ -124,14 +125,15 @@ export default function CommunityWriteScreen() {
         currentPostId = res.data?.communityPostId || res.data?.postId || res.data?.id || res.id;
       }
 
-      // 3. 새롭게 추가된 이미지가 있다면 백엔드에 등록 요청!
+      // 3. 새롭게 추가된 이미지가 있다면 S3에 업로드 후 확정된 objectKey로 등록 요청!
       const newImages = selectedImages.filter(img => !img.id);
       if (newImages.length > 0 && currentPostId) {
-        const imagePayload = newImages.map((img, index) => ({
-          imageUrl: img.uri, 
-          thumbnail: index === 0 && selectedImages[0].uri === img.uri
+        const objectKeys = await uploadImageAssets(newImages.map(img => img.uri), 'COMMUNITY');
+        const imagePayload = objectKeys.map((objectKey, index) => ({
+          imageUrl: objectKey,
+          thumbnail: index === 0 && selectedImages[0].uri === newImages[index].uri
         }));
-        
+
         await communityApi.uploadPostImages(currentPostId, imagePayload);
       }
 
