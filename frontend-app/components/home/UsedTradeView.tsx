@@ -15,7 +15,15 @@ interface UsedTradeViewProps {
 
 export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
+
+  // 커서 페이징 상태 (cursorValue + cursorId)
+  const [cursor, setCursor] = useState<{ value: string | null; id: number | null; hasNext: boolean }>({
+    value: null,
+    id: null,
+    hasNext: true,
+  });
 
   // 필터 상태
   const [includeSold, setIncludeSold] = useState(false);
@@ -47,16 +55,17 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
         setIsLoading(true);
 
         try {
-          const res = await usedApi.getUsedProducts({
+          const result = await usedApi.getUsedProducts({
             regionId,
             categoryId,
             status: statusFilter,
             sort: activeSort.sort,
           });
 
-          // 응답에서 데이터 추출
-          const fetchedProducts = res.data?.data?.content ?? [];
-          if (isActive) setProducts(fetchedProducts);
+          if (isActive) {
+            setProducts(result.content);
+            setCursor({ value: result.nextCursorValue, id: result.nextCursorId, hasNext: result.hasNext });
+          }
         } catch (error) {
           console.error('중고거래 목록 로딩 실패:', error);
         } finally {
@@ -69,6 +78,28 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
       return () => { isActive = false; };
     }, [regionId, categoryId, statusFilter, activeSort.sort]) // 필터나 정렬이 바뀌어도 다시 불러옴
   );
+
+  const loadMoreProducts = async () => {
+    if (!regionId || !cursor.hasNext || isLoading || isLoadingMore) return;
+
+    try {
+      setIsLoadingMore(true);
+      const result = await usedApi.getUsedProducts({
+        regionId,
+        categoryId,
+        status: statusFilter,
+        sort: activeSort.sort,
+        cursorValue: cursor.value,
+        cursorId: cursor.id,
+      });
+      setProducts(prev => [...prev, ...result.content]);
+      setCursor({ value: result.nextCursorValue, id: result.nextCursorId, hasNext: result.hasNext });
+    } catch (error) {
+      console.error('중고거래 목록 추가 로드 실패:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const filteredProducts = products;
 
@@ -170,6 +201,13 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
         columnWrapperStyle={styles.rowWrapper}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
+        onEndReached={loadMoreProducts}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          isLoadingMore ? (
+            <ActivityIndicator style={{ marginVertical: 20 }} color="#00A859" />
+          ) : null
+        }
         renderItem={({ item }) => (
           <TouchableOpacity 
             style={styles.productCard} 

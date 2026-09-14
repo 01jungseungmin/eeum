@@ -42,6 +42,12 @@ export default function ChatRoomScreen() {
 
   // [NEW] 이전 대화 불러오기 중복 방지용 상태
   const [isFetchingOlder, setIsFetchingOlder] = useState(false);
+  // 과거 메시지 커서 페이징 상태 (cursorValue + cursorId)
+  const [messageCursor, setMessageCursor] = useState<{ value: string | null; id: number | null; hasNext: boolean }>({
+    value: null,
+    id: null,
+    hasNext: true,
+  });
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
@@ -64,8 +70,9 @@ export default function ChatRoomScreen() {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         if (roomId) {
           try {
-            const pastMessages = await chatApi.getPastMessages(roomId);
-            setMessages(pastMessages.reverse()); 
+            const result = await chatApi.getPastMessages(roomId);
+            setMessages(result.content.reverse());
+            setMessageCursor({ value: result.nextCursorValue, id: result.nextCursorId, hasNext: result.hasNext });
             chatApi.markAsRead(roomId).catch(() => {});
           } catch (error) {
             console.error('최신 메시지 동기화 실패:', error);
@@ -97,9 +104,10 @@ export default function ChatRoomScreen() {
           setParticipants(realParticipants);
         }
 
-        const pastMessages = await chatApi.getPastMessages(roomId);
-        setMessages(pastMessages.reverse()); 
-        
+        const result = await chatApi.getPastMessages(roomId);
+        setMessages(result.content.reverse());
+        setMessageCursor({ value: result.nextCursorValue, id: result.nextCursorId, hasNext: result.hasNext });
+
         if (roomId) {
           chatApi.markAsRead(roomId).catch(err => console.error('읽음 처리 에러:', err));
         }
@@ -126,23 +134,18 @@ export default function ChatRoomScreen() {
 
   // [NEW] 이전 50개 메시지 불러오기 로직 (커서 페이징)
   const loadMoreMessages = async () => {
-    if (messages.length === 0 || isFetchingOlder) return;
-
-    // 현재 렌더링된 메시지 중 가장 오래된 메시지 (배열 맨 앞 데이터)
-    const oldestMessage = messages[0];
-    const cursorTime = oldestMessage.sentAt || oldestMessage.createdAt;
-
-    if (!cursorTime) return;
+    if (messages.length === 0 || isFetchingOlder || !messageCursor.hasNext) return;
 
     try {
       setIsFetchingOlder(true);
-      
-      const olderMessages = await chatApi.getPastMessages(roomId, cursorTime);
-      
-      if (olderMessages && olderMessages.length > 0) {
+
+      const result = await chatApi.getPastMessages(roomId, messageCursor.value, messageCursor.id);
+
+      if (result.content.length > 0) {
         // 새로 가져온 과거 메시지를 최신순->과거순에 맞게 뒤집은 뒤, 기존 배열 앞에 붙여줍니다.
-        setMessages((prev) => [...olderMessages.reverse(), ...prev]);
+        setMessages((prev) => [...result.content.reverse(), ...prev]);
       }
+      setMessageCursor({ value: result.nextCursorValue, id: result.nextCursorId, hasNext: result.hasNext });
     } catch (error) {
       console.error('이전 메시지 로딩 실패:', error);
     } finally {
