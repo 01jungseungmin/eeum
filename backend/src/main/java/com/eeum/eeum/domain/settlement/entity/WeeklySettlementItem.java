@@ -60,6 +60,7 @@ public class WeeklySettlementItem extends BaseEntity {
         return item;
     }
 
+    /** 원장과 같은 금액 스냅샷을 유지해 지급 합계가 어긋나지 않게 한다. */
     public void replaceAmounts(
             BigDecimal paymentAmount,
             BigDecimal pgFeeAmount,

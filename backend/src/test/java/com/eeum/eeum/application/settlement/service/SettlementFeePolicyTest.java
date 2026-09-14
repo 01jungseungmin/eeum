@@ -41,6 +41,18 @@ class SettlementFeePolicyTest {
     }
 
     @Test
+    void 원장에_저장한_요율로_부분취소_금액을_재계산한다() {
+        SettlementFeePolicy policy = policy("0.10", "0.20");
+
+        SettlementFeePolicy.Breakdown breakdown = policy.breakdown(
+                new BigDecimal("7000"), new BigDecimal("0.033"), new BigDecimal("0.05"));
+
+        assertThat(breakdown.pgFeeAmount()).isEqualByComparingTo("231.00");
+        assertThat(breakdown.platformFeeAmount()).isEqualByComparingTo("350.00");
+        assertThat(breakdown.payoutAmount()).isEqualByComparingTo("6419.00");
+    }
+
+    @Test
     void 지급액은_항상_결제액에서_수수료를_뺀_값과_같다() {
         // given — DB CHECK 제약(payout = payment - pg - platform)을 반올림이 깨뜨리면 안 된다
         SettlementFeePolicy policy = policy("0.0333", "0.0777");

@@ -267,6 +267,7 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutAmount = this.payoutAmount.subtract(revenue.getPayoutAmount());
     }
 
+    /** 지급 전 원장 조정과 정산 합계 변경을 한 도메인 연산으로 묶는다. */
     public void replaceRevenueAmounts(
             WeeklySettlementItem item,
             BigDecimal paymentAmount,

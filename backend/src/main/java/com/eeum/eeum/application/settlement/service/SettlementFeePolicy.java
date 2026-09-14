@@ -32,14 +32,27 @@ public class SettlementFeePolicy {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_AMOUNT);
         }
         BigDecimal payment = paymentAmount.setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-        BigDecimal pgFee = applyRate(payment, properties.pgRate());
+        return breakdown(payment, properties.pgRate(), properties.platformRate());
+    }
+
+    /** 기존 원장의 요율을 재사용해 부분 취소 금액을 계산한다. */
+    public Breakdown breakdown(BigDecimal paymentAmount, BigDecimal pgRate, BigDecimal platformRate) {
+        if (paymentAmount == null || paymentAmount.signum() < 0
+                || pgRate == null || platformRate == null
+                || pgRate.signum() < 0 || platformRate.signum() < 0
+                || pgRate.add(platformRate).compareTo(BigDecimal.ONE) > 0) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_AMOUNT);
+        }
+        BigDecimal payment = paymentAmount.setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal pgFee = applyRate(payment, pgRate);
 
         // 두 수수료를 각각 반올림하면 합이 결제액을 1원 미만 넘길 수 있다(비율 합이 1에 가까울 때).
         // 그 몫은 플랫폼 수수료에서 깎아 지급액이 음수가 되지 않게 한다.
         BigDecimal platformFeeCap = payment.subtract(pgFee);
-        BigDecimal platformFee = applyRate(payment, properties.platformRate()).min(platformFeeCap);
+        BigDecimal platformFee = applyRate(payment, platformRate).min(platformFeeCap);
 
-        return new Breakdown(payment, pgFee, platformFee, payment.subtract(pgFee).subtract(platformFee));
+        return new Breakdown(payment, pgFee, platformFee, payment.subtract(pgFee).subtract(platformFee),
+                pgRate, platformRate);
     }
 
     private BigDecimal applyRate(BigDecimal payment, BigDecimal rate) {
@@ -51,7 +64,9 @@ public class SettlementFeePolicy {
             BigDecimal paymentAmount,
             BigDecimal pgFeeAmount,
             BigDecimal platformFeeAmount,
-            BigDecimal payoutAmount
+            BigDecimal payoutAmount,
+            BigDecimal pgRate,
+            BigDecimal platformRate
     ) {
     }
 }
