@@ -47,3 +47,7 @@ app-example
 .env-cmdrc
 .env.*
 !.env.example
+
+# Google 서비스 설정 파일 (EAS file 환경변수로 대체, 로컬 빌드용 사본은 커밋 금지)
+GoogleService-Info.plist
+google-services.json

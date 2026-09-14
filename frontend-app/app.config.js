@@ -15,7 +15,10 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.eeum.app",
-      googleServicesFile: "./GoogleService-Info.plist",
+      // EAS 원격 빌드는 file 타입 환경변수(GOOGLE_SERVICES_INFO_PLIST)가 다운로드된
+      // 절대경로를 이 이름으로 주입한다. 로컬 빌드는 developer가 직접 내려받아
+      // 프로젝트 루트에 둔 사본(gitignore됨)을 그대로 쓴다.
+      googleServicesFile: process.env.GOOGLE_SERVICES_INFO_PLIST || "./GoogleService-Info.plist",
       infoPlist: {
         LSApplicationQueriesSchemes: [
           // 소셜 로그인
@@ -53,7 +56,10 @@ module.exports = {
       // android/app/build.gradle 의 applicationId 와 반드시 같아야 한다.
       // 카카오·네이버 콘솔에 등록된 패키지명도 이 값이다.
       package: "com.eeum",
-      googleServicesFile: "./google-services.json"
+      // EAS 원격 빌드는 file 타입 환경변수(GOOGLE_SERVICES_JSON)가 다운로드된
+      // 절대경로를 이 이름으로 주입한다. 로컬 빌드는 developer가 직접 내려받아
+      // 프로젝트 루트에 둔 사본(gitignore됨)을 그대로 쓴다.
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json"
     },
     
     plugins: [
