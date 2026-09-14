@@ -175,4 +175,33 @@ public class OwnerRevenueService {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED);
         }
     }
+
+    @Transactional
+    public void reconcilePartialCancellation(
+            Long orderId, SettlementFeePolicy.Breakdown breakdown
+    ) {
+        OwnerRevenue snapshot = ownerRevenueRepository.findByOrder_OrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        WeeklySettlement settlement = weeklySettlementRepository
+                .findByOwnerRevenueIdWithPessimisticLock(snapshot.getOwnerRevenueId()).orElse(null);
+        OwnerRevenue revenue = ownerRevenueRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        WeeklySettlementItem item = weeklySettlementItemRepository
+                .findByOwnerRevenue_OwnerRevenueId(revenue.getOwnerRevenueId()).orElse(null);
+        if (settlement != null && settlement.getStatus() != WeeklySettlementStatus.PAYOUT_PENDING) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_PAYOUT_STARTED);
+        }
+        if (settlement != null && item == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CONCURRENT_MODIFICATION);
+        }
+        if (item != null && settlement == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CONCURRENT_MODIFICATION);
+        }
+        if (item != null) {
+            settlement.replaceRevenueAmounts(item, breakdown.paymentAmount(), breakdown.pgFeeAmount(),
+                    breakdown.platformFeeAmount(), breakdown.payoutAmount());
+        }
+        revenue.adjustAmounts(breakdown.paymentAmount(), breakdown.pgFeeAmount(),
+                breakdown.platformFeeAmount(), breakdown.payoutAmount());
+    }
 }

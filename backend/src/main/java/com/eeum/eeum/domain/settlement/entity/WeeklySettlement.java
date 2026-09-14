@@ -267,6 +267,24 @@ public class WeeklySettlement extends BaseEntity {
         this.payoutAmount = this.payoutAmount.subtract(revenue.getPayoutAmount());
     }
 
+    public void replaceRevenueAmounts(
+            WeeklySettlementItem item,
+            BigDecimal paymentAmount,
+            BigDecimal pgFeeAmount,
+            BigDecimal platformFeeAmount,
+            BigDecimal payoutAmount
+    ) {
+        if (status != WeeklySettlementStatus.PAYOUT_PENDING || item == null
+                || item.getWeeklySettlement() != this) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.paymentAmount = this.paymentAmount.subtract(item.getPaymentAmount()).add(paymentAmount);
+        this.pgFeeAmount = this.pgFeeAmount.subtract(item.getPgFeeAmount()).add(pgFeeAmount);
+        this.platformFeeAmount = this.platformFeeAmount.subtract(item.getPlatformFeeAmount()).add(platformFeeAmount);
+        this.payoutAmount = this.payoutAmount.subtract(item.getPayoutAmount()).add(payoutAmount);
+        item.replaceAmounts(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
+    }
+
     private void validateClaimToken(String claimToken) {
         if (this.claimToken == null || !this.claimToken.equals(claimToken)) {
             throw new BusinessException(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);

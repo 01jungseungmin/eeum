@@ -59,4 +59,19 @@ public class WeeklySettlementItem extends BaseEntity {
         item.payoutAmount = revenue.getPayoutAmount();
         return item;
     }
+
+    public void replaceAmounts(
+            BigDecimal paymentAmount,
+            BigDecimal pgFeeAmount,
+            BigDecimal platformFeeAmount,
+            BigDecimal payoutAmount
+    ) {
+        if (paymentAmount == null || pgFeeAmount == null || platformFeeAmount == null || payoutAmount == null) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_AMOUNT);
+        }
+        this.paymentAmount = paymentAmount;
+        this.pgFeeAmount = pgFeeAmount;
+        this.platformFeeAmount = platformFeeAmount;
+        this.payoutAmount = payoutAmount;
+    }
 }

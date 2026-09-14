@@ -137,6 +137,24 @@ public class OwnerRevenue extends BaseEntity {
         this.status = OwnerRevenueStatus.SETTLEMENT_PENDING;
     }
 
+    public void adjustAmounts(
+            BigDecimal paymentAmount,
+            BigDecimal pgFeeAmount,
+            BigDecimal platformFeeAmount,
+            BigDecimal payoutAmount
+    ) {
+        if ((status != OwnerRevenueStatus.ACCRUED && status != OwnerRevenueStatus.SETTLEMENT_PENDING)
+                || paymentAmount == null || paymentAmount.signum() < 0
+                || paymentAmount.compareTo(this.paymentAmount) > 0) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        validateAmountSnapshot(paymentAmount, pgFeeAmount, platformFeeAmount, payoutAmount);
+        this.paymentAmount = paymentAmount;
+        this.pgFeeAmount = pgFeeAmount;
+        this.platformFeeAmount = platformFeeAmount;
+        this.payoutAmount = payoutAmount;
+    }
+
     public void markSettled() {
         if (status != OwnerRevenueStatus.SETTLEMENT_PENDING) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);

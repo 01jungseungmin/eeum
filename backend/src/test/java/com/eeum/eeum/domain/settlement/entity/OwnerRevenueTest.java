@@ -47,6 +47,18 @@ class OwnerRevenueTest {
     }
 
     @Test
+    void 부분_취소는_남은_결제액과_수수료_스냅샷으로_원장을_조정한다() {
+        OwnerRevenue revenue = createRevenue();
+
+        revenue.adjustAmounts(amount("7000"), amount("231"), amount("350"), amount("6419"));
+
+        assertThat(revenue.getPaymentAmount()).isEqualByComparingTo("7000");
+        assertThat(revenue.getPgFeeAmount()).isEqualByComparingTo("231");
+        assertThat(revenue.getPlatformFeeAmount()).isEqualByComparingTo("350");
+        assertThat(revenue.getPayoutAmount()).isEqualByComparingTo("6419");
+    }
+
+    @Test
     void 지급이_완료된_원장은_취소할_수_없다() {
         // given
         OwnerRevenue revenue = createRevenue();
