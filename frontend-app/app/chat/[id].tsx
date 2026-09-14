@@ -252,7 +252,7 @@ export default function ChatRoomScreen() {
           </View>
           <View style={[styles.myBubble, item.messageType === 'IMAGE' && { backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 0 }]}>
             {item.messageType === 'IMAGE' ? (
-              <Image source={{ uri: item.content }} style={styles.messageImage} />
+              <Image source={{ uri: item.imageUrl || item.content }} style={styles.messageImage} />
             ) : (
               <Text style={styles.myMessageText}>{item.content}</Text>
             )}
@@ -280,7 +280,7 @@ export default function ChatRoomScreen() {
           <View style={styles.otherBubbleRow}>
             <View style={[styles.otherBubble, item.messageType === 'IMAGE' && { backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 0 }]}>
               {item.messageType === 'IMAGE' ? (
-                <Image source={{ uri: item.content }} style={styles.messageImage} />
+                <Image source={{ uri: item.imageUrl || item.content }} style={styles.messageImage} />
               ) : (
                 <Text style={styles.otherMessageText}>{item.content}</Text>
               )}
