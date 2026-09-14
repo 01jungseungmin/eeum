@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.settlement;
 
 import com.eeum.eeum.application.settlement.dto.request.ManualPayoutCompleteRequestDto;
+import com.eeum.eeum.application.settlement.dto.request.PartialCancellationReconcileRequestDto;
 import com.eeum.eeum.application.settlement.dto.response.BlockingCancellationResponseDto;
 import com.eeum.eeum.application.settlement.dto.response.WeeklySettlementResponseDto;
 import com.eeum.eeum.application.settlement.service.ManualSettlementPayoutService;
@@ -84,6 +85,20 @@ public class AdminSettlementController {
             @PathVariable @Positive Long orderId
     ) {
         payoutService.applyConfirmedCancellation(SecurityUtil.getCurrentAccountId(), id, orderId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "부분 취소 누적 금액 대사",
+            description = "관리자가 확인한 누적 취소액을 지급 전 원장과 정산 항목에 반영합니다.")
+    @PostMapping("/{id}/blocking-cancellations/{orderId}/partial-reconcile")
+    public ResponseEntity<ApiResponse<Void>> reconcilePartialCancellation(
+            @PathVariable @Positive Long id,
+            @PathVariable @Positive Long orderId,
+            @Valid @RequestBody PartialCancellationReconcileRequestDto request
+    ) {
+        payoutService.reconcilePartialCancellation(
+                SecurityUtil.getCurrentAccountId(), id, orderId, request.cumulativeCancelledAmount(),
+                request.pgFeeRate(), request.platformFeeRate());
         return ResponseEntity.ok(ApiResponse.success());
     }
 
