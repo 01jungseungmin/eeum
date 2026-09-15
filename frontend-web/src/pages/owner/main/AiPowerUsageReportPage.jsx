@@ -11,6 +11,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
 
 /* 기존 Styled Components 유지 */
 const PageLayout = styled.div`
@@ -274,6 +279,7 @@ const ActionButton = styled.button`
 
 export default function AiPowerUsageReportPage() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState(null);
 
@@ -282,6 +288,17 @@ export default function AiPowerUsageReportPage() {
   const [modalErrorMessage, setModalErrorMessage] = useState('');
 
   useEffect(() => {
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.powerUsageReport)) {
+      queueMicrotask(() => {
+        setModalErrorMessage(
+          '현재 플랜에서 사용할 수 없는 기능입니다. 플랜 업그레이드가 필요합니다.',
+        );
+        setIsUpgradeModalOpen(true);
+        setLoading(false);
+      });
+      return;
+    }
+
     const fetchReport = async () => {
       try {
         setLoading(true);
@@ -308,8 +325,8 @@ export default function AiPowerUsageReportPage() {
       }
     };
 
-    fetchReport();
-  }, []);
+    queueMicrotask(() => fetchReport());
+  }, [aiPlanType]);
 
   const monthlyUsages = report?.monthlyUsages || [];
   const equipmentShares = report?.equipmentShares || [];

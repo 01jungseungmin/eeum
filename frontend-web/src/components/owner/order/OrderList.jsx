@@ -65,6 +65,23 @@ function OrderList({ orders, onRefresh }) {
     }
   };
 
+  if (orders.length === 0) {
+    return (
+      <ListContainer>
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '50px 0',
+            color: '#999',
+            fontSize: '13px',
+          }}
+        >
+          해당 조건에 부합하는 주문 내역이 존재하지 않습니다.
+        </div>
+      </ListContainer>
+    );
+  }
+
   return (
     <ListContainer>
       {orders.map((order) => (

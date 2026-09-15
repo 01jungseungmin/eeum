@@ -3,6 +3,11 @@ import styled from 'styled-components';
 import { ArrowLeft, Loader2, Lightbulb, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
 
 import RiskSidebar from '../../../components/owner/ai/operation/RiskSidebar';
 import RiskEnergySection from '../../../components/owner/ai/operation/RiskEnergySection';
@@ -125,6 +130,7 @@ const LeftContainer = styled.div`
 
 export default function AiOperationRiskDetailPage() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -159,8 +165,18 @@ export default function AiOperationRiskDetailPage() {
   };
 
   useEffect(() => {
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.operationRiskDetail)) {
+      queueMicrotask(() => {
+        setModalErrorMessage(
+          '현재 플랜에서 사용할 수 없는 기능입니다. 플랜 업그레이드가 필요합니다.',
+        );
+        setIsUpgradeModalOpen(true);
+        setLoading(false);
+      });
+      return;
+    }
     queueMicrotask(() => fetchDetailData());
-  }, []);
+  }, [aiPlanType]);
 
   if (loading) {
     return (

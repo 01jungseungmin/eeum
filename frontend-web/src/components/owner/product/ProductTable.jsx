@@ -101,6 +101,16 @@ const TypeBadge = styled.span`
         : '#666'};
 `;
 
+const RepresentativeBadge = styled.span`
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  background: #fff9db;
+  color: #f08c00;
+  margin-left: 6px;
+`;
+
 const StatusBadge = styled.span`
   padding: 5px 10px;
   border-radius: 20px;
@@ -285,7 +295,12 @@ function ProductTable({
                     </div>
 
                     <div className="details">
-                      <span className="name">{item.name}</span>
+                      <span className="name">
+                        {item.name}
+                        {item.categoryName === '대표 메뉴' && (
+                          <RepresentativeBadge>대표</RepresentativeBadge>
+                        )}
+                      </span>
                       <span className="code">{id}</span>
                     </div>
                   </ProductInfo>

@@ -346,6 +346,12 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
       color: '#d97706',
       border: '#fef3c7',
     },
+    PAID: {
+      text: '결제완료',
+      bg: '#fffbeb',
+      color: '#d97706',
+      border: '#fef3c7',
+    },
     CONFIRMED: {
       text: '확인됨',
       bg: '#eff6ff',
@@ -735,8 +741,9 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                   </>
                 ) : (
                   <>
-                    {/* 일반 표준 프로세스 버튼 */}
-                    {detailData.orderStatus === 'PENDING' && (
+                    {/* 일반 표준 프로세스 버튼 (온라인 결제 완료 건은 PAID 상태로 대기중에 들어옴) */}
+                    {(detailData.orderStatus === 'PENDING' ||
+                      detailData.orderStatus === 'PAID') && (
                       <>
                         <Button
                           $variant="confirm"

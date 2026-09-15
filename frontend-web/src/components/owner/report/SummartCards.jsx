@@ -27,7 +27,11 @@ const CardValue = styled.div`
   color: ${(props) => props.$color || '#0f172a'};
 `;
 
-export default function SummaryCards() {
+export default function SummaryCards({ reports = [] }) {
+  const total = reports.length;
+  const pending = reports.filter((r) => r.status === 'PENDING').length;
+  const reviewed = reports.filter((r) => r.status === 'REVIEWED').length;
+
   return (
     <CardsGrid>
       <Card
@@ -35,7 +39,7 @@ export default function SummaryCards() {
         $borderColor="#e2e8f0"
       >
         <CardLabel $color="#64748b">전체 신고</CardLabel>
-        <CardValue>4</CardValue>
+        <CardValue>{total}</CardValue>
       </Card>
 
       <Card
@@ -43,7 +47,7 @@ export default function SummaryCards() {
         $borderColor="#fde68a"
       >
         <CardLabel $color="#b45309">검토중</CardLabel>
-        <CardValue $color="#b45309">2</CardValue>
+        <CardValue $color="#b45309">{pending}</CardValue>
       </Card>
 
       <Card
@@ -51,7 +55,7 @@ export default function SummaryCards() {
         $borderColor="#bbf7d0"
       >
         <CardLabel $color="#15803d">처리완료</CardLabel>
-        <CardValue $color="#15803d">2</CardValue>
+        <CardValue $color="#15803d">{reviewed}</CardValue>
       </Card>
     </CardsGrid>
   );

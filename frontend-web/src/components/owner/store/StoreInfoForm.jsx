@@ -65,6 +65,11 @@ const TextArea = styled.textarea`
   background: ${(props) => (props.disabled ? '#f5f5f5' : 'white')};
 `;
 
+const HelperText = styled.span`
+  font-size: 12px;
+  color: #999;
+`;
+
 const BaseButton = styled.button`
   padding: 8px 16px;
   border-radius: 8px;
@@ -221,14 +226,12 @@ function StoreInfoForm({ storeInfo, onSave }) {
           />
         </Field>
         <Field>
-          <Label>카테고리 *</Label>
+          <Label>카테고리</Label>
           <Input
-            disabled={!isEditing}
+            disabled
             value={formData.categoryName || formData.category || ''}
-            onChange={(e) =>
-              setFormData({ ...formData, categoryName: e.target.value })
-            }
           />
+          <HelperText>카테고리 변경은 고객센터로 문의해주세요.</HelperText>
         </Field>
       </GridGroup>
 

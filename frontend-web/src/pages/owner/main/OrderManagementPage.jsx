@@ -64,8 +64,9 @@ function OrderManagementPage() {
 
         setCounts({
           total: contentList.length,
-          waiting: contentList.filter((o) => o.orderStatus === 'PENDING')
-            .length,
+          waiting: contentList.filter(
+            (o) => o.orderStatus === 'PENDING' || o.orderStatus === 'PAID',
+          ).length,
           confirmed: contentList.filter(
             (o) => o.orderStatus === 'CONFIRMED' || o.orderStatus === 'READY',
           ).length,
@@ -111,7 +112,7 @@ function OrderManagementPage() {
         <OrderSummaryCard
           title="대기중"
           count={counts.waiting}
-          badge="처리 필요"
+          badge={counts.waiting > 0 ? '처리 필요' : undefined}
         />
         <OrderSummaryCard
           title="확인됨"

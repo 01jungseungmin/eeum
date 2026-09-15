@@ -15,6 +15,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
 
 const PageContainer = styled.div`
   max-width: 1200px;
@@ -735,6 +740,7 @@ const formatStartTime = (isoString) => {
 
 export default function AiLocationMatchingDetailPage() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -848,6 +854,14 @@ export default function AiLocationMatchingDetailPage() {
 
   // POST: 노출 시작 API
   const handleStartExposure = async () => {
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.locationMatchExposure)) {
+      setUpgradeErrorMessage(
+        '현재 플랜에서 사용할 수 없는 기능입니다. 플랜 업그레이드가 필요합니다.',
+      );
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+
     try {
       const response = await aiManagerApi.startExposure();
       if (response.data && response.data.success) {

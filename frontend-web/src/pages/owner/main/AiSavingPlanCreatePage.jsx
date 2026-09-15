@@ -4,6 +4,11 @@ import { ArrowLeft, Sparkles, Check, Leaf, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
 
 const Container = styled.div`
   max-width: 1080px;
@@ -327,6 +332,7 @@ const SourceFooter = styled.div`
 
 export default function AiSavingPlanCreatePage() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -356,6 +362,18 @@ export default function AiSavingPlanCreatePage() {
   };
 
   useEffect(() => {
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.savingPlan)) {
+      queueMicrotask(() => {
+        setModalErrorMessage(
+          '현재 플랜에서 사용할 수 없는 기능입니다. 플랜 업그레이드가 필요합니다.',
+        );
+        setIsUpgradeModalOpen(true);
+        setIsInitError(true);
+        setLoading(false);
+      });
+      return;
+    }
+
     const initPlan = async () => {
       try {
         setLoading(true);
@@ -375,8 +393,8 @@ export default function AiSavingPlanCreatePage() {
       }
     };
 
-    initPlan();
-  }, []);
+    queueMicrotask(() => initPlan());
+  }, [aiPlanType]);
 
   const handleToggle = (index) => {
     setItems((prev) =>

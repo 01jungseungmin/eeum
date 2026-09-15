@@ -124,7 +124,8 @@ function ApprovalPage() {
 
   // 회원 승인
   const handleApprove = async (account) => {
-    const targetId = account.ownerInfo?.ownerInfoId;
+    const targetId =
+      account.ownerInfoId || account.accountId || account.ownerInfo?.ownerInfoId;
     if (!targetId) {
       alert('유효한 신청 ID를 찾을 수 없습니다.');
       return;
@@ -158,7 +159,8 @@ function ApprovalPage() {
 
   // 회원 거절
   const handleReject = async (account) => {
-    const targetId = account.ownerInfo?.ownerInfoId;
+    const targetId =
+      account.ownerInfoId || account.accountId || account.ownerInfo?.ownerInfoId;
     if (!targetId) {
       alert('유효한 신청 ID를 찾을 수 없습니다.');
       return;

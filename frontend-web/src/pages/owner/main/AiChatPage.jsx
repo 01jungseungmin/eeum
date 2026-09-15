@@ -14,6 +14,11 @@ import {
 // API 및 모달 경로
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
 
 // 상수로 분리한 데이터 (.jsx)
 import {
@@ -195,6 +200,7 @@ const NoticeText = styled.p`
 
 export default function AiChatPage() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
   const chatEndRef = useRef(null);
   const messageIdRef = useRef(0);
 
@@ -238,6 +244,14 @@ export default function AiChatPage() {
   // 질문 칩 선택 시 API 전송
   const handleSend = async (qItem) => {
     if (isLoading || !qItem) return;
+
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.chat)) {
+      setUpgradeErrorMessage(
+        '현재 플랜에서 사용할 수 없는 기능입니다. 플랜 업그레이드가 필요합니다.',
+      );
+      setIsUpgradeModalOpen(true);
+      return;
+    }
 
     const payload = {
       quickQuestionId: qItem.id,
