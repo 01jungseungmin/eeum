@@ -107,7 +107,7 @@ export default function InquiryManagement() {
   };
 
   useEffect(() => {
-    loadInquiries();
+    queueMicrotask(() => loadInquiries());
   }, []);
 
   // 사장님 대표 단톡방 개설 핸들러 함수

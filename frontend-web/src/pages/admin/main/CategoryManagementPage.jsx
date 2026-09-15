@@ -79,7 +79,7 @@ export default function CategoryManagementPage() {
   };
 
   useEffect(() => {
-    fetchAllCategories();
+    queueMicrotask(() => fetchAllCategories());
   }, []);
 
   // 📌 드래그 앤 드롭 순서 변경 핸들러

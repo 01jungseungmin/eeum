@@ -119,7 +119,7 @@ function ApprovalPage() {
   };
 
   useEffect(() => {
-    fetchApplications();
+    queueMicrotask(() => fetchApplications());
   }, []);
 
   // 회원 승인

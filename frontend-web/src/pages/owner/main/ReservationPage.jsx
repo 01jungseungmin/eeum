@@ -20,20 +20,6 @@ const PageContainer = styled.div`
   font-family: 'Noto Sans KR', sans-serif;
 `;
 
-const HeaderZone = styled.div`
-  margin-bottom: 24px;
-  h2 {
-    font-size: 20px;
-    font-weight: 700;
-    color: #1a1a1a;
-    margin-bottom: 4px;
-  }
-  p {
-    font-size: 13px;
-    color: #868e96;
-  }
-`;
-
 // 상단 요약본 대시보드 4열 배치
 const SummaryGrid = styled.div`
   display: grid;
@@ -259,12 +245,14 @@ export default function ReservationPage() {
   }, [filter]);
 
   useEffect(() => {
-    fetchSettings();
+    queueMicrotask(() => fetchSettings());
   }, []);
 
   useEffect(() => {
-    fetchOrders();
-    fetchTimeSlots(selectedDate);
+    queueMicrotask(() => {
+      fetchOrders();
+      fetchTimeSlots(selectedDate);
+    });
   }, [selectedDate, fetchOrders, fetchTimeSlots]);
 
   const filteredOrders = orders.filter(

@@ -151,7 +151,7 @@ function StoreInfoForm({ storeInfo, onSave }) {
   // 💡 부모 컴포넌트(StorePage)에서 비동기로 API 조회가 완료되어 데이터가 변경되면 폼 상태 동기화
   useEffect(() => {
     if (!isEditing && storeInfo) {
-      setFormData(createInitialFormData(storeInfo));
+      queueMicrotask(() => setFormData(createInitialFormData(storeInfo)));
     }
   }, [storeInfo, isEditing]);
 

@@ -313,37 +313,41 @@ function EventModal({ isOpen, onClose, onSave, editingEvent }) {
 
   // 수정 모드일 때 기존 데이터 불러오기 바인딩
   useEffect(() => {
-    if (editingEvent) {
-      setProductId(editingEvent.productId || '');
-      setBaseOriginalPrice(editingEvent.originalPrice || 0);
-      setDiscountedPrice(editingEvent.eventPrice || 0);
-      setQuantity(editingEvent.eventStock || '');
+    queueMicrotask(() => {
+      if (editingEvent) {
+        setProductId(editingEvent.productId || '');
+        setBaseOriginalPrice(editingEvent.originalPrice || 0);
+        setDiscountedPrice(editingEvent.eventPrice || 0);
+        setQuantity(editingEvent.eventStock || '');
 
-      setStartTime(
-        editingEvent.startAt ? editingEvent.startAt.substring(0, 16) : '',
-      );
-      setEndTime(editingEvent.endAt ? editingEvent.endAt.substring(0, 16) : '');
-
-      if (editingEvent.discountRate !== undefined) {
-        setDiscountRate(editingEvent.discountRate);
-      } else if (editingEvent.originalPrice && editingEvent.eventPrice) {
-        const calculatedRate = Math.round(
-          ((editingEvent.originalPrice - editingEvent.eventPrice) /
-            editingEvent.originalPrice) *
-            100,
+        setStartTime(
+          editingEvent.startAt ? editingEvent.startAt.substring(0, 16) : '',
         );
-        setDiscountRate(calculatedRate);
+        setEndTime(
+          editingEvent.endAt ? editingEvent.endAt.substring(0, 16) : '',
+        );
+
+        if (editingEvent.discountRate !== undefined) {
+          setDiscountRate(editingEvent.discountRate);
+        } else if (editingEvent.originalPrice && editingEvent.eventPrice) {
+          const calculatedRate = Math.round(
+            ((editingEvent.originalPrice - editingEvent.eventPrice) /
+              editingEvent.originalPrice) *
+              100,
+          );
+          setDiscountRate(calculatedRate);
+        }
+      } else {
+        // 등록 모드일 때 전체 초기화
+        setProductId('');
+        setBaseOriginalPrice(0);
+        setDiscountRate(0);
+        setDiscountedPrice(0);
+        setQuantity('');
+        setStartTime('');
+        setEndTime('');
       }
-    } else {
-      // 등록 모드일 때 전체 초기화
-      setProductId('');
-      setBaseOriginalPrice(0);
-      setDiscountRate(0);
-      setDiscountedPrice(0);
-      setQuantity('');
-      setStartTime('');
-      setEndTime('');
-    }
+    });
   }, [editingEvent, isOpen]);
 
   // 드롭다운 선택 시 해당 상품의 원가를 찾아 자동으로 상태 주입하는 핸들러

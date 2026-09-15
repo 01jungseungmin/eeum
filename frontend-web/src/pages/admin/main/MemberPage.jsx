@@ -66,7 +66,7 @@ function MemberPage() {
   };
 
   useEffect(() => {
-    fetchAllMembers();
+    queueMicrotask(() => fetchAllMembers());
   }, []);
 
   const tabCounts = useMemo(() => {
@@ -135,8 +135,10 @@ function MemberPage() {
   }, [currentPage, filteredList]);
 
   useEffect(() => {
-    setCurrentPage(0);
-    setSelectedIds([]);
+    queueMicrotask(() => {
+      setCurrentPage(0);
+      setSelectedIds([]);
+    });
   }, [activeTab, currentStatusFilter, searchKeyword]);
 
   const handleSelectRow = (id) => {

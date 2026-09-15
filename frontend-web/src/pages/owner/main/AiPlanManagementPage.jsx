@@ -207,7 +207,6 @@ export default function AiPlanManagementPage() {
   const navigate = useNavigate();
   const [planData, setPlanData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [subscribing, setSubscribing] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
 
   // 플랜 데이터 재조회 함수
@@ -226,7 +225,7 @@ export default function AiPlanManagementPage() {
   };
 
   useEffect(() => {
-    fetchPlans();
+    queueMicrotask(() => fetchPlans());
   }, []);
 
   const handleSubscribe = async (plan) => {
@@ -405,12 +404,12 @@ export default function AiPlanManagementPage() {
 
               <PlanButton
                 $isCurrent={isCurrent}
-                disabled={isCurrent || subscribing}
+                disabled={isCurrent || paymentLoading}
                 onClick={() => handleSubscribe(plan)}
               >
                 {isCurrent
                   ? '사용 중'
-                  : subscribing
+                  : paymentLoading
                     ? '처리 중...'
                     : '플랜 변경하기'}
               </PlanButton>

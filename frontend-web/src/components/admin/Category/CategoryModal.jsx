@@ -148,7 +148,7 @@ export default function CategoryModal({
 
   useEffect(() => {
     if (isOpen) {
-      setCategoryName(initialValue);
+      queueMicrotask(() => setCategoryName(initialValue));
     }
   }, [isOpen, initialValue]);
 

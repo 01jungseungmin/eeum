@@ -87,7 +87,7 @@ export default function CustomerManagementPage() {
   };
 
   useEffect(() => {
-    fetchData();
+    queueMicrotask(() => fetchData());
   }, []);
 
   // 💡 API 명세를 기반으로 가공된 대시보드 stats 구조 매핑

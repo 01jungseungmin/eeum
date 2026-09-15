@@ -161,6 +161,9 @@ function EventItemRow({ evt, onEdit, onDelete, onEnd }) {
   const startAt = evt?.startAt ? new Date(evt?.startAt) : null;
   const endAt = evt?.endAt ? new Date(evt?.endAt) : null;
 
+  let currentStatus;
+  let statusText;
+
   if (evt?.eventStatus === 'ENDED' || isOut) {
     currentStatus = 'DONE';
     statusText = '종료';

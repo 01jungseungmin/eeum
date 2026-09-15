@@ -81,7 +81,7 @@ function OrderManagementPage() {
   };
 
   useEffect(() => {
-    fetchOrders();
+    queueMicrotask(() => fetchOrders());
   }, [filterType]);
 
   // 클라이언트 사이드 검색어 필터링

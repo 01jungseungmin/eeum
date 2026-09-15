@@ -371,7 +371,7 @@ export default function InquiryDetailPage() {
 
   useEffect(() => {
     if (id) {
-      fetchInquiryDetail();
+      queueMicrotask(() => fetchInquiryDetail());
     }
   }, [id]);
 

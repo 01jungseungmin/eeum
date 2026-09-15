@@ -459,7 +459,7 @@ export default function ShopChatManagement() {
   };
 
   useEffect(() => {
-    initChat();
+    queueMicrotask(() => initChat());
   }, [ROOM_ID]);
 
   // 바깥쪽 클릭 이벤트 처리

@@ -178,12 +178,6 @@ function ProductTable({
     MENU: { text: '메뉴 상품', color: '메뉴 상품' },
   };
 
-  const STATUS_MAP = {
-    ACTIVE: { text: '판매중', color: '판매중' },
-    SOLD_OUT: { text: '품절', color: '품절' },
-    INACTIVE: { text: '비공개', color: '비공개' },
-  };
-
   // 현재 필터링되어 보여지는 상품들이 전부 선택되었는지 확인
   const isAllSelected =
     products.length > 0 &&

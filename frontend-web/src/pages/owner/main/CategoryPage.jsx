@@ -124,7 +124,7 @@ function CategoryPage() {
   };
 
   useEffect(() => {
-    fetchCategories();
+    queueMicrotask(() => fetchCategories());
   }, []);
 
   // 카테고리 추가 생성 핸들러

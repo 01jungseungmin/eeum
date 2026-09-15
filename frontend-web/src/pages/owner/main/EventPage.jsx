@@ -100,12 +100,11 @@ function EventPage() {
     } catch (error) {
       console.error('이벤트 목록 로드 에러:', error);
       alert('이벤트 상품 목록을 불러오는 도중 오류가 발생했습니다.');
-    } finally {
     }
   };
 
   useEffect(() => {
-    loadEventList();
+    queueMicrotask(() => loadEventList());
   }, []);
 
   // 대시보드 상태값 연산 핸들링

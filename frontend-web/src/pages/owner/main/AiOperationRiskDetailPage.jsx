@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { ArrowLeft, Loader2, Lightbulb, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -159,7 +159,7 @@ export default function AiOperationRiskDetailPage() {
   };
 
   useEffect(() => {
-    fetchDetailData();
+    queueMicrotask(() => fetchDetailData());
   }, []);
 
   if (loading) {

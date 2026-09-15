@@ -48,9 +48,11 @@ export default function ComplaintReplyModal({
 
   useEffect(() => {
     if (isOpen) {
-      setMessage(modalConfig.initial);
-      setIsSuccess(false);
-      setIsLoading(false);
+      queueMicrotask(() => {
+        setMessage(modalConfig.initial);
+        setIsSuccess(false);
+        setIsLoading(false);
+      });
     }
   }, [isOpen]);
 

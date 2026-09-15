@@ -434,7 +434,7 @@ export default function AiMarketingPage() {
   const [tone, setTone] = useState('lively');
   const [aiText, setAiText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [overviewData, setOverviewData] = useState([]);
+  const [, setOverviewData] = useState([]);
 
   // 채널 활성화 상태
   const [channels, setChannels] = useState({

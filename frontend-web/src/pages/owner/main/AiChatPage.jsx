@@ -196,6 +196,7 @@ const NoticeText = styled.p`
 export default function AiChatPage() {
   const navigate = useNavigate();
   const chatEndRef = useRef(null);
+  const messageIdRef = useRef(0);
 
   const [isLoading, setIsLoading] = useState(false);
   const [quickQuestions, setQuickQuestions] = useState([]); // API 질문 목록 상태
@@ -244,7 +245,7 @@ export default function AiChatPage() {
     };
 
     const userMsg = {
-      id: Date.now(),
+      id: ++messageIdRef.current,
       sender: 'user',
       text: qItem.question,
     };
@@ -258,7 +259,7 @@ export default function AiChatPage() {
         const resData = response.data.data;
 
         const aiMsg = {
-          id: Date.now() + 1,
+          id: ++messageIdRef.current,
           sender: 'ai',
           text: resData?.text || '답변이 완료되었습니다.',
           actions: resData?.actions || [],
@@ -276,7 +277,7 @@ export default function AiChatPage() {
         setMessages((prev) => [
           ...prev,
           {
-            id: Date.now() + 1,
+            id: ++messageIdRef.current,
             sender: 'ai',
             text:
               errResponse?.error?.message ||

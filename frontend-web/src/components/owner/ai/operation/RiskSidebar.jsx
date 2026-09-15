@@ -170,7 +170,7 @@ export default function RiskSidebar({ data }) {
 
   // props 데이터가 새로 넘어올 경우 탭 재설정
   useEffect(() => {
-    setSelectedTab(getInitialTab());
+    queueMicrotask(() => setSelectedTab(getInitialTab()));
   }, [data]);
 
   return (

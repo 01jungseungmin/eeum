@@ -54,7 +54,7 @@ function InitialRedirect() {
 
   useEffect(() => {
     if (role === 'ROLE_ADMIN') {
-      setTargetPath('/admin/dashboard');
+      queueMicrotask(() => setTargetPath('/admin/dashboard'));
       return;
     }
 

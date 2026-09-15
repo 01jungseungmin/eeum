@@ -37,7 +37,7 @@ const ReportManagementPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchReports();
+    queueMicrotask(() => fetchReports());
   }, [fetchReports]);
 
   // 프론트엔드 상태(Status) 필터링

@@ -69,7 +69,7 @@ export default function ReviewManagementPage() {
   };
 
   useEffect(() => {
-    loadReviewsData();
+    queueMicrotask(() => loadReviewsData());
   }, []);
 
   // 답글 등록

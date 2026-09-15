@@ -71,7 +71,7 @@ function ApprovalStatusPage() {
   };
 
   useEffect(() => {
-    fetchChecklistData();
+    queueMicrotask(() => fetchChecklistData());
   }, []);
 
   const currentChecklist = checklist || {

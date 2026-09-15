@@ -48,7 +48,7 @@ export default function AdminInquiryManagementPage() {
   };
 
   useEffect(() => {
-    fetchInquiries(0);
+    queueMicrotask(() => fetchInquiries(0));
   }, []);
 
   return (

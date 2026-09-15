@@ -96,9 +96,6 @@ function StorePage() {
         if (res.success) {
           const imageList = res.data || [];
           setStoreImages(imageList);
-          const currentThumbnail = imageList.find(
-            (img) => img.thumbnail === true,
-          );
         }
       })
       .catch((err) => console.error('상점 이미지 로드 실패:', err));
@@ -329,24 +326,6 @@ function StorePage() {
         }
       })
       .catch((err) => console.error('이미지 일괄 등록 실패:', err));
-  };
-
-  // 영업시간 수정
-  const handleUpdateHours = async (hoursArray) => {
-    try {
-      const requestBody = {
-        businessHours: hoursArray,
-      };
-
-      const response = await storeApi.updateBusinessHours(requestBody);
-
-      if (response.data?.success) {
-        alert('영업시간이 성공적으로 수정되었습니다.');
-      }
-    } catch (err) {
-      console.error('영업시간 수정 실패:', err);
-      alert('영업시간 수정에 실패했습니다.');
-    }
   };
 
   // 이미지 삭제

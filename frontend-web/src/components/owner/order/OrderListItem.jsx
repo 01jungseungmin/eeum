@@ -394,7 +394,7 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
 
   useEffect(() => {
     if (isExpanded) {
-      fetchDetail();
+      queueMicrotask(() => fetchDetail());
     }
   }, [isExpanded, order.orderId]);
 

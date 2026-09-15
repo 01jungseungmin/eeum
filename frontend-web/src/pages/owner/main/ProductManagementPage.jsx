@@ -110,8 +110,10 @@ function ProductManagementPage() {
   };
 
   useEffect(() => {
-    fetchProductsWithImages();
-    fetchCategoryData();
+    queueMicrotask(() => {
+      fetchProductsWithImages();
+      fetchCategoryData();
+    });
   }, []);
 
   const activeProducts = products.filter((p) => p.status !== 'INACTIVE');
@@ -178,7 +180,7 @@ function ProductManagementPage() {
         product.categoryName.toLowerCase().includes(searchTerm.toLowerCase()));
 
     // 상태 필터 및 Soft-Delete(INACTIVE) 처리
-    let matchesStatus = true;
+    let matchesStatus;
 
     if (statusFilter === 'ALL') {
       // 전체 탭일 때는 삭제(비공개)된 INACTIVE 상품을 철저히 숨깁니다.

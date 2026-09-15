@@ -33,10 +33,6 @@ export default function ReportManagement() {
   const [detailData, setDetailData] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  useEffect(() => {
-    fetchReports();
-  }, []);
-
   const fetchReports = async () => {
     try {
       setLoading(true);
@@ -51,6 +47,10 @@ export default function ReportManagement() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    queueMicrotask(() => fetchReports());
+  }, []);
 
   // 상세 모달 열기 핸들러
   const handleOpenDetail = async (reportId) => {
