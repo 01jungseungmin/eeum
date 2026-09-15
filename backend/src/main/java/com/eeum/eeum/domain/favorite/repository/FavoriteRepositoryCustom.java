@@ -31,7 +31,7 @@ public interface FavoriteRepositoryCustom {
     /**
      * 중고 게시글 찜 목록 — 커서 무한 스크롤.
      *
-     * <p>노출 조건(숨김·삭제 제외)을 페이징 전에 DB에서 걸러 페이지 크기를 보장한다.
+     * 노출 조건(숨김·삭제 제외)을 페이징 전에 DB에서 걸러 페이지 크기를 보장한다.
      * Favorite은 FK 없는 polymorphic 참조지만 refId ↔ usedProductId theta join으로 조인할 수 있다.
      *
      * @param cursor 직전 페이지의 마지막 찜. 첫 페이지면 null이다.
@@ -50,7 +50,7 @@ public interface FavoriteRepositoryCustom {
     /**
      * 전체 찜 목록(상점 + 중고) — 커서 무한 스크롤.
      *
-     * <p>대상 종류로 거르지 않는다. 공개 여부는 응답 조립 단계가 판단한다 —
+     * 대상 종류로 거르지 않는다. 공개 여부는 응답 조립 단계가 판단한다 —
      * 타입별 목록과 달리 이 목록은 "내가 찜한 것 전부"가 기준이다.
      */
     CursorSlice<Favorite> findMyFavorites(Long accountId, FavoriteCursor cursor, int size);

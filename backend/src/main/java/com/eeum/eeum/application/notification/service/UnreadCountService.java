@@ -13,21 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * unread 카운트 조회/무효화 전담 — <b>Redis만 만진다.</b>
- *
- * <p>DB를 읽어 캐시를 다시 쓰는 일은 {@link UnreadSnapshotRebuilder}에 있다.
- * 트랜잭션이 필요한 쪽을 그쪽으로 몰아 두면, 캐시 히트로 끝나는 조회는
- * EntityManager도 DB 커넥션도 건드리지 않는다. 알림 배지 조회는 웹 대시보드가
- * 페이지마다 부르는 경로라 이 차이가 그대로 커넥션 풀 여유가 된다.
- *
- * <p>Redis 키:
- * <ul>
- *   <li>{@code unread:account:{accountId}} — 전체 미읽음 수</li>
- *   <li>{@code unread:category:{accountId}} — 카테고리별 미읽음 수 hash</li>
- * </ul>
- * 두 키는 항상 같은 DB 스냅샷으로 함께 교체된다.
- */
+/** unread 카운트 조회/무효화 전담 — Redis만 만진다. */
 @Slf4j
 @Service
 @RequiredArgsConstructor

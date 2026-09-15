@@ -5,6 +5,9 @@ import com.eeum.eeum.application.auth.dto.response.OAuthLoginResponseDto;
 import com.eeum.eeum.application.auth.dto.response.OAuthUserInfo;
 import com.eeum.eeum.application.auth.dto.response.ReAuthResponseDto;
 import com.eeum.eeum.application.auth.dto.response.TokenResponseDto;
+import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
+import com.eeum.eeum.domain.ai.enums.AiPlanType;
+import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
 import com.eeum.eeum.application.product.service.ProductCategoryService;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.lock.RateLimitKeys;
@@ -29,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -56,6 +60,7 @@ public class AuthService {
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final StoreRepository storeRepository;
+    private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final TokenService tokenService;
@@ -329,9 +334,9 @@ public class AuthService {
     /**
      * Refresh Token 재발급.
      *
-     * <p>Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
+     * Redis lock은 logout과의 경쟁(validate → save 사이 logout 개입)을 막는다.
      *
-     * <p>제재와의 경쟁은 잠금이 아니라 <b>토큰 세대</b>로 푼다. 여기서 계정을 읽어 세대 N을
+     * 제재와의 경쟁은 잠금이 아니라 토큰 세대로 푼다. 여기서 계정을 읽어 세대 N을
      * 확인한 뒤 정지가 커밋돼 세대가 N+1이 되더라도, 이 요청이 발급하는 토큰은 N을 실은 채
      * 나가므로 다음 검증에서 걸린다. 행 잠금으로 직렬화할 필요가 없다.
      */
@@ -624,6 +629,29 @@ public class AuthService {
                 .role(account.getRole().name())
                 .ownerInfoExists(ownerInfoExists)
                 .ownerApprovalStatus(ownerApprovalStatus)
+                .aiPlanType(resolveAiPlanType(account))
                 .build();
+    }
+
+    // 세션 표시용 값이다. AI 기능 권한은 요청마다 AiManagerSupportService가 DB 기준으로 재검증한다.
+    private String resolveAiPlanType(Account account) {
+        if (account.getRole() != AccountRole.ROLE_OWNER) {
+            return null;
+        }
+
+        return storeRepository.findByAccount_AccountId(account.getAccountId())
+                .map(Store::getStoreId)
+                .map(this::getCurrentPlanType)
+                .orElse(AiPlanType.FREE.name());
+    }
+
+    private String getCurrentPlanType(Long storeId) {
+        return aiPlanSubscriptionRepository
+                .findCurrentActivePlans(storeId, java.time.LocalDateTime.now(), PageRequest.of(0, 1))
+                .stream()
+                .findFirst()
+                .map(AiPlanSubscription::getPlanType)
+                .map(Enum::name)
+                .orElse(AiPlanType.FREE.name());
     }
 }

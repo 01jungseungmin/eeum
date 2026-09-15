@@ -1,9 +1,12 @@
 package com.eeum.eeum.application.chat.service;
 
 import com.eeum.eeum.application.chat.ChatRedisKeys;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.application.chat.dto.request.ChatImageMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.request.ChatMessageSendRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
+import com.eeum.eeum.application.chat.dto.response.ChatImageMessageResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatUnreadCountResponseDto;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -53,6 +56,7 @@ public class ChatMessageService {
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationOutboxRecorder outboxRecorder;
     private final StringRedisTemplate redisTemplate;
+    private final FileStorageService fileStorageService;
 
     // ===================== 메시지 발송 =====================
 
@@ -87,7 +91,7 @@ public class ChatMessageService {
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
-        ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
+        ChatMessageResponseDto dto = toResponse(message);
 
         eventPublisher.publishEvent(
                 new ChatMessageBroadcastEvent(room.getChatroomId(), dto)
@@ -112,6 +116,10 @@ public class ChatMessageService {
         chatAccessHelper.verifyRoomActive(room);
         ChatParticipant participant = chatAccessHelper.verifyParticipant(accountId, roomId);
 
+        // file_object 잠금은 마지막이다. 먼저 잡으면 file_object를 쥔 채 account를 기다리게 되어
+        // 다른 이미지 경로(used/community/store)와 순서가 엇갈린다.
+        fileStorageService.requireAttachableObject(accountId, FileUploadPurpose.CHAT, request.getImageUrl());
+
         Account sender = participant.getAccount();
         // 위 lockActive가 계정 행을 잠그고 상태를 확인했다. 참여자를 통해 얻은 이 인스턴스가
         // 같은 계정인지에 기대지 않고 한 번 더 본다 — 이미 로딩돼 있어 추가 조회가 없다.
@@ -122,7 +130,7 @@ public class ChatMessageService {
         chatMessageRepository.save(message);
         room.updateLastMessageAt(message.getSentAt());
 
-        ChatMessageResponseDto dto = ChatMessageResponseDto.from(message);
+        ChatMessageResponseDto dto = toResponse(message);
         eventPublisher.publishEvent(new ChatMessageBroadcastEvent(room.getChatroomId(), dto));
         publishSentEvent(room, sender, message, "사진을 보냈습니다", firstMessage);
         return dto;
@@ -133,12 +141,12 @@ public class ChatMessageService {
     /**
      * 메시지 목록 (최신→과거) — 커서 무한 스크롤.
      *
-     * <p>커서는 발신 시각과 메시지 ID를 함께 담는다. 예전에는 시각 하나였고 조건이
-     * {@code sentAt < cursor}라, 같은 시각에 저장된 메시지가 경계에 걸리면 나머지가
+     * 커서는 발신 시각과 메시지 ID를 함께 담는다. 예전에는 시각 하나였고 조건이
+     * sentAt < cursor라, 같은 시각에 저장된 메시지가 경계에 걸리면 나머지가
      * 영구히 누락됐다.
      *
-     * @param cursorValue 직전 응답의 {@code nextCursorValue}. 첫 페이지면 null이다.
-     * @param cursorId    직전 응답의 {@code nextCursorId}. 첫 페이지면 null이다.
+     * @param cursorValue 직전 응답의 nextCursorValue. 첫 페이지면 null이다.
+     * @param cursorId    직전 응답의 nextCursorId. 첫 페이지면 null이다.
      */
     @Transactional(readOnly = true)
     public CursorSlice<ChatMessageResponseDto> getMessages(
@@ -148,7 +156,18 @@ public class ChatMessageService {
         chatAccessHelper.verifyParticipant(accountId, roomId);
 
         return chatMessageRepository.findRoomMessages(roomId, cursor, size)
-                .map(ChatMessageResponseDto::from);
+                .map(this::toResponse);
+    }
+
+    /** 활성 참여자만 사진 모아보기에서 삭제되지 않은 이미지 메시지를 조회할 수 있다. */
+    @Transactional(readOnly = true)
+    public CursorSlice<ChatImageMessageResponseDto> getImageMessages(
+            Long accountId, Long roomId, String cursorValue, Long cursorId, int size) {
+        ChatMessageCursor cursor = ChatMessageCursor.ofNullable(cursorValue, cursorId);
+        chatAccessHelper.verifyParticipant(accountId, roomId);
+
+        return chatMessageRepository.findRoomImageMessages(roomId, cursor, size)
+                .map(ChatImageMessageResponseDto::from);
     }
 
     // 전체 안 읽은 메시지 수 (Redis 우선, 캐시 미스 시 DB 합산)
@@ -163,13 +182,15 @@ public class ChatMessageService {
     // 본인 메시지 Soft Delete — 삭제 후 같은 방 참여자에게 "삭제된 메시지" 상태 브로드캐스트
     @Transactional
     public void deleteMessage(Long accountId, Long messageId) {
+        // 발송과 같은 account → message 순서다. 탈퇴·정지와 경합해도 삭제 쓰기가 뒤늦게 커밋되지 않는다.
+        accountWriteGuard.lockActive(accountId);
         ChatMessage message = chatAccessHelper.verifyMessageOwnership(accountId, messageId);
         if (!message.isDeletable(accountId)) {
             throw new BadRequestException(ErrorCode.CHAT_MESSAGE_NOT_DELETABLE);
         }
         message.markDeleted();
         Long roomId = message.getChatRoom().getChatroomId();
-        eventPublisher.publishEvent(new ChatMessageBroadcastEvent(roomId, ChatMessageResponseDto.from(message)));
+        eventPublisher.publishEvent(new ChatMessageBroadcastEvent(roomId, toResponse(message)));
         log.info("채팅 메시지 삭제: messageId={}, accountId={}", messageId, accountId);
     }
 
@@ -202,11 +223,11 @@ public class ChatMessageService {
     /**
      * 알림 요청을 outbox에 남긴다 — 메시지 저장과 같은 트랜잭션에서 커밋된다.
      *
-     * <p>예전에는 여기서 Spring 이벤트를 발행하고 {@code AFTER_COMMIT} + {@code @Async}가
+     * 예전에는 여기서 Spring 이벤트를 발행하고 AFTER_COMMIT + @Async가
      * 알림을 만들었다. 비동기 풀이 포화되면 그 작업이 버려져 알림이 아예 생기지 않았고,
      * 메시지 전송은 성공으로 끝나 아무도 알아채지 못했다.
      *
-     * <p>브로드캐스트({@code ChatMessageBroadcastEvent})는 그대로 이벤트로 둔다.
+     * 브로드캐스트(ChatMessageBroadcastEvent)는 그대로 이벤트로 둔다.
      * 실시간 전달은 놓쳐도 다음 조회에서 복구되지만, 알림 레코드는 놓치면 복구되지 않는다.
      */
     private void publishSentEvent(
@@ -235,6 +256,10 @@ public class ChatMessageService {
                 .mapToLong(p -> chatMessageRepository.countByChatRoom_ChatroomIdAndSentAtAfterAndAccount_AccountIdNot(
                         p.getChatRoom().getChatroomId(), p.unreadSince(), accountId))
                 .sum();
+    }
+
+    private ChatMessageResponseDto toResponse(ChatMessage message) {
+        return ChatMessageResponseDto.from(message);
     }
 
     private String truncate(String text) {

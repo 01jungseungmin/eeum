@@ -15,5 +15,7 @@ public class PortOnePaymentInfo {
 
     private BigDecimal amount;
 
+    private BigDecimal cancelledAmount;
+
     private String pgProvider;
 }

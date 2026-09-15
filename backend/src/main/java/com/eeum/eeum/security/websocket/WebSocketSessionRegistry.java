@@ -10,20 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 계정별 WebSocket 세션 레지스트리 — 제재·탈퇴 시 이미 열린 연결을 끊기 위해 필요하다.
- *
- * <p>인바운드 프레임(CONNECT/SUBSCRIBE/SEND)에는 계정 상태 검사가 있지만, <b>수신은 인바운드가
- * 아니다.</b> 이미 구독을 걸어둔 연결은 상대가 보낸 메시지·읽음·타이핑 이벤트를 계속 받는다.
- * 정지된 계정이 대화를 계속 들여다볼 수 있다는 뜻이고, 인터셉터로는 막을 수 없다.
- *
- * <p><b>단일 인스턴스 전제.</b> 인메모리 STOMP 브로커와 같은 전제다({@code WebSocketConfig} 참고) —
- * 세션은 그 커넥션을 받은 JVM에만 존재하므로 다른 인스턴스의 세션은 끊지 못한다.
- * 인스턴스를 늘리면 Redis 릴레이({@code RealtimeRelayPublisher})를 태워야 한다.
- *
- * <p>계정 바인딩과 세션 등록 시점이 다르다. 세션은 HTTP 업그레이드 직후 등록되는데
- * 그때는 아직 STOMP CONNECT 전이라 누구인지 모른다. 계정은 CONNECT를 인증한 뒤에 붙인다.
- */
+/** 계정별 WebSocket 세션 레지스트리 — 제재·탈퇴 시 이미 열린 연결을 끊기 위해 필요하다. */
 @Slf4j
 @Component
 public class WebSocketSessionRegistry {
@@ -62,7 +49,7 @@ public class WebSocketSessionRegistry {
     /**
      * 연결 종료 정리. 정상 종료든 비정상 종료든 이 경로로 온다.
      *
-     * <p>계정 인덱스에서도 빼야 한다 — 남겨두면 끊긴 세션 ID가 쌓여 누수가 된다.
+     * 계정 인덱스에서도 빼야 한다 — 남겨두면 끊긴 세션 ID가 쌓여 누수가 된다.
      */
     public void unregister(String sessionId) {
         sessions.remove(sessionId);

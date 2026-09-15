@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { ArrowLeft, Send, Store, User, Lock } from 'lucide-react';
@@ -371,7 +371,7 @@ export default function InquiryDetailPage() {
 
   useEffect(() => {
     if (id) {
-      fetchInquiryDetail();
+      queueMicrotask(() => fetchInquiryDetail());
     }
   }, [id]);
 

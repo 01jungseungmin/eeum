@@ -65,18 +65,7 @@ public class ChatNotificationProcessor {
         }
     }
 
-    /**
-     * 알림 타입 판정.
-     *
-     * <p>중고 문의방의 <b>첫 메시지를 구매자가 보낸 경우</b>만 {@code USED_PRODUCT_INQUIRY}다.
-     * 판매자에게 "문의가 들어왔다"를 알리는 것이 이 타입의 의미이므로, 이후 대화와
-     * 판매자가 먼저 말을 건 경우는 일반 채팅 알림으로 둔다.
-     *
-     * <p>중복 억제는 하지 않는다 — 기존 채팅 알림이 메시지마다 알림을 만드는 정책이고,
-     * 중고만 다르게 하면 같은 채팅인데 알림 동작이 갈린다. 억제가 필요하면 채팅 전체 정책으로 다룬다.
-     *
-     * <p>첫 메시지 여부는 이벤트가 싣고 온다 — 추가 조회가 없다.
-     */
+    /** 알림 타입 판정. */
     private NotificationType resolveType(ChatRoom room, ChatMessageSentEvent event) {
         if (!room.isUsedProductRoom()) {
             return NotificationType.CHAT_MESSAGE;

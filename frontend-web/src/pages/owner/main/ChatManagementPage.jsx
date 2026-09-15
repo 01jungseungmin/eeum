@@ -1,4 +1,4 @@
-import React, {
+import {
   useState,
   useRef,
   useEffect,
@@ -392,15 +392,30 @@ export default function ShopChatManagement() {
         );
         if (isAlreadyExist) return prev;
 
-        return [
-          ...prev,
-          {
-            ...newMsg,
-            isMe: isMyMessage,
-            isDeleted: newMsg.deleted || false,
-            unreadCount: newMsg.unreadCount || 0,
-          },
-        ];
+        const confirmed = {
+          ...newMsg,
+          isMe: isMyMessage,
+          isDeleted: newMsg.deleted || false,
+          unreadCount: newMsg.unreadCount || 0,
+        };
+
+        // 내가 낙관적으로 먼저 그려둔 (아직 실제 messageId가 없는) 메시지가
+        // 있으면 새로 추가하지 않고 그 자리를 실제 서버 데이터로 교체한다.
+        if (isMyMessage) {
+          const pendingIndex = prev.findIndex(
+            (msg) =>
+              !msg.messageId &&
+              msg.isMe &&
+              msg.content === newMsg.content,
+          );
+          if (pendingIndex !== -1) {
+            const next = [...prev];
+            next[pendingIndex] = confirmed;
+            return next;
+          }
+        }
+
+        return [...prev, confirmed];
       });
       return prevRoom;
     });
@@ -459,7 +474,7 @@ export default function ShopChatManagement() {
   };
 
   useEffect(() => {
-    initChat();
+    queueMicrotask(() => initChat());
   }, [ROOM_ID]);
 
   // 바깥쪽 클릭 이벤트 처리
@@ -481,7 +496,30 @@ export default function ShopChatManagement() {
 
   const handleSend = () => {
     if (!inputValue || !inputValue.trim()) return;
-    if (sendMessage(inputValue.trim())) setInputValue('');
+
+    if (!connected) {
+      alert('실시간 연결이 끊겨 있어 메시지를 보낼 수 없습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    const content = inputValue.trim();
+    const clientMessageId = `msg-${Date.now()}`;
+
+    if (sendMessage(content, clientMessageId)) {
+      setInputValue('');
+      // 소켓 에코를 기다리지 않고 즉시 화면에 반영 (낙관적 업데이트)
+      setMessages((prev) => [
+        ...prev,
+        {
+          clientMessageId,
+          content,
+          messageType: 'TEXT',
+          isMe: true,
+          isDeleted: false,
+          sentAt: new Date().toISOString(),
+        },
+      ]);
+    }
   };
 
   const handleContextMenu = (e, msg) => {
@@ -650,7 +688,7 @@ export default function ShopChatManagement() {
             />
             <SendIconButton
               onClick={handleSend}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || !connected}
             >
               <svg
                 width="20"

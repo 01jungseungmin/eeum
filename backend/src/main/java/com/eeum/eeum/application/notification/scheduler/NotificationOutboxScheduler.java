@@ -15,19 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * outbox에 쌓인 알림 요청을 처리한다.
- *
- * <p>예전에는 {@code AFTER_COMMIT} + {@code @Async}가 이 일을 했는데, 비동기 풀이 포화되면
- * 작업이 버려져 알림이 만들어지지 않았다. 지금은 원 트랜잭션에서 커밋된 행을 읽어 처리하므로
- * 풀 상태와 무관하고, 인스턴스가 죽어도 다음 주기에 이어서 한다.
- *
- * <p>스케줄러 스레드가 기본 1개라 한 번에 처리하는 양을 제한한다. 밀린 행이 많아도
- * 이 스케줄러가 오래 붙잡고 있으면 다른 스케줄러가 전부 밀린다 — 다음 주기에 마저 한다.
- *
- * <p>행마다 트랜잭션을 나눈다. 하나로 묶으면 중간 한 건이 실패할 때 이미 처리한 알림까지
- * 함께 롤백되고, 재시도에서 같은 실패를 반복하며 뒤의 정상 알림이 영원히 막힌다.
- */
+/** outbox에 쌓인 알림 요청을 처리한다. */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -63,10 +51,10 @@ public class NotificationOutboxScheduler {
     /**
      * 처리 완료분 정리.
      *
-     * <p>남겨두면 대기 행 조회가 점점 느려진다 — 인덱스 선두가 status라 DONE이 쌓여도
+     * 남겨두면 대기 행 조회가 점점 느려진다 — 인덱스 선두가 status라 DONE이 쌓여도
      * 탐색 자체는 좁지만, 테이블이 무한히 커지는 것을 막을 이유는 그것만이 아니다.
      *
-     * <p>FAILED는 지우지 않는다. 알림이 끝내 생성되지 않은 기록이라 조사할 근거로 남긴다.
+     * FAILED는 지우지 않는다. 알림이 끝내 생성되지 않은 기록이라 조사할 근거로 남긴다.
      */
     @Scheduled(cron = "0 20 4 * * *")
     @SchedulerLock(name = "cleanupNotificationOutbox", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")

@@ -1,10 +1,12 @@
 package com.eeum.eeum.application.report.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.report.enums.ReportAction;
 import com.eeum.eeum.domain.report.enums.ReportTargetType;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.entity.StoreReviewImage;
 import com.eeum.eeum.domain.store.event.StoreReviewAdminActionEvent;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewImageRepository;
@@ -22,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +49,7 @@ class StoreReviewReportActionExecutorTest {
     @Mock private StoreReviewReplyRepository replyRepository;
     @Mock private StoreRepository storeRepository;
     @Mock private ReportedAccountActionService reportedAccountActionService;
+    @Mock private FileStorageService fileStorageService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     @Test
@@ -104,6 +108,34 @@ class StoreReviewReportActionExecutorTest {
         assertThat(eventCaptor.getValue().reviewId()).isEqualTo(REVIEW_ID);
         assertThat(eventCaptor.getValue().actionLabel()).isEqualTo("리뷰 삭제");
         assertThat(eventCaptor.getValue().adminNote()).isEqualTo("조작된 리뷰");
+    }
+
+    @Test
+    void 리뷰_삭제는_첨부된_이미지도_정리_대상으로_전환한다() {
+        // given — 이미지 행만 지우면 FileObject가 ATTACHED로 남아 스케줄러가 회수하지 못한다.
+        StoreReview review = createReview();
+        Store store = review.getStore();
+        when(reviewRepository.findStoreIdByStorereviewId(REVIEW_ID))
+                .thenReturn(Optional.of(STORE_ID));
+        when(reviewRepository.findWithAccountAndStoreByStorereviewIdForUpdate(REVIEW_ID))
+                .thenReturn(Optional.of(review));
+        when(storeRepository.findByIdWithPessimisticLock(STORE_ID)).thenReturn(Optional.of(store));
+        when(imageRepository.findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(REVIEW_ID))
+                .thenReturn(List.of(
+                        StoreReviewImage.create(review, "stores/30/first.webp", 0, true),
+                        StoreReviewImage.create(review, "stores/30/second.webp", 1, false)
+                ));
+
+        // when
+        executor.execute(ReportAction.DELETE_STORE_REVIEW, REVIEW_ID, AUTHOR_ID, "조작된 리뷰");
+
+        // then — 삭제 전에 key를 읽어 두고, 행을 지운 뒤 정리 대상으로 전환한다.
+        InOrder order = inOrder(imageRepository, fileStorageService);
+        order.verify(imageRepository)
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(REVIEW_ID);
+        order.verify(imageRepository).deleteAllByStoreReview_StorereviewId(REVIEW_ID);
+        order.verify(fileStorageService).scheduleAttachedObjectCleanup(
+                List.of("stores/30/first.webp", "stores/30/second.webp"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.store.service;
 
 import com.eeum.eeum.application.store.dto.request.StoreStatusUpdateRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.dto.response.StoreDashboardResponseDto;
 import com.eeum.eeum.application.store.mapper.StoreMapper;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -41,6 +42,7 @@ class StoreServiceTest {
     @InjectMocks
     private StoreService storeService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private StoreRepository storeRepository;
     @Mock private StoreNoticeRepository storeNoticeRepository;
     @Mock private CategoryRepository categoryRepository;

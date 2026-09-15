@@ -1,5 +1,3 @@
-// src/components/owner/event/EventStats.jsx
-import React from 'react';
 import styled from 'styled-components';
 import { Zap, Clock, Tag } from 'lucide-react';
 
@@ -67,10 +65,16 @@ function EventStats({ liveCount, readyCount, totalCount }) {
     <StatsGrid>
       <StatCard className="active">
         <div className="icon-box active-icon">
-          <Zap size={20} strokeWidth={2.5} />
+          <Zap
+            size={20}
+            strokeWidth={2.5}
+          />
         </div>
         <div className="info">
-          <div className="label" style={{ color: 'rgba(255,255,255,0.7)' }}>
+          <div
+            className="label"
+            style={{ color: 'rgba(255,255,255,0.7)' }}
+          >
             진행중 이벤트
           </div>
           <div className="count">{liveCount}</div>
@@ -79,7 +83,10 @@ function EventStats({ liveCount, readyCount, totalCount }) {
 
       <StatCard>
         <div className="icon-box">
-          <Clock size={20} color="#1a73e8" />
+          <Clock
+            size={20}
+            color="#1a73e8"
+          />
         </div>
         <div className="info">
           <div className="label">예정 이벤트</div>
@@ -89,7 +96,10 @@ function EventStats({ liveCount, readyCount, totalCount }) {
 
       <StatCard>
         <div className="icon-box">
-          <Tag size={20} color="#00a651" />
+          <Tag
+            size={20}
+            color="#00a651"
+          />
         </div>
         <div className="info">
           <div className="label">전체 이벤트</div>

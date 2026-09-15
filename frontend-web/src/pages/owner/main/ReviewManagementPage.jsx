@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import ReviewStats from '../../../components/owner/review/ReviewStats';
 import ReviewFilterBar from '../../../components/owner/review/ReviewFilterBar';
@@ -69,7 +69,7 @@ export default function ReviewManagementPage() {
   };
 
   useEffect(() => {
-    loadReviewsData();
+    queueMicrotask(() => loadReviewsData());
   }, []);
 
   // 답글 등록

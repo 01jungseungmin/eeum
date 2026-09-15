@@ -1,7 +1,5 @@
-import React from 'react';
 import styled from 'styled-components';
 
-// ---------------- Styled Components ----------------
 const CardsGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);

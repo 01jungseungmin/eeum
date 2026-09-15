@@ -1,9 +1,11 @@
 package com.eeum.eeum.application.order.service;
 
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.entity.Cart;
 import com.eeum.eeum.domain.order.entity.CartItem;
 import com.eeum.eeum.domain.order.entity.OrderItem;
@@ -49,6 +51,7 @@ class OrderServiceTest {
     @InjectMocks
     private OrderService orderService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private AccountRepository accountRepository;
     @Mock private CartRepository cartRepository;
     @Mock private CartItemRepository cartItemRepository;
@@ -81,6 +84,23 @@ class OrderServiceTest {
     }
 
     // ──────────────────── createOrder ────────────────────
+
+    @Test
+    void 가상계좌_주문은_생성_단계에서_막는다() {
+        // given — 지금 API에는 고객 환불 계좌를 받는 계약이 없다. 그대로 열어 두면
+        // 환불할 수 없는 결제가 정산 원장에 쌓인다.
+        OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
+        when(request.getPaymentMethod()).thenReturn(PaymentMethod.VIRTUAL_ACCOUNT);
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ORDER_PAYMENT_METHOD_NOT_SUPPORTED);
+
+        // 재고 차감까지 가기 전에 막아야 한다
+        verify(accountRepository, never()).findById(any());
+    }
 
     // [시나리오 2] 이벤트 종료 후 카트에 남은 이벤트 상품으로 주문 생성 → EVENT_NOT_FOUND
     @Test

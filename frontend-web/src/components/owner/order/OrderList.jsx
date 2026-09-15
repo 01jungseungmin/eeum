@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import OrderListItem from './OrderListItem';
 import { orderApi } from '../../../api/owner/orderApi';
@@ -64,6 +64,23 @@ function OrderList({ orders, onRefresh }) {
       alert('요청 처리 중 오류가 발생했습니다. 다시 시도해 주세요.');
     }
   };
+
+  if (orders.length === 0) {
+    return (
+      <ListContainer>
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '50px 0',
+            color: '#999',
+            fontSize: '13px',
+          }}
+        >
+          해당 조건에 부합하는 주문 내역이 존재하지 않습니다.
+        </div>
+      </ListContainer>
+    );
+  }
 
   return (
     <ListContainer>

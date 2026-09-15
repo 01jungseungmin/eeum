@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { User, Heart, Bell, Star, TrendingUp } from 'lucide-react';
 
@@ -52,7 +51,10 @@ export default function StatsCardGrid({ stats }) {
           <CardValue>{stats.totalCount}명</CardValue>
         </div>
         {/* 사용처에서도 앞에 $를 붙여줍니다 */}
-        <IconWrapper $bg="#e6f4ea" $color="#137333">
+        <IconWrapper
+          $bg="#e6f4ea"
+          $color="#137333"
+        >
           <User size={20} />
         </IconWrapper>
       </Card>
@@ -61,8 +63,14 @@ export default function StatsCardGrid({ stats }) {
           <CardTitle>단골 고객</CardTitle>
           <CardValue>{stats.vipCount}명</CardValue>
         </div>
-        <IconWrapper $bg="#fce8e6" $color="#d93025">
-          <Heart size={20} fill="currentColor" />
+        <IconWrapper
+          $bg="#fce8e6"
+          $color="#d93025"
+        >
+          <Heart
+            size={20}
+            fill="currentColor"
+          />
         </IconWrapper>
       </Card>
       <Card>
@@ -72,7 +80,10 @@ export default function StatsCardGrid({ stats }) {
             {stats.favCount} / {stats.alertCount}
           </CardValue>
         </div>
-        <IconWrapper $bg="#e8eaf6" $color="#3f51b5">
+        <IconWrapper
+          $bg="#e8eaf6"
+          $color="#3f51b5"
+        >
           <Bell size={20} />
         </IconWrapper>
       </Card>
@@ -81,7 +92,10 @@ export default function StatsCardGrid({ stats }) {
           <CardTitle>이번 달 신규</CardTitle>
           <CardValue>{stats.newCount}명</CardValue>
         </div>
-        <IconWrapper $bg="#fef7e0" $color="#b06000">
+        <IconWrapper
+          $bg="#fef7e0"
+          $color="#b06000"
+        >
           <Star size={20} />
         </IconWrapper>
       </Card>
@@ -90,7 +104,10 @@ export default function StatsCardGrid({ stats }) {
           <CardTitle>누적 매출</CardTitle>
           <CardValue>{stats.totalSales}만원</CardValue>
         </div>
-        <IconWrapper $bg="#e8f0fe" $color="#1a73e8">
+        <IconWrapper
+          $bg="#e8f0fe"
+          $color="#1a73e8"
+        >
           <TrendingUp size={20} />
         </IconWrapper>
       </Card>

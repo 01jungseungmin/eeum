@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -51,13 +52,14 @@ public class CommunityCommentResponseDto {
     @Schema(description = "수정일시")
     private LocalDateTime modifiedAt;
 
-    public static CommunityCommentResponseDto of(CommunityComment comment, boolean likedByMe) {
+    public static CommunityCommentResponseDto of(
+            CommunityComment comment, boolean likedByMe, Function<String, String> imageUrlResolver) {
         return CommunityCommentResponseDto.builder()
                 .commentId(comment.getCommentId())
                 .postId(comment.getPost().getPostId())
                 .authorId(comment.getAccount().getAccountId())
                 .authorNickname(comment.getAccount().getNickname())
-                .authorProfileImageUrl(comment.getAccount().getProfileImageUrl())
+                .authorProfileImageUrl(imageUrlResolver.apply(comment.getAccount().getProfileImageUrl()))
                 .content(comment.getContent())
                 .likeCount(comment.getLikeCount())
                 .likedByMe(likedByMe)

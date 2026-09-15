@@ -25,11 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 중고거래 후기.
  *
- * <p>작성 자격은 <b>거래가 완료됐고(SOLD) 본인이 그 거래의 구매자로 지정된 경우</b>다.
- * 구매자 지정은 판매자가 예약·판매완료 시 하며({@code UsedProductService}), 지정이 없는 거래
+ * 작성 자격은 거래가 완료됐고(SOLD) 본인이 그 거래의 구매자로 지정된 경우다.
+ * 구매자 지정은 판매자가 예약·판매완료 시 하며(UsedProductService), 지정이 없는 거래
  * (앱 밖에서 성사돼 상태만 정리한 글)에는 후기가 붙지 않는다.
  *
- * <p>후기는 구매자만 쓴다 — 판매자는 받기만 한다.
+ * 후기는 구매자만 쓴다 — 판매자는 받기만 한다.
  */
 @Slf4j
 @Service
@@ -43,8 +43,8 @@ public class UsedReviewService {
     /**
      * 후기 작성.
      *
-     * <p>잠금 순서는 프로젝트 전역 규약대로 <b>account → used_product</b>다. 게시글 행을 잠그는
-     * 이유는 자격 판정의 근거인 {@code status}·{@code buyer}가 판매자의 상태 변경과 같은 행에
+     * 잠금 순서는 프로젝트 전역 규약대로 account → used_product다. 게시글 행을 잠그는
+     * 이유는 자격 판정의 근거인 status·buyer가 판매자의 상태 변경과 같은 행에
      * 있어서다. 잠그지 않으면 "판매완료 확인 → 후기 저장" 사이에 예약 취소가 끼어들어
      * 구매자가 아닌 사람의 후기가 남는다.
      */
@@ -111,20 +111,7 @@ public class UsedReviewService {
 
     // ===================== 조회 =====================
 
-    /**
-     * 판매자가 받은 후기 목록. 비회원도 볼 수 있는 판매자 평판이다.
-     *
-     * <p>정렬은 요청과 무관하게 리포지토리가 고정한다(작성 최신순 + PK tie-break).
-     * 요청 sort를 그대로 쓰면 사용자가 순서를 바꿀 수 있어 페이지 경계가 흔들린다.
-     * 적용된 정렬은 응답({@code CursorSlice.sort})에 실려 온다.
-     *
-     * <p>커서 페이징이다. 최신순 목록은 새 후기가 맨 앞에 꽂히므로, 페이지 번호로 읽으면
-     * 스크롤 도중 등록된 한 건에 목록 전체가 밀려 경계 항목이 중복되거나 누락된다.
-     *
-     * @param viewerId    조회 주체. 비회원 조회에서는 null이다 — 자기 후기의 제목을 가리지 않기 위해 받는다.
-     * @param cursorValue 직전 응답의 {@code nextCursorValue}. 첫 페이지면 null이다.
-     * @param cursorId    직전 응답의 {@code nextCursorId}. 첫 페이지면 null이다.
-     */
+    /** 판매자가 받은 후기 목록. 비회원도 볼 수 있는 판매자 평판이다. */
     @Transactional(readOnly = true)
     public CursorSlice<UsedReviewResponseDto> getSellerReviews(
             Long sellerId, Long viewerId, String cursorValue, Long cursorId, int size) {
@@ -137,9 +124,9 @@ public class UsedReviewService {
     /**
      * 판매자 평판 요약. 비회원도 볼 수 있다 — 후기 목록과 같은 공개 범위다.
      *
-     * <p>집계는 실시간으로 낸다. 비정규화 컬럼을 두면 후기 생성·수정·삭제마다 갱신해야 하고
+     * 집계는 실시간으로 낸다. 비정규화 컬럼을 두면 후기 생성·수정·삭제마다 갱신해야 하고
      * 어긋나면 되돌리기 어렵다. 후기는 거래당 1건이라 판매자당 수십 건 수준이고
-     * {@code idx_used_product_seller}로 좁혀지므로, 드리프트 위험을 지고 갈 이유가 약하다.
+     * idx_used_product_seller로 좁혀지므로, 드리프트 위험을 지고 갈 이유가 약하다.
      */
     @Transactional(readOnly = true)
     public UsedReviewSummaryResponseDto getSellerReviewSummary(Long sellerId) {
@@ -161,11 +148,11 @@ public class UsedReviewService {
     /**
      * 후기 대상 게시글을 잠그고 읽는다.
      *
-     * <p><b>게시글의 공개 여부로 거르지 않는다.</b> 후기를 쓸 자격은 "그 거래를 실제로 했는가"
+     * 게시글의 공개 여부로 거르지 않는다. 후기를 쓸 자격은 "그 거래를 실제로 했는가"
      * (SOLD + 지정 구매자)이지 "게시글이 아직 살아 있는가"가 아니다.
      *
-     * <p>삭제된 글을 막으면 판매자가 구매자보다 먼저 글을 지워 나쁜 후기를 원천 봉쇄할 수 있다.
-     * 기존 후기를 남기는 이유가 평판 세탁 방지인데, 세탁은 후기가 <b>쓰이기 전</b> 삭제로도 되므로
+     * 삭제된 글을 막으면 판매자가 구매자보다 먼저 글을 지워 나쁜 후기를 원천 봉쇄할 수 있다.
+     * 기존 후기를 남기는 이유가 평판 세탁 방지인데, 세탁은 후기가 쓰이기 전 삭제로도 되므로
      * 그 방어가 반쪽이 된다. 숨김·판매자 탈퇴 글에는 작성이 되는데 삭제 글만 막히던 비대칭도 없앤다.
      */
     private UsedProduct getForUpdateOrThrow(Long usedProductId) {
@@ -176,11 +163,11 @@ public class UsedReviewService {
     /**
      * 수정·삭제 대상 조회.
      *
-     * <p>조회 조건에 작성자를 함께 넣는다. 후기를 먼저 읽고 소유권을 나중에 비교하면
+     * 조회 조건에 작성자를 함께 넣는다. 후기를 먼저 읽고 소유권을 나중에 비교하면
      * 남의 후기 ID로 존재 여부를 알아낼 수 있다(404와 403이 갈린다).
      * 여기서는 남의 후기든 없는 후기든 같은 404로 응답한다.
      *
-     * <p>잠금 순서는 다른 쓰기 경로와 같은 account → used_review다. 계정을 먼저 잠그고
+     * 잠금 순서는 다른 쓰기 경로와 같은 account → used_review다. 계정을 먼저 잠그고
      * 사용 가능 상태를 확인하므로, 탈퇴 정리가 지나간 뒤 살아 있는 토큰으로 후기를 고치는 것도 막힌다.
      */
     private UsedReview getOwnedForUpdateOrThrow(Long reviewerId, Long usedReviewId) {

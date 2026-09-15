@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.chat.service;
 
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.response.ChatRoomResponseDto;
 import com.eeum.eeum.application.chat.helper.ChatAccessHelper;
 import com.eeum.eeum.common.lock.LockKeys;
@@ -71,6 +72,7 @@ class ChatRoomServiceTest {
     @InjectMocks
     private ChatRoomService chatRoomService;
 
+    @Mock private FileStorageService fileStorageService;
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private StoreRepository storeRepository;
     @Mock private AccountRegionRepository accountRegionRepository;

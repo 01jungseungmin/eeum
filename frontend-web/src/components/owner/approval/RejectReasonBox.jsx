@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { AlertCircle, ChevronRight } from 'lucide-react';
 
@@ -26,7 +25,10 @@ const RejectReasonBox = () => {
   return (
     <Container>
       <Header>
-        <AlertCircle size={20} color="#ff4d4f" />
+        <AlertCircle
+          size={20}
+          color="#ff4d4f"
+        />
         <Title>반려 사유</Title>
       </Header>
 

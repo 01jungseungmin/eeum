@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { X, Utensils } from 'lucide-react';
 import { approvalApi } from '../../../../api/owner/approvalApi';
@@ -258,7 +258,10 @@ function RepresentativeMenuModal({ onClose, onSuccess }) {
         {/* 모달 헤더 */}
         <ModalHeader>
           <HeaderTitle>
-            <Utensils size={20} color="#00a651" />
+            <Utensils
+              size={20}
+              color="#00a651"
+            />
             <h3>대표 메뉴 등록/수정</h3>
           </HeaderTitle>
           <IconButton onClick={onClose}>
@@ -315,10 +318,16 @@ function RepresentativeMenuModal({ onClose, onSuccess }) {
 
           {/* 하단 제어 버턴 */}
           <ButtonGroup>
-            <CancelButton type="button" onClick={onClose}>
+            <CancelButton
+              type="button"
+              onClick={onClose}
+            >
               취소
             </CancelButton>
-            <SubmitButton type="submit" disabled={loading}>
+            <SubmitButton
+              type="submit"
+              disabled={loading}
+            >
               {loading ? '저장 중...' : '메뉴 저장하기'}
             </SubmitButton>
           </ButtonGroup>

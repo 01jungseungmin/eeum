@@ -21,18 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
-/**
- * AI 플랜 구독/결제 연동.
- * - 결제 성공 전에는 플랜 변경 금지 (PortOne 결제 검증 후에만 구독 반영)
- * - Webhook/검증 완료는 Redis 락 + 상태 체크로 멱등 처리
- * - 구독 취소: 기본은 결제 기간 종료일까지 유지 (ai.plan.cancel-immediately=true면 즉시 FREE)
- *
- * 락-트랜잭션 순서 주의: 이 클래스의 공개 메서드(requestSubscription/completePayment/handleWebhook)는
- * 그 자체로 @Transactional을 걸지 않는다 — 락을 먼저 잡고, DB 쓰기는 AiPlanPaymentCommandExecutor의
- * @Transactional 메서드가 커밋까지 마친 뒤에 락을 해제해야 하기 때문 (AiMessageCommandExecutor와 동일 패턴).
- * 과거에는 락이 @Transactional 메서드 "안"에서 걸렸다 풀려 커밋 전에 락이 풀리는 틈이 있었고,
- * 그 틈에 Webhook과 클라이언트 리다이렉트가 동시 진입하면 같은 결제에 대해 활성 구독이 2개 생성될 수 있었다.
- */
+/** AI 플랜 구독/결제 연동. */
 @Slf4j
 @Service
 @RequiredArgsConstructor

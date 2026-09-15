@@ -9,7 +9,18 @@ if (typeof global.TextEncoder === 'undefined') {
 }
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
-const WEBSOCKET_URL = BASE_URL.replace(/^http/, 'ws') + '/ws';
+
+/**
+ * 웹소켓 주소는 API 주소에서 파생하되 /api 접두사를 떼야 한다.
+ *
+ * 운영은 https://eeum.life/api 로 프록시되지만 웹소켓은 그 밖의
+ * wss://eeum.life/ws 다. BASE_URL 뒤에 그대로 /ws를 붙이면 /api/ws 로 나가는데,
+ * Nginx에서 Upgrade·Connection 헤더를 전달하도록 잡아둔 건 /ws location이라
+ * 핸드셰이크가 실패한다. 개발(http://host:8080)은 뗄 접두사가 없어 그대로 동작한다.
+ */
+const WEBSOCKET_URL =
+  process.env.EXPO_PUBLIC_WS_URL ||
+  BASE_URL.replace(/\/api\/?$/, '').replace(/^http/, 'ws') + '/ws';
 
 export const useChatStomp = (roomId: number) => {
   const clientRef = useRef<Client | null>(null);

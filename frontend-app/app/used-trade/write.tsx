@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { usedApi, UsedProductPriceType } from '../../api/used';
 import { USED_CATEGORIES } from '../../constants/usedCategories';
 import { categoryApi } from '../../api/category';
+import { uploadImageAssets } from '../../utils/imageUpload';
 
 export default function UsedTradeWriteScreen() {
   const router = useRouter();
@@ -100,12 +101,10 @@ export default function UsedTradeWriteScreen() {
       const res = await usedApi.createUsedProduct(payload);
       const newProductId = res.data?.data?.usedProductId || res.data?.usedProductId; 
 
-      //  JSON 배열 형태로 이미지 URL 전송
       if (images.length > 0 && newProductId) {
-        // 주의: 실제 환경에서는 이미지를 S3 등에 먼저 업로드하고 발급받은 URL을 사용해야 합니다.
-        // 현재는 기기 내부 URI를 임시로 넘깁니다.
+        const objectKeys = await uploadImageAssets(images, 'USED');
         const imagePayload = {
-          images: images.map(uri => ({ imageUrl: uri }))
+          images: objectKeys.map(objectKey => ({ imageUrl: objectKey }))
         };
 
         await usedApi.uploadImages(newProductId, imagePayload);

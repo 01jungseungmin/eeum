@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Clock } from 'lucide-react';
 
@@ -148,7 +147,10 @@ export default function TimeSlotStatus({
             padding: '30px 0',
           }}
         >
-          <Clock size={20} style={{ color: '#ccc', marginBottom: '8px' }} />
+          <Clock
+            size={20}
+            style={{ color: '#ccc', marginBottom: '8px' }}
+          />
           <br />
           해당 날짜에 승인된 예약 시간대가 없습니다.
         </div>
@@ -178,7 +180,10 @@ export default function TimeSlotStatus({
           };
 
           return (
-            <SlotRow key={slot.time} $disabled={!isSlotEnabled}>
+            <SlotRow
+              key={slot.time}
+              $disabled={!isSlotEnabled}
+            >
               <TimeLabel>{slotTime}</TimeLabel>
               <TableInfoContainer>
                 {!isSlotEnabled ? (

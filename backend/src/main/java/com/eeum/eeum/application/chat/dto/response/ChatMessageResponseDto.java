@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -28,6 +29,14 @@ public class ChatMessageResponseDto {
     private final LocalDateTime sentAt;
 
     public static ChatMessageResponseDto from(ChatMessage message) {
+        return from(message, java.util.function.Function.identity());
+    }
+
+    /**
+     * @param imageUrlResolver objectKey를 조회용 URL로 바꾼다. DB에는 key만 있으므로 이 변환을
+     *                         거치지 않은 값은 private 버킷에서 열리지 않는다.
+     */
+    public static ChatMessageResponseDto from(ChatMessage message, Function<String, String> imageUrlResolver) {
         Account sender = message.getAccount();
         boolean deleted = message.isDeleted();
         return ChatMessageResponseDto.builder()
@@ -36,12 +45,27 @@ public class ChatMessageResponseDto {
                 .senderAccountId(sender.getAccountId())
                 // 실명이 아니라 표시명이다 — 문의방은 모르는 사람과 연결된다
                 .senderName(sender.getDisplayName())
-                .senderProfileImageUrl(sender.getProfileImageUrl())
+                .senderProfileImageUrl(imageUrlResolver.apply(sender.getProfileImageUrl()))
                 .content(deleted ? DELETED_PLACEHOLDER : message.getContent())
-                .imageUrl(deleted ? null : message.getImageUrl())
+                .imageUrl(deleted ? null : imageUrlResolver.apply(message.getImageUrl()))
                 .messageType(message.getMessageType())
                 .deleted(deleted)
                 .sentAt(message.getSentAt())
+                .build();
+    }
+
+    public ChatMessageResponseDto withResolvedImageUrls(String senderProfileImageUrl, String imageUrl) {
+        return ChatMessageResponseDto.builder()
+                .messageId(messageId)
+                .roomId(roomId)
+                .senderAccountId(senderAccountId)
+                .senderName(senderName)
+                .senderProfileImageUrl(senderProfileImageUrl)
+                .content(content)
+                .imageUrl(imageUrl)
+                .messageType(messageType)
+                .deleted(deleted)
+                .sentAt(sentAt)
                 .build();
     }
 }

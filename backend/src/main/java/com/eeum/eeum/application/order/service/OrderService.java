@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.order.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
 import com.eeum.eeum.application.order.dto.request.RefundRequestDto;
 import com.eeum.eeum.application.order.dto.response.OrderItemResponseDto;
@@ -49,6 +50,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrderService {
 
+    private final FileStorageService fileStorageService;
     private final AccountRepository accountRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
@@ -72,6 +74,8 @@ public class OrderService {
             Long accountId,
             OrderCreateRequestDto request
     ) {
+        validateSupportedPaymentMethod(request.getPaymentMethod());
+
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
@@ -237,25 +241,6 @@ public class OrderService {
         restoreStock(orderItems);
     }
 
-    // 고객 PAID 결제 취소(환불) 후 주문 취소 + 재고 복원 — PortOne 환불은 PaymentService가 먼저 수행한다.
-    // 주문 락 안에서 이미 CANCELLED/EXPIRED면 스킵해 재고 이중 복원을 방지한다.
-    @Transactional
-    public void cancelPaidOrder(Long orderId) {
-        redisLockService.executeWithLock(
-                LockKeys.order(orderId),
-                ORDER_LOCK_LEASE_TIME,
-                ErrorCode.LOCK_ORDER_FAILED,
-                () -> {
-                    Order order = orderRepository.findByIdWithPessimisticLock(orderId)
-                            .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-                    if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED) {
-                        return;
-                    }
-                    restoreStock(orderItemRepository.findByOrder_OrderId(orderId));
-                    order.cancel("고객 결제 취소");
-                }
-        );
-    }
 
     @Transactional
     public void requestOrderRefund(Long accountId, Long orderId, RefundRequestDto request) {
@@ -408,6 +393,18 @@ public class OrderService {
                 .findFirst()
                 .map(image -> image.getImageUrl())
                 .orElse(null);
+    }
+
+    /**
+     * 가상계좌는 취소 시 고객의 환불 계좌를 PortOne에 넘겨야 하는데, 지금 API에는 그 계좌를
+     * 받는 계약이 없다. 그대로 열어 두면 환불할 수 없는 결제가 정산 원장에 쌓이므로
+     * 신규 주문 단계에서 막는다. 이미 만들어진 가상계좌 결제의 외부 취소 Webhook
+     * 조정은 그대로 동작한다.
+     */
+    private void validateSupportedPaymentMethod(PaymentMethod paymentMethod) {
+        if (paymentMethod == PaymentMethod.VIRTUAL_ACCOUNT) {
+            throw new BusinessException(ErrorCode.ORDER_PAYMENT_METHOD_NOT_SUPPORTED);
+        }
     }
 
     private String createPaymentId(String orderNumber, PaymentMethod paymentMethod) {

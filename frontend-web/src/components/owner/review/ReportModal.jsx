@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { reportApi } from '../../../api/owner/reportApi'; // API 경로에 맞춰 수정해주세요
 
@@ -207,10 +207,16 @@ export default function ReportModal({ reviewId, onClose }) {
         />
 
         <ButtonGroup>
-          <CancelButton onClick={onClose} disabled={isSubmitting}>
+          <CancelButton
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
             취소
           </CancelButton>
-          <SubmitButton onClick={handleSubmit} disabled={isSubmitting}>
+          <SubmitButton
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+          >
             {isSubmitting ? '접수 중...' : '신고 접수'}
           </SubmitButton>
         </ButtonGroup>

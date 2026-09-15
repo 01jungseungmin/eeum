@@ -22,6 +22,25 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 
     @Override
     public Page<CommunityPost> searchByRegionAndKeyword(Long regionId, String keyword, Pageable pageable) {
+        return search(regionId, keyword, null, pageable);
+    }
+
+    @Override
+    public Page<CommunityPost> searchByRegionKeywordAndCategoryIds(
+            Long regionId,
+            String keyword,
+            List<Long> categoryIds,
+            Pageable pageable
+    ) {
+        return search(regionId, keyword, categoryIds, pageable);
+    }
+
+    private Page<CommunityPost> search(
+            Long regionId,
+            String keyword,
+            List<Long> categoryIds,
+            Pageable pageable
+    ) {
         List<CommunityPost> content = queryFactory
                 .selectFrom(post)
                 .join(post.account).fetchJoin()
@@ -30,7 +49,8 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
                 .where(
                         post.region.regionId.eq(regionId),
                         post.hidden.isFalse(),
-                        keywordContains(keyword)
+                        keywordContains(keyword),
+                        categoryIn(categoryIds)
                 )
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
@@ -43,7 +63,8 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
                 .where(
                         post.region.regionId.eq(regionId),
                         post.hidden.isFalse(),
-                        keywordContains(keyword)
+                        keywordContains(keyword),
+                        categoryIn(categoryIds)
                 )
                 .fetchOne();
 
@@ -54,5 +75,11 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
         return keyword == null || keyword.isBlank()
                 ? null
                 : post.title.contains(keyword).or(post.content.contains(keyword));
+    }
+
+    private BooleanExpression categoryIn(List<Long> categoryIds) {
+        return categoryIds == null || categoryIds.isEmpty()
+                ? null
+                : post.category.categoryId.in(categoryIds);
     }
 }

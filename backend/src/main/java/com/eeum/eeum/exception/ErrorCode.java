@@ -29,6 +29,17 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     COMMON_CONFLICT("COMMON_010", "요청 처리 중 충돌이 발생했습니다.", HttpStatus.CONFLICT),
     COMMON_METHOD_NOT_ALLOWED("COMMON_011", "지원하지 않는 HTTP 메서드입니다", HttpStatus.METHOD_NOT_ALLOWED),
 
+    // ===================== 파일 (FILE) =====================
+    FILE_STORAGE_NOT_CONFIGURED("FILE_001", "파일 저장소가 설정되지 않았습니다", HttpStatus.SERVICE_UNAVAILABLE),
+    FILE_UNSUPPORTED_CONTENT_TYPE("FILE_002", "지원하지 않는 이미지 형식입니다", HttpStatus.BAD_REQUEST),
+    FILE_TOO_LARGE("FILE_003", "이미지는 10MB 이하만 업로드할 수 있습니다", HttpStatus.BAD_REQUEST),
+    FILE_ACCESS_DENIED("FILE_004", "파일 접근 권한이 없습니다", HttpStatus.FORBIDDEN),
+    FILE_NOT_FOUND("FILE_005", "업로드한 파일을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+    FILE_UPLOAD_INVALID("FILE_006", "업로드한 파일 정보가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    FILE_STORAGE_ERROR("FILE_007", "파일 저장소 처리 중 오류가 발생했습니다", HttpStatus.BAD_GATEWAY),
+    FILE_RATE_LIMITED("FILE_008", "파일 업로드 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요", HttpStatus.TOO_MANY_REQUESTS),
+    FILE_ALREADY_ATTACHED("FILE_009", "이미 연결된 파일입니다. 새 업로드 파일을 사용해 주세요", HttpStatus.CONFLICT),
+
     // ===================== 인증 (AUTH) =====================
     AUTH_INVALID_TOKEN("AUTH_001", "유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
     AUTH_EXPIRED_TOKEN("AUTH_002", "만료된 토큰입니다", HttpStatus.UNAUTHORIZED),
@@ -129,6 +140,31 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ORDER_INVALID_STATUS("ORDER_007", "유효하지 않은 주문 상태 입니다.", HttpStatus.BAD_REQUEST),
     ORDER_REFUND_NOT_ALLOWED("ORDER_008", "환불 요청할 수 없는 주문 상태입니다", HttpStatus.BAD_REQUEST),
 
+    // 환불 계좌 입력 계약이 없어 취소를 끝까지 처리할 수 없는 결제수단(가상계좌)을 막는다.
+    ORDER_PAYMENT_METHOD_NOT_SUPPORTED("ORDER_009",
+            "현재 지원하지 않는 결제수단입니다", HttpStatus.BAD_REQUEST),
+
+    // ===================== 정산 (SETTLEMENT) =====================
+    SETTLEMENT_INVALID_AMOUNT("SETTLEMENT_001", "정산 금액 구성이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
+    SETTLEMENT_INVALID_STATUS("SETTLEMENT_002", "처리할 수 없는 정산 상태입니다", HttpStatus.CONFLICT),
+    SETTLEMENT_CLAIM_MISMATCH("SETTLEMENT_003", "유효하지 않거나 만료된 정산 작업입니다", HttpStatus.CONFLICT),
+
+    // 취소와 마감·지급이 같은 원장을 두고 경합한 경우. 재시도로 해소될 수 있는 충돌이라
+    // 상태 위반(SETTLEMENT_002)과 구분한다.
+    SETTLEMENT_CONCURRENT_MODIFICATION("SETTLEMENT_004", "정산 상태가 변경되었습니다. 다시 시도해 주세요", HttpStatus.CONFLICT),
+
+    // 지급할 항목이 없는 정산이다. 상태 위반(SETTLEMENT_002)과 원인이 다르다.
+    SETTLEMENT_NO_PAYOUT_TARGET("SETTLEMENT_005", "지급할 정산 항목이 없습니다", HttpStatus.BAD_REQUEST),
+
+    // 정산에 포함된 주문 중 마무리되지 않은 취소 작업이 있어 지급을 막은 경우.
+    // 상태 위반(SETTLEMENT_002)과 섞으면 어느 주문 때문인지 알 수 없어 코드를 나눈다.
+    SETTLEMENT_BLOCKED_BY_CANCELLATION("SETTLEMENT_006",
+            "정산에 포함된 주문의 취소 처리가 끝나지 않아 지급할 수 없습니다", HttpStatus.CONFLICT),
+
+    // 정산 합계와 포함 항목의 합이 어긋난 경우. 금액이 맞지 않는 지급은 절대 진행하지 않는다.
+    SETTLEMENT_AMOUNT_MISMATCH("SETTLEMENT_007",
+            "정산 합계가 포함된 항목의 합과 일치하지 않습니다", HttpStatus.CONFLICT),
+
     // ===================== 결제 (PAYMENT) =====================
     PAYMENT_NOT_FOUND("PAYMENT_001", "존재하지 않는 결제 정보입니다", HttpStatus.NOT_FOUND),
     PAYMENT_AMOUNT_MISMATCH("PAYMENT_002", "결제 금액이 일치하지 않습니다", HttpStatus.BAD_REQUEST),
@@ -144,6 +180,20 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     PAYMENT_REFUND_NOT_REQUESTED("PAYMENT_012", "환불 요청 상태가 아닙니다.", HttpStatus.BAD_REQUEST),
     // 서명 검증 이전 단계에서 걸러지는 형식 오류 — 인증 실패(401)와 구분해 400으로 응답한다
     PAYMENT_WEBHOOK_MALFORMED("PAYMENT_013", "형식이 올바르지 않은 Webhook 요청입니다", HttpStatus.BAD_REQUEST),
+
+    // 전액 취소 작업의 단계 전이 위반. 외부 PG 취소는 롤백되지 않으므로
+    // 단계를 건너뛰거나 되돌리려는 시도는 저장 전에 막는다.
+    PAYMENT_CANCELLATION_INVALID_STATUS("PAYMENT_014", "처리할 수 없는 취소 작업 상태입니다", HttpStatus.CONFLICT),
+
+    // 지급이 시작된 정산에 묶인 결제는 자동 취소하지 않는다 — 과지급이 되기 때문이다.
+    PAYMENT_CANCELLATION_PAYOUT_STARTED("PAYMENT_015", "정산 지급이 시작되어 자동 취소할 수 없습니다. 관리자 확인이 필요합니다", HttpStatus.CONFLICT),
+
+    // PG는 취소됐는데 내부 반영이 실패한 경우. 롤백하지 않고 수동 검토로 격리한다.
+    PAYMENT_CANCELLATION_MANUAL_REVIEW("PAYMENT_016", "취소 처리에 관리자 확인이 필요합니다", HttpStatus.CONFLICT),
+
+    // PG 요청 결과를 아직 확인하지 못한 유예 구간. 아무것도 격리되지 않았으므로
+    // "관리자 확인"과 구분한다 — 잠시 후 재시도하면 해소되는 상태다.
+    PAYMENT_CANCELLATION_IN_PROGRESS("PAYMENT_017", "취소 처리가 진행 중입니다. 잠시 후 다시 확인해 주세요", HttpStatus.CONFLICT),
 
     // ===================== 예약 (RESERVATION) =====================
     RESERVATION_NOT_FOUND("RESERVATION_001", "존재하지 않는 예약입니다", HttpStatus.NOT_FOUND),

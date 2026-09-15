@@ -168,12 +168,14 @@ Controller와 요청·응답 DTO를 구현한다.
 - 중고거래·Favorite·Account/Store 연계: `used-favorite-review.md`
 - 결제·정산·PortOne: `payment-settlement.md`
 - 스레드·DB 연결·소켓 자원: `resource-budget.md`
+- 외부 의존성·배포·복구·CS 운영 준비도: `operational-readiness.md` 및 `/operational-readiness`
 
 ### Gate 5
 
 - 운영 DDL과 엔티티 정의가 일치한다.
 - 삭제·정리 후 역참조 데이터가 남거나 FK 때문에 배치 전체가 실패하지 않는다.
 - 동시 쓰기 중단이나 공통 mutex가 필요한 운영 절차가 문서화돼 있다.
+- 외부 의존성, 배포, 스케줄러, 데이터 복구 또는 고객 영향 기능 변경이면 `/operational-readiness` 결과에 시나리오 카탈로그 판정, Critical/Major와 수습 경로가 남아 있다.
 
 ## 6단계 — 테스트·실행 검증
 

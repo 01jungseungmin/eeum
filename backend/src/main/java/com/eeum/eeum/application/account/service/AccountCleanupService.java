@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.account.service;
 
 import com.eeum.eeum.application.favorite.service.FavoriteService;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.store.service.SettlementAccountDeleteService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
@@ -31,17 +32,18 @@ public class AccountCleanupService {
     private final OwnerInfoRepository ownerInfoRepository;
     private final SettlementAccountDeleteService settlementAccountDeleteService;
     private final FavoriteService favoriteService;
+    private final FileStorageService fileStorageService;
 
     // 탈퇴 후 유예 기간이 지난 계정의 개인정보를 파기한다.
     // 대상 조회만 하고 파기는 계정별 트랜잭션으로 넘긴다 — 한 계정의 실패가 회차 전체를 되돌리면
     // 정상 처리 가능한 계정까지 함께 죽고, 대상이 쌓이며 매일 같은 실패를 반복한다.
     /**
-     * 파기 대상 ID를 {@code lastAccountId} 다음부터 최대 {@code batchSize}건 읽는다.
+     * 파기 대상 ID를 lastAccountId 다음부터 최대 batchSize건 읽는다.
      *
-     * <p>한 번에 다 읽지 않는다 — backlog가 쌓여 있으면 전체 적재만으로 메모리를 밀어내고,
+     * 한 번에 다 읽지 않는다 — backlog가 쌓여 있으면 전체 적재만으로 메모리를 밀어내고,
      * 스케줄러 잠금(ShedLock)을 쥔 채 조회에만 시간을 쓰게 된다.
      *
-     * <p>실패한 계정은 anonymizedAt이 비어 있어 다음 회차에 다시 대상이 되지만,
+     * 실패한 계정은 anonymizedAt이 비어 있어 다음 회차에 다시 대상이 되지만,
      * 커서가 앞으로만 가므로 같은 회차에서 무한히 반복하지는 않는다.
      */
     @Transactional(readOnly = true)
@@ -56,11 +58,11 @@ public class AccountCleanupService {
     /**
      * 계정 한 건의 개인정보를 파기한다.
      *
-     * <p>계정 행은 남긴다 — 주문·결제·신고·채팅 등 18개 테이블이 이 계정을 참조하고,
+     * 계정 행은 남긴다 — 주문·결제·신고·채팅 등 18개 테이블이 이 계정을 참조하고,
      * 그중 주문·결제는 정산과 보존 의무가 걸려 지울 수 없다.
      * 파기 대상은 식별 정보이지 활동 이력이 아니다.
      *
-     * <p>REQUIRES_NEW로 트랜잭션을 분리해 실패를 이 계정 하나로 가둔다.
+     * REQUIRES_NEW로 트랜잭션을 분리해 실패를 이 계정 하나로 가둔다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void anonymizeAccount(Long accountId) {
@@ -76,6 +78,7 @@ public class AccountCleanupService {
         // 익명화를 먼저 반영한다. 아래 정리 작업에는 영속성 컨텍스트를 비우는
         // bulk 연산(@Modifying(clearAutomatically))이 섞여 있어, 나중에 호출하면
         // 엔티티가 분리된 뒤라 dirty checking 대상에서 빠져 파기가 통째로 유실된다.
+        fileStorageService.scheduleAttachedObjectCleanup(account.getProfileImageUrl());
         account.anonymize();
         accountRepository.flush();
 

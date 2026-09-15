@@ -4,7 +4,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
-import { approvalApi } from '../api/owner/ApprovalApi';
+import { approvalApi } from '../api/owner/approvalApi';
 import { storeApi } from '../api/owner/storeApi';
 
 const LayoutWrapper = styled.div`

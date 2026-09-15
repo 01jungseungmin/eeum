@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.account.mapper;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.account.dto.response.AccountDetailResponseDto;
 import com.eeum.eeum.application.account.dto.response.AccountResponseDto;
 import com.eeum.eeum.application.account.dto.response.MyPageResponseDto;
@@ -16,6 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AccountMapper {
 
+    private final FileStorageService fileStorageService;
     private final AccountRegionMapper accountRegionMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
 

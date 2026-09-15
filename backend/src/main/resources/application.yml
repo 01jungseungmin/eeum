@@ -35,7 +35,7 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration/common
     # 기존 테이블이 이미 존재하지만
     # flyway_schema_history가 없는 DB를 Flyway 체계에 편입
     baseline-on-migrate: true
@@ -86,6 +86,13 @@ business:
 kakao:
   rest-api-key: ${KAKAO_REST_API_KEY}
 
+# 정산 수수료율 — 0 이상 1 이하의 소수(0.033 = 3.3%). 현재는 수수료 없음.
+# 이 숫자만 바꾸면 이후 생성되는 수익 원장부터 새 수수료가 적용된다.
+settlement:
+  fee:
+    pg-rate: ${SETTLEMENT_PG_FEE_RATE:0}
+    platform-rate: ${SETTLEMENT_PLATFORM_FEE_RATE:0}
+
 portone:
   api-secret: ${PORTONE_API_SECRET}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
@@ -96,6 +103,27 @@ fcm:
   service-account-key-path: ${FCM_SERVICE_ACCOUNT_KEY_PATH}
   # 발표/시연 시 실제 FCM 발송이 필요하면 --spring.profiles.active=demo 로 기동
   # demo 프로필: FcmPushAdapter(실제 발송) + FCM 단건 테스트 API(/owner/ai-manager/test/fcm) 모두 활성
+
+storage:
+  s3:
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-northeast-2}
+    upload-url-expiration: PT10M
+    download-url-expiration: PT10M
+    # 프론트가 예전 외부 HTTPS URL을 보내는 전환 기간에만 true. 켜져 있으면 이미지 필드에
+    # 소유권 검증 없이 임의 외부 URL이 저장될 수 있다 — 전환이 끝나면 false로 내린다.
+    allow-legacy-https-url: ${LEGACY_IMAGE_URL_ALLOWED:true}
+
+search:
+  popular:
+    # 시간 버킷을 합산해 최근 24시간을 만든다. 금칙어는 쉼표로 구분해 배포 환경변수에서 주입한다.
+    bucket-ttl: PT25H
+    duplicate-ttl: PT10M
+    cache-ttl: PT1M
+    window-hours: 24
+    min-keyword-length: 2
+    max-keyword-length: 50
+    banned-keywords: ${POPULAR_SEARCH_BANNED_KEYWORDS:}
 
 # 실시간(WebSocket·SSE) 활성화 여부.
 # 인스턴스를 늘리면 인메모리 STOMP 브로커와 SseEmitter가 JVM 경계를 넘지 못한다.

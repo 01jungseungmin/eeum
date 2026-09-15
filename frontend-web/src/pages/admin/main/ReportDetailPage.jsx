@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
@@ -348,11 +348,12 @@ const ReportDetailPage = () => {
     try {
       let res;
 
-      // '신고 기각'인 경우 /dismiss 호출, 그 외(숨김, 삭제, 경고, 정지 등)는 /review 호출
+      // '신고 기각'인 경우 /dismiss 호출, 그 외(숨김, 삭제, 경고, 정지 등)는
+      // 실제 조치를 수행하는 /process 호출
       if (status === 'DISMISS' || status === 'DISMISSED') {
         res = await reportApi.dismissReport(id, adminNote);
       } else {
-        res = await reportApi.reviewReport(id, adminNote);
+        res = await reportApi.processReport(id, status, adminNote);
       }
 
       const responseData = res.data || res;

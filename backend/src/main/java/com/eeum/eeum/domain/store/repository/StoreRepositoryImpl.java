@@ -38,7 +38,7 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 .join(ownerInfo).on(ownerInfo.account.eq(account))
                 .where(
                         publicVisibleStore(),
-                        categoryEq(condition.getCategoryId()),
+                        categoryIn(condition.getCategoryIds()),
                         regionEq(condition.getRegionId()),
                         keywordContains(condition.getKeyword())
                 )
@@ -54,7 +54,7 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 .join(ownerInfo).on(ownerInfo.account.eq(account))
                 .where(
                         publicVisibleStore(),
-                        categoryEq(condition.getCategoryId()),
+                        categoryIn(condition.getCategoryIds()),
                         regionEq(condition.getRegionId()),
                         keywordContains(condition.getKeyword())
                 )
@@ -119,7 +119,7 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                         publicVisibleStore(),
                         store.latitude.isNotNull(),
                         store.longitude.isNotNull(),
-                        categoryEq(condition.getCategoryId()),
+                        categoryIn(condition.getCategoryIds()),
                         regionEq(condition.getRegionId()),
                         keywordContains(condition.getKeyword()),
                         distance.loe(condition.getRadiusKm())
@@ -134,8 +134,10 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 .and(store.status.ne(StoreStatus.SUSPENDED));
     }
 
-    private BooleanExpression categoryEq(Long categoryId) {
-        return categoryId == null ? null : store.category.categoryId.eq(categoryId);
+    private BooleanExpression categoryIn(List<Long> categoryIds) {
+        return categoryIds == null || categoryIds.isEmpty()
+                ? null
+                : store.category.categoryId.in(categoryIds);
     }
 
     private BooleanExpression regionEq(Long regionId) {

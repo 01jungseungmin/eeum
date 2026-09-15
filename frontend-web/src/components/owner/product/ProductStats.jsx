@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const StatsSection = styled.div`
@@ -81,19 +80,28 @@ function ProductStats({ products = [] }) {
       <CardGrid>
         <StatCard>
           <div className="label">전체 상품</div>
-          <div className="count" style={{ color: '#00a651' }}>
+          <div
+            className="count"
+            style={{ color: '#00a651' }}
+          >
             {totalCount}개
           </div>
         </StatCard>
         <StatCard>
           <div className="label">판매 상품</div>
-          <div className="count" style={{ color: '#4361ee' }}>
+          <div
+            className="count"
+            style={{ color: '#4361ee' }}
+          >
             {saleCount}개
           </div>
         </StatCard>
         <StatCard>
           <div className="label">메뉴 상품</div>
-          <div className="count" style={{ color: '#555' }}>
+          <div
+            className="count"
+            style={{ color: '#555' }}
+          >
             {menuCount}개
           </div>
         </StatCard>

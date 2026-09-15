@@ -3,6 +3,7 @@ package com.eeum.eeum.application.order.service;
 import com.eeum.eeum.application.order.dto.request.PaymentCompleteRequestDto;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
 import com.eeum.eeum.common.service.RedisLockService;
+import org.springframework.http.HttpHeaders;
 import com.eeum.eeum.config.PortOneProperties;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.order.entity.Order;
@@ -60,6 +61,9 @@ class PaymentServiceTest {
     @Mock private com.eeum.eeum.application.ai.service.AiPlanSubscriptionService aiPlanSubscriptionService;
     @Mock private com.eeum.eeum.application.operation.service.OperationFailureRecorder operationFailureRecorder;
     @Mock private com.eeum.eeum.common.service.RateLimitService rateLimitService;
+    @Mock private com.eeum.eeum.application.settlement.service.OwnerRevenueService ownerRevenueService;
+    @Mock private PaymentCancellationService paymentCancellationService;
+    @Mock private PaymentWebhookProcessor paymentWebhookProcessor;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +79,10 @@ class PaymentServiceTest {
                 eventPublisher,
                 operationFailureRecorder,
                 rateLimitService,
+                ownerRevenueService,
+                paymentCancellationService,
+                paymentWebhookProcessor,
+                new PaymentVerificationProcessor(orderRepository, paymentRepository, ownerRevenueService, eventPublisher),
                 aiPlanSubscriptionService
         );
     }
@@ -132,6 +140,7 @@ class PaymentServiceTest {
 
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
                 .thenReturn(Optional.of(payment));
         when(portOnePaymentClient.getPayment(portonePaymentId)).thenReturn(paymentInfo);
@@ -171,6 +180,8 @@ class PaymentServiceTest {
         ReflectionTestUtils.setField(request, "paymentId", portonePaymentId);
         ReflectionTestUtils.setField(request, "orderNumber", orderNumber);
 
+        // 상태 검증이 주문 락 안에서 일어나므로 락 스텁이 필요하다. 없으면 mock이
+        // supplier를 실행하지 않아 아무 예외도 나지 않는다.
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(3);
             runnable.run();
@@ -180,6 +191,7 @@ class PaymentServiceTest {
 
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
                 .thenReturn(Optional.of(payment));
 
@@ -215,6 +227,8 @@ class PaymentServiceTest {
         ReflectionTestUtils.setField(request, "paymentId", portonePaymentId);
         ReflectionTestUtils.setField(request, "orderNumber", orderNumber);
 
+        // 상태 검증이 주문 락 안에서 일어나므로 락 스텁이 필요하다. 없으면 mock이
+        // supplier를 실행하지 않아 아무 예외도 나지 않는다.
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(3);
             runnable.run();
@@ -224,6 +238,7 @@ class PaymentServiceTest {
 
         when(orderRepository.findByOrderNumberWithPessimisticLock(orderNumber))
                 .thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderIdWithPessimisticLock(10L))
                 .thenReturn(Optional.of(payment));
 
@@ -241,7 +256,7 @@ class PaymentServiceTest {
         // given — permitAll 엔드포인트라 건별 기록 시 익명 요청만으로 이력 테이블이 불어난다
 
         // when & then
-        assertThatThrownBy(() -> paymentService.handleWebhook("", "sig"))
+        assertThatThrownBy(() -> paymentService.handleWebhook("", webhookHeaders("sig")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
@@ -254,7 +269,7 @@ class PaymentServiceTest {
         // given — PortOne이 보낸 요청이 아니다. 1단계로 걸러 기록하지 않는다.
 
         // when & then
-        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", null))
+        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", new HttpHeaders()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_MALFORMED);
@@ -269,7 +284,7 @@ class PaymentServiceTest {
         when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(true);
 
         // when & then — 서명 불일치는 인증 실패(401)로 남는다
-        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", "wrong-signature"))
+        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", webhookHeaders("wrong-signature")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_INVALID);
@@ -287,9 +302,23 @@ class PaymentServiceTest {
         when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(false);
 
         // when & then
-        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", "wrong-signature"))
+        assertThatThrownBy(() -> paymentService.handleWebhook("{\"paymentId\":\"p1\"}", webhookHeaders("wrong-signature")))
                 .isInstanceOf(BusinessException.class);
 
         verifyNoInteractions(operationFailureRecorder);
+    }
+
+    /**
+     * PortOne이 보내는 Standard Webhooks 헤더 묶음.
+     *
+     * <p>서명 문자열만 받는 편의 오버로드를 프로덕션에 두면 실제 헤더 계약이 테스트에서
+     * 사라진다. 테스트가 헤더를 직접 만들어야 계약이 눈에 보인다.
+     */
+    private HttpHeaders webhookHeaders(String signature) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("webhook-id", "test-webhook-id");
+        headers.add("webhook-timestamp", "0");
+        headers.add("webhook-signature", "v1," + signature);
+        return headers;
     }
 }

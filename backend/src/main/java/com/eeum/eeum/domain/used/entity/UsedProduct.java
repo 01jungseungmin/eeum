@@ -35,6 +35,8 @@ import java.time.LocalDateTime;
                 // TODO: 운영 데이터로 EXPLAIN 확인 후 컬럼 순서 재검토
                 @Index(name = "idx_used_product_public_list",
                         columnList = "region_id, deleted_at, is_hidden, created_at"),
+                // 관리자 전체 목록 최신순 조회
+                @Index(name = "idx_used_product_admin_created", columnList = "created_at"),
                 // 내가 쓴 글 목록
                 @Index(name = "idx_used_product_seller", columnList = "account_id")
         }
@@ -69,7 +71,7 @@ public class UsedProduct extends BaseEntity {
     @Column(name = "price_type", nullable = false, length = 20)
     private UsedProductPriceType priceType;
 
-    // NEGOTIABLE이면 null {@link #validatePrice}가 유형별 규칙을 강제
+    // NEGOTIABLE이면 null #validatePrice가 유형별 규칙을 강제
     @Column(name = "price", precision = 10, scale = 2)
     private BigDecimal price;
 
@@ -100,11 +102,11 @@ public class UsedProduct extends BaseEntity {
     /**
      * 거래 상대(구매자). 예약·판매완료 시 판매자가 지정한다.
      *
-     * <p><b>nullable이다.</b> 앱 밖에서 성사된 거래를 판매완료로 정리하거나 상대 없이
+     * nullable이다. 앱 밖에서 성사된 거래를 판매완료로 정리하거나 상대 없이
      * "예약중"만 표시하는 경우가 있어, 구매자 지정을 강제하면 그런 글을 SOLD로 만들 수 없다.
      * 대신 후기는 이 값이 있는 거래에서만 쓸 수 있다.
      *
-     * <p>판매자와 같은 계정은 지정할 수 없다 — 자기 거래에 후기를 남기는 경로가 생긴다.
+     * 판매자와 같은 계정은 지정할 수 없다 — 자기 거래에 후기를 남기는 경로가 생긴다.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "buyer_account_id")
@@ -245,7 +247,7 @@ public class UsedProduct extends BaseEntity {
     /**
      * 거래 완료 처리. 후기 자격의 근거는 이 시점에 확정된 구매자다.
      *
-     * <p>예약을 거치지 않은 즉시 거래(SELLING → SOLD)도 허용하므로 여기서도 구매자를 받는다.
+     * 예약을 거치지 않은 즉시 거래(SELLING → SOLD)도 허용하므로 여기서도 구매자를 받는다.
      * 예약 때 지정해 둔 구매자가 있고 이번에 생략하면 그 값을 유지한다 —
      * 예약 상대와 그대로 거래한 흐름에서 구매자가 사라지면 후기를 쓸 수 없다.
      */
@@ -317,18 +319,7 @@ public class UsedProduct extends BaseEntity {
         return (value == null || value.isBlank()) ? null : value;
     }
 
-    /**
-     * 거래 장소의 정합성 강제.
-     *
-     * <p>장소명·위도·경도는 <b>셋 다 있거나 셋 다 없다.</b> 부분 입력은 지도에 그릴 수도,
-     * 이름만 보여줄 수도 없는 반쪽 데이터가 된다.
-     *
-     * <p>{@code placeId}는 카카오 검색을 거치지 않고 지도에서 직접 찍은 핀이면 없으므로
-     * 있어도 되고 없어도 된다. 다만 장소 자체가 없는데 장소 ID만 남는 것은 막는다.
-     *
-     * <p>좌표 범위는 서버가 확인한다 — 프론트에서 검색 결과만 고르게 막아도 API를
-     * 직접 호출하면 임의 좌표가 들어온다.
-     */
+    /** 거래 장소의 정합성 강제. */
     private static void validateTradeLocation(
             String name,
             Double latitude,
@@ -353,7 +344,7 @@ public class UsedProduct extends BaseEntity {
         }
     }
 
-    //거래 유형과 가격의 정합성 강제 DB에서 돌아온 {@code 0.00}이 {@code BigDecimal.ZERO}와 다른 값으로 판정
+    //거래 유형과 가격의 정합성 강제 DB에서 돌아온 0.00이 BigDecimal.ZERO와 다른 값으로 판정
     private static void validatePrice(UsedProductPriceType priceType, BigDecimal price) {
         boolean valid = switch (priceType) {
             case FIXED -> price != null && price.compareTo(BigDecimal.ZERO) > 0;

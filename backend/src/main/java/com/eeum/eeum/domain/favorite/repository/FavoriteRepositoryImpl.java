@@ -45,7 +45,7 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     /**
      * 찜 목록 정렬 — 등록 최신순, 동률은 PK로 끊는다.
      *
-     * <p>세 목록(전체·상점·중고)이 같은 정렬을 쓰므로 커서 규칙도 하나다.
+     * 세 목록(전체·상점·중고)이 같은 정렬을 쓰므로 커서 규칙도 하나다.
      */
     private static final Sort FAVORITE_SORT = Sort.by(
             Sort.Order.desc("createdAt"), Sort.Order.desc("favoriteId"));
@@ -161,7 +161,7 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     /**
      * 전체 찜 목록 — 상점·중고를 가리지 않고 내가 찜한 순서대로 읽는다.
      *
-     * <p>타입별 목록과 달리 대상의 공개 여부로 거르지 않는다. 이 목록의 기준은
+     * 타입별 목록과 달리 대상의 공개 여부로 거르지 않는다. 이 목록의 기준은
      * "내가 찜한 것 전부"이고, 사라진 대상의 표시는 응답 조립 단계가 판단한다.
      */
     @Override
@@ -177,10 +177,10 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     }
 
     /**
-     * 커서 이후 구간. 정렬이 {@code createdAt desc, favoriteId desc}이므로
+     * 커서 이후 구간. 정렬이 createdAt desc, favoriteId desc이므로
      * "더 이르게 찜했거나, 같은 시각이면 ID가 더 작은" 행들이다.
      *
-     * <p>두 번째 항이 빠지면 같은 순간에 등록된 찜들 사이에서 경계를 끊지 못해
+     * 두 번째 항이 빠지면 같은 순간에 등록된 찜들 사이에서 경계를 끊지 못해
      * OFFSET과 같은 중복·누락이 그대로 재현된다.
      */
     private com.querydsl.core.types.dsl.BooleanExpression afterCursor(FavoriteCursor cursor) {
@@ -195,7 +195,7 @@ public class FavoriteRepositoryImpl implements FavoriteRepositoryCustom {
     /**
      * 한 건 더 읽어 다음 페이지 여부를 판정하고, 마지막 행에서 다음 커서를 만든다.
      *
-     * <p>커서를 서버가 만들어 응답에 싣는 이유는, 목록마다 행 타입이 달라도 클라이언트가
+     * 커서를 서버가 만들어 응답에 싣는 이유는, 목록마다 행 타입이 달라도 클라이언트가
      * 조립 규칙을 알 필요가 없게 하기 위해서다 — 받은 값을 그대로 되돌려보내면 된다.
      */
     private <T> CursorSlice<T> toCursorSlice(

@@ -91,13 +91,11 @@ export default function SignupScreen() {
     if (isVerifying) return;
     setIsVerifying(true);
     try {
-      const response = await client.post('/auth/email/verify', { 
-        email, 
-        code: verificationCode 
+      const response = await client.post('/auth/email/verify', {
+        email,
+        code: verificationCode
       });
 
-      console.log(" [인증 확인 응답]:", response.data);
-      
       if (response.status === 200) {
         // 서버가 돌려주는 인증 토큰을 저장
         const token = response.data.data;

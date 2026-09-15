@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import InquiryItem from './InquiryItem';
 
@@ -26,7 +25,10 @@ export default function InquiryList({ data }) {
   return (
     <ListContainer>
       {data.map((item) => (
-        <InquiryItem key={item.inquiryId} item={item} />
+        <InquiryItem
+          key={item.inquiryId}
+          item={item}
+        />
       ))}
     </ListContainer>
   );

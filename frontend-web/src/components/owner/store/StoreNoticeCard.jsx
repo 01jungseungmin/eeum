@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { Plus, X } from 'lucide-react';
 
@@ -278,7 +278,10 @@ function StoreNoticeCard({
           </div>
         ) : (
           notices.map((n) => (
-            <NoticeItem key={n.noticeId} onClick={() => openEditModal(n)}>
+            <NoticeItem
+              key={n.noticeId}
+              onClick={() => openEditModal(n)}
+            >
               <NoticeContent>
                 <span>{getNoticeEmoji(n.noticeType)}</span>
                 <span>{n.content}</span>
@@ -335,7 +338,10 @@ function StoreNoticeCard({
 
             <BtnGroup>
               <ActionBtn onClick={() => setIsModalOpen(false)}>취소</ActionBtn>
-              <ActionBtn $primary onClick={submitCustomNotice}>
+              <ActionBtn
+                $primary
+                onClick={submitCustomNotice}
+              >
                 {modalMode === 'CREATE' ? '공지 등록' : '수정 완료'}
               </ActionBtn>
             </BtnGroup>

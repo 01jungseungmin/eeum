@@ -31,6 +31,10 @@ public final class RateLimitKeys {
         return "rate-limit:fcm-test:" + ownerId;
     }
 
+    public static String fileUpload(Long accountId) {
+        return "rate-limit:file-upload:" + accountId;
+    }
+
     // 생활권 매칭 노출 가게 목록 조회(공개 API) — viewerKey(account:{id} 또는 ip:{ip}) 단위 과호출 방지
     public static String aiExposureView(String viewerKey) {
         return "rate-limit:ai-exposure-view:" + viewerKey;
@@ -56,6 +60,11 @@ public final class RateLimitKeys {
     // Webhook 서명 검증 실패의 DB 이력 기록 쿨다운 — 구간당 1건만 남긴다.
     public static String webhookSignatureFailureRecord() {
         return "rate-limit:webhook-signature-fail:record";
+    }
+
+    /** Standard Webhooks event id의 짧은 중복 수신 차단 키. */
+    public static String webhookReplay(String webhookId) {
+        return "webhook:portone:received:" + (webhookId == null ? "" : webhookId);
     }
 
     private static String normalize(String email) {

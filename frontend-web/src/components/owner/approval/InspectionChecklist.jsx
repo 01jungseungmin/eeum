@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { CheckCircle2, XCircle } from 'lucide-react';
 

@@ -5,6 +5,8 @@ import com.eeum.eeum.application.store.dto.request.StoreReviewCreateRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewReplyRequestDto;
 import com.eeum.eeum.application.store.dto.request.StoreReviewUpdateRequestDto;
 import com.eeum.eeum.application.store.dto.response.*;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
@@ -62,6 +64,7 @@ public class StoreReviewService {
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileStorageService fileStorageService;
 
     // ===================== 공개 조회 =====================
 
@@ -83,7 +86,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // 내가 작성한 리뷰 목록 조회 (주문 리뷰 / 예약 리뷰 통합 또는 타입별)
@@ -102,9 +105,9 @@ public class StoreReviewService {
 
             if (review.getReviewType() == StoreReviewType.ORDER) {
                 List<OrderItem> orderItems = getOrderItemsForReview(review);
-                return MyReviewResponseDto.ofOrder(review, images, orderItems);
+                return MyReviewResponseDto.ofOrder(review, images, orderItems, java.util.function.Function.identity());
             }
-            return MyReviewResponseDto.ofReservation(review, images);
+            return MyReviewResponseDto.ofReservation(review, images, java.util.function.Function.identity());
         });
     }
 
@@ -150,7 +153,7 @@ public class StoreReviewService {
 
         // 이미지 저장 (신규 리뷰이므로 currentCount = 0)
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
-            saveReviewImages(review, request.getImageUrls(), 0);
+            saveReviewImages(accountId, review, request.getImageUrls(), 0);
         }
 
         // Store 평점 및 리뷰 수 갱신
@@ -169,7 +172,7 @@ public class StoreReviewService {
         List<StoreReviewImage> savedImages = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, savedImages, null, orderItems);
+        return StoreReviewResponseDto.of(review, savedImages, null, orderItems, java.util.function.Function.identity());
     }
 
     // 방문 예약 리뷰 작성 — 방문 완료(COMPLETED) 예약만 허용, 1예약 1리뷰
@@ -207,7 +210,7 @@ public class StoreReviewService {
         }
 
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
-            saveReviewImages(review, request.getImageUrls(), 0);
+            saveReviewImages(accountId, review, request.getImageUrls(), 0);
         }
 
         recalculateStoreRating(store);
@@ -224,7 +227,7 @@ public class StoreReviewService {
 
         List<StoreReviewImage> savedImages = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
-        return StoreReviewResponseDto.of(review, savedImages, null, Collections.emptyList());
+        return StoreReviewResponseDto.of(review, savedImages, null, Collections.emptyList(), java.util.function.Function.identity());
     }
 
     // 방문 예약 리뷰 단건 조회 — 해당 예약의 작성자만 가능
@@ -241,7 +244,7 @@ public class StoreReviewService {
         List<StoreReviewImage> images = storeReviewImageRepository
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         StoreReviewReplyResponseDto replyDto = buildReplyDto(review.getStorereviewId());
-        return StoreReviewDetailResponseDto.of(review, images, replyDto, Collections.emptyList());
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, Collections.emptyList(), java.util.function.Function.identity());
     }
 
     // 주문 리뷰 단건 조회 — 해당 주문의 작성자만 가능
@@ -259,7 +262,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(review.getStorereviewId());
         StoreReviewReplyResponseDto replyDto = buildReplyDto(review.getStorereviewId());
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewDetailResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // 리뷰 수정 — 본인만 가능
@@ -289,7 +292,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // 리뷰 삭제 — 본인만 가능
@@ -299,8 +302,15 @@ public class StoreReviewService {
         StoreReview review = getReviewForUpdateOrThrow(storeId, reviewId);
         checkReviewOwnership(review, accountId);
 
+        List<String> imageUrls = storeReviewImageRepository
+                .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId)
+                .stream()
+                .map(StoreReviewImage::getImageUrl)
+                .toList();
+
         // 연관 이미지 / 답글 먼저 삭제
         storeReviewImageRepository.deleteAllByStoreReview_StorereviewId(reviewId);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrls);
         storeReviewReplyRepository.deleteByStoreReview_StorereviewId(reviewId);
         storeReviewRepository.delete(review);
         storeReviewRepository.flush();
@@ -337,7 +347,7 @@ public class StoreReviewService {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
 
-        saveReviewImages(review, imageUrls, currentCount);
+        saveReviewImages(accountId, review, imageUrls, currentCount);
 
         log.info("리뷰 이미지 추가: reviewId={}, count={}", reviewId, imageUrls.size());
 
@@ -345,7 +355,8 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+        // 트랜잭션 안에서는 objectKey만 조립한다. HTTP 응답 직전 Advice가 조회 URL로 바꾼다.
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // 리뷰 이미지 삭제
@@ -363,7 +374,9 @@ public class StoreReviewService {
         }
 
         boolean wasThumbnail = image.isThumbnail();
+        String imageUrl = image.getImageUrl();
         storeReviewImageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
 
         if (wasThumbnail) {
             storeReviewImageRepository
@@ -504,7 +517,7 @@ public class StoreReviewService {
                 .findByStoreReview_StorereviewIdOrderByDisplayOrderAsc(reviewId);
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
-        return OwnerStoreReviewDetailResponseDto.of(review, images, replyDto, orderItems);
+        return OwnerStoreReviewDetailResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // ===================== 내부 헬퍼 =====================
@@ -520,7 +533,8 @@ public class StoreReviewService {
 
     // 리뷰 이미지 목록을 저장
     // @param currentCount 이미 저장된 이미지 수 (호출 측에서 조회한 값을 재사용해 중복 쿼리 방지) - 신규 리뷰 생성 시에는 0을 전달
-    private void saveReviewImages(StoreReview review, List<String> imageUrls, int currentCount) {
+    private void saveReviewImages(Long accountId, StoreReview review, List<String> imageUrls, int currentCount) {
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.STORE, imageUrls);
         boolean hasExistingThumbnail = storeReviewImageRepository
                 .existsByStoreReview_StorereviewIdAndIsThumbnailTrue(review.getStorereviewId());
 
@@ -574,7 +588,7 @@ public class StoreReviewService {
         StoreReviewReplyResponseDto replyDto = buildReplyDto(reviewId);
         List<OrderItem> orderItems = getOrderItemsForReview(review);
 
-        return StoreReviewResponseDto.of(review, images, replyDto, orderItems);
+        return StoreReviewResponseDto.of(review, images, replyDto, orderItems, java.util.function.Function.identity());
     }
 
     // 주문 기반 리뷰인 경우 OrderItem 스냅샷 목록 조회, 예약 기반이면 빈 목록

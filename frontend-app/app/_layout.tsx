@@ -9,13 +9,9 @@ import 'react-native-reanimated';
 import { useFonts } from 'expo-font';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-
-// 🚨 파일 경로가 다를 경우 프로젝트 구조에 맞게 수정해 주세요 (예: '@/api/notification' 또는 './api/notification')
-import { notificationApi } from '../api/notification'; 
+import { getNotificationRoute } from '../utils/notificationRoute';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,50 +36,10 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    // 1. 앱 켜질 때 푸시 권한 묻고 토큰을 서버로 보내는 로직
-    const registerForPushNotificationsAsync = async () => {
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-        });
-      }
-
-      if (Device.isDevice) {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        
-        if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-        
-        if (finalStatus !== 'granted') {
-          console.log('푸시 알림 권한이 거부되었습니다.');
-          return;
-        }
-        
-        try {
-          // 기기 고유 토큰 발급
-          const tokenData = await Notifications.getExpoPushTokenAsync();
-          const fcmToken = tokenData.data;
-          console.log("🔥 내 기기 푸시 토큰:", fcmToken);
-          
-          // 백엔드 DB에 내 토큰 저장 요청
-          await notificationApi.updateFcmToken(fcmToken);
-          console.log("✅ 백엔드로 푸시 토큰 전송 성공!");
-        } catch (error) {
-          console.log("푸시 토큰 전송 실패:", error);
-        }
-      } else {
-        console.log('푸시 알림 토큰 발급은 실제 기기에서만 가능합니다.');
-      }
-    };
-
-    // 토큰 발급 및 전송 함수 실행
-    registerForPushNotificationsAsync();
-
-    // --------------------------------------------------------
+    // 네이티브 푸시 토큰(FCM/APNs) 등록은 utils/notification.ts의
+    // registerForPushNotificationsAsync가 로그인/자동로그인 시점에 전담한다.
+    // 여기서 Expo Push Token을 추가로 등록하면 마지막에 저장된 토큰으로
+    // 덮어써져 백엔드(FCM HTTP v1)가 발송에 사용할 수 없는 토큰이 남는다.
 
     // [리스너 1] 앱이 켜진 상태(포그라운드)에서 알림이 도착했을 때
     const notificationSubscription = Notifications.addNotificationReceivedListener(notification => {
@@ -92,13 +48,14 @@ export default function RootLayout() {
 
     // [리스너 2] 유저가 스마트폰 상단 알림 배너를 클릭했을 때
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      // 백엔드가 FCM Payload의 'data' 영역에 담아 보낸 linkUrl을 추출
-      const linkUrl = response.notification.request.content.data?.linkUrl;
-      console.log('🚀 알림 클릭됨, 이동할 주소:', linkUrl);
-      
-      if (linkUrl) {
-        // 해당 주소로 유저를 즉시 리다이렉트
-        router.push(linkUrl as any);
+      // 백엔드가 FCM Payload의 'data' 영역에 담아 보낸 정보를 앱 라우트로 변환
+      const data = response.notification.request.content.data;
+      const route = getNotificationRoute(data);
+
+      if (route) {
+        router.push(route as any);
+      } else {
+        console.warn('⚠️ 알림 클릭: 이동할 화면을 찾지 못함', data);
       }
     });
 

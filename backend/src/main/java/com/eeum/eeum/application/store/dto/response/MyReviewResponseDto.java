@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 @Getter
 @Builder
@@ -62,7 +63,8 @@ public class MyReviewResponseDto {
     public static MyReviewResponseDto ofOrder(
             StoreReview review,
             List<StoreReviewImage> images,
-            List<OrderItem> orderItems
+            List<OrderItem> orderItems,
+            Function<String, String> imageUrlResolver
     ) {
         return MyReviewResponseDto.builder()
                 .storereviewId(review.getStorereviewId())
@@ -71,17 +73,18 @@ public class MyReviewResponseDto {
                 .storeName(review.getStore().getName())
                 .rating(review.getRating())
                 .content(review.getContent())
-                .images(toImageDtos(images))
+                .images(toImageDtos(images, imageUrlResolver))
                 .orderId(review.getOrder().getOrderId())
                 .orderItems(orderItems == null ? Collections.emptyList()
-                        : orderItems.stream().map(OrderItemSummaryDto::from).toList())
+                        : orderItems.stream().map(item -> OrderItemSummaryDto.from(item, imageUrlResolver)).toList())
                 .createdAt(review.getCreatedAt())
                 .build();
     }
 
     public static MyReviewResponseDto ofReservation(
             StoreReview review,
-            List<StoreReviewImage> images
+            List<StoreReviewImage> images,
+            Function<String, String> imageUrlResolver
     ) {
         return MyReviewResponseDto.builder()
                 .storereviewId(review.getStorereviewId())
@@ -90,7 +93,7 @@ public class MyReviewResponseDto {
                 .storeName(review.getStore().getName())
                 .rating(review.getRating())
                 .content(review.getContent())
-                .images(toImageDtos(images))
+                .images(toImageDtos(images, imageUrlResolver))
                 .visitReservationId(review.getVisitReservation().getVisitReservationId())
                 .visitDate(review.getVisitReservation().getVisitDate())
                 .visitTime(review.getVisitReservation().getVisitTime())
@@ -98,11 +101,14 @@ public class MyReviewResponseDto {
                 .build();
     }
 
-    private static List<ImageResponseDto> toImageDtos(List<StoreReviewImage> images) {
+    private static List<ImageResponseDto> toImageDtos(
+            List<StoreReviewImage> images,
+            Function<String, String> imageUrlResolver
+    ) {
         return images.stream()
                 .map(img -> ImageResponseDto.builder()
                         .imageId(img.getStorereviewimageId())
-                        .imageUrl(img.getImageUrl())
+                        .imageUrl(imageUrlResolver.apply(img.getImageUrl()))
                         .displayOrder(img.getDisplayOrder())
                         .isThumbnail(img.isThumbnail())
                         .build())
@@ -123,10 +129,10 @@ public class MyReviewResponseDto {
         @Schema(description = "수량", example = "2")
         private Integer quantity;
 
-        public static OrderItemSummaryDto from(OrderItem orderItem) {
+        public static OrderItemSummaryDto from(OrderItem orderItem, Function<String, String> imageUrlResolver) {
             return OrderItemSummaryDto.builder()
                     .productName(orderItem.getProductName())
-                    .thumbnailUrl(orderItem.getThumbnailUrl())
+                    .thumbnailUrl(imageUrlResolver.apply(orderItem.getThumbnailUrl()))
                     .quantity(orderItem.getQuantity())
                     .build();
         }

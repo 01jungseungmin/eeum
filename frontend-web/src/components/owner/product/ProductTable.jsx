@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Eye, Pencil, Trash2 } from 'lucide-react';
 
@@ -102,6 +101,16 @@ const TypeBadge = styled.span`
         : '#666'};
 `;
 
+const RepresentativeBadge = styled.span`
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  background: #fff9db;
+  color: #f08c00;
+  margin-left: 6px;
+`;
+
 const StatusBadge = styled.span`
   padding: 5px 10px;
   border-radius: 20px;
@@ -179,12 +188,6 @@ function ProductTable({
     MENU: { text: '메뉴 상품', color: '메뉴 상품' },
   };
 
-  const STATUS_MAP = {
-    ACTIVE: { text: '판매중', color: '판매중' },
-    SOLD_OUT: { text: '품절', color: '품절' },
-    INACTIVE: { text: '비공개', color: '비공개' },
-  };
-
   // 현재 필터링되어 보여지는 상품들이 전부 선택되었는지 확인
   const isAllSelected =
     products.length > 0 &&
@@ -239,10 +242,7 @@ function ProductTable({
               text: item.productType,
               color: '메뉴 상품',
             };
-            const statusInfo = STATUS_MAP[item.status] || {
-              text: item.status,
-              color: '비공개',
-            };
+
             const pickupTime = item.pickupTime || item.pickup;
 
             return (
@@ -295,7 +295,12 @@ function ProductTable({
                     </div>
 
                     <div className="details">
-                      <span className="name">{item.name}</span>
+                      <span className="name">
+                        {item.name}
+                        {item.categoryName === '대표 메뉴' && (
+                          <RepresentativeBadge>대표</RepresentativeBadge>
+                        )}
+                      </span>
                       <span className="code">{id}</span>
                     </div>
                   </ProductInfo>
@@ -366,21 +371,30 @@ function ProductTable({
                       title="상세보기"
                       onClick={() => onView(item.productId)}
                     >
-                      <Eye size={15} strokeWidth={2.3} />
+                      <Eye
+                        size={15}
+                        strokeWidth={2.3}
+                      />
                     </ActionButton>
                     <ActionButton
                       className="edit"
                       title="수정하기"
                       onClick={() => onEdit(item.productId)}
                     >
-                      <Pencil size={14} strokeWidth={2.3} />
+                      <Pencil
+                        size={14}
+                        strokeWidth={2.3}
+                      />
                     </ActionButton>
                     <ActionButton
                       className="delete"
                       title="삭제하기"
                       onClick={() => onDelete(item.productId)}
                     >
-                      <Trash2 size={15} strokeWidth={2.3} />
+                      <Trash2
+                        size={15}
+                        strokeWidth={2.3}
+                      />
                     </ActionButton>
                   </ActionContainer>
                 </Td>

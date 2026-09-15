@@ -1,9 +1,7 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Inbox } from 'lucide-react';
-import ReviewItem from './ReviewItem'; // 분리된 ReviewItem 임포트
+import ReviewItem from './ReviewItem';
 
-// --- Styled Components (최상단 위치) ---
 const ListContainer = styled.div`
   display: flex;
   flex-direction: column;

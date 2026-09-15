@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { X, Calendar, Power, AlertCircle } from 'lucide-react';
 import { reservationApi } from '../../../api/owner/reservationApi';
@@ -100,29 +100,6 @@ const ToggleButton = styled.button`
   gap: 4px;
 `;
 
-const InputWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  input {
-    width: 55px;
-    padding: 6px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 600;
-    &:disabled {
-      background: #e9ecef;
-      color: #adb5bd;
-    }
-  }
-  span {
-    font-size: 12px;
-    color: #495057;
-  }
-`;
-
 const Footer = styled.div`
   display: grid;
   grid-template-columns: 1fr 2fr;
@@ -168,13 +145,6 @@ export default function DateSlotEditModal({
     };
     fetchDateSlots();
   }, [selectedDate]);
-
-  // 특정 타임 수용 테이블 수 실시간 타이핑 핸들러
-  const handleCountChange = (index, value) => {
-    const updated = [...slots];
-    updated[index].maxTeamCount = Math.max(0, parseInt(value) || 0);
-    setSlots(updated);
-  };
 
   // 특정 타임 예약 차단/오픈 스위치 토글 핸들러
   const handleToggleEnable = (index) => {
@@ -267,7 +237,10 @@ export default function DateSlotEditModal({
             slots.map((slot, index) => {
               const isEnabled = slot.enabled !== false;
               return (
-                <SlotItemRow key={slot.time || index} $disabled={!isEnabled}>
+                <SlotItemRow
+                  key={slot.time || index}
+                  $disabled={!isEnabled}
+                >
                   <TimeBlock $disabled={!isEnabled}>
                     <span>{slot.time?.substring(0, 5)}</span>
                     <ToggleButton
@@ -286,7 +259,10 @@ export default function DateSlotEditModal({
 
         <Footer>
           <ActionBtn onClick={onClose}>취소</ActionBtn>
-          <ActionBtn $save onClick={handleSave}>
+          <ActionBtn
+            $save
+            onClick={handleSave}
+          >
             설정 저장
           </ActionBtn>
         </Footer>

@@ -1,5 +1,6 @@
 package com.eeum.eeum.application.chat.service;
 
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.chat.dto.request.GroupChatRoomCreateRequestDto;
 import com.eeum.eeum.application.chat.dto.response.ChatParticipantResponseDto;
 import com.eeum.eeum.application.chat.dto.response.ChatMessageResponseDto;
@@ -70,6 +71,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatRoomService {
 
+    private final FileStorageService fileStorageService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -87,22 +89,7 @@ public class ChatRoomService {
 
     // ===================== 채팅방 생성 =====================
 
-    /**
-     * 중고거래 1:1 문의방 생성 (구매자가 시작).
-     *
-     * <p><b>멱등하다.</b> 같은 상품에 이미 활성 문의방이 있으면 새로 만들지 않고 그 방을 돌려준다.
-     * 구매자가 "채팅하기"를 여러 번 눌러도 방이 늘어나지 않는다. 가게 단톡방(createGroupRoom)이
-     * 중복을 409로 막는 것과 의도적으로 다르다 — 그쪽은 사장이 명시적으로 개설하는 행위라
-     * 이미 있다는 사실을 알려야 하지만, 여기서는 대화 진입이 목적이라 기존 방으로 들여보내는 것이 맞다.
-     *
-     * <p>잠금 순서는 프로젝트 전역 규약을 따른다: <b>account → used_product → chat_room</b>.
-     * 직렬화는 상품 행 잠금이 담당하고, uk_chat_room_active_ref가 최종 방어선이다.
-     *
-     * <p>가게 단톡방과 달리 <b>Redis 락을 쓰지 않는다.</b> RedisLockService는 대기 없이 즉시
-     * 실패하므로, 구매자가 "채팅하기"를 연타하면 두 번째 요청이 기존 방을 받는 대신
-     * LOCK_ACQUIRE_FAILED로 떨어져 멱등 계약이 깨진다. 상품 행 잠금은 대기하므로
-     * 두 번째 요청은 첫 트랜잭션 커밋을 기다렸다가 기존 방을 그대로 돌려받는다.
-     */
+    /** 중고거래 문의방을 멱등하게 생성한다. 상품 행 잠금이 연속 요청을 직렬화한다. */
     public ChatRoomResponseDto createUsedProductInquiry(Long buyerId, Long usedProductId) {
         try {
             return createInquiryRoom(buyerId, usedProductId);
@@ -188,7 +175,7 @@ public class ChatRoomService {
     /**
      * 판매자 계정 잠금 — 상태 판정은 호출부가 한다.
      *
-     * <p>{@code accountWriteGuard.lockActive}를 쓰지 않는 이유는 오류 계약이 다르기 때문이다.
+     * accountWriteGuard.lockActive를 쓰지 않는 이유는 오류 계약이 다르기 때문이다.
      * 판매자가 탈퇴·정지라는 사실을 구매자에게 알리면 안 된다(비공개 사유 비노출 정책).
      * 여기서는 잠그기만 하고, 호출부가 USED_PRODUCT_NOT_FOUND로 바꿔 던진다.
      */
@@ -631,7 +618,7 @@ public class ChatRoomService {
     /**
      * 문의방 저장. 유니크 위반은 실패가 아니라 "누군가 방금 같은 방을 만들었다"는 뜻이다.
      *
-     * <p>Redis lease(5초)가 만료된 상태에서는 동시 요청 둘이 모두 기존 방 조회를 지나칠 수 있다.
+     * Redis lease(5초)가 만료된 상태에서는 동시 요청 둘이 모두 기존 방 조회를 지나칠 수 있다.
      * 그때 409를 돌려주면 구매자는 채팅에 들어가지 못하고 재시도해야 한다. 대신 신호만 올려
      * 트랜잭션을 롤백시키고, 호출부가 새 트랜잭션에서 먼저 커밋된 방을 읽어 그 방으로 들여보낸다.
      * 유니크 충돌 경로에서도 멱등 계약이 유지된다.
@@ -834,8 +821,8 @@ public class ChatRoomService {
     /**
      * 중고 문의방들의 상품 요약을 한 번에 읽는다. 반환 키는 roomId다.
      *
-     * <p>삭제된 게시글도 그대로 담는다 — 기존 대화는 유지하는 정책이라 프론트가
-     * {@code deleted}로 "삭제된 게시글입니다"를 표시해야 하고, 여기서 빼면 그 표시가 불가능해진다.
+     * 삭제된 게시글도 그대로 담는다 — 기존 대화는 유지하는 정책이라 프론트가
+     * deleted로 "삭제된 게시글입니다"를 표시해야 하고, 여기서 빼면 그 표시가 불가능해진다.
      */
     private Map<Long, UsedProductChatSummaryDto> resolveUsedProductSummaries(List<ChatRoom> rooms) {
         List<ChatRoom> inquiryRooms = rooms.stream()

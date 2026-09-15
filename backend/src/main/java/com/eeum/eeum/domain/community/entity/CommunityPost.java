@@ -14,7 +14,13 @@ import org.hibernate.annotations.DynamicUpdate;
 @Getter
 @DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "community_post")
+@Table(
+        name = "community_post",
+        indexes = {
+                // 관리자 전체 목록 최신순 조회
+                @Index(name = "idx_community_post_admin_created", columnList = "created_at")
+        }
+)
 public class CommunityPost extends BaseEntity {
 
     @Id
@@ -74,5 +80,9 @@ public class CommunityPost extends BaseEntity {
 
     public void hide() {
         this.hidden = true;
+    }
+
+    public void show() {
+        this.hidden = false;
     }
 }

@@ -16,7 +16,7 @@ public class OrderCreateRequestDto {
     @Schema(
             description = "결제 수단",
             example = "CARD",
-            allowableValues = {"CARD", "EASY_PAY", "TRANSFER", "VIRTUAL_ACCOUNT", "CASH_ON_SITE"}
+            allowableValues = {"CARD", "EASY_PAY", "TRANSFER", "CASH_ON_SITE"}
     )
     private PaymentMethod paymentMethod;
 

@@ -15,12 +15,34 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.eeum.app",
-      googleServicesFile: "./GoogleService-Info.plist",
+      // EAS 원격 빌드는 file 타입 환경변수(GOOGLE_SERVICES_INFO_PLIST)가 다운로드된
+      // 절대경로를 이 이름으로 주입한다. 로컬 빌드는 developer가 직접 내려받아
+      // 프로젝트 루트에 둔 사본(gitignore됨)을 그대로 쓴다.
+      googleServicesFile: process.env.GOOGLE_SERVICES_INFO_PLIST || "./GoogleService-Info.plist",
       infoPlist: {
         LSApplicationQueriesSchemes: [
+          // 소셜 로그인
           "kakaokompassauth",
+          "kakaolink",
           "naversearchapp",
-          "naversearchthirdlogin"
+          "naversearchthirdlogin",
+          // 결제 앱 전환. 여기 없는 스킴은 iOS가 canOpenURL을 막아
+          // "앱이 설치되어 있지 않다"로 잘못 처리된다.
+          "kakaotalk",
+          "supertoss",
+          "payco",
+          "lpayapp",
+          "ispmobile",
+          "kftc-bankpay",
+          "citispay",
+          "shinhan-sr-ansimclick",
+          "kb-acp",
+          "mpocket.online.ansimclick",
+          "hdcardappcardansimclick",
+          "nhallonepayansimclick",
+          "cloudpay",
+          "hanawalletmembers",
+          "lottesmartpay"
         ]
       }
     },
@@ -31,8 +53,13 @@ module.exports = {
         foregroundImage: "./assets/images/android-icon-foreground.png"
       },
       "softwareKeyboardLayoutMode": "resize",
-      package: "com.eeum.app",
-      googleServicesFile: "./google-services.json"
+      // android/app/build.gradle 의 applicationId 와 반드시 같아야 한다.
+      // 카카오·네이버 콘솔에 등록된 패키지명도 이 값이다.
+      package: "com.eeum",
+      // EAS 원격 빌드는 file 타입 환경변수(GOOGLE_SERVICES_JSON)가 다운로드된
+      // 절대경로를 이 이름으로 주입한다. 로컬 빌드는 developer가 직접 내려받아
+      // 프로젝트 루트에 둔 사본(gitignore됨)을 그대로 쓴다.
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json"
     },
     
     plugins: [

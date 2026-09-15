@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authApi } from '../../../api/authApi';
-import axios from 'axios';
 
 const PageWrapper = styled.div`
   max-width: 400px;

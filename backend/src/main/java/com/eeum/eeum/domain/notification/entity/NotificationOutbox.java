@@ -10,19 +10,7 @@ import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 
-/**
- * 알림 생성 요청을 원 트랜잭션과 함께 커밋해 두는 outbox.
- *
- * <p>예전에는 알림 생성을 {@code AFTER_COMMIT} + {@code @Async}로 처리했다.
- * 비동기 풀이 포화되면 그 작업이 버려져 알림이 아예 만들어지지 않았고, 원 요청은 성공으로 끝나
- * 아무도 알아채지 못했다. 커밋된 사실(메시지 전송)과 그에 따른 알림 사이에 보장이 없었다.
- *
- * <p>이 행은 메시지 저장과 <b>같은 트랜잭션</b>에서 커밋된다. 이후 처리는 스케줄러가
- * 이 행을 읽어서 하므로, 비동기 풀이 포화되든 인스턴스가 죽든 기록은 남는다.
- *
- * <p>중복 방지는 상태 전이를 알림 생성과 같은 트랜잭션에 묶어서 한다 — 처리 도중 죽으면
- * 둘 다 롤백돼 다음 주기에 다시 시도한다. 알림만 만들어지고 DONE을 못 남기는 창이 없다.
- */
+/** 알림 생성 요청을 원 트랜잭션과 함께 커밋해 두는 outbox. */
 @Entity
 @Table(
         name = "notification_outbox",
@@ -86,7 +74,7 @@ public class NotificationOutbox extends BaseEntity {
     /**
      * 실패 기록. 재시도 한도를 넘으면 FAILED로 내려 더 시도하지 않는다.
      *
-     * <p>영원히 재시도하면 깨진 행 하나가 주기마다 앞자리를 차지해 뒤의 정상 알림을 막는다.
+     * 영원히 재시도하면 깨진 행 하나가 주기마다 앞자리를 차지해 뒤의 정상 알림을 막는다.
      */
     public void recordFailure(String error) {
         this.attemptCount++;

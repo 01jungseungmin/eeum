@@ -24,6 +24,10 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
             CategoryType type
     );
 
+    List<Category> findAllByTypeAndIsActiveTrueOrderByDepthAscParentIdAscDisplayOrderAscCategoryIdAsc(
+            CategoryType type
+    );
+
     boolean existsByTypeAndParentIdAndName(
             CategoryType type,
             Long parentId,

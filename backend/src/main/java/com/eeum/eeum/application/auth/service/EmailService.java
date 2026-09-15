@@ -164,7 +164,7 @@ public class EmailService {
         return """
                 <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
                     <h2 style="color: #333;">이음 이메일 인증</h2>
-                    <p>아래 인증 코드를 입력해 주세요.</p>
+                    아래 인증 코드를 입력해 주세요.</p>
                     <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px;
                                 color: #4A90E2; padding: 16px; background: #f5f5f5;
                                 border-radius: 8px; text-align: center;">

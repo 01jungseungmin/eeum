@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis } from 'recharts';
@@ -56,7 +55,10 @@ function TopProducts() {
           margin={{ top: 0, right: 20, left: 30, bottom: 0 }}
           style={{ width: '100%' }}
         >
-          <XAxis type="number" hide />
+          <XAxis
+            type="number"
+            hide
+          />
           <YAxis
             dataKey="name"
             type="category"

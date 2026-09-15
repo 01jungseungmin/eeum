@@ -42,6 +42,9 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPost, Lo
             Pageable pageable
     );
 
+    @EntityGraph(attributePaths = {"account", "category", "region"})
+    Page<CommunityPost> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
     // 동시 조회/좋아요/댓글 작성 시 lost update 방지 — DB 레벨 원자적 증감
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""

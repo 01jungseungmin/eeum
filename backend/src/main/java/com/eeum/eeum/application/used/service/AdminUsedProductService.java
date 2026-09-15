@@ -9,11 +9,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.eeum.eeum.application.used.dto.response.UsedProductDetailResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductSummaryResponseDto;
+import com.eeum.eeum.application.used.dto.response.UsedProductImageResponseDto;
+import com.eeum.eeum.application.used.service.UsedProductImageService;
+import java.util.List;
 
 /**
  * 관리자 중고 게시글 조치.
  *
- * 숨김 적용은 신고 처리 흐름({@code UsedProductReportActionExecutor})에서 이뤄진다.
+ * 숨김 적용은 신고 처리 흐름(UsedProductReportActionExecutor)에서 이뤄진다.
  * 여기에는 오판을 되돌리는 해제만 둔다 — 해제 수단이 없으면 DB를 직접 고쳐야 한다.
  */
 @Slf4j
@@ -22,6 +29,32 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminUsedProductService {
 
     private final UsedProductRepository usedProductRepository;
+    private final UsedProductImageService usedProductImageService;
+
+    @Transactional(readOnly = true)
+    public Page<UsedProductSummaryResponseDto> getProducts(Pageable pageable) {
+        return usedProductRepository.findAllByOrderByCreatedAtDesc(pageable)
+                .map(product -> UsedProductSummaryResponseDto.of(product, null));
+    }
+
+    @Transactional(readOnly = true)
+    public UsedProductDetailResponseDto getDetail(Long usedProductId) {
+        UsedProduct product = usedProductRepository.findById(usedProductId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+        List<UsedProductImageResponseDto> images = usedProductImageService.getImages(usedProductId);
+        return UsedProductDetailResponseDto.from(product, images, product.getSeller().getAccountId());
+    }
+
+    @Transactional
+    public void hide(Long usedProductId) {
+        UsedProduct product = usedProductRepository.findByUsedProductIdForUpdate(usedProductId)
+                .filter(found -> !found.isDeleted())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USED_PRODUCT_NOT_FOUND));
+        if (product.isHidden()) {
+            throw new ConflictException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+        product.hide();
+    }
 
     @Transactional
     public void show(Long usedProductId) {

@@ -26,6 +26,18 @@ public final class LockKeys {
         return "lock:portone-payment:" + portonePaymentId;
     }
 
+    public static String ownerRevenue(Long orderId) {
+        return "lock:owner-revenue:order:" + orderId;
+    }
+
+    public static String weeklySettlementJob() {
+        return "lock:settlement:weekly-job";
+    }
+
+    public static String weeklySettlement(Long weeklySettlementId) {
+        return "lock:settlement:weekly:" + weeklySettlementId;
+    }
+
     // 생성자 단위 채팅방 락(chatRoom(creatorId))은 제거됐다.
     // 비STORE GROUP 방은 중복 판정이 없어 락이 중복을 막지 못하면서, 대기 없는 락 정책 탓에
     // 정상적인 동시 요청만 LOCK_ACQUIRE_FAILED로 실패시켰기 때문. 같은 패턴을 다시 만들지 말 것.

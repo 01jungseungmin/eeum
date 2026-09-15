@@ -125,10 +125,10 @@ public class TokenService {
     /**
      * ReAuth Token 검증과 소비를 한 번에 한다 — 비밀번호 변경·회원 탈퇴 같은 민감 작업의 관문.
      *
-     * <p>조회로 확인만 하고 삭제를 나중(AFTER_COMMIT)으로 미루면, 같은 토큰으로 동시에 들어온
+     * 조회로 확인만 하고 삭제를 나중(AFTER_COMMIT)으로 미루면, 같은 토큰으로 동시에 들어온
      * 두 요청이 모두 확인을 통과해 민감 작업이 두 번 실행된다. 일회용 토큰의 의미가 사라진다.
      *
-     * <p>대가로 재시도 가능성을 잃는다. 이후 DB 작업이 실패해도 토큰은 이미 소비돼
+     * 대가로 재시도 가능성을 잃는다. 이후 DB 작업이 실패해도 토큰은 이미 소비돼
      * 사용자는 재인증을 다시 받아야 한다. 일회용 보장이 재시도 편의보다 우선한다.
      */
     public void consumeReAuthToken(Long currentAccountId, String reAuthToken) {
@@ -175,10 +175,10 @@ public class TokenService {
     /**
      * Password Reset Token 검증과 소비를 한 번에 한다.
      *
-     * <p>{@link #consumeReAuthToken}과 같은 이유다 — 확인만 하고 삭제를 커밋 후로 미루면
+     * #consumeReAuthToken과 같은 이유다 — 확인만 하고 삭제를 커밋 후로 미루면
      * 같은 토큰으로 동시에 들어온 요청이 모두 통과한다.
      *
-     * <p>이전에는 DB 롤백 시 재시도할 수 있도록 삭제를 미뤘다. 그 편의를 포기한다.
+     * 이전에는 DB 롤백 시 재시도할 수 있도록 삭제를 미뤘다. 그 편의를 포기한다.
      * 재설정에 실패하면 메일을 다시 받아야 한다.
      */
     public Long consumePasswordResetToken(String resetToken) {

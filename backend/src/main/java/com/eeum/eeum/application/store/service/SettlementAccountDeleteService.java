@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 정산 계좌 파기.
  *
- * <p>계좌번호·예금주는 개인정보다. 상점 자체는 주문·정산 이력이 매달려 있어 남기지만,
+ * 계좌번호·예금주는 개인정보다. 상점 자체는 주문·정산 이력이 매달려 있어 남기지만,
  * 계좌 정보는 탈퇴 후 보관할 이유가 없다.
  */
 @Slf4j

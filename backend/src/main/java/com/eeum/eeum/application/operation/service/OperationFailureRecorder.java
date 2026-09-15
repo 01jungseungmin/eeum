@@ -11,10 +11,10 @@ import org.springframework.stereotype.Component;
 /**
  * 운영 실패를 이력으로 남기는 단일 진입점.
  *
- * <p>catch 블록에서 이 컴포넌트를 호출한다. 실제 DB 기록은
- * {@code OperationFailureLogListener}가 커밋/롤백 완료 후 별도 스레드에서 수행한다.
+ * catch 블록에서 이 컴포넌트를 호출한다. 실제 DB 기록은
+ * OperationFailureLogListener가 커밋/롤백 완료 후 별도 스레드에서 수행한다.
  *
- * <p><b>기록 자체가 원 작업을 실패시키지 않는다.</b> 이벤트 발행에서 예외가 나도
+ * 기록 자체가 원 작업을 실패시키지 않는다. 이벤트 발행에서 예외가 나도
  * 삼키고 로그만 남긴다 — 이력 기록 실패가 결제 처리를 막으면 주객이 전도된다.
  */
 @Slf4j

@@ -1,6 +1,9 @@
 package com.eeum.eeum.application.community.service;
 
 import com.eeum.eeum.application.community.dto.response.CommunityImageResponseDto;
+import com.eeum.eeum.application.account.service.AccountWriteGuard;
+import com.eeum.eeum.application.file.FileStorageService;
+import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.common.dto.request.ImageUploadListRequestDto;
 import com.eeum.eeum.domain.community.entity.CommunityImage;
 import com.eeum.eeum.domain.community.entity.CommunityPost;
@@ -28,15 +31,22 @@ public class CommunityPostImageService {
 
     private final CommunityPostRepository postRepository;
     private final CommunityImageRepository imageRepository;
+    private final FileStorageService fileStorageService;
+    private final AccountWriteGuard accountWriteGuard;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<CommunityImageResponseDto> addImages(Long accountId, Long postId, ImageUploadListRequestDto request) {
+        // account → post → file_object 순서. 탈퇴·정지와 겹쳐 이미지가 뒤늦게 추가되는 것을 막는다.
+        accountWriteGuard.lockActive(accountId);
         CommunityPost post = getVisiblePostWithOwnerCheckForUpdate(accountId, postId);
 
         int currentCount = imageRepository.countByPost_PostId(postId);
         if (currentCount + request.getImages().size() > MAX_IMAGE_COUNT) {
             throw new BusinessException(ErrorCode.IMAGE_LIMIT_EXCEEDED);
         }
+
+        fileStorageService.requireAttachableObjects(accountId, FileUploadPurpose.COMMUNITY,
+                request.getImages().stream().map(image -> image.getImageUrl()).toList());
 
         List<CommunityImage> images = new ArrayList<>();
         for (int i = 0; i < request.getImages().size(); i++) {
@@ -49,11 +59,13 @@ public class CommunityPostImageService {
 
         List<CommunityImage> saved = imageRepository.saveAll(images);
         log.info("커뮤니티 이미지 등록: postId={}, count={}", postId, saved.size());
-        return saved.stream().map(CommunityImageResponseDto::from).toList();
+        return saved.stream().map(this::toResponse).toList();
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteImage(Long accountId, Long postId, Long imageId) {
+        // 추가와 같은 account → post 순서를 유지해 탈퇴 정리와 직렬화한다.
+        accountWriteGuard.lockActive(accountId);
         getPostWithOwnerCheckForUpdate(accountId, postId);
 
         CommunityImage image = imageRepository.findById(imageId)
@@ -63,7 +75,9 @@ public class CommunityPostImageService {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
 
+        String imageUrl = image.getImageUrl();
         imageRepository.delete(image);
+        fileStorageService.scheduleAttachedObjectCleanup(imageUrl);
         imageRepository.flush();
 
         List<CommunityImage> images = imageRepository.findByPost_PostIdOrderByDisplayOrder(postId);
@@ -91,5 +105,9 @@ public class CommunityPostImageService {
         if (!post.isOwnedBy(accountId)) {
             throw new ForbiddenException(ErrorCode.COMMUNITY_POST_ACCESS_DENIED);
         }
+    }
+
+    private CommunityImageResponseDto toResponse(CommunityImage image) {
+        return CommunityImageResponseDto.from(image, image.getImageUrl());
     }
 }
