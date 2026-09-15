@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -20,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -162,6 +164,33 @@ class WebSocketSessionReconciliationSchedulerTest {
         verify(sessionRegistry).closeIfCurrent(
                 "old", old, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
         verify(sessionRegistry, never()).closeIfCurrent(eq("current"), eq(current), any());
+    }
+
+    @Test
+    void Redis_블랙리스트_조회_실패가_다른_세션의_DB_대조를_막지_않는다() {
+        // Given: 첫 세션의 Redis 조회만 실패하고, 두 번째 세션은 DB 기준으로 회수 대상이다.
+        WebSocketSessionRegistry.ConnectionCredentials redisFailure =
+                credentials(1L, 2L, "redis-failure");
+        WebSocketSessionRegistry.ConnectionCredentials stale =
+                credentials(2L, 1L, "stale");
+        Map<String, WebSocketSessionRegistry.ConnectionCredentials> connections = new LinkedHashMap<>();
+        connections.put("redis-failure", redisFailure);
+        connections.put("stale", stale);
+        when(sessionRegistry.connectedCredentials()).thenReturn(connections);
+        when(sseEmitterManager.connectedCredentials()).thenReturn(Map.of());
+        when(accountRepository.findAuthStates(anyCollection())).thenReturn(List.of(
+                new AccountAuthState(1L, AccountStatus.ACTIVE, 2L),
+                new AccountAuthState(2L, AccountStatus.ACTIVE, 2L)));
+        doThrow(new IllegalStateException("Redis unavailable"))
+                .when(tokenService).isFingerprintBlacklisted("redis-failure");
+
+        // When
+        scheduler.closeRevokedSessions();
+
+        // Then: Redis에 의존하지 않는 계정 상태·세대 판정은 계속 진행한다.
+        verify(sessionRegistry).closeIfCurrent(
+                "stale", stale, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
+        verify(sessionRegistry, never()).closeIfCurrent(eq("redis-failure"), eq(redisFailure), any());
     }
 
     @Test
