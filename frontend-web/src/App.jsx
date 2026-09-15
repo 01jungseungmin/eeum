@@ -45,7 +45,7 @@ import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
 import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
-import { approvalApi } from './api/owner/ApprovalApi';
+import { approvalApi } from './api/owner/approvalApi';
 
 // 루트 경로("/")에서 유저 상태에 맞춰 대시보드 또는 심사창으로 스위칭해주는 지능형 컴포넌트
 function InitialRedirect() {
