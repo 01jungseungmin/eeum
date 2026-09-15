@@ -63,8 +63,9 @@ public class WebSocketSessionReconciliationScheduler {
             AccountAuthState state = statesByAccount.get(credentials.accountId());
             if (state == null
                     || !state.isUsable(credentials.tokenVersion())
-                    || tokenService.isFingerprintBlacklisted(credentials.tokenFingerprint())
-                    || credentials.tokenExpiresAtEpochMilli() <= System.currentTimeMillis()) {
+                    || credentials.tokenExpiresAtEpochMilli() <= System.currentTimeMillis()
+                    || isFingerprintBlacklisted(
+                            credentials.accountId(), "WebSocket", credentials.tokenFingerprint())) {
                 sessionRegistry.closeIfCurrent(
                         entry.getKey(), credentials, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
             }
@@ -73,7 +74,8 @@ public class WebSocketSessionReconciliationScheduler {
         for (AccountAuthState state : states) {
             SseEmitterManager.ConnectionCredentials sseConnection = sseConnections.get(state.accountId());
             if (sseConnection != null && (!state.isUsable(sseConnection.tokenVersion())
-                    || tokenService.isFingerprintBlacklisted(sseConnection.tokenFingerprint()))) {
+                    || isFingerprintBlacklisted(
+                            state.accountId(), "SSE", sseConnection.tokenFingerprint()))) {
                 sseEmitterManager.closeIfCurrent(state.accountId(), sseConnection);
             }
         }
@@ -83,5 +85,17 @@ public class WebSocketSessionReconciliationScheduler {
                 .filter(accountId -> !statesByAccount.containsKey(accountId))
                 .forEach(accountId -> sseEmitterManager.closeIfCurrent(
                         accountId, sseConnections.get(accountId)));
+    }
+
+    private boolean isFingerprintBlacklisted(Long accountId, String connectionType, String fingerprint) {
+        try {
+            return tokenService.isFingerprintBlacklisted(fingerprint);
+        } catch (RuntimeException e) {
+            // Redis 장애가 DB 기준 회수와 다른 세션의 대조까지 중단시키면 안 된다.
+            // 이 세션의 블랙리스트 판정만 다음 회차로 미루고 나머지는 계속 처리한다.
+            log.warn("{} 세션 블랙리스트 대조 실패. accountId={}, 다음 회차에 재시도: {}",
+                    connectionType, accountId, e.getMessage());
+            return false;
+        }
     }
 }
