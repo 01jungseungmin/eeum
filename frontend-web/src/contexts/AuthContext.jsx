@@ -1,6 +1,7 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { setGlobalAnchorToken } from '../api/apiClient';
+import { aiManagerApi } from '../api/owner/aiManagerApi';
 
 const AuthContext = createContext();
 
@@ -8,12 +9,34 @@ export const AuthProvider = ({ children }) => {
   const [accessToken, setAccessToken] = useState(null);
   const [hasChatRoom, setHasChatRoom] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [aiPlanType, setAiPlanType] = useState(null);
 
   // Strict Mode 등으로 인한 중복 reissue 요청 방지용 Lock
   const isReissuing = useRef(false);
+  // 세션당 AI 플랜 조회 1회만 수행하기 위한 Lock
+  const hasFetchedPlan = useRef(false);
 
   useEffect(() => {
     setGlobalAnchorToken(accessToken);
+  }, [accessToken]);
+
+  // 로그인/세션 복구 완료 시 AI 플랜 구독 상태를 1회 조회해 캐싱
+  // (사장 계정이 아니면 404/403이 날 수 있으므로 실패는 조용히 무시)
+  useEffect(() => {
+    if (!accessToken || hasFetchedPlan.current) return;
+    if (sessionStorage.getItem('role') !== 'ROLE_OWNER') return;
+
+    hasFetchedPlan.current = true;
+
+    aiManagerApi
+      .getPlans()
+      .then((response) => {
+        const currentPlan = response.data?.data?.currentPlan;
+        if (currentPlan) setAiPlanType(currentPlan);
+      })
+      .catch((error) => {
+        console.error('AI 플랜 조회 실패:', error);
+      });
   }, [accessToken]);
 
   // 새로고침 시 토큰 복구 시스템
@@ -100,6 +123,8 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setAccessToken(null);
     setHasChatRoom(false);
+    setAiPlanType(null);
+    hasFetchedPlan.current = false;
 
     // refreshToken 및 모든 세션 데이터 완전 삭제
     localStorage.removeItem('refreshToken');
@@ -110,11 +135,12 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ accessToken, login, logout, isLoading, hasChatRoom }}
+      value={{ accessToken, login, logout, isLoading, hasChatRoom, aiPlanType }}
     >
       {!isLoading && children}
     </AuthContext.Provider>
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

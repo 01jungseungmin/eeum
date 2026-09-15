@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const CardContainer = styled.div`
@@ -95,7 +94,10 @@ function DashboardCard({
             {unit && <span className="unit">{unit}</span>}
           </div>
         </TitleSection>
-        <IconWrapper $bgColor={iconBg} $iconColor={iconColor}>
+        <IconWrapper
+          $bgColor={iconBg}
+          $iconColor={iconColor}
+        >
           {icon}
         </IconWrapper>
       </CardTop>

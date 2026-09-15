@@ -71,15 +71,15 @@ export default function useChatSocket(roomId, onMessageReceived, myAccountId) {
     };
   }, [roomId, accessToken, onMessageReceived, myAccountId]);
 
-  // 텍스트 메시지 전송
+  // 텍스트 메시지 전송 (clientMessageId를 넘기지 않으면 자동 생성)
   const sendMessage = useCallback(
-    (content) => {
+    (content, clientMessageId = `msg-${Date.now()}`) => {
       if (!stompClient.current?.connected) return false;
       stompClient.current.publish({
         destination: `/pub/chat/rooms/${roomId}/messages`,
         body: JSON.stringify({
           content: content,
-          clientMessageId: `msg-${Date.now()}`,
+          clientMessageId,
         }),
       });
       return true;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { X, Settings, Layers, CalendarDays } from 'lucide-react';
 import { reservationApi } from '../../../api/owner/reservationApi';
@@ -312,7 +312,10 @@ export default function CapacityModal({
           {/* 기본 운영 상태 설정 */}
           <FormGroup>
             <GroupTitle>
-              <CalendarDays size={15} color="#4CA771" />
+              <CalendarDays
+                size={15}
+                color="#4CA771"
+              />
               <span>기본 운영 상태 설정</span>
             </GroupTitle>
             <InputRow>
@@ -336,7 +339,10 @@ export default function CapacityModal({
           {/* 예약 타임 간격 */}
           <FormGroup>
             <GroupTitle>
-              <Settings size={15} color="#4CA771" />
+              <Settings
+                size={15}
+                color="#4CA771"
+              />
               <span>예약 타임 간격</span>
             </GroupTitle>
             <InputRow>
@@ -355,7 +361,10 @@ export default function CapacityModal({
           {/* 슬롯당 최대 수용량 (테이블 구성) */}
           <FormGroup>
             <GroupTitle>
-              <Layers size={15} color="#4CA771" />
+              <Layers
+                size={15}
+                color="#4CA771"
+              />
               <span>슬롯당 최대 수용량 (인원석별 테이블 수)</span>
             </GroupTitle>
 
@@ -387,10 +396,17 @@ export default function CapacityModal({
         </ScrollArea>
 
         <FooterGrid>
-          <FooterBtn onClick={onClose} disabled={isSaving}>
+          <FooterBtn
+            onClick={onClose}
+            disabled={isSaving}
+          >
             취소
           </FooterBtn>
-          <FooterBtn $primary onClick={handleSaveSettings} disabled={isSaving}>
+          <FooterBtn
+            $primary
+            onClick={handleSaveSettings}
+            disabled={isSaving}
+          >
             {isSaving ? '저장 중...' : '저장'}
           </FooterBtn>
         </FooterGrid>

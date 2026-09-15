@@ -9,9 +9,12 @@ export const reportApi = {
   getReportDetail: (reportId) => {
     return apiClient.get(`/admin/reports/${reportId}`);
   },
-  // 신고 처리 저장
-  processReport: (reportId, data) => {
-    return apiClient.put(`/admin/reports/${reportId}`, data);
+  // 신고 처리 저장 (숨김/삭제/경고/정지 등 실제 조치)
+  processReport: (reportId, action, adminNote) => {
+    return apiClient.patch(`/admin/reports/${reportId}/process`, {
+      action,
+      adminNote,
+    });
   },
 
   // 신고 기각 API

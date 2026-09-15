@@ -1,7 +1,5 @@
-import React from 'react';
 import styled from 'styled-components';
-// 🌟 Lucide 아이콘 임포트
-import { ShoppingCart, Calendar, BookOpen } from 'lucide-react';
+import { ShoppingCart, BookOpen } from 'lucide-react';
 
 const TypeCardContainer = styled.div`
   display: flex;
@@ -55,7 +53,10 @@ function TypeSelector({ currentType, onChangeType }) {
         onClick={() => onChangeType('SALE')}
       >
         <div className="icon-wrapper">
-          <ShoppingCart size={18} strokeWidth={2.5} />
+          <ShoppingCart
+            size={18}
+            strokeWidth={2.5}
+          />
         </div>
         <div className="title">판매 상품</div>
         <div className="desc">
@@ -72,7 +73,10 @@ function TypeSelector({ currentType, onChangeType }) {
         onClick={() => onChangeType('MENU')}
       >
         <div className="icon-wrapper">
-          <BookOpen size={18} strokeWidth={2.5} />
+          <BookOpen
+            size={18}
+            strokeWidth={2.5}
+          />
         </div>
         <div className="title">메뉴 상품</div>
         <div className="desc">

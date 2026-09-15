@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const RowGroup = styled.div`
@@ -46,30 +45,6 @@ const Select = styled.select`
   &:focus {
     border-color: #00a651;
   }
-`;
-const OptionHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 25px;
-  margin-bottom: 10px;
-  .add-btn {
-    color: #00a651;
-    font-size: 13px;
-    font-weight: bold;
-    cursor: pointer;
-    border: none;
-    background: none;
-  }
-`;
-const EmptyOptionBox = styled.div`
-  border: 1px dashed #e9ecef;
-  border-radius: 10px;
-  padding: 20px;
-  text-align: center;
-  color: #adb5bd;
-  font-size: 13px;
-  margin-bottom: 30px;
 `;
 
 function SaleFormFields({

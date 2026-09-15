@@ -1,7 +1,6 @@
 import styled from 'styled-components';
 import InputForm from '../../../components/InputForm';
-import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../../api/authApi';
 
@@ -80,6 +79,9 @@ function SignUpPage() {
   // 비밀번호 유효성 통과 여부 및 에러 메시지 상태 관리
   const [isPwValid, setIsPwValid] = useState(false);
 
+  // 사업자번호 인증 통과 여부
+  const [isBusinessVerified, setIsBusinessVerified] = useState(false);
+
   const handleEmailVerification = async (e) => {
     e.preventDefault();
 
@@ -115,6 +117,35 @@ function SignUpPage() {
     } catch (error) {
       console.error('인증코드 확인 실패:', error);
       alert('인증코드 확인에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const handleBusinessVerification = async (e) => {
+    e.preventDefault();
+
+    if (!businessNumber || !businessName || !openingDate) {
+      alert('사업자번호, 사업자명, 개업일자를 먼저 입력해주세요.');
+      return;
+    }
+
+    try {
+      const response = await authApi.verifyBusiness(
+        businessNumber,
+        businessName,
+        openingDate,
+      );
+      const verified = response.data?.data;
+
+      setIsBusinessVerified(!!verified);
+      alert(
+        verified
+          ? '정상적으로 확인된 사업자 정보입니다.'
+          : '입력하신 정보와 일치하는 사업자를 찾을 수 없습니다. 사업자번호, 사업자명, 개업일자를 다시 확인해주세요.',
+      );
+    } catch (error) {
+      console.error('사업자번호 인증 실패:', error);
+      setIsBusinessVerified(false);
+      alert('사업자 정보 확인에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -163,6 +194,23 @@ function SignUpPage() {
     const onlyNumbers = e.target.value.replace(/[^0-9]/g, '');
 
     setOpeningDate(onlyNumbers);
+    setIsBusinessVerified(false);
+  };
+
+  // 다음 우편번호 서비스로 사업장 소재지(도로명주소) 검색
+  const handleAddressSearch = (e) => {
+    e.preventDefault();
+
+    if (!window.daum?.Postcode) {
+      alert('주소 검색 스크립트를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    new window.daum.Postcode({
+      oncomplete: (data) => {
+        setLocation(data.roadAddress || data.jibunAddress);
+      },
+    }).open();
   };
 
   const handleSignUp = async (e) => {
@@ -201,6 +249,12 @@ function SignUpPage() {
       alert(
         '비밀번호 보안 규칙을 확인해 주세요. (영문/숫자/특수문자 조합 8자 이상)',
       );
+      return;
+    }
+
+    if (!isBusinessVerified) {
+      alert('사업자번호 인증을 먼저 완료해주세요.');
+      businessNumberRef.current?.focus();
       return;
     }
 
@@ -287,14 +341,22 @@ function SignUpPage() {
         title="사업자번호"
         placeholder="- 제외하고 입력해주세요"
         value={businessNumber}
-        onChange={(e) => setBusinessNumber(e.target.value)}
+        onChange={(e) => {
+          setBusinessNumber(e.target.value);
+          setIsBusinessVerified(false);
+        }}
+        buttonText={isBusinessVerified ? '인증완료' : '인증받기'}
+        onButtonClick={handleBusinessVerification}
       />
       <InputForm
         ref={businessNameRef}
         title="사업자명"
         placeholder="사업자명을 입력해주세요"
         value={businessName}
-        onChange={(e) => setBusinessName(e.target.value)}
+        onChange={(e) => {
+          setBusinessName(e.target.value);
+          setIsBusinessVerified(false);
+        }}
       />
       <InputForm
         ref={phoneRef}
@@ -324,9 +386,11 @@ function SignUpPage() {
       <InputForm
         ref={locationRef}
         title="사업장 소재지"
-        placeholder="사업장 소재지를 입력해주세요"
+        placeholder="주소 검색 버튼을 눌러주세요"
         value={location}
         onChange={(e) => setLocation(e.target.value)}
+        buttonText="주소 검색"
+        onButtonClick={handleAddressSearch}
       />
       <InputForm
         ref={storePhoneRef}

@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { Search, ChevronDown, MoreVertical, Check } from 'lucide-react';
 
-// ---------------- Styled Components ----------------
 const Container = styled.div`
   background-color: #ffffff;
   border-radius: 16px;

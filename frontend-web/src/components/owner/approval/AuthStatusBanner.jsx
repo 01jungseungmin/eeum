@@ -1,5 +1,4 @@
 import { Clock, Shield, CircleCheckBig, CircleX } from 'lucide-react';
-import React from 'react';
 import styled from 'styled-components';
 
 const BannerContainer = styled.div`
@@ -162,7 +161,10 @@ const AuthStatusBanner = ({ status }) => {
           <Label>사업자 인증 상태</Label>
           <BadgeGroup>
             <StatusIcon $color={config.titleColor}>{config.icon}</StatusIcon>
-            <StatusBadge $color={config.titleColor} $bg={config.titleBg}>
+            <StatusBadge
+              $color={config.titleColor}
+              $bg={config.titleBg}
+            >
               {config.title}
             </StatusBadge>
           </BadgeGroup>

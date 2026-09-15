@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import {
   AreaChart,
@@ -77,9 +76,23 @@ function SalesChart() {
           style={{ width: '100%' }} // 너비를 100%로 유연하게 확장
         >
           <defs>
-            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#2d5a43" stopOpacity={0.2} />
-              <stop offset="95%" stopColor="#2d5a43" stopOpacity={0} />
+            <linearGradient
+              id="colorRevenue"
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="1"
+            >
+              <stop
+                offset="5%"
+                stopColor="#2d5a43"
+                stopOpacity={0.2}
+              />
+              <stop
+                offset="95%"
+                stopColor="#2d5a43"
+                stopOpacity={0}
+              />
             </linearGradient>
           </defs>
           <CartesianGrid

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { X } from 'lucide-react';
 
@@ -148,7 +148,7 @@ export default function CategoryModal({
 
   useEffect(() => {
     if (isOpen) {
-      setCategoryName(initialValue);
+      queueMicrotask(() => setCategoryName(initialValue));
     }
   }, [isOpen, initialValue]);
 

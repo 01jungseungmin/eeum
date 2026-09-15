@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Clock, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { inquiryApi } from '../../../api/owner/inquiryApi';
@@ -341,7 +341,7 @@ export default function InquiryItem({ item: initialItem, onRefresh }) {
       } else {
         alert(res.data?.message || '답변 등록에 실패했습니다.');
       }
-    } catch (error) {
+    } catch {
       alert('서버 통신 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

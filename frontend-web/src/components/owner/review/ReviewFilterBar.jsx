@@ -1,7 +1,5 @@
-import React from 'react';
 import styled from 'styled-components';
 
-// --- Styled Components (최상단 위치) ---
 const BarContainer = styled.div`
   background: #ffffff;
   border-radius: 16px;

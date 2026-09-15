@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Camera, Store, Check, Star, Heart, MessageSquare } from 'lucide-react';
 
@@ -174,8 +173,14 @@ function StoreProfileCard({
             <span>등록된 상점 대표 이미지가 없습니다</span>
           </div>
         )}
-        <CameraButton onClick={onOpenImageModal} title="상점 사진 관리">
-          <Camera size={16} color="white" />
+        <CameraButton
+          onClick={onOpenImageModal}
+          title="상점 사진 관리"
+        >
+          <Camera
+            size={16}
+            color="white"
+          />
         </CameraButton>
       </ImageContainer>
 
@@ -195,15 +200,26 @@ function StoreProfileCard({
 
         <StatsSummaryBar>
           <MiniStatItem>
-            <Star size={13} fill="#ffbc00" color="#ffbc00" />
+            <Star
+              size={13}
+              fill="#ffbc00"
+              color="#ffbc00"
+            />
             <span>{storeInfo.rating?.toFixed(1) || '0.0'}</span>
           </MiniStatItem>
           <MiniStatItem>
-            <Heart size={13} fill="#ff4d61" color="#ff4d61" />
+            <Heart
+              size={13}
+              fill="#ff4d61"
+              color="#ff4d61"
+            />
             <span>찜 {storeInfo.favoriteCount || 0}</span>
           </MiniStatItem>
           <MiniStatItem>
-            <MessageSquare size={13} color="#4dabf7" />
+            <MessageSquare
+              size={13}
+              color="#4dabf7"
+            />
             <span>리뷰 {storeInfo.reviewCount || 0}</span>
           </MiniStatItem>
         </StatsSummaryBar>
@@ -244,7 +260,10 @@ function StoreProfileCard({
           >
             <span style={{ color: '#2e7d32' }}>● 영업중</span>
             {storeInfo.status === 'OPERATING' && (
-              <Check size={16} color="#2e7d32" />
+              <Check
+                size={16}
+                color="#2e7d32"
+              />
             )}
           </StatusOptionCard>
 
@@ -256,7 +275,10 @@ function StoreProfileCard({
           >
             <span style={{ color: '#f5222d' }}>● 영업 종료</span>
             {storeInfo.status === 'CLOSED' && (
-              <Check size={16} color="#f5222d" />
+              <Check
+                size={16}
+                color="#f5222d"
+              />
             )}
           </StatusOptionCard>
 
@@ -268,7 +290,10 @@ function StoreProfileCard({
           >
             <span style={{ color: '#d46b08' }}>● 휴식중</span>
             {storeInfo.status === 'TEMP_CLOSED' && (
-              <Check size={16} color="#d46b08" />
+              <Check
+                size={16}
+                color="#d46b08"
+              />
             )}
           </StatusOptionCard>
         </StatusSelectArea>

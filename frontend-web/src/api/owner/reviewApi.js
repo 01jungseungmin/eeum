@@ -22,7 +22,7 @@ export const reviewApi = {
       content,
     });
   },
-  deleteReply: (reviewId, replyId) => {
+  deleteReply: (reviewId) => {
     return apiClient.delete(`/owner/stores/me/reviews/${reviewId}/reply`);
   },
 };

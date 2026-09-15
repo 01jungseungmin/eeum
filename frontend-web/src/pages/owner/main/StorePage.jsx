@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import StoreProfileCard from '../../../components/owner/store/StoreProfileCard';
 import StoreNoticeCard from '../../../components/owner/store/StoreNoticeCard';
 import StoreInfoForm from '../../../components/owner/store/StoreInfoForm';
 import StoreImageModal from '../../../components/owner/store/StoreImageModal';
-import StoreHoursForm from '../../../components/owner/store/StoreHoursForm';
 import { storeApi } from '../../../api/owner/storeApi';
 
 const PageContainer = styled.div`
@@ -37,7 +36,6 @@ function StorePage() {
   const [storeInfo, setStoreInfo] = useState(null);
   const [notices, setNotices] = useState([]);
   const [storeImages, setStoreImages] = useState([]);
-  const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [businessHours, setBusinessHours] = useState([]);
 
@@ -98,10 +96,6 @@ function StorePage() {
         if (res.success) {
           const imageList = res.data || [];
           setStoreImages(imageList);
-          const currentThumbnail = imageList.find(
-            (img) => img.thumbnail === true,
-          );
-          setThumbnailUrl(currentThumbnail ? currentThumbnail.imageUrl : '');
         }
       })
       .catch((err) => console.error('상점 이미지 로드 실패:', err));
@@ -332,25 +326,6 @@ function StorePage() {
         }
       })
       .catch((err) => console.error('이미지 일괄 등록 실패:', err));
-  };
-
-  // 영업시간 수정
-  const handleUpdateHours = async (hoursArray) => {
-    try {
-      const requestBody = {
-        businessHours: hoursArray,
-      };
-
-      const response = await storeApi.updateBusinessHours(requestBody);
-
-      if (response.data?.success) {
-        alert('영업시간이 성공적으로 수정되었습니다.');
-        fetchAllData(); // 데이터 재조회로 화면 갱신
-      }
-    } catch (err) {
-      console.error('영업시간 수정 실패:', err);
-      alert('영업시간 수정에 실패했습니다.');
-    }
   };
 
   // 이미지 삭제

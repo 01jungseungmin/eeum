@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { Search, ChevronDown } from 'lucide-react';
 
-// 1번째 사진처럼 전체 영역을 감싸는 백그라운드 컨테이너 스타일링
 const FilterBarOuter = styled.div`
   background: #ffffff;
   border: 1px solid #e5e7eb;
@@ -107,7 +106,10 @@ function OrderFilterBar({
     <FilterBarOuter>
       <BarContainer>
         <SearchWrapper>
-          <Search size={16} color="#9ca3af" />
+          <Search
+            size={16}
+            color="#9ca3af"
+          />
           <Input
             type="text"
             placeholder="주문번호, 고객명, 상품명 검색..."
@@ -118,7 +120,11 @@ function OrderFilterBar({
 
         <DropdownContainer>
           <DropdownButton onClick={() => setIsOpen(!isOpen)}>
-            {filterType} <ChevronDown size={14} color="#4b5563" />
+            {filterType}{' '}
+            <ChevronDown
+              size={14}
+              color="#4b5563"
+            />
           </DropdownButton>
 
           {isOpen && (

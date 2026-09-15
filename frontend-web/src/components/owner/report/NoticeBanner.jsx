@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Flag } from 'lucide-react';
 
@@ -16,7 +15,11 @@ const Banner = styled.div`
 export default function NoticeBanner() {
   return (
     <Banner>
-      <Flag size={18} color="#2563eb" style={{ marginTop: '2px' }} />
+      <Flag
+        size={18}
+        color="#2563eb"
+        style={{ marginTop: '2px' }}
+      />
       <div style={{ fontSize: '13px' }}>
         <div
           style={{ fontWeight: 'bold', color: '#1d4ed8', marginBottom: '2px' }}

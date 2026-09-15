@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const CardsGrid = styled.div`
@@ -28,22 +27,35 @@ const CardValue = styled.div`
   color: ${(props) => props.$color || '#0f172a'};
 `;
 
-export default function SummaryCards() {
+export default function SummaryCards({ reports = [] }) {
+  const total = reports.length;
+  const pending = reports.filter((r) => r.status === 'PENDING').length;
+  const reviewed = reports.filter((r) => r.status === 'REVIEWED').length;
+
   return (
     <CardsGrid>
-      <Card $bg="#ffffff" $borderColor="#e2e8f0">
+      <Card
+        $bg="#ffffff"
+        $borderColor="#e2e8f0"
+      >
         <CardLabel $color="#64748b">전체 신고</CardLabel>
-        <CardValue>4</CardValue>
+        <CardValue>{total}</CardValue>
       </Card>
 
-      <Card $bg="#fffbeb" $borderColor="#fde68a">
+      <Card
+        $bg="#fffbeb"
+        $borderColor="#fde68a"
+      >
         <CardLabel $color="#b45309">검토중</CardLabel>
-        <CardValue $color="#b45309">2</CardValue>
+        <CardValue $color="#b45309">{pending}</CardValue>
       </Card>
 
-      <Card $bg="#f0fdf4" $borderColor="#bbf7d0">
+      <Card
+        $bg="#f0fdf4"
+        $borderColor="#bbf7d0"
+      >
         <CardLabel $color="#15803d">처리완료</CardLabel>
-        <CardValue $color="#15803d">2</CardValue>
+        <CardValue $color="#15803d">{reviewed}</CardValue>
       </Card>
     </CardsGrid>
   );

@@ -19,6 +19,14 @@ export const authApi = {
   verifyEmailCode: (email, code) =>
     apiClient.post('/auth/email/verify', { email, code }),
 
+  // 사업자등록번호 검증
+  verifyBusiness: (businessNumber, ownerName, openingDate) =>
+    apiClient.post('/auth/business/verify', {
+      businessNumber,
+      ownerName,
+      openingDate,
+    }),
+
   // 비밀번호 찾기 메일 발송
   requestPasswordReset: (email) =>
     apiClient.post('/auth/password/reset-request', { email }),

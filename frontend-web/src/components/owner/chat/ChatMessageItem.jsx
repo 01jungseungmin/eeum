@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const MessageRow = styled.div`
@@ -119,7 +118,10 @@ export default function ChatMessageItem({ msg, onContextMenu }) {
       {!isMe && (
         <Avatar>
           {msg.senderProfileImageUrl ? (
-            <img src={msg.senderProfileImageUrl} alt={msg.senderName} />
+            <img
+              src={msg.senderProfileImageUrl}
+              alt={msg.senderName}
+            />
           ) : (
             msg.senderName?.charAt(0) || '고'
           )}
@@ -137,7 +139,10 @@ export default function ChatMessageItem({ msg, onContextMenu }) {
             onContextMenu={(e) => onContextMenu(e, msg)}
           />
         ) : (
-          <ChatBubble $isMe={isMe} onContextMenu={(e) => onContextMenu(e, msg)}>
+          <ChatBubble
+            $isMe={isMe}
+            onContextMenu={(e) => onContextMenu(e, msg)}
+          >
             {msg.content || '내용 없음'}
           </ChatBubble>
         )}

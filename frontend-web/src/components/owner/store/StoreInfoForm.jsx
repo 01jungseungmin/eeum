@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Pencil, X, Save } from 'lucide-react';
-import StoreHoursForm from './StoreHoursForm'; // 분리된 영업시간 컴포넌트
+import StoreHoursForm from './StoreHoursForm';
 
 const Card = styled.div`
   background: white;
@@ -63,6 +63,11 @@ const TextArea = styled.textarea`
   height: 80px;
   resize: none;
   background: ${(props) => (props.disabled ? '#f5f5f5' : 'white')};
+`;
+
+const HelperText = styled.span`
+  font-size: 12px;
+  color: #999;
 `;
 
 const BaseButton = styled.button`
@@ -151,7 +156,7 @@ function StoreInfoForm({ storeInfo, onSave }) {
   // 💡 부모 컴포넌트(StorePage)에서 비동기로 API 조회가 완료되어 데이터가 변경되면 폼 상태 동기화
   useEffect(() => {
     if (!isEditing && storeInfo) {
-      setFormData(createInitialFormData(storeInfo));
+      queueMicrotask(() => setFormData(createInitialFormData(storeInfo)));
     }
   }, [storeInfo, isEditing]);
 
@@ -221,14 +226,12 @@ function StoreInfoForm({ storeInfo, onSave }) {
           />
         </Field>
         <Field>
-          <Label>카테고리 *</Label>
+          <Label>카테고리</Label>
           <Input
-            disabled={!isEditing}
+            disabled
             value={formData.categoryName || formData.category || ''}
-            onChange={(e) =>
-              setFormData({ ...formData, categoryName: e.target.value })
-            }
           />
+          <HelperText>카테고리 변경은 고객센터로 문의해주세요.</HelperText>
         </Field>
       </GridGroup>
 
