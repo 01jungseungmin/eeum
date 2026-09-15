@@ -283,6 +283,13 @@ export default function UsedTradeDetailScreen() {
             <Ionicons name="location-outline" size={16} color="#00A859" />
             <Text style={styles.locationText}>{product.regionName || '동네 정보 없음'}</Text>
           </View>
+
+          {product.tradeLocationName && (
+            <View style={styles.locationRow}>
+              <Ionicons name="pin-outline" size={16} color="#00A859" />
+              <Text style={styles.locationText}>{product.tradeLocationName}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.divider} />

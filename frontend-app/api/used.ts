@@ -14,6 +14,7 @@ export interface UsedProductSummary {
   thumbnailUrl: string | null;
   favoriteCount: number;
   createdAt: string;
+  tradeLocationName: string | null;
 }
 
 export interface UsedProductListParams {
@@ -44,6 +45,11 @@ export interface CreateUsedProductReq {
   content: string;
   priceType: UsedProductPriceType;
   price: number;
+  // 거래 희망 장소(선택). 셋 다 있거나 셋 다 없어야 한다 — 서버가 부분 입력을 400으로 막는다.
+  tradeLocationName?: string | null;
+  tradeLatitude?: number | null;
+  tradeLongitude?: number | null;
+  tradePlaceId?: string | null;
 }
 
 export interface UsedProductImage {
@@ -72,6 +78,10 @@ export interface UsedProductDetail {
   createdAt: string;
   modifiedAt: string;
   images: UsedProductImage[];
+  tradeLocationName: string | null;
+  tradeLatitude: number | null;
+  tradeLongitude: number | null;
+  tradePlaceId: string | null;
 }
 
 export const usedApi = {
