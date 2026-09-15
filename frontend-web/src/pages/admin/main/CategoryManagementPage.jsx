@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import CategoryCard from '../../../components/admin/category/CategoryCard';
 import AutoFilterSection from '../../../components/admin/category/AutoFilterSection';
 import CategoryModal from '../../../components/admin/category/CategoryModal';
-import { adminCategoryApi } from '../../../api/admin/CategoryApi';
+import { adminCategoryApi } from '../../../api/admin/categoryApi';
 
 const Container = styled.div`
   width: 100%;

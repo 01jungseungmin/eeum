@@ -11,7 +11,7 @@ import BusinessInfoModal from '../../../components/owner/approval/modals/Busines
 import RepresentativeMenuModal from '../../../components/owner/approval/modals/RepresentativeMenuModal';
 import SettlementAccountModal from '../../../components/owner/approval/modals/SettlementAccountModal';
 
-import { approvalApi } from '../../../api/owner/ApprovalApi';
+import { approvalApi } from '../../../api/owner/approvalApi';
 
 const Container = styled.div`
   margin: 0 auto;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import styled from 'styled-components';
 import { X, Clock } from 'lucide-react'; // 깔끔한 아이콘 사용
-import { approvalApi } from '../../../../api/owner/ApprovalApi';
+import { approvalApi } from '../../../../api/owner/approvalApi';
 
 const ModalOverlay = styled.div`
   position: fixed;

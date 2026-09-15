@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import styled from 'styled-components';
 import { X, Store } from 'lucide-react';
-import { approvalApi } from '../../../../api/owner/ApprovalApi';
+import { approvalApi } from '../../../../api/owner/approvalApi';
 
 const ModalOverlay = styled.div`
   position: fixed;
