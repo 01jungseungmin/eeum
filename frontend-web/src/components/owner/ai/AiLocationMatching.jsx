@@ -242,25 +242,13 @@ export default function AiLocationMatching() {
           setMatchData(response.data.data);
         }
       } catch (error) {
-        // aiPlanType이 아직 로딩되기 전의 레이스 구간에서만 여기로 온다 —
-        // 그 외에는 위 사전 체크에서 이미 걸러진다.
-        const status = error.response?.status;
-        const errorData = error.response?.data?.error || error.response?.data;
-        if (status === 403 || errorData?.code === 'AI_001') {
-          setPlanLocked(true);
-          setUpgradeMessage(
-            errorData?.message || '베이직 플랜부터 이용할 수 있는 기능이에요.',
-          );
-        } else {
           console.error('생활권 매칭 데이터 조회 실패:', error);
-        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchLocalMatch();
-  }, [aiPlanType]);
 
   if (loading) return <div>로딩 중...</div>;
 

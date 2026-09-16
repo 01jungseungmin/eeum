@@ -1,4 +1,3 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import {
   Megaphone,
@@ -212,23 +211,7 @@ export default function AiMarketingAutomation() {
         setLockBusy(false);
       }
     } catch (error) {
-      const errorData = error.response?.data?.error || error.response?.data;
-      if (error.response?.status === 403 || errorData?.code === 'AI_001') {
-        setPlanLocked(true);
-      } else if (errorData?.code === 'AI_015') {
-        // 이 위젯은 마운트/탭 전환마다 자동으로(사용량 차감 대상) 초안을
-        // 새로 만든다. confirmDelete 없이 계속 만들기만 하면 타입별 보관
-        // 캡(AI_015)을 채워서 이후엔 항상 409가 난다 — 계정 문제가 아니라
-        // 보관함이 꽉 찬 것이므로, "다시 시도" 대신 정리하라고 안내한다.
-        setDraftLimitReached(true);
-      } else if (errorData?.code === 'LOCK_001') {
-        // 위 isFetchingRef 가드로 거의 발생하지 않지만, 다른 화면(예: 문의/리뷰
-        // 초안 생성)과 같은 순간에 겹쳤을 때 등 완전히 배제할 순 없다 — 이건
-        // 실패가 아니라 "잠깐 후 재시도하면 되는" 일시적 상태라 알려만 준다.
-        setLockBusy(true);
-      } else {
         console.error('마케팅 문구 초안 생성 실패:', error);
-      }
       setDraft(null);
     } finally {
       isFetchingRef.current = false;
@@ -248,35 +231,6 @@ export default function AiMarketingAutomation() {
       return;
     }
     queueMicrotask(() => fetchDraft());
-  }, [fetchDraft, aiPlanType]);
-
-  if (planLocked) {
-    return (
-      <>
-        <CardContainer id="section-ai-marketing">
-          <Header>
-            <HeaderLeft>
-              <IconBox>
-                <Megaphone size={20} />
-              </IconBox>
-              <TitleArea>
-                <h3>마케팅 자동화 매니저</h3>
-                <p>베이직 플랜부터 이용할 수 있는 기능이에요.</p>
-              </TitleArea>
-            </HeaderLeft>
-          </Header>
-          <SubmitButton onClick={() => setIsUpgradeModalOpen(true)}>
-            <Crown size={16} /> 플랜 업그레이드
-          </SubmitButton>
-        </CardContainer>
-        <PlanUpgradeModal
-          isOpen={isUpgradeModalOpen}
-          onClose={() => setIsUpgradeModalOpen(false)}
-          errorMessage="베이직 플랜부터 이용할 수 있는 기능이에요."
-        />
-      </>
-    );
-  }
 
   return (
     <CardContainer id="section-ai-marketing">
@@ -325,10 +279,6 @@ export default function AiMarketingAutomation() {
         <AiMessageText>
           {loading
             ? '문구를 생성하는 중...'
-            : draftLimitReached
-              ? '보관 중인 초안이 가득 찼어요. 마케팅 페이지에서 오래된 초안을 정리한 뒤 다시 시도해주세요.'
-              : lockBusy
-                ? '다른 요청이 처리 중이에요. 잠시 후 "다시 생성"을 눌러주세요.'
                 : draft?.content || '문구 생성에 실패했습니다. 다시 시도해주세요.'}
         </AiMessageText>
       </AiMessageBox>
