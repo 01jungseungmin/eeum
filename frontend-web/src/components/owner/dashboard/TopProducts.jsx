@@ -138,7 +138,6 @@ function TopProducts() {
       const response = await storeApi.getProductSales(from, to);
 
       if (response?.success) {
-        console.log('인기 상품 조회 성공:', response.data);
         setProducts((response.data || []).slice(0, 3));
       }
     } catch (error) {

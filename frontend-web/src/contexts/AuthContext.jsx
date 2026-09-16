@@ -1,6 +1,9 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
-import axios from 'axios';
-import { setGlobalAnchorToken } from '../api/apiClient';
+import {
+  setGlobalAnchorToken,
+  onTokenChange,
+  reissueAccessToken,
+} from '../api/apiClient';
 import { aiManagerApi } from '../api/owner/aiManagerApi';
 
 const AuthContext = createContext();
@@ -19,6 +22,15 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     setGlobalAnchorToken(accessToken);
   }, [accessToken]);
+
+  // apiClient의 401 인터셉터가 조용히 토큰을 재발급하는 경우에도(요청 흐름 중이라
+  // 이 컴포넌트를 거치지 않음) React state가 같이 갱신되도록 리스너를 등록.
+  // 그래야 Sidebar의 SSE 연결처럼 accessToken을 구독하는 곳들이 재발급 시점에
+  // 새 토큰으로 다시 연결할 수 있다.
+  useEffect(() => {
+    onTokenChange((token) => setAccessToken(token));
+    return () => onTokenChange(null);
+  }, []);
 
   // 로그인/세션 복구 완료 시 AI 플랜 구독 상태를 1회 조회해 캐싱
   // (사장 계정이 아니면 404/403이 날 수 있으므로 실패는 조용히 무시)
@@ -52,12 +64,7 @@ export const AuthProvider = ({ children }) => {
       try {
         isReissuing.current = true;
 
-        const res = await axios.post(
-          'http://localhost:8080/auth/token/reissue',
-          {
-            refreshToken: rfToken,
-          },
-        );
+        const res = await reissueAccessToken(rfToken);
 
         if (res.data?.success || res.status === 200) {
           // 💡 백엔드 reissue 응답에 role, storeId 등을 포함시켜 받아옵니다.
