@@ -1,5 +1,11 @@
 import axios from 'axios';
 
+// 운영에서는 nginx가 같은 origin의 /api를 백엔드로 프록시하므로 상대경로가 기본값이다.
+// 로컬에서 배포 서버나 다른 백엔드로 바로 붙고 싶으면 .env.local에 VITE_API_URL로
+// 절대 URL(예: https://eeum.life/api)을 넣어 덮어쓸 수 있다. 아무 설정도 없으면
+// 이 상대경로가 vite.config.js의 dev proxy(/api → localhost:8080)를 타고 로컬 백엔드로 간다.
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 export let currentAccessToken = null;
 
 // AuthContext가 등록해두는 리스너. apiClient 내부(401 인터셉터)에서
@@ -29,7 +35,7 @@ let reissuePromise = null;
 export const reissueAccessToken = (refreshToken) => {
   if (!reissuePromise) {
     reissuePromise = axios
-      .post('http://localhost:8080/auth/token/reissue', { refreshToken })
+      .post(`${API_BASE_URL}/auth/token/reissue`, { refreshToken })
       .finally(() => {
         reissuePromise = null;
       });
@@ -38,7 +44,7 @@ export const reissueAccessToken = (refreshToken) => {
 };
 
 export const apiClient = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

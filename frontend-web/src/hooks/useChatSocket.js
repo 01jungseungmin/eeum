@@ -2,8 +2,23 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client } from '@stomp/stompjs';
 import { useAuth } from '../contexts/AuthContext';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-const WEBSOCKET_URL = BASE_URL.replace(/^http/, 'ws') + '/ws';
+// 운영에서는 VITE_API_URL이 상대경로(/api)라 도메인이 없으므로, 현재 페이지의
+// origin(window.location) 기준으로 wss://<도메인>/ws를 계산한다. 로컬에서
+// VITE_API_URL을 절대 URL(예: https://eeum.life/api)로 덮어썼다면 그 도메인을 쓴다.
+// /ws는 nginx·vite 프록시 둘 다 /api와 별개 경로로 처리하므로 /api 접미사는 버린다.
+const resolveWebSocketUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+
+  if (apiUrl && /^https?:\/\//.test(apiUrl)) {
+    const { protocol, host } = new URL(apiUrl);
+    return `${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}/ws`;
+  }
+
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${wsProtocol}//${window.location.host}/ws`;
+};
+
+const WEBSOCKET_URL = resolveWebSocketUrl();
 
 export default function useChatSocket(roomId, onMessageReceived, myAccountId) {
   const [connected, setConnected] = useState(false);
