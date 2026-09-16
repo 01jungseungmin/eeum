@@ -363,13 +363,20 @@ export default function AiOperationWarning() {
           setData(res.data.data);
         }
       } catch (error) {
+        const status = error.response?.status;
+        const errorData = error.response?.data?.error || error.response?.data;
+        if (status === 403 || errorData?.code === 'AI_001') {
+          setPlanLocked(true);
+        } else {
           console.error('운영 위험 조기경보 데이터 로딩 실패:', error);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
+  }, [aiPlanType]);
 
   if (loading) {
     return (

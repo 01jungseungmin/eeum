@@ -144,6 +144,33 @@ export default function AiManagerPage() {
         </div>
       </TwoColumnGrid>
 
+      {/* 5~8. 생활권 매칭 / 마케팅 자동화 / 운영 위험 조기경보 / AI 활동 요약
+          — 전부 BASIC부터 열리는 기능이라, 미만 플랜이면 위젯 4개 대신
+          통합 업그레이드 배너 하나만 보여준다. 사이드바가 각 섹션으로
+          앵커 스크롤하므로, id는 그대로 유지하고 배너 바로 앞에 빈 앵커로
+          붙여둔다. */}
+      {isBasicLocked ? (
+        <>
+          <div
+            id="section-ai-location"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <div
+            id="section-ai-marketing"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <div
+            id="section-ai-warning"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <div
+            id="section-ai-summary"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <AiBasicUpgradeBanner />
+        </>
+      ) : (
+        <>
           <TwoColumnGrid>
             <div
               id="section-ai-location"
@@ -172,6 +199,8 @@ export default function AiManagerPage() {
           >
             <AiWeeklySummary data={dashboardData?.activitySummary} />
           </div>
+        </>
+      )}
     </PageLayout>
   );
 }

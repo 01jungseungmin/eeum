@@ -210,13 +210,20 @@ export default function AiWeeklySummary() {
           setSummaryData(response.data.data);
         }
       } catch (error) {
+        const status = error.response?.status;
+        const errorData = error.response?.data?.error || error.response?.data;
+        if (status === 403 || errorData?.code === 'AI_001') {
+          setPlanLocked(true);
+        } else {
           console.error('AI 활동 요약 데이터를 불러오는 중 오류 발생:', error);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchSummary();
+  }, [aiPlanType]);
 
   if (loading) {
     return (
