@@ -239,4 +239,23 @@ class RedisLockIntegrationTest extends IntegrationTestSupport {
             stringRedisTemplate.delete(key);
         }
     }
+
+    @Test
+    void RateLimit_이미_차단된_TTL_없는_카운터도_차단_전에_만료를_복구한다() {
+        String key = "test:rate-limit:blocked-ttl-repair:" + UUID.randomUUID();
+        stringRedisTemplate.opsForValue().set(key, "5");
+
+        try {
+            assertThatThrownBy(() -> rateLimitService.checkNotBlocked(
+                    key, 5, Duration.ofSeconds(30), ErrorCode.AUTH_RATE_LIMITED))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.AUTH_RATE_LIMITED);
+
+            assertThat(stringRedisTemplate.getExpire(key, TimeUnit.MILLISECONDS))
+                    .isBetween(1L, 30_000L);
+        } finally {
+            stringRedisTemplate.delete(key);
+        }
+    }
 }

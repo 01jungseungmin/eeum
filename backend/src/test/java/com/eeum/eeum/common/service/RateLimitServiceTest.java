@@ -105,4 +105,21 @@ class RateLimitServiceTest {
                 any(DefaultRedisScript.class), eq(java.util.List.of(KEY)), eq("300000"));
         verify(redisTemplate, never()).expire(anyString(), any(Duration.class));
     }
+
+    @Test
+    void TTL_없는_한도_도달_카운터도_차단_전에_만료를_복구한다() {
+        // Given: INCR 뒤 장애로 TTL 없이 5회 실패 카운터만 남은 상태
+        when(redisTemplate.execute(
+                any(DefaultRedisScript.class), eq(java.util.List.of(KEY)), anyString()))
+                .thenReturn("5");
+
+        // When & Then: 이미 한도에 도달해도 Lua가 TTL을 붙인 뒤 차단한다.
+        assertThatThrownBy(() -> rateLimitService.checkNotBlocked(
+                KEY, 5, Duration.ofMinutes(5), ErrorCode.AUTH_RATE_LIMITED))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AUTH_RATE_LIMITED);
+        verify(redisTemplate).execute(
+                any(DefaultRedisScript.class), eq(java.util.List.of(KEY)), eq("300000"));
+    }
 }

@@ -26,6 +26,21 @@ public class RateLimitService {
                     Long.class
             );
 
+    private static final DefaultRedisScript<String> READ_WITH_TTL_REPAIR_SCRIPT =
+            new DefaultRedisScript<>(
+                    """
+                    local value = redis.call('get', KEYS[1])
+                    if not value then
+                        return nil
+                    end
+                    if redis.call('pttl', KEYS[1]) < 0 then
+                        redis.call('pexpire', KEYS[1], ARGV[1])
+                    end
+                    return value
+                    """,
+                    String.class
+            );
+
     private final StringRedisTemplate redisTemplate;
 
     // 쿨다운형 — SET NX + TTL. 같은 키로 cooldown 동안 1회만 허용 (이메일 인증 발송, 비밀번호 재설정 메일 등)
@@ -56,8 +71,10 @@ public class RateLimitService {
     }
 
     // 카운터형 — window 동안 누적된 실패 횟수가 maxAttempts 이상이면 차단 (로그인 실패 등)
-    public void checkNotBlocked(String key, int maxAttempts, ErrorCode errorCode) {
-        String value = redisTemplate.opsForValue().get(key);
+    public void checkNotBlocked(
+            String key, int maxAttempts, Duration window, ErrorCode errorCode
+    ) {
+        String value = readWithTtlRepair(key, window);
 
         if (value == null) {
             return;
@@ -103,5 +120,13 @@ public class RateLimitService {
                 String.valueOf(window.toMillis())
         );
         return count == null ? 0L : count;
+    }
+
+    private String readWithTtlRepair(String key, Duration window) {
+        return redisTemplate.execute(
+                READ_WITH_TTL_REPAIR_SCRIPT,
+                List.of(key),
+                String.valueOf(window.toMillis())
+        );
     }
 }
