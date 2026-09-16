@@ -3,6 +3,7 @@ package com.eeum.eeum.integration;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.common.service.RedisLockService;
+import com.eeum.eeum.common.service.RateLimitService;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +34,7 @@ class RedisLockIntegrationTest extends IntegrationTestSupport {
 
 
     private final RedisLockService redisLockService;
+    private final RateLimitService rateLimitService;
     private final StringRedisTemplate stringRedisTemplate;
 
     // ─────────────────────────────────────────────────────────────────
@@ -204,5 +207,55 @@ class RedisLockIntegrationTest extends IntegrationTestSupport {
         });
 
         assertThat(secondSuccess.get()).as("예외 발생 후 락 자동 해제 확인").isTrue();
+    }
+
+    @Test
+    void RateLimit_Lua가_실제_Redis에서_증가와_TTL을_함께_적용한다() {
+        String key = "test:rate-limit:lua:" + UUID.randomUUID();
+
+        try {
+            rateLimitService.recordFailure(key, Duration.ofSeconds(30));
+
+            assertThat(stringRedisTemplate.opsForValue().get(key)).isEqualTo("1");
+            assertThat(stringRedisTemplate.getExpire(key, TimeUnit.MILLISECONDS))
+                    .isBetween(1L, 30_000L);
+        } finally {
+            stringRedisTemplate.delete(key);
+        }
+    }
+
+    @Test
+    void RateLimit_Lua가_TTL이_유실된_기존_카운터를_복구한다() {
+        String key = "test:rate-limit:ttl-repair:" + UUID.randomUUID();
+        stringRedisTemplate.opsForValue().set(key, "4");
+
+        try {
+            rateLimitService.recordFailure(key, Duration.ofSeconds(30));
+
+            assertThat(stringRedisTemplate.opsForValue().get(key)).isEqualTo("5");
+            assertThat(stringRedisTemplate.getExpire(key, TimeUnit.MILLISECONDS))
+                    .isBetween(1L, 30_000L);
+        } finally {
+            stringRedisTemplate.delete(key);
+        }
+    }
+
+    @Test
+    void RateLimit_이미_차단된_TTL_없는_카운터도_차단_전에_만료를_복구한다() {
+        String key = "test:rate-limit:blocked-ttl-repair:" + UUID.randomUUID();
+        stringRedisTemplate.opsForValue().set(key, "5");
+
+        try {
+            assertThatThrownBy(() -> rateLimitService.checkNotBlocked(
+                    key, 5, Duration.ofSeconds(30), ErrorCode.AUTH_RATE_LIMITED))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.AUTH_RATE_LIMITED);
+
+            assertThat(stringRedisTemplate.getExpire(key, TimeUnit.MILLISECONDS))
+                    .isBetween(1L, 30_000L);
+        } finally {
+            stringRedisTemplate.delete(key);
+        }
     }
 }

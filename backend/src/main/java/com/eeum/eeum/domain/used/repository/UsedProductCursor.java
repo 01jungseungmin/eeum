@@ -3,7 +3,14 @@ package com.eeum.eeum.domain.used.repository;
 import com.eeum.eeum.exception.BadRequestException;
 import com.eeum.eeum.exception.ErrorCode;
 
-/** 중고 게시글 목록 커서. 정렬 키를 문자열로 보관해 여러 정렬을 지원한다. */
+/**
+ * 중고 게시글 목록 커서. 페이징 규칙은 CLAUDE.md "페이징 선택 기준" 참고.
+ *
+ * 정렬 키를 클라이언트가 고를 수 있어(createdAt·price·favoriteCount·viewCount) 값의 타입도
+ * 함께 바뀐다. 그래서 원문 문자열만 보관하고 해석은 실제 정렬을 아는 리포지토리가 한다.
+ * sortValue가 null이면 가격순 정렬에서 가격제안(price null) 글에 걸린 커서다 — 그 구간은
+ * 정렬상 맨 뒤라 ID로만 이어 읽는다. 찜 수·조회수처럼 변하는 키는 행이 커서를 넘나든다.
+ */
 public record UsedProductCursor(String sortValue, Long usedProductId) {
 
     /**

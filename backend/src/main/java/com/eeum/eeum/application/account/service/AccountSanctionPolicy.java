@@ -7,7 +7,15 @@ import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.ForbiddenException;
 import org.springframework.stereotype.Component;
 
-/** 관리자 제재 경로의 대상 자격을 한 곳에서 판정한다. 정지 계정의 강제 탈퇴는 허용한다. */
+/**
+ * 관리자 제재(경고·정지·강제 탈퇴)의 대상 자격 판정.
+ *
+ * 제재 경로가 관리자 직접 API와 신고 처리 둘이라, 판정을 각자 적어두면 한쪽만 고쳐져
+ * "신고로는 못 건드리는데 관리자 API로는 되는" 구멍이 생긴다(실제로 그랬다).
+ * 조치마다 허용 상태가 달라 메서드를 나눈다 — 하나로 합쳐 isSuspended를 전 경로에 걸면
+ * 정지 계정의 강제 탈퇴가 막혀 회귀한다. 정지 후 탈퇴는 정상 흐름이다.
+ * 자기 제재는 따로 막지 않는다 — ROLE_ADMIN 전용이라 관리자 차단이 이미 포함한다.
+ */
 @Component
 public class AccountSanctionPolicy {
 

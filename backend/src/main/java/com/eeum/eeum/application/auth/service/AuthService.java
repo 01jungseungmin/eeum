@@ -194,7 +194,8 @@ public class AuthService {
         String loginFailKey = RateLimitKeys.loginFail(request.getEmail());
 
         // 5분 동안 5회 이상 실패한 이메일은 비밀번호 확인 없이 바로 차단
-        rateLimitService.checkNotBlocked(loginFailKey, LOGIN_FAIL_MAX_ATTEMPTS, ErrorCode.AUTH_RATE_LIMITED);
+        rateLimitService.checkNotBlocked(
+                loginFailKey, LOGIN_FAIL_MAX_ATTEMPTS, LOGIN_FAIL_WINDOW, ErrorCode.AUTH_RATE_LIMITED);
 
         Account account = accountRepository.findByEmail(request.getEmail()).orElse(null);
 

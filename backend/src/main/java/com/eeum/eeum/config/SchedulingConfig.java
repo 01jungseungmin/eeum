@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
-/** 또 @Scheduled 작업에서 빠져나온 예외를 운영 실패 이력으로 남긴다. */
+/** 스케줄 작업(@Scheduled)에서 빠져나온 예외를 운영 실패 이력으로 남긴다. */
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
