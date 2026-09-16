@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { X, Sparkles, Send, Check, Loader2 } from 'lucide-react';
 import { aiManagerApi } from '../../../../api/owner/aiManagerApi';
@@ -51,17 +51,31 @@ export default function ComplaintReplyModal({
   const [isSending, setIsSending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // isSending(state)만으로는 못 막는 레이스 두 가지를 ref로 막는다: StrictMode의
+  // mount effect 중복 실행(draft 중복 생성), 그리고 버튼 빠른 두 번 클릭(두 번째
+  // 클릭이 setIsSending(true)가 재렌더로 반영되기 전에 같은 렌더의 오래된
+  // isSending(false)을 읽어 가드를 통과 — 그 결과 같은 messageId로 /send가
+  // 두 번 나가 두 번째 요청이 409(AI_INVALID_STATUS)로 실패한다.
+  const isCreatingDraftRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+
   useEffect(() => {
     if (!isOpen) return;
+    if (isCreatingDraftRef.current) return;
+    isCreatingDraftRef.current = true;
 
     queueMicrotask(() => {
       setIsSuccess(false);
       setMessage('');
       setDraft(null);
 
-      createDraft().then((result) => {
-        if (result) setMessage(result.content || '');
-      });
+      createDraft()
+        .then((result) => {
+          if (result) setMessage(result.content || '');
+        })
+        .finally(() => {
+          isCreatingDraftRef.current = false;
+        });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -69,15 +83,20 @@ export default function ComplaintReplyModal({
   if (!isOpen) return null;
 
   const handleSubmit = async () => {
-    if (!draft?.messageId || isSending) return;
+    if (!draft?.messageId || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsSending(true);
 
     try {
-      if (message !== draft.content) {
-        await aiManagerApi.updateGeneratedMessage(draft.messageId, {
-          content: message,
-        });
-      }
+      // 수정 여부와 무관하게 항상 호출해야 한다 — 백엔드는 방금 만들어진
+      // DRAFT 상태를 바로 send() 하는 걸 막고, edit()(=이 PATCH 호출)을 거쳐
+      // REVIEWED로 전환된 메시지만 보낼 수 있게 해놨다(AiGeneratedMessage.
+      // validateTransitable). AI 문구를 안 고치고 그대로 보내는 — 즉
+      // message === draft.content인 — 가장 흔한 경로에서만 이 호출을
+      // 건너뛰던 게 실제 버그였다.
+      await aiManagerApi.updateGeneratedMessage(draft.messageId, {
+        content: message,
+      });
       await aiManagerApi.sendGeneratedMessage(draft.messageId);
 
       setIsSuccess(true);
@@ -89,6 +108,7 @@ export default function ComplaintReplyModal({
           '전송 중 오류가 발생했습니다.',
       );
     } finally {
+      isSubmittingRef.current = false;
       setIsSending(false);
     }
   };
