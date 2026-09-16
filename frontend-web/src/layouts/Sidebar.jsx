@@ -149,7 +149,7 @@ const CATEGORY_MAP = {
 function Sidebar({ approvalStatus }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, accessToken } = useAuth();
 
   const role = sessionStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
@@ -170,14 +170,15 @@ function Sidebar({ approvalStatus }) {
 
   const [activeSection, setActiveSection] = useState('section-ai-report');
 
-  // SSE 실시간 연결
+  // SSE 실시간 연결 (accessToken이 재발급되어 바뀔 때마다 새 토큰으로 재연결)
   useEffect(() => {
-    const { url, token } = notificationApi.getSubscribeInfo();
-    if (!token) return;
+    if (!accessToken) return;
+
+    const { url } = notificationApi.getSubscribeInfo();
 
     const eventSource = new EventSourcePolyfill(url, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       heartbeatTimeout: 300000,
     });
@@ -214,7 +215,7 @@ function Sidebar({ approvalStatus }) {
     return () => {
       eventSource.close();
     };
-  }, []);
+  }, [accessToken]);
 
   // 메뉴 클릭 핸들러
   const handleMenuClick = async (e, item) => {
