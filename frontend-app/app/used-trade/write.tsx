@@ -1,4 +1,4 @@
-import React, { useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,10 @@ import { Text } from '../../components/CustomText';
 import * as ImagePicker from 'expo-image-picker';
 import { usedApi, UsedProductPriceType } from '../../api/used';
 import { USED_CATEGORIES } from '../../constants/usedCategories';
+import { categoryApi } from '../../api/category';
 import { uploadImageAssets } from '../../utils/imageUpload';
+import { regionApi } from '../../api/region';
+import TradeLocationPickerModal, { TradeLocationSelection } from '../../components/used/TradeLocationPickerModal';
 
 export default function UsedTradeWriteScreen() {
   const router = useRouter();
@@ -22,9 +25,29 @@ export default function UsedTradeWriteScreen() {
   const [price, setPrice] = useState('');
   const [isFree, setIsFree] = useState(false);
   const [description, setDescription] = useState('');
-  const [tradeLocation, setTradeLocation] = useState(''); 
+
+  // 대략 거래 장소(선택). 셋 다 있거나 셋 다 없어야 한다 — 모달이 그 제약을 지킨 값만 넘겨준다.
+  const [tradeLocation, setTradeLocation] = useState<TradeLocationSelection | null>(null);
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+  const [regionCenter, setRegionCenter] = useState<{ lat: number; lng: number } | null>(null);
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  // 지도 초기 중심 — 내 대표 지역 좌표. 실패하거나 좌표 미등록 지역이면 모달 쪽 기본 좌표를 쓴다.
+  useEffect(() => {
+    let cancelled = false;
+    regionApi.getMyRegions()
+      .then(res => {
+        if (cancelled) return;
+        const regions = res.data || [];
+        const primary = regions.find((r: any) => r.isPrimary === true) || regions[0];
+        if (primary?.latitude && primary?.longitude) {
+          setRegionCenter({ lat: primary.latitude, lng: primary.longitude });
+        }
+      })
+      .catch(err => console.warn('대표 지역 조회 실패:', err));
+    return () => { cancelled = true; };
+  }, []);
 
   // price는 숫자만 담고, 화면에는 콤마를 찍어서 보여준다. 전송할 때 되돌릴 필요가 없다.
   const handlePriceChange = (text: string) => {
@@ -32,7 +55,24 @@ export default function UsedTradeWriteScreen() {
   };
   const formattedPrice = price ? Number(price).toLocaleString() : '';
 
-  const selectableCategories = USED_CATEGORIES.filter(c => c.id !== null);
+  // 카테고리는 서버(category 테이블 type=USED)에서 받는다.
+  // 조회에 실패하면 상수 목록으로 떨어뜨려 글 작성 자체가 막히지 않게 한다.
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
+    USED_CATEGORIES.filter(c => c.id !== null).map(c => ({ id: c.id as number, name: c.name }))
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    categoryApi.getCategories('USED')
+      .then(list => {
+        if (cancelled || list.length === 0) return;
+        setCategories(list.map(c => ({ id: c.categoryId, name: c.name })));
+      })
+      .catch(err => console.warn('카테고리 조회 실패, 기본 목록 사용:', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  const selectableCategories = categories;
   const selectedCategoryName = selectableCategories.find(c => c.id === categoryId)?.name || '카테고리를 선택해주세요';
 
   const pickImages = async () => {
@@ -77,7 +117,11 @@ export default function UsedTradeWriteScreen() {
         title: title,
         content: description, 
         priceType: isFree ? 'FREE' : 'FIXED' as UsedProductPriceType,
-        price: isFree ? 0 : Number(price)
+        price: isFree ? 0 : Number(price),
+        tradeLocationName: tradeLocation?.name ?? null,
+        tradeLatitude: tradeLocation?.latitude ?? null,
+        tradeLongitude: tradeLocation?.longitude ?? null,
+        tradePlaceId: tradeLocation?.placeId ?? null,
       };
 
       const res = await usedApi.createUsedProduct(payload);
@@ -233,16 +277,22 @@ export default function UsedTradeWriteScreen() {
         <View style={styles.divider} />
 
         <View style={styles.section}>
-          <Text style={styles.label}>거래 방법</Text>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder="거래 희망 장소를 입력해주세요"
-              placeholderTextColor="#999"
-              value={tradeLocation}
-              onChangeText={setTradeLocation}
-            />
-          </View>
+          <Text style={styles.label}>거래 희망 장소 <Text style={styles.labelSub}>(선택)</Text></Text>
+          <TouchableOpacity
+            style={[styles.inputWrapper, { paddingVertical: 14 }]}
+            onPress={() => setIsLocationPickerOpen(true)}
+          >
+            <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+            <Text style={[styles.inputText, !tradeLocation && styles.placeholderText]} numberOfLines={1}>
+              {tradeLocation?.name || '지도에서 거래 희망 장소를 선택해주세요'}
+            </Text>
+            {tradeLocation && (
+              <TouchableOpacity onPress={() => setTradeLocation(null)} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color="#CCC" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.helperText}>동네만 공개하고 싶다면 비워두셔도 됩니다.</Text>
         </View>
 
         <View style={styles.tipContainer}>
@@ -251,6 +301,16 @@ export default function UsedTradeWriteScreen() {
           <Text style={styles.tipText}>2. 상품을 직접 확인한 후 거래해주세요.</Text>
           <Text style={styles.tipText}>3. 계좌이체는 신중하게 진행해주세요.</Text>
         </View>
+
+        <TouchableOpacity
+          style={[styles.bottomSubmit, isLoading && styles.bottomSubmitDisabled]}
+          onPress={handleSubmit}
+          disabled={isLoading}
+        >
+          {isLoading
+            ? <ActivityIndicator size="small" color="#FFF" />
+            : <Text style={styles.bottomSubmitText}>완료</Text>}
+        </TouchableOpacity>
 
       </ScrollView>
 
@@ -273,6 +333,16 @@ export default function UsedTradeWriteScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <TradeLocationPickerModal
+        visible={isLocationPickerOpen}
+        initialCenter={regionCenter}
+        onClose={() => setIsLocationPickerOpen(false)}
+        onConfirm={(selection) => {
+          setTradeLocation(selection);
+          setIsLocationPickerOpen(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -317,6 +387,9 @@ const styles = StyleSheet.create({
   tipContainer: { backgroundColor: '#F5F5F5', borderRadius: 8, padding: 16, marginHorizontal: 20, marginTop: 10 },
   tipTitle: { fontSize: 13, fontWeight: 'bold', color: '#333', marginBottom: 10 },
   tipText: { fontSize: 12, color: '#666', marginBottom: 4 },
+  bottomSubmit: { backgroundColor: '#00A859', borderRadius: 8, height: 52, justifyContent: 'center', alignItems: 'center', marginHorizontal: 20, marginTop: 24 },
+  bottomSubmitDisabled: { backgroundColor: '#9ED9BD' },
+  bottomSubmitText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingVertical: 10, paddingBottom: 30 },
   modalOption: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 24 },
