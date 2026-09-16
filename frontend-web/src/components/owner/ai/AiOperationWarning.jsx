@@ -14,6 +14,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
+import PlanUpgradeModal from './modal/PlanUpgradeModal';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -267,6 +273,34 @@ const LoadingBox = styled.div`
   color: #9ca3af;
 `;
 
+const LockedMessage = styled.p`
+  color: #6b7280;
+  text-align: center;
+  padding: 20px 0;
+  margin: 0;
+`;
+
+const UpgradeButton = styled.button`
+  width: 100%;
+  background-color: #47a075;
+  color: #ffffff;
+  border: none;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #3b8762;
+  }
+`;
+
 // 위험도 레벨 매핑 Helper
 const getLevelStyle = (level) => {
   switch (level) {
@@ -303,10 +337,25 @@ const getLevelStyle = (level) => {
 
 export default function AiOperationWarning() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [planLocked, setPlanLocked] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   useEffect(() => {
+    // 캐싱된 플랜으로 이미 BASIC 미만인 게 확실하면 요청 자체를 생략한다 —
+    // 안 그러면 403 + 브라우저/우리 콘솔에 에러 로그가 매번 찍힌다.
+    if (
+      !hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.operationRiskSummary)
+    ) {
+      queueMicrotask(() => {
+        setPlanLocked(true);
+        setLoading(false);
+      });
+      return;
+    }
+
     const fetchData = async () => {
       try {
         const res = await aiManagerApi.getRiskEarlyInfo();
@@ -314,14 +363,20 @@ export default function AiOperationWarning() {
           setData(res.data.data);
         }
       } catch (error) {
-        console.error('운영 위험 조기경보 데이터 로딩 실패:', error);
+        const status = error.response?.status;
+        const errorData = error.response?.data?.error || error.response?.data;
+        if (status === 403 || errorData?.code === 'AI_001') {
+          setPlanLocked(true);
+        } else {
+          console.error('운영 위험 조기경보 데이터 로딩 실패:', error);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [aiPlanType]);
 
   if (loading) {
     return (
@@ -333,6 +388,39 @@ export default function AiOperationWarning() {
           />
         </LoadingBox>
       </CardContainer>
+    );
+  }
+
+  if (planLocked) {
+    return (
+      <>
+        <CardContainer id="section-ai-warning">
+          <Header>
+            <HeaderLeft>
+              <IconBox>
+                <Siren size={20} />
+              </IconBox>
+              <div>
+                <TitleArea>
+                  <h3>산업부 데이터 기반 운영 위험 조기경보</h3>
+                  <BadgePro>
+                    <Crown size={12} /> Basic 이상
+                  </BadgePro>
+                </TitleArea>
+              </div>
+            </HeaderLeft>
+          </Header>
+          <LockedMessage>베이직 플랜부터 이용할 수 있는 기능이에요.</LockedMessage>
+          <UpgradeButton onClick={() => setIsUpgradeModalOpen(true)}>
+            <Crown size={16} /> 플랜 업그레이드
+          </UpgradeButton>
+        </CardContainer>
+        <PlanUpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          errorMessage="베이직 플랜부터 이용할 수 있는 기능이에요."
+        />
+      </>
     );
   }
 
