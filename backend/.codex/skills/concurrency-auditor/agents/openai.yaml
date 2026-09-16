@@ -1,0 +1,4 @@
+interface:
+  display_name: "동시성 감사"
+  short_description: "경쟁 조건과 멱등성 및 상태 전이 안전성을 감사합니다"
+  default_prompt: "Use $concurrency-auditor to audit these changes for concurrency and idempotency risks."

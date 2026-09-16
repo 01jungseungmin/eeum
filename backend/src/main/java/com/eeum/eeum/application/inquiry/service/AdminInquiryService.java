@@ -1,0 +1,165 @@
+package com.eeum.eeum.application.inquiry.service;
+
+import com.eeum.eeum.application.inquiry.dto.request.InquiryAnswerCreateRequestDto;
+import com.eeum.eeum.application.inquiry.dto.response.InquiryAnswerResponseDto;
+import com.eeum.eeum.application.inquiry.dto.response.InquiryDetailResponseDto;
+import com.eeum.eeum.application.inquiry.dto.response.InquiryResponseDto;
+import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.inquiry.entity.Inquiry;
+import com.eeum.eeum.domain.inquiry.entity.InquiryAnswer;
+import com.eeum.eeum.domain.inquiry.enums.InquiryAnswerWriterType;
+import com.eeum.eeum.domain.inquiry.enums.InquiryCategory;
+import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
+import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
+import com.eeum.eeum.domain.inquiry.event.InquiryAnsweredEvent;
+import com.eeum.eeum.domain.inquiry.repository.InquiryAnswerRepository;
+import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
+import com.eeum.eeum.exception.ConflictException;
+import com.eeum.eeum.exception.ErrorCode;
+import com.eeum.eeum.exception.ForbiddenException;
+import com.eeum.eeum.exception.NotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class AdminInquiryService {
+
+    private final InquiryRepository inquiryRepository;
+    private final InquiryAnswerRepository inquiryAnswerRepository;
+    private final AccountRepository accountRepository;
+    private final InquiryService inquiryService;
+    private final ApplicationEventPublisher eventPublisher;
+
+    @Transactional(readOnly = true)
+    public Page<InquiryResponseDto> getAdminInquiries(
+            InquiryStatus status,
+            InquiryCategory category,
+            String keyword,
+            Pageable pageable
+    ) {
+        return inquiryRepository
+                .searchInquiries(InquiryTargetType.ADMIN, status, category, keyword, pageable)
+                .map(InquiryResponseDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public InquiryDetailResponseDto getAdminInquiryDetail(Long inquiryId) {
+        Inquiry inquiry = inquiryRepository.findByInquiryId(inquiryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.INQUIRY_NOT_FOUND));
+
+        if (inquiry.getTargetType() != InquiryTargetType.ADMIN) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+
+        List<InquiryAnswerResponseDto> answers = inquiryService.getAnswerDtos(inquiryId);
+        return InquiryDetailResponseDto.of(inquiry, answers);
+    }
+
+    @Transactional
+    public InquiryAnswerResponseDto answerInquiry(Long adminId, Long inquiryId,
+                                                   InquiryAnswerCreateRequestDto request) {
+        Inquiry inquiry = inquiryRepository.findByInquiryId(inquiryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.INQUIRY_NOT_FOUND));
+
+        if (inquiry.getTargetType() != InquiryTargetType.ADMIN) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+        if (inquiry.isClosed()) {
+            throw new ConflictException(ErrorCode.INQUIRY_CLOSED);
+        }
+        if (!inquiry.isAnswerable()) {
+            throw new ConflictException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+        }
+        // 재오픈된 문의는 상태가 PENDING으로 돌아가지만 기존 답변은 그대로 남아 있다.
+        // 답변은 문의당 1건이므로(uk_inquiry_answer_inquiry_id) 여기서 막지 않으면
+        // DB 제약 위반이 그대로 새어 나간다. 정정이 필요하면 updateAnswer를 쓴다.
+        if (inquiryAnswerRepository.existsByInquiry_InquiryId(inquiryId)) {
+            throw new ConflictException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
+        }
+
+        Account admin = accountRepository.findById(adminId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        InquiryAnswer answer = InquiryAnswer.create(inquiry, admin, InquiryAnswerWriterType.ADMIN, request.getContent());
+        InquiryAnswer saved = inquiryAnswerRepository.save(answer);
+        inquiry.markAnswered();
+
+        eventPublisher.publishEvent(new InquiryAnsweredEvent(
+                inquiry.getInquiryId(),
+                inquiry.getWriter().getAccountId(),
+                inquiry.getTitle()
+        ));
+
+        return InquiryAnswerResponseDto.from(saved);
+    }
+
+    /** 관리자 답변 본문 정정. */
+    @Transactional
+    public InquiryAnswerResponseDto updateAnswer(
+            Long inquiryId,
+            Long answerId,
+            InquiryAnswerCreateRequestDto request
+    ) {
+        Inquiry inquiry = getAdminInquiryOrThrow(inquiryId);
+
+        InquiryAnswer answer = inquiryAnswerRepository.findById(answerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.INQUIRY_ANSWER_NOT_FOUND));
+
+        // 다른 문의의 답변 ID를 넘겨 남의 답변을 고치는 경로를 막는다.
+        if (!answer.getInquiry().getInquiryId().equals(inquiry.getInquiryId())) {
+            throw new NotFoundException(ErrorCode.INQUIRY_ANSWER_NOT_FOUND);
+        }
+        // 관리자 API로 사장 답변을 고칠 수 없다.
+        if (!answer.isWrittenBy(InquiryAnswerWriterType.ADMIN)) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+
+        answer.updateContent(request.getContent());
+
+        // modifiedAt은 @LastModifiedDate라 flush(@PreUpdate) 시점에 채워진다.
+        // flush 없이 DTO를 만들면 edited=false, modifiedAt=이전 값이 그대로 응답에 실린다.
+        inquiryAnswerRepository.flush();
+
+        return InquiryAnswerResponseDto.from(answer);
+    }
+
+    // ===================== 문의 종료 / 재오픈 =====================
+
+    @Transactional
+    public void closeInquiry(Long inquiryId) {
+        Inquiry inquiry = getAdminInquiryOrThrow(inquiryId);
+        if (inquiry.isClosed()) {
+            throw new ConflictException(ErrorCode.INQUIRY_ALREADY_CLOSED);
+        }
+        inquiry.close();
+    }
+
+    @Transactional
+    public void reopenInquiry(Long inquiryId) {
+        Inquiry inquiry = getAdminInquiryOrThrow(inquiryId);
+        if (!inquiry.isClosed()) {
+            throw new ConflictException(ErrorCode.INQUIRY_NOT_CLOSED);
+        }
+        // 답변이 남아 있으면 ANSWERED로 되돌린다 — PENDING으로 되돌리면 재답변이 거부되어
+        // 미답변 목록과 대시보드 미답변 수에서 빠져나갈 수 없게 된다.
+        inquiry.reopen(inquiryAnswerRepository.existsByInquiry_InquiryId(inquiryId));
+    }
+
+    // ADMIN 문의가 아니면 관리자 API로 다룰 수 없다 — 상점 문의는 사장이 담당한다.
+    private Inquiry getAdminInquiryOrThrow(Long inquiryId) {
+        Inquiry inquiry = inquiryRepository.findByInquiryId(inquiryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.INQUIRY_NOT_FOUND));
+        if (inquiry.getTargetType() != InquiryTargetType.ADMIN) {
+            throw new ForbiddenException(ErrorCode.INQUIRY_TARGET_TYPE_MISMATCH);
+        }
+        return inquiry;
+    }
+}

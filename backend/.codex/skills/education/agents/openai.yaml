@@ -1,0 +1,4 @@
+interface:
+  display_name: "백엔드 학습 설명"
+  short_description: "프로젝트 코드를 한국어 학습형 설명으로 풀어냅니다"
+  default_prompt: "Use $education to explain this code and its design in learning mode."

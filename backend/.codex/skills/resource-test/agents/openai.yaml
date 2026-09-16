@@ -1,0 +1,4 @@
+interface:
+  display_name: "자원 고갈 테스트 생성"
+  short_description: "스레드·커넥션·소켓 자원을 굶겨 블로킹과 누수를 재현하는 통합 테스트를 작성합니다"
+  default_prompt: "Use $resource-test to add integration tests that starve threads, DB connections and sockets to expose blocking and leaks."

@@ -1,0 +1,177 @@
+spring:
+  config:
+    import: optional:file:../.env[.properties]
+
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/eeum?connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: eeum-pool
+      # Tomcat 워커는 200인데 커넥션은 이 수가 상한이다. 요청 하나가 커넥션 하나만
+      # 쓴다는 전제 위의 값이다 — afterCommit에서 REQUIRES_NEW를 여는 식으로 한 요청이
+      # 2개를 쥐기 시작하면 실효 동시성이 절반으로 떨어진다.
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      # 기본값 30초는 너무 길다. 풀이 고갈되면 요청 스레드 200개가 30초씩 묶여
+      # 서버가 꺼진 것처럼 보인다. 빨리 실패시켜 원인을 드러낸다.
+      connection-timeout: 5000
+      # MySQL wait_timeout(기본 28800s)과 프록시 idle cut보다 짧게 잡아,
+      # 이미 끊긴 커넥션을 풀에서 꺼내 쓰는 상황을 막는다.
+      max-lifetime: 1740000
+      keepalive-time: 300000
+      # 커넥션을 20초 넘게 쥐고 있으면 스택트레이스를 남긴다. 커넥션 이중 점유가
+      # 다시 들어와도 장애가 아니라 로그로 먼저 드러나게 하는 안전망이다.
+      leak-detection-threshold: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/common
+    # 기존 테이블이 이미 존재하지만
+    # flyway_schema_history가 없는 DB를 Flyway 체계에 편입
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+springdoc:
+  swagger-ui:
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiration: ${JWT_ACCESS_EXPIRATION:1800}
+  refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:1209600}
+  reauth-token-expiration: ${JWT_REAUTH_TOKEN_EXPIRATION:300}
+  password-reset-token-expiration: ${JWT_PASSWORD_RESET_TOKEN_EXPIRATION:1800}
+
+auth:
+  email-verification-code-expiration: ${EMAIL_VERIFICATION_CODE_EXPIRATION:300}
+  email-verification-token-expiration: ${EMAIL_VERIFICATION_TOKEN_EXPIRATION:1800}
+
+business:
+  nts:
+    service-key: ${NTS_BUSINESS_SERVICE_KEY}
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY}
+
+# 정산 수수료율 — 0 이상 1 이하의 소수(0.033 = 3.3%). 현재는 수수료 없음.
+# 이 숫자만 바꾸면 이후 생성되는 수익 원장부터 새 수수료가 적용된다.
+settlement:
+  fee:
+    pg-rate: ${SETTLEMENT_PG_FEE_RATE:0}
+    platform-rate: ${SETTLEMENT_PLATFORM_FEE_RATE:0}
+
+portone:
+  api-secret: ${PORTONE_API_SECRET}
+  base-url: ${PORTONE_BASE_URL:https://api.portone.io}
+  webhook-secret: ${PORTONE_WEBHOOK_SECRET}
+
+fcm:
+  project-id: ${FCM_PROJECT_ID}
+  service-account-key-path: ${FCM_SERVICE_ACCOUNT_KEY_PATH}
+  # 발표/시연 시 실제 FCM 발송이 필요하면 --spring.profiles.active=demo 로 기동
+  # demo 프로필: FcmPushAdapter(실제 발송) + FCM 단건 테스트 API(/owner/ai-manager/test/fcm) 모두 활성
+
+storage:
+  s3:
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-northeast-2}
+    upload-url-expiration: PT10M
+    download-url-expiration: PT10M
+    # 프론트가 예전 외부 HTTPS URL을 보내는 전환 기간에만 true. 켜져 있으면 이미지 필드에
+    # 소유권 검증 없이 임의 외부 URL이 저장될 수 있다 — 전환이 끝나면 false로 내린다.
+    allow-legacy-https-url: ${LEGACY_IMAGE_URL_ALLOWED:true}
+
+search:
+  popular:
+    # 시간 버킷을 합산해 최근 24시간을 만든다. 금칙어는 쉼표로 구분해 배포 환경변수에서 주입한다.
+    bucket-ttl: PT25H
+    duplicate-ttl: PT10M
+    cache-ttl: PT1M
+    window-hours: 24
+    min-keyword-length: 2
+    max-keyword-length: 50
+    banned-keywords: ${POPULAR_SEARCH_BANNED_KEYWORDS:}
+
+# 실시간(WebSocket·SSE) 활성화 여부.
+# 인스턴스를 늘리면 인메모리 STOMP 브로커와 SseEmitter가 JVM 경계를 넘지 못한다.
+# 실시간 커넥션은 LB 경로 라우팅으로 한 인스턴스에 모으고, API 전용 인스턴스는 false로 끈다.
+eeum:
+  realtime:
+    enabled: ${REALTIME_ENABLED:true}
+
+ai:
+  provider: gemini
+  fallback-provider: groq
+  # final-fallback은 Generator(GeminiAiTextGenerator 등)에서 고정 template으로 처리
+
+  gemini:
+    enabled: true
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    models:
+      flash-lite: gemini-2.5-flash-lite
+      flash: gemini-2.5-flash
+
+  groq:
+    enabled: true
+    api-key: ${GROQ_API_KEY:}
+    base-url: https://api.groq.com/openai/v1
+    models:
+      fast: llama-3.1-8b-instant
+      quality: llama-3.3-70b-versatile
+
+public-data:
+  # data.go.kr 계정당 일반 인증키 1개로 3종 API 공유 (Decoding 키 권장)
+  service-key: ${NTS_BUSINESS_SERVICE_KEY:}
+  # 각 API 상세페이지의 오픈API 엔드포인트 URL (미설정 시 해당 데이터만 fallback)
+  kepco-industry-url: ${KEPCO_INDUSTRY_API_URL:}
+  kpx-region-energy-url: ${KPX_REGION_ENERGY_API_URL:}
+  kgs-gas-accident-url: ${KGS_GAS_ACCIDENT_API_URL:}
+
+kepco-bigdata:
+  api-key: ${KEPCO_BIGDATA_API_KEY:}
+  business-type-usage-url: ${KEPCO_BUSINESS_TYPE_USAGE_API_URL:}
+
+alimtalk:
+  provider: ${ALIMTALK_PROVIDER:mock}
+  api-key: ${ALIMTALK_API_KEY:}
+  api-secret: ${ALIMTALK_API_SECRET:}
+  sender-key: ${ALIMTALK_SENDER_KEY:}
+  base-url: ${ALIMTALK_BASE_URL:}
+  templates:
+    customer-care: ${ALIMTALK_TEMPLATE_CUSTOMER_CARE:}
+    marketing: ${ALIMTALK_TEMPLATE_MARKETING:}
+    notice: ${ALIMTALK_TEMPLATE_NOTICE:}

@@ -1,0 +1,28 @@
+# 이 저장소의 표준 줄바꿈은 LF다.
+#
+# Git for Windows(core.autocrlf=true)와 WSL git(false)이 같은 작업트리를 번갈아 쓰면
+# 체크아웃할 때마다 CRLF/LF가 뒤집혀, 내용이 같은 파일 수천 개가 수정된 것처럼 보인다.
+# 아래 규칙은 core.autocrlf보다 우선하므로 두 환경 모두 LF로 통일된다.
+* text=auto eol=lf
+
+# Windows 배치 파일은 CRLF여야 정상 실행된다.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 줄바꿈 변환 대상이 아닌 바이너리.
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.keystore binary
+*.hwpx binary
+*.hwp binary

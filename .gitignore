@@ -2,6 +2,7 @@
 # 환경변수 (절대 올리면 안 됨)
 # ========================
 .env
+.env.prod
 .env.local
 .env.*.local
 
@@ -14,6 +15,7 @@ backend/out/
 backend/*.jar
 backend/*.war
 backend/logs/
+backend/src/test/chat-ws-test.html
 
 # ========================
 # 프론트 웹 (React)
@@ -60,3 +62,5 @@ logs/
 # Docker
 # ========================
 docker/data/
+
+secrets/firebase-service-account.json

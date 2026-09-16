@@ -1,0 +1,4 @@
+interface:
+  display_name: "테스트 실행·진단"
+  short_description: "계층별로 테스트를 실행하고 실패를 원인별로 분류해 보고합니다"
+  default_prompt: "Use $test-suite to run the layered test suites and classify every failure by cause."

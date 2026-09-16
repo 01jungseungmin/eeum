@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDD 도메인 분리"
+  short_description: "SDD 원문을 도메인별 문서로 분류하고 보존합니다"
+  default_prompt: "Use $sdd-domain-extractor to split the full SDD into domain documents."

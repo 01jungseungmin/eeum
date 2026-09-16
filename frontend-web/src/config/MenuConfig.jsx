@@ -1,0 +1,374 @@
+import {
+  LayoutGrid,
+  Store,
+  Box,
+  Layers,
+  Tag,
+  ClipboardList,
+  ClipboardCheck,
+  MapPin,
+  Megaphone,
+  AlertTriangle,
+  Activity,
+  CreditCard,
+  Calendar,
+  Users,
+  Star,
+  MessageSquare,
+  MessageCircle,
+  Flag,
+  TrendingUp,
+  Bell,
+  ShieldCheck,
+  FileText,
+  FolderTree,
+  UserCheck,
+  Settings,
+  Sparkles,
+  LogOut,
+} from 'lucide-react';
+
+const iconProps = { size: 20, strokeWidth: 1.5 };
+
+export const OWNER_MENU_CONFIG = [
+  {
+    group: '메뉴',
+    items: [
+      {
+        id: 'dashboard',
+        name: '대시보드',
+        path: '/dashboard',
+        icon: <LayoutGrid {...iconProps} />,
+        subtitle: '오늘의 상점 현황을 한눈에 확인하세요',
+      },
+      {
+        id: 'ai-manager',
+        name: 'AI 매니저',
+        path: '/ai-manager',
+        icon: <Sparkles {...iconProps} />,
+        children: [
+          {
+            id: 'ai-report',
+            name: 'AI 점장 보고',
+            sectionId: 'section-ai-report',
+            icon: <ClipboardCheck {...iconProps} />,
+          },
+          {
+            id: 'ai-care',
+            name: 'AI 고객 케어',
+            sectionId: 'section-ai-care',
+            icon: <UserCheck {...iconProps} />,
+          },
+          {
+            id: 'ai-review',
+            name: '리뷰·문의 대응',
+            sectionId: 'section-ai-review',
+            icon: <MessageSquare {...iconProps} />,
+          },
+          {
+            id: 'ai-event',
+            name: '이벤트 성과',
+            sectionId: 'section-ai-event',
+            icon: <TrendingUp {...iconProps} />,
+          },
+          {
+            id: 'ai-location',
+            name: '생활권 매칭',
+            sectionId: 'section-ai-location',
+            icon: <MapPin {...iconProps} />,
+          },
+          {
+            id: 'ai-marketing',
+            name: '마케팅 자동화',
+            sectionId: 'section-ai-marketing',
+            icon: <Megaphone {...iconProps} />,
+          },
+          {
+            id: 'ai-warning',
+            name: '운영 위험 조기경보',
+            sectionId: 'section-ai-warning',
+            icon: <AlertTriangle {...iconProps} />,
+          },
+          {
+            id: 'ai-summary',
+            name: 'AI 활동 요약',
+            sectionId: 'section-ai-summary',
+            icon: <Activity {...iconProps} />,
+          },
+          {
+            id: 'ai-plan',
+            name: '플랜 관리',
+            path: '/ai-manager/plan',
+            icon: <CreditCard {...iconProps} />,
+          },
+        ],
+      },
+      {
+        id: 'store',
+        name: '상점 관리',
+        path: '/store',
+        icon: <Store {...iconProps} />,
+        subtitle: '상점 정보를 수정하고 관리하세요',
+      },
+      {
+        id: 'products',
+        name: '상품 관리',
+        path: '/products',
+        icon: <Box {...iconProps} />,
+        subtitle: '판매 중인 상품을 등록하고 관리하세요',
+      },
+      {
+        id: 'categories',
+        name: '카테고리 관리',
+        path: '/categories',
+        icon: <Layers {...iconProps} />,
+        subtitle: '상품 카테고리를 설정하세요',
+      },
+      {
+        id: 'events',
+        name: '이벤트 관리',
+        path: '/events',
+        icon: <Tag {...iconProps} />,
+        subtitle: '특가 및 시간 제한 이벤트 상품을 관리하세요',
+      },
+    ],
+  },
+  {
+    group: '주문/고객',
+    items: [
+      {
+        id: 'orders',
+        name: '주문/예약 관리',
+        path: '/order-management',
+        icon: <ClipboardList {...iconProps} />,
+        subtitle: '실시간 주문 및 예약 내역을 확인하세요',
+        countKey: 'orders',
+      },
+      {
+        id: 'calendar',
+        name: '예약 캘린더',
+        path: '/reservation',
+        icon: <Calendar {...iconProps} />,
+        subtitle: '일자별 예약 현황을 한눈에 보세요',
+      },
+      {
+        id: 'customers',
+        name: '고객 관리',
+        path: '/customers',
+        icon: <Users {...iconProps} />,
+        subtitle: '우리 가게 단골 손님을 관리하세요',
+      },
+      {
+        id: 'reviews',
+        name: '리뷰 관리',
+        path: '/reviews',
+        icon: <Star {...iconProps} />,
+        subtitle: '고객들이 남긴 소중한 리뷰에 답글을 달아주세요',
+        countKey: 'reviews',
+      },
+
+      {
+        id: 'chat',
+        name: '채팅',
+        path: '/chat',
+        icon: <MessageSquare {...iconProps} />,
+        subtitle: '고객과 실시간으로 소통하세요',
+        countKey: 'chat',
+      },
+    ],
+  },
+  {
+    group: '고객 지원',
+    items: [
+      {
+        id: 'qna',
+        name: '문의 관리',
+        path: '/inquiry',
+        icon: <MessageCircle {...iconProps} />,
+        subtitle: '매장 이용 관련 문의 사항에 답변하세요',
+        countKey: 'qna',
+      },
+      {
+        id: 'reports',
+        name: '신고 내역',
+        path: '/reports',
+        icon: <Flag {...iconProps} />,
+        subtitle: '매장 신고 내역을 확인하세요',
+        isSpecial: true,
+      },
+    ],
+  },
+  {
+    group: '정산/알림',
+    items: [
+      {
+        id: 'sales',
+        name: '매출/정산',
+        path: '/9',
+        icon: <TrendingUp {...iconProps} />,
+        subtitle: '이번 달 정산 예정 금액과 매출을 확인하세요',
+      },
+      {
+        id: 'alerts',
+        name: '알림',
+        path: '/notifications',
+        icon: <Bell {...iconProps} />,
+        subtitle: '새로운 시스템 알림과 공지사항입니다',
+        countKey: 'alerts',
+      },
+    ],
+  },
+  {
+    group: '관리자',
+    items: [
+      {
+        id: 'approval',
+        name: '승인 상태',
+        path: '/approval-status',
+        icon: <ShieldCheck {...iconProps} />,
+        subtitle: '사업자 등록증 인증 상태를 확인하세요',
+        status: '확인필요',
+      },
+    ],
+  },
+  {
+    group: '설정',
+    items: [
+      {
+        id: 'logout',
+        name: '로그아웃',
+        path: '#',
+        action: 'LOGOUT',
+        icon: <LogOut {...iconProps} />,
+      },
+    ],
+  },
+];
+
+export const ADMIN_MENU_CONFIG = [
+  {
+    group: '',
+    items: [
+      {
+        id: 'admin-dashboard',
+        name: '대시보드',
+        path: '/admin/dashboard',
+        icon: <LayoutGrid {...iconProps} />,
+      },
+      {
+        id: 'admin-members',
+        name: '회원 관리',
+        path: '/admin/members',
+        icon: <Users {...iconProps} />,
+      },
+      {
+        id: 'admin-approval',
+        name: '사장 승인',
+        path: '/admin/approval',
+        icon: <UserCheck {...iconProps} />,
+        countKey: 'adminApproval',
+      },
+      {
+        id: 'admin-posts',
+        name: '게시글',
+        path: '/admin/posts',
+        icon: <FileText {...iconProps} />,
+      },
+      {
+        id: 'admin-reports',
+        name: '신고',
+        path: '/admin/reports',
+        icon: <Flag {...iconProps} />,
+        countKey: 'adminReports',
+      },
+      {
+        id: 'admin-inquiry',
+        name: '문의',
+        path: '/admin/inquiry',
+        icon: <MessageCircle {...iconProps} />,
+      },
+      {
+        id: 'admin-categories',
+        name: '카테고리',
+        path: '/admin/categories',
+        subtitle: '가게, 게시판, 중고거래, 신고사유 카테고리를 관리합니다.',
+        icon: <FolderTree {...iconProps} />,
+      },
+      {
+        id: 'admin-logs',
+        name: '관리자 로그',
+        path: '/admin/logs',
+        icon: <ClipboardList {...iconProps} />,
+      },
+    ],
+  },
+  {
+    group: '설정',
+    items: [
+      {
+        id: 'admin-settings',
+        name: '설정',
+        path: '/admin/settings',
+        icon: <Settings {...iconProps} />,
+      },
+      {
+        id: 'admin-logout',
+        name: '로그아웃',
+        path: '#',
+        action: 'LOGOUT',
+        icon: <LogOut {...iconProps} />,
+      },
+    ],
+  },
+];
+
+// 사이드바 메뉴에 나타나지 않는 서브 페이지 전용 타이틀 정보 정의
+const SUB_PAGE_CONFIG = {
+  '/ai-manager/chat': {
+    id: 'ai-chat',
+    name: 'AI 매니저 상담',
+    subtitle: '리뷰·공지·이벤트·고객 메시지·문의 답변을 도와드립니다',
+  },
+  '/ai-manager/care': {
+    id: 'ai-care-detail',
+    name: 'AI 고객 케어 상세',
+    subtitle: '다시 안내하면 좋을 고객 분석과 AI 준비 메시지 현황을 보여줘요.',
+  },
+  '/ai-manager/location': {
+    id: 'ai-location-detail',
+    name: '생활권 매칭 상세',
+    subtitle:
+      '우리 가게와 잘 맞는 주변 생활권 고객을 찾아 노출 대상을 추천해요.',
+  },
+  '/ai-manager/plan': {
+    id: 'ai-plan-management',
+    name: '플랜 관리',
+    subtitle: '매장 성장을 돕는 최적의 AI 매니저 플랜을 선택하고 변경하세요.',
+  },
+};
+
+// 브레드크럼이나 헤더 타이틀 매칭 함수 리팩토링
+export const findMenuByPath = (path, role) => {
+  if (SUB_PAGE_CONFIG[path]) {
+    return SUB_PAGE_CONFIG[path];
+  }
+
+  const targetConfig =
+    role === 'ROLE_ADMIN' ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
+
+  if (!Array.isArray(targetConfig)) return null;
+
+  for (const group of targetConfig) {
+    const found = group.items.find((item) => item.path === path);
+    if (found) return found;
+
+    // 만약 children(서브메뉴) 안에 정의된 path가 있다면 검색
+    for (const item of group.items) {
+      if (item.children) {
+        const subFound = item.children.find((sub) => sub.path === path);
+        if (subFound) return subFound;
+      }
+    }
+  }
+  return null;
+};

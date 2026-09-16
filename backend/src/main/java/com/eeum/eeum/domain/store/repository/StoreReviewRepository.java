@@ -1,0 +1,116 @@
+package com.eeum.eeum.domain.store.repository;
+
+import com.eeum.eeum.domain.store.entity.StoreReview;
+import com.eeum.eeum.domain.store.enums.StoreReviewType;
+import com.eeum.eeum.domain.store.repository.CustomerReviewStatProjection;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+public interface StoreReviewRepository extends JpaRepository<StoreReview, Long> {
+
+    // 신고 상세의 대상 스냅샷 — 작성자/가게를 함께 조회해 N+1 방지
+    @EntityGraph(attributePaths = {"account", "store"})
+    Optional<StoreReview> findWithAccountAndStoreByStorereviewId(Long storereviewId);
+
+    // 리뷰 삭제 잠금 순서(Store → StoreReview) 결정용.
+    // Store 엔티티를 미리 적재하지 않아 동시 평점 수정 후 stale version 충돌을 방지한다.
+    @Query("SELECT r.store.storeId FROM StoreReview r WHERE r.storereviewId = :storereviewId")
+    Optional<Long> findStoreIdByStorereviewId(@Param("storereviewId") Long storereviewId);
+
+    // 신고 조치 중 리뷰 수정·삭제와 경쟁하지 않도록 대상 행을 잠금
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM StoreReview r WHERE r.storereviewId = :storereviewId")
+    Optional<StoreReview> findWithAccountAndStoreByStorereviewIdForUpdate(
+            @Param("storereviewId") Long storereviewId
+    );
+
+    //주문 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 orderId 집합
+    @Query("SELECT r.order.orderId FROM StoreReview r WHERE r.order.orderId IN :orderIds")
+    Set<Long> findOrderIdsWithReview(@Param("orderIds") List<Long> orderIds);
+
+    //예약 목록의 hasReview 배치 조회용 — 리뷰가 존재하는 visitReservationId 집합
+    @Query("SELECT r.visitReservation.visitReservationId FROM StoreReview r WHERE r.visitReservation.visitReservationId IN :visitReservationIds")
+    Set<Long> findVisitReservationIdsWithReview(@Param("visitReservationIds") List<Long> visitReservationIds);
+
+    //상점 리뷰 목록 조회 (최신순)
+    Page<StoreReview> findByStore_StoreIdOrderByCreatedAtDesc(
+            Long storeId,
+            Pageable pageable
+    );
+
+    //평점 재계산용 — 해당 상점의 전체 리뷰 목록
+    List<StoreReview> findByStore_StoreId(Long storeId);
+
+    //AI 매니저 — 최근 기간 리뷰 조회 (반복 불만 키워드 분석용)
+    List<StoreReview> findByStore_StoreIdAndCreatedAtAfter(Long storeId, java.time.LocalDateTime after);
+
+    //상점 리뷰 단건 조회
+    Optional<StoreReview> findByStorereviewIdAndStore_StoreId(
+            Long storereviewId,
+            Long storeId
+    );
+
+    //특정 주문에 대한 리뷰 존재 여부 — 1주문 1리뷰 보장용
+    boolean existsByOrder_OrderId(Long orderId);
+
+    //주문 기준 리뷰 단건 조회
+    Optional<StoreReview> findByOrder_OrderId(Long orderId);
+
+    //특정 방문 예약에 대한 리뷰 존재 여부 — 1예약 1리뷰 보장용
+    boolean existsByVisitReservation_VisitReservationId(Long visitReservationId);
+
+    //방문 예약 기준 리뷰 단건 조회
+    Optional<StoreReview> findByVisitReservation_VisitReservationId(Long visitReservationId);
+
+    //사용자가 작성한 리뷰 목록 (마이페이지용)
+    Page<StoreReview> findByAccount_AccountIdOrderByCreatedAtDesc(
+            Long accountId,
+            Pageable pageable
+    );
+
+    //사용자가 작성한 리뷰 목록 — 타입별 조회 (마이페이지용)
+    Page<StoreReview> findByAccount_AccountIdAndReviewTypeOrderByCreatedAtDesc(
+            Long accountId,
+            StoreReviewType reviewType,
+            Pageable pageable
+    );
+
+    // 사장 통합 고객 목록 — 고객별 리뷰 수·평균 평점 배치 조회 (IN절 1번으로 N+1 방지)
+    @Query("""
+        SELECT r.account.accountId AS accountId,
+               COUNT(r)            AS reviewCount,
+               AVG(r.rating)       AS avgRating
+        FROM StoreReview r
+        WHERE r.store.storeId     = :storeId
+          AND r.account.accountId IN :accountIds
+        GROUP BY r.account.accountId
+    """)
+    List<CustomerReviewStatProjection> findReviewStatsByStoreAndAccounts(
+            @Param("storeId") Long storeId,
+            @Param("accountIds") List<Long> accountIds
+    );
+
+    @Query("""
+    select coalesce(avg(r.rating), 0)
+    from StoreReview r
+    where r.store.storeId = :storeId
+""")
+    double calculateAverageRating(@Param("storeId") Long storeId);
+
+    @Query("""
+    select count(r)
+    from StoreReview r
+    where r.store.storeId = :storeId
+""")
+    long countByStoreId(@Param("storeId") Long storeId);
+}

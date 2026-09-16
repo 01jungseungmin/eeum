@@ -1,0 +1,21 @@
+package com.eeum.eeum.domain.notification.enums;
+
+public enum NotificationRefType {
+    ORDER,
+    PAYMENT,
+    RESERVATION,
+    CHAT_ROOM,
+    COMMUNITY_POST,
+    COMMUNITY_COMMENT,
+    STORE,
+    STORE_REVIEW,
+    PRODUCT,
+    USED_PRODUCT,
+    USED_REVIEW,
+    INQUIRY,
+    SETTLEMENT,          // 정산
+    OWNER_APPLICATION,   // 사장 승인 신청
+    REPORT,              // 신고
+    OPERATION_FAILURE,   // 운영 실패 이력
+    SYSTEM               // refId = null (시스템 공지)
+}

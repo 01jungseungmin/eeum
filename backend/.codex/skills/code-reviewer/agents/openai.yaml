@@ -1,0 +1,4 @@
+interface:
+  display_name: "코드 리뷰"
+  short_description: "변경 영역에 맞는 전문 체크리스트로 코드를 검토합니다"
+  default_prompt: "Use $code-reviewer to review the current branch changes."

@@ -1,0 +1,132 @@
+package com.eeum.eeum.common.service;
+
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.List;
+
+@Component
+@RequiredArgsConstructor
+public class RateLimitService {
+
+    private static final DefaultRedisScript<Long> INCREMENT_WITH_TTL_SCRIPT =
+            new DefaultRedisScript<>(
+                    """
+                    local count = redis.call('incr', KEYS[1])
+                    if redis.call('pttl', KEYS[1]) < 0 then
+                        redis.call('pexpire', KEYS[1], ARGV[1])
+                    end
+                    return count
+                    """,
+                    Long.class
+            );
+
+    private static final DefaultRedisScript<String> READ_WITH_TTL_REPAIR_SCRIPT =
+            new DefaultRedisScript<>(
+                    """
+                    local value = redis.call('get', KEYS[1])
+                    if not value then
+                        return nil
+                    end
+                    if redis.call('pttl', KEYS[1]) < 0 then
+                        redis.call('pexpire', KEYS[1], ARGV[1])
+                    end
+                    return value
+                    """,
+                    String.class
+            );
+
+    private final StringRedisTemplate redisTemplate;
+
+    // 쿨다운형 — SET NX + TTL. 같은 키로 cooldown 동안 1회만 허용 (이메일 인증 발송, 비밀번호 재설정 메일 등)
+    // Redis 전용 메서드 — DB 트랜잭션과 무관
+    public void checkCooldown(String key, Duration cooldown, ErrorCode errorCode) {
+        Boolean firstRequest = redisTemplate.opsForValue().setIfAbsent(key, "1", cooldown);
+
+        if (!Boolean.TRUE.equals(firstRequest)) {
+            throw new BusinessException(errorCode);
+        }
+    }
+
+    // 쿨다운형(비예외) — 획득에 성공하면 true, 이미 쿨다운 중이면 false.
+    // checkCooldown과 달리 예외를 던지지 않는다. 사용자 요청을 막는 것이 아니라
+    // "막히면 조용히 건너뛰는" 내부 경로(운영 실패 알림 스로틀 등)에서 쓴다.
+    public boolean tryAcquireCooldown(String key, Duration cooldown) {
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, "1", cooldown));
+    }
+
+    // 쿨다운 반납 — 획득해 놓고 실제로는 아무 일도 하지 않은 경우 되돌린다.
+    public void releaseCooldown(String key) {
+        redisTemplate.delete(key);
+    }
+
+    // 카운터 증가 후 현재 값 반환 — 시간 구간별 발생량 집계용(Webhook 서명 실패 등)
+    public long incrementAndGet(String key, Duration window) {
+        return incrementWithTtl(key, window);
+    }
+
+    // 카운터형 — window 동안 누적된 실패 횟수가 maxAttempts 이상이면 차단 (로그인 실패 등)
+    public void checkNotBlocked(
+            String key, int maxAttempts, Duration window, ErrorCode errorCode
+    ) {
+        String value = readWithTtlRepair(key, window);
+
+        if (value == null) {
+            return;
+        }
+
+        int failureCount;
+
+        try {
+            failureCount = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            redisTemplate.delete(key);
+            return;
+        }
+
+        if (failureCount >= maxAttempts) {
+            throw new BusinessException(errorCode);
+        }
+    }
+
+    // 카운터형 — window 동안 누적 호출 횟수가 maxRequests를 초과하면 차단 (공개 API 스팸/과호출 방지 등).
+    // checkNotBlocked와 달리 이 메서드 자체가 호출마다 카운트를 증가시킨다(선-검증 후 별도 기록이 필요 없음).
+    public void checkAndIncrement(String key, int maxRequests, Duration window, ErrorCode errorCode) {
+        long count = incrementWithTtl(key, window);
+        if (count > maxRequests) {
+            throw new BusinessException(errorCode);
+        }
+    }
+
+    // 실패 1회 기록 — 최초 실패(count == 1) 시에만 TTL 설정
+    public void recordFailure(String key, Duration window) {
+        incrementWithTtl(key, window);
+    }
+
+    // 성공 시 실패 카운트 초기화
+    public void resetFailure(String key) {
+        redisTemplate.delete(key);
+    }
+
+    private long incrementWithTtl(String key, Duration window) {
+        Long count = redisTemplate.execute(
+                INCREMENT_WITH_TTL_SCRIPT,
+                List.of(key),
+                String.valueOf(window.toMillis())
+        );
+        return count == null ? 0L : count;
+    }
+
+    private String readWithTtlRepair(String key, Duration window) {
+        return redisTemplate.execute(
+                READ_WITH_TTL_REPAIR_SCRIPT,
+                List.of(key),
+                String.valueOf(window.toMillis())
+        );
+    }
+}

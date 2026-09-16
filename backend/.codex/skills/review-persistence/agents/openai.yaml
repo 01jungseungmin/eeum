@@ -1,0 +1,4 @@
+interface:
+  display_name: "영속성 리뷰"
+  short_description: "엔티티와 JPA 및 QueryDSL 쿼리 규칙을 점검합니다"
+  default_prompt: "Use $review-persistence to review entity and persistence-layer changes."

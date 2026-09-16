@@ -1,0 +1,4 @@
+interface:
+  display_name: "권한 보안 리뷰"
+  short_description: "인증과 소유권 검증 및 민감 정보 노출을 점검합니다"
+  default_prompt: "Use $review-security to review authorization and ownership checks."

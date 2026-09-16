@@ -1,0 +1,4 @@
+interface:
+  display_name: "API 계약 리뷰"
+  short_description: "API 표준과 DTO 및 프론트 계약 변경을 점검합니다"
+  default_prompt: "Use $review-api-contract to review the API and DTO contract changes."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "빌드 오류 해결"
+  short_description: "Gradle 빌드와 테스트 실패를 진단하고 수정합니다"
+  default_prompt: "Use $build-fixer to diagnose and fix the current Gradle build failure."

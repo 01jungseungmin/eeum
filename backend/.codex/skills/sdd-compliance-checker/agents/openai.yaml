@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDD 정합성 검토"
+  short_description: "설계 문서와 구현의 일치 및 변형 구현을 검토합니다"
+  default_prompt: "Use $sdd-compliance-checker to compare this implementation with the relevant SDD."
