@@ -27,8 +27,11 @@ export const aiManagerApi = {
   getCustomerCareCardByType: (careType) => {
     return apiClient.get(`/owner/ai-manager/customer-care/${careType}`);
   },
-  createCustomerCareCard: (careType) => {
-    return apiClient.post(`/owner/ai-manager/customer-care/${careType}/draft`);
+  createCustomerCareCard: (careType, payload = {}) => {
+    return apiClient.post(
+      `/owner/ai-manager/customer-care/${careType}/draft`,
+      payload,
+    );
   },
 
   // 3. AI 생성 메시지
