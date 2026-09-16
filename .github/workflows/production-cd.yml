@@ -1,0 +1,278 @@
+name: Production CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend-web/**"
+      - "Dockerfile"
+      - "docker-compose.prod.yml"
+      - ".github/workflows/production-cd.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Create deployment script
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          DEPLOY_USER: ${{ vars.EC2_DEPLOY_USER }}
+          PROJECT_DIR: ${{ vars.EC2_PROJECT_DIR }}
+        run: |
+          cat > deploy.sh <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          DEPLOY_SHA="${DEPLOY_SHA}"
+          BEFORE_SHA="${BEFORE_SHA}"
+          DEPLOY_USER="${DEPLOY_USER}"
+          PROJECT_DIR="${PROJECT_DIR}"
+
+          echo "========================================"
+          echo "EEUM Production Deployment"
+          echo "Target SHA: \$DEPLOY_SHA"
+          echo "========================================"
+
+          cd "\$PROJECT_DIR"
+
+          echo "[1/7] Fetch main"
+
+          sudo -u "\$DEPLOY_USER" -H \
+            git -C "\$PROJECT_DIR" fetch origin main
+
+          sudo -u "\$DEPLOY_USER" -H \
+            git -C "\$PROJECT_DIR" checkout main
+
+          sudo -u "\$DEPLOY_USER" -H \
+            git -C "\$PROJECT_DIR" reset --hard "\$DEPLOY_SHA"
+
+          echo "[2/7] Validate Docker Compose"
+
+          docker compose \
+            -f docker-compose.prod.yml \
+            --env-file .env.prod \
+            config -q
+
+          echo "[3/7] Detect changed services"
+
+          DEPLOY_BACKEND=false
+          DEPLOY_FRONTEND=false
+
+          if [ -z "\$BEFORE_SHA" ] || \
+             [ "\$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+
+            DEPLOY_BACKEND=true
+            DEPLOY_FRONTEND=true
+
+          else
+
+            CHANGED_FILES=\$(
+              sudo -u "\$DEPLOY_USER" -H \
+                git -C "\$PROJECT_DIR" \
+                diff --name-only "\$BEFORE_SHA" "\$DEPLOY_SHA"
+            )
+
+            echo "Changed files:"
+            echo "\$CHANGED_FILES"
+
+            if echo "\$CHANGED_FILES" | \
+              grep -Eq '^(backend/|Dockerfile$|docker-compose\.prod\.yml$|\.github/workflows/production-cd\.yml$)'; then
+              DEPLOY_BACKEND=true
+            fi
+
+            if echo "\$CHANGED_FILES" | \
+              grep -Eq '^(frontend-web/|docker-compose\.prod\.yml$|\.github/workflows/production-cd\.yml$)'; then
+              DEPLOY_FRONTEND=true
+            fi
+          fi
+
+          echo "Backend deploy:  \$DEPLOY_BACKEND"
+          echo "Frontend deploy: \$DEPLOY_FRONTEND"
+
+          echo "[4/7] Deploy backend"
+
+          if [ "\$DEPLOY_BACKEND" = true ]; then
+
+            # t4g.small에서 Gradle Docker build 중 메모리 압박을 줄이기 위해
+            # 기존 backend만 잠시 중지한다.
+            docker compose \
+              -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              stop backend
+
+            if ! docker build \
+              --progress=plain \
+              -t eeum-backend:latest \
+              .; then
+
+              echo "Backend build failed. Restarting previous backend."
+
+              docker compose \
+                -f docker-compose.prod.yml \
+                --env-file .env.prod \
+                up -d --no-deps backend
+
+              exit 1
+            fi
+
+            docker compose \
+              -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              up -d \
+              --no-deps \
+              --force-recreate \
+              backend
+          fi
+
+          echo "[5/7] Deploy frontend"
+
+          if [ "\$DEPLOY_FRONTEND" = true ]; then
+
+            docker compose \
+              -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              build frontend
+
+            docker compose \
+              -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              up -d \
+              --no-deps \
+              --force-recreate \
+              frontend
+          fi
+
+          echo "[6/7] Health checks"
+
+          curl \
+            --fail \
+            --retry 20 \
+            --retry-delay 3 \
+            http://127.0.0.1:8080/actuator/health
+
+          curl \
+            --fail \
+            --retry 10 \
+            --retry-delay 2 \
+            http://127.0.0.1:3000/ \
+            > /dev/null
+
+          curl \
+            --fail \
+            --retry 10 \
+            --retry-delay 2 \
+            https://eeum.life/api/actuator/health
+
+          curl \
+            --fail \
+            --retry 10 \
+            --retry-delay 2 \
+            https://eeum.life/ \
+            > /dev/null
+
+          echo "[7/7] Container status"
+
+          docker compose \
+            -f docker-compose.prod.yml \
+            --env-file .env.prod \
+            ps
+
+          echo "========================================"
+          echo "Deployment SUCCESS"
+          echo "SHA: \$DEPLOY_SHA"
+          echo "========================================"
+          EOF
+
+      - name: Deploy through AWS Systems Manager
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          PARAMETERS=$(jq -n --rawfile script deploy.sh '{commands: [$script]}')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$PARAMETERS" \
+            --timeout-seconds 1800 \
+            --region "$AWS_REGION" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          for i in $(seq 1 180); do
+
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --region "$AWS_REGION" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Pending")
+
+            echo "Deployment status: $STATUS"
+
+            case "$STATUS" in
+
+              Success)
+                break
+                ;;
+
+              Failed|Cancelled|TimedOut)
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --region "$AWS_REGION"
+
+                exit 1
+                ;;
+
+            esac
+
+            sleep 10
+          done
+
+          FINAL_STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" \
+            --query "Status" \
+            --output text)
+
+          if [ "$FINAL_STATUS" != "Success" ]; then
+            echo "Deployment timed out or failed."
+            exit 1
+          fi
+
+          echo "========== DEPLOY OUTPUT =========="
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" \
+            --query "StandardOutputContent" \
+            --output text
+
+          echo "==================================="
