@@ -100,7 +100,6 @@ export default function AiCustomerCare() {
 
   const [modalState, setModalState] = useState({
     isOpen: false,
-    step: 'review',
     cardData: null,
   });
   const [sentStatus, setSentStatus] = useState({});
@@ -136,20 +135,21 @@ export default function AiCustomerCare() {
 
     setModalState({
       isOpen: true,
-      step: 'review',
       cardData,
     });
   };
 
-  const handleSendSubmit = () => {
+  // 모달이 실제로 발송 API(updateGeneratedMessage + sendGeneratedMessage)를
+  // 성공시킨 뒤에만 호출된다 — 로컬 state만 바꾸던 예전 handleSendSubmit과 달리
+  // 진짜 전송 성공 여부를 반영한다.
+  const handleSendSuccess = () => {
     if (modalState.cardData) {
       setSentStatus((prev) => ({ ...prev, [modalState.cardData.id]: true }));
     }
-    setModalState((prev) => ({ ...prev, step: 'success' }));
   };
 
   const handleCloseModal = () => {
-    setModalState({ isOpen: false, step: 'review', cardData: null });
+    setModalState({ isOpen: false, cardData: null });
   };
 
   // 피로도 제외 인원 수 추출 (첫 번째 카드 데이터 기준)
@@ -198,6 +198,8 @@ export default function AiCustomerCare() {
                 item.careType === 'INQUIRY_HESITATION' ||
                 config.secondaryAction,
               targetCustomerCount: item.targetCustomerCount ?? 0,
+              recentlyNotifiedExcludedCount:
+                item.recentlyNotifiedExcludedCount ?? 0,
             };
 
             return (
@@ -220,10 +222,9 @@ export default function AiCustomerCare() {
 
       <CustomerCareModal
         isOpen={modalState.isOpen}
-        step={modalState.step}
         cardData={modalState.cardData}
         onClose={handleCloseModal}
-        onSubmit={handleSendSubmit}
+        onSuccess={handleSendSuccess}
       />
     </CareContainer>
   );
