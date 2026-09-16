@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import {
   Megaphone,
@@ -7,9 +7,16 @@ import {
   Send,
   RefreshCw,
   Loader2,
+  Crown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
+import PlanUpgradeModal from './modal/PlanUpgradeModal';
 
 // UI 탭 키 ↔ 백엔드 AiNoticeType 매핑 (AiMarketingPage.jsx와 동일 규칙)
 const TYPE_MAP = {
@@ -171,12 +178,25 @@ const RefreshButton = styled.button`
 `;
 
 export default function AiMarketingAutomation() {
+  const { aiPlanType } = useAuth();
   const [activeTab, setActiveTab] = useState('event');
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [planLocked, setPlanLocked] = useState(false);
+  const [draftLimitReached, setDraftLimitReached] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
   const navigate = useNavigate();
 
+  // fetchDraft가 겹쳐서(동시에 두 번) 호출되는 걸 막는 가드. React StrictMode는
+  // 개발 모드에서 effect를 일부러 두 번 실행하는데, 그 두 호출이 같은 상점의
+  // 사용량 카운트 분산 락(LockKeys.aiUsage)에 거의 동시에 붙으면 뒤 요청이
+  // LOCK_001(락 획득 실패)로 튕긴다 — 애초에 두 번째 요청 자체를 안 보내야 한다.
+  const isFetchingRef = useRef(false);
+
   const fetchDraft = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       setLoading(true);
       const response = await aiManagerApi.createMarketingDraft({
@@ -187,18 +207,76 @@ export default function AiMarketingAutomation() {
       });
       if (response.data?.success) {
         setDraft(response.data.data);
+        setPlanLocked(false);
+        setDraftLimitReached(false);
+        setLockBusy(false);
       }
     } catch (error) {
-      console.error('마케팅 문구 초안 생성 실패:', error);
+      const errorData = error.response?.data?.error || error.response?.data;
+      if (error.response?.status === 403 || errorData?.code === 'AI_001') {
+        setPlanLocked(true);
+      } else if (errorData?.code === 'AI_015') {
+        // 이 위젯은 마운트/탭 전환마다 자동으로(사용량 차감 대상) 초안을
+        // 새로 만든다. confirmDelete 없이 계속 만들기만 하면 타입별 보관
+        // 캡(AI_015)을 채워서 이후엔 항상 409가 난다 — 계정 문제가 아니라
+        // 보관함이 꽉 찬 것이므로, "다시 시도" 대신 정리하라고 안내한다.
+        setDraftLimitReached(true);
+      } else if (errorData?.code === 'LOCK_001') {
+        // 위 isFetchingRef 가드로 거의 발생하지 않지만, 다른 화면(예: 문의/리뷰
+        // 초안 생성)과 같은 순간에 겹쳤을 때 등 완전히 배제할 순 없다 — 이건
+        // 실패가 아니라 "잠깐 후 재시도하면 되는" 일시적 상태라 알려만 준다.
+        setLockBusy(true);
+      } else {
+        console.error('마케팅 문구 초안 생성 실패:', error);
+      }
       setDraft(null);
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   }, [activeTab]);
 
   useEffect(() => {
+    // 캐싱된 플랜으로 이미 BASIC 미만인 게 확실하면 초안 생성 요청(사용량
+    // 차감 대상) 자체를 생략한다 — 매번 403 + 콘솔 에러 로그가 남는 것도
+    // 막고, 도달 불가능한 기능을 위해 사용량을 낭비하지도 않는다.
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.marketingDraft)) {
+      queueMicrotask(() => {
+        setPlanLocked(true);
+        setLoading(false);
+      });
+      return;
+    }
     queueMicrotask(() => fetchDraft());
-  }, [fetchDraft]);
+  }, [fetchDraft, aiPlanType]);
+
+  if (planLocked) {
+    return (
+      <>
+        <CardContainer id="section-ai-marketing">
+          <Header>
+            <HeaderLeft>
+              <IconBox>
+                <Megaphone size={20} />
+              </IconBox>
+              <TitleArea>
+                <h3>마케팅 자동화 매니저</h3>
+                <p>베이직 플랜부터 이용할 수 있는 기능이에요.</p>
+              </TitleArea>
+            </HeaderLeft>
+          </Header>
+          <SubmitButton onClick={() => setIsUpgradeModalOpen(true)}>
+            <Crown size={16} /> 플랜 업그레이드
+          </SubmitButton>
+        </CardContainer>
+        <PlanUpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          errorMessage="베이직 플랜부터 이용할 수 있는 기능이에요."
+        />
+      </>
+    );
+  }
 
   return (
     <CardContainer id="section-ai-marketing">
@@ -247,7 +325,11 @@ export default function AiMarketingAutomation() {
         <AiMessageText>
           {loading
             ? '문구를 생성하는 중...'
-            : draft?.content || '문구 생성에 실패했습니다. 다시 시도해주세요.'}
+            : draftLimitReached
+              ? '보관 중인 초안이 가득 찼어요. 마케팅 페이지에서 오래된 초안을 정리한 뒤 다시 시도해주세요.'
+              : lockBusy
+                ? '다른 요청이 처리 중이에요. 잠시 후 "다시 생성"을 눌러주세요.'
+                : draft?.content || '문구 생성에 실패했습니다. 다시 시도해주세요.'}
         </AiMessageText>
       </AiMessageBox>
 
