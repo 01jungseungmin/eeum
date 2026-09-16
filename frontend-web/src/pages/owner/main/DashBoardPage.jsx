@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ShoppingBag,
@@ -11,8 +11,8 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import DashboardCard from '../../../components/owner/dashboard/DashBoardCard';
-import SalesChart from '../../../components/owner/dashboard/SalesChart';
-import CategoryChart from '../../../components/owner/dashboard/CategoryChart';
+// import SalesChart from '../../../components/owner/dashboard/SalesChart';
+// import CategoryChart from '../../../components/owner/dashboard/CategoryChart';
 import TopProducts from '../../../components/owner/dashboard/TopProducts';
 import RecentOrders from '../../../components/owner/dashboard/recentOrders';
 import RecentReviews from '../../../components/owner/dashboard/RecentReviews';
@@ -81,11 +81,11 @@ const WelcomeBanner = styled.div`
   }
 `;
 
-const BottomGridRow1 = styled.div`
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-`;
+// const BottomGridRow1 = styled.div`
+//   display: grid;
+//   grid-template-columns: 2fr 1fr;
+//   gap: 20px;
+// `;
 
 const BottomGridRow2 = styled.div`
   display: grid;
@@ -97,6 +97,7 @@ const BottomGridRow2 = styled.div`
 const toManwon = (value) => Math.round((value || 0) / 10000).toLocaleString();
 
 function DashboardPage() {
+  const navigate = useNavigate();
   const { dashboardData } = useOutletContext();
   const d = dashboardData || {};
 
@@ -114,8 +115,18 @@ function DashboardPage() {
           </p>
         </div>
         <div className="button-side">
-          <button className="btn-check">주문 확인</button>
-          <button className="btn-add">상품 등록</button>
+          <button
+            className="btn-check"
+            onClick={() => navigate('/order-management')}
+          >
+            주문 확인
+          </button>
+          <button
+            className="btn-add"
+            onClick={() => navigate('/products')}
+          >
+            상품 등록
+          </button>
         </div>
       </WelcomeBanner>
 
@@ -183,10 +194,10 @@ function DashboardPage() {
         />
       </GridSection>
 
-      <BottomGridRow1>
+      {/* <BottomGridRow1>
         <SalesChart />
         <CategoryChart />
-      </BottomGridRow1>
+      </BottomGridRow1> */}
 
       <BottomGridRow2>
         <TopProducts />

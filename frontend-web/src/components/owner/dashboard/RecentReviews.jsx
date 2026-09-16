@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { ChevronRight, AlertCircle } from 'lucide-react';
 
 const Card = styled.div`
@@ -103,11 +104,16 @@ const reviews = [
 ];
 
 function RecentReviews() {
+  const navigate = useNavigate();
+
   return (
     <Card>
       <Header>
         <h3>최근 리뷰</h3>
-        <span className="more">
+        <span
+          className="more"
+          onClick={() => navigate('/reviews')}
+        >
           전체 보기 <ChevronRight size={14} />
         </span>
       </Header>

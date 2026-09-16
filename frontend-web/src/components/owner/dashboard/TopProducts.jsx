@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis } from 'recharts';
 
@@ -38,11 +39,16 @@ const data = [
 ].reverse();
 
 function TopProducts() {
+  const navigate = useNavigate();
+
   return (
     <Card>
       <Header>
         <h3>인기 상품 TOP 5</h3>
-        <span className="more">
+        <span
+          className="more"
+          onClick={() => navigate('/products')}
+        >
           전체 보기 <ChevronRight size={14} />
         </span>
       </Header>
