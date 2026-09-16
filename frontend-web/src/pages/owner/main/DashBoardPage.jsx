@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ShoppingBag,
@@ -7,11 +8,11 @@ import {
   CheckCircle,
   Clock,
   PlusCircle,
-  Users,
+  CalendarClock,
 } from 'lucide-react';
 import DashboardCard from '../../../components/owner/dashboard/DashBoardCard';
-import SalesChart from '../../../components/owner/dashboard/SalesChart';
-import CategoryChart from '../../../components/owner/dashboard/CategoryChart';
+// import SalesChart from '../../../components/owner/dashboard/SalesChart';
+// import CategoryChart from '../../../components/owner/dashboard/CategoryChart';
 import TopProducts from '../../../components/owner/dashboard/TopProducts';
 import RecentOrders from '../../../components/owner/dashboard/recentOrders';
 import RecentReviews from '../../../components/owner/dashboard/RecentReviews';
@@ -80,11 +81,11 @@ const WelcomeBanner = styled.div`
   }
 `;
 
-const BottomGridRow1 = styled.div`
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-`;
+// const BottomGridRow1 = styled.div`
+//   display: grid;
+//   grid-template-columns: 2fr 1fr;
+//   gap: 20px;
+// `;
 
 const BottomGridRow2 = styled.div`
   display: grid;
@@ -92,94 +93,111 @@ const BottomGridRow2 = styled.div`
   gap: 20px;
 `;
 
+// 원 단위 매출을 "만원" 단위로 반올림 표시
+const toManwon = (value) => Math.round((value || 0) / 10000).toLocaleString();
+
 function DashboardPage() {
+  const navigate = useNavigate();
+  const { dashboardData } = useOutletContext();
+  const d = dashboardData || {};
+
   return (
     <DashboardWrapper>
       <WelcomeBanner>
         <div className="text-side">
-          <h3>좋은 아침이에요, 김사장님! 👋</h3>
+          <h3>
+            좋은 아침이에요{d.storeName ? `, ${d.storeName} 사장님` : ''}! 👋
+          </h3>
           <h1>오늘도 활기찬 하루 보내세요</h1>
-          <p>오늘 3건의 새 주문과 2개의 읽지 않은 리뷰가 있어요</p>
+          <p>
+            오늘 {d.todayOrderCount ?? 0}건의 새 주문과{' '}
+            {d.unansweredReviewCount ?? 0}개의 미답변 리뷰가 있어요
+          </p>
         </div>
         <div className="button-side">
-          <button className="btn-check">주문 확인</button>
-          <button className="btn-add">상품 등록</button>
+          <button
+            className="btn-check"
+            onClick={() => navigate('/order-management')}
+          >
+            주문 확인
+          </button>
+          <button
+            className="btn-add"
+            onClick={() => navigate('/products')}
+          >
+            상품 등록
+          </button>
         </div>
       </WelcomeBanner>
 
       <GridSection>
         <DashboardCard
-          title="이번 주 매출"
-          value="168"
+          title="이번 달 매출"
+          value={toManwon(d.monthRevenue)}
           unit="만원"
           icon={<TrendingUp size={20} />}
           iconBg="#e6f7ff"
           iconColor="#1890ff"
-          trendText="↑ 지난주 대비 +12.5%"
-          trendType="up"
         />
         <DashboardCard
           title="오늘 주문"
-          value="8"
+          value={d.todayOrderCount ?? 0}
           icon={<ShoppingBag size={20} />}
           iconBg="#f0f5ff"
           iconColor="#2f54eb"
-          trendText="↑ 어제 대비 +3건"
-          trendType="up"
         />
         <DashboardCard
           title="상점 평점"
-          value="4.8"
+          value={(d.averageRating ?? 0).toFixed(1)}
           unit="/ 5.0"
           icon={<Star size={20} />}
           iconBg="#fffbe6"
           iconColor="#faad14"
-          subText="리뷰 124개"
+          subText={`리뷰 ${d.totalReviewCount ?? 0}개`}
         />
         <DashboardCard
-          title="미답변 채팅"
-          value="5"
+          title="미답변 리뷰"
+          value={d.unansweredReviewCount ?? 0}
           icon={<MessageSquare size={20} />}
           iconBg="#f9f0ff"
           iconColor="#722ed1"
-          trendText="↓ 빠른 응답 필요"
-          trendType="down"
+          trendText={d.unansweredReviewCount > 0 ? '빠른 응답 필요' : undefined}
+          trendType="warning"
         />
       </GridSection>
 
       <GridSection>
         <DashboardCard
           title="등록 상품"
-          value="24"
+          value={d.totalProductCount ?? 0}
           icon={<PlusCircle size={20} />}
-          subText="품절 2개 포함"
+          subText={`품절 ${d.soldOutProductCount ?? 0}개 포함`}
         />
         <DashboardCard
           title="대기 주문"
-          value="3"
+          value={d.pendingOrderCount ?? 0}
           icon={<Clock size={20} />}
-          trendText="확인 필요"
+          trendText={d.pendingOrderCount > 0 ? '확인 필요' : undefined}
           trendType="warning"
         />
         <DashboardCard
-          title="이벤트 완료"
-          value="156"
-          icon={<CheckCircle size={20} />}
-          trendText="전월 대비 +18%"
-          trendType="up"
+          title="대기 예약"
+          value={d.pendingReservationCount ?? 0}
+          icon={<CalendarClock size={20} />}
+          trendText={d.pendingReservationCount > 0 ? '확인 필요' : undefined}
+          trendType="warning"
         />
         <DashboardCard
-          title="관심 고객"
-          value="89"
-          icon={<Users size={20} />}
-          subText="이번 주 +5명"
+          title="이번 달 주문"
+          value={d.monthOrderCount ?? 0}
+          icon={<CheckCircle size={20} />}
         />
       </GridSection>
 
-      <BottomGridRow1>
+      {/* <BottomGridRow1>
         <SalesChart />
         <CategoryChart />
-      </BottomGridRow1>
+      </BottomGridRow1> */}
 
       <BottomGridRow2>
         <TopProducts />

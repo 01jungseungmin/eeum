@@ -11,6 +11,12 @@ export const storeApi = {
   getDashboard: () =>
     apiClient.get('/owner/stores/me/dashboard').then((res) => res.data),
 
+  // 상품별 판매 수량 조회 (from/to: LocalDateTime 문자열, 수량 내림차순)
+  getProductSales: (from, to) =>
+    apiClient
+      .get('/owner/stores/me/products/sales', { params: { from, to } })
+      .then((res) => res.data),
+
   // 영업시간 조회 / 수정
   getBusinessHours: () => apiClient.get('/owner/stores/me/business-hours'),
   updateBusinessHours: (data) =>

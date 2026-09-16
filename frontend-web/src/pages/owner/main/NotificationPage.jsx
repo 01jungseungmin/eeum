@@ -51,7 +51,6 @@ const NotificationPage = () => {
         // 전체 알림 설정(allEnabled) 반영
         const settingsData = settingsRes.data?.data;
         if (settingsData && typeof settingsData.allEnabled === 'boolean') {
-          console.log(settingsData);
           setIsGlobalNotificationOn(settingsData.allEnabled);
         }
       } catch (error) {

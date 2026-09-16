@@ -1,85 +1,95 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { X, Sparkles, ShieldCheck, Send, Check, Loader2 } from 'lucide-react';
+import { X, Sparkles, Send, Check, Loader2 } from 'lucide-react';
 import { aiManagerApi } from '../../../../api/owner/aiManagerApi';
+import { useAiDraft } from '../../../../hooks/useAiDraft';
+
+// type별 고정 타이틀/버튼 문구 (실제 내용은 AI 초안 생성 API의 content를 그대로 사용)
+const MODAL_META = {
+  review: { title: '미답변 리뷰 답글 초안', submitLabel: '답글 등록하기' },
+  inquiry: { title: '미답변 문의 답변 초안', submitLabel: '답변 보내기' },
+  complaint: { title: '반복 불만 답글 초안', submitLabel: '답글 등록하기' },
+};
 
 export default function ComplaintReplyModal({
   isOpen,
   onClose,
   targetId,
   type = 'review', // 'review' | 'inquiry' | 'complaint'
-  title,
+  keyword, // complaint 타입일 때 대응할 불만 키워드
   subtitle,
-  initialMessage,
-  submitLabel,
-  excludedCount = 4,
+  onSuccess,
 }) {
-  // type별 기본 텍스트 설정
-  const modalConfig = {
-    review: {
-      title: title || '미답변 리뷰 답글 초안',
-      subtitle: subtitle || '리뷰 3건',
-      initial:
-        initialMessage ||
-        '소중한 후기 감사합니다! 말씀해 주신 점 참고해 더 맛있는 반찬으로 보답하겠습니다. 또 찾아주세요 😊',
-      submitLabel: submitLabel || '답글 등록하기',
+  const meta = MODAL_META[type];
+
+  const createDraftRequest = useCallback(
+    (payload) => {
+      if (type === 'inquiry') {
+        return aiManagerApi.createInquiryReplyDraft(
+          targetId,
+          payload.confirmDelete,
+        );
+      }
+      if (type === 'complaint') {
+        return aiManagerApi.createComplaintDraft({
+          keyword,
+          confirmDelete: payload.confirmDelete,
+        });
+      }
+      return aiManagerApi.createReviewReplyDraft(
+        targetId,
+        payload.confirmDelete,
+      );
     },
-    inquiry: {
-      title: title || '미답변 문의 답변 초안',
-      subtitle: subtitle || '주차·영업시간',
-      initial:
-        initialMessage ||
-        '문의 주셔서 감사합니다. 매장 앞 공영주차장 이용 가능하시며, 영업시간은 오전 10시~오후 8시입니다. 방문 기다릴게요!',
-      submitLabel: submitLabel || '답변 보내기',
-    },
-    complaint: {
-      title: title || '반복 불만 답글 초안',
-      subtitle: subtitle || '‘대기 시간’ 관련',
-      initial:
-        initialMessage ||
-        '기다리시게 해 죄송합니다. 조리 동선을 점검해 대기 시간을 줄이도록 준비 중이에요. 늘 찾아주셔서 감사합니다.',
-      submitLabel: submitLabel || '답글 등록하기',
-    },
-  }[type];
+    [type, targetId, keyword],
+  );
+
+  const { draft, setDraft, creating, createDraft } =
+    useAiDraft(createDraftRequest);
 
   const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      queueMicrotask(() => {
-        setMessage(modalConfig.initial);
-        setIsSuccess(false);
-        setIsLoading(false);
+    if (!isOpen) return;
+
+    queueMicrotask(() => {
+      setIsSuccess(false);
+      setMessage('');
+      setDraft(null);
+
+      createDraft().then((result) => {
+        if (result) setMessage(result.content || '');
       });
-    }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // 등록 및 API 호출 처리
   const handleSubmit = async () => {
-    if (isLoading) return;
-    setIsLoading(true);
+    if (!draft?.messageId || isSending) return;
+    setIsSending(true);
 
     try {
-      // type에 따라 분기 처리 가능
-      if (type === 'inquiry') {
-        // await aiManagerApi.createInquiryReplyDraft(targetId, message);
-      } else {
-        await aiManagerApi.createReviewReplyDraft(targetId);
+      if (message !== draft.content) {
+        await aiManagerApi.updateGeneratedMessage(draft.messageId, {
+          content: message,
+        });
       }
+      await aiManagerApi.sendGeneratedMessage(draft.messageId);
 
       setIsSuccess(true);
+      onSuccess?.();
     } catch (error) {
-      console.error('초안 처리 실패:', error);
+      console.error('초안 전송 실패:', error);
       alert(
         error.response?.data?.error?.message ||
-          '답변 등록 중 오류가 발생했습니다.',
+          '전송 중 오류가 발생했습니다.',
       );
     } finally {
-      setIsLoading(false);
+      setIsSending(false);
     }
   };
 
@@ -88,8 +98,8 @@ export default function ComplaintReplyModal({
       <ModalContainer onClick={(e) => e.stopPropagation()}>
         <Header>
           <TitleGroup>
-            <Title>{modalConfig.title}</Title>
-            <Subtitle>{modalConfig.subtitle}</Subtitle>
+            <Title>{meta.title}</Title>
+            {subtitle && <Subtitle>{subtitle}</Subtitle>}
           </TitleGroup>
           <CloseButton onClick={onClose}>
             <X size={18} />
@@ -102,42 +112,38 @@ export default function ComplaintReplyModal({
               <Badge>
                 <Sparkles size={14} /> AI 준비 메시지 · 수정 가능
               </Badge>
-              <MessageInput
-                rows={3}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-              />
+              {creating ? (
+                <LoadingText>
+                  <Loader2 size={16} /> AI가 문구를 생성하고 있어요...
+                </LoadingText>
+              ) : (
+                <MessageInput
+                  rows={3}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                />
+              )}
             </MessageCard>
-
-            <NoticeBox>
-              <ShieldCheck
-                size={16}
-                color="#16a34a"
-              />
-              <span>
-                최근 7일 내 알림을 받은 고객 {excludedCount}명은 제외했습니다.
-              </span>
-            </NoticeBox>
 
             <ButtonGroup>
               <CancelButton
                 onClick={onClose}
-                disabled={isLoading}
+                disabled={isSending}
               >
                 취소
               </CancelButton>
               <SubmitButton
                 onClick={handleSubmit}
-                disabled={isLoading}
+                disabled={isSending || creating || !draft}
               >
-                {isLoading ? (
+                {isSending ? (
                   <Loader2
                     size={16}
                     style={{ animation: 'spin 1s linear infinite' }}
                   />
                 ) : (
                   <>
-                    <Send size={16} /> {modalConfig.submitLabel}
+                    <Send size={16} /> {meta.submitLabel}
                   </>
                 )}
               </SubmitButton>
@@ -270,6 +276,15 @@ const Badge = styled.div`
   color: #166534;
 `;
 
+const LoadingText = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #4b5563;
+  padding: 8px 0;
+`;
+
 const MessageInput = styled.textarea`
   width: 100%;
   background: transparent;
@@ -284,17 +299,6 @@ const MessageInput = styled.textarea`
   &:focus {
     outline: none;
   }
-`;
-
-const NoticeBox = styled.div`
-  background-color: #f9fafb;
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #4b5563;
 `;
 
 const ButtonGroup = styled.div`

@@ -254,7 +254,6 @@ function StorePage() {
       .then((res) => {
         if (res.success) {
           alert('공지가 정상적으로 등록되었습니다.');
-          console.log('등록된 공지 데이터:', res.data);
           fetchNotices();
         }
       })

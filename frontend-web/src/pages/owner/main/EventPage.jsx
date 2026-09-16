@@ -94,7 +94,6 @@ function EventPage() {
     try {
       const response = await eventApi.getOwnerEventProducts();
       if (response.data && response.data.success) {
-        console.log(response.data.data);
         setEvents(response.data.data);
       }
     } catch (error) {
@@ -254,7 +253,6 @@ function EventPage() {
 
       if (response.data?.success) {
         alert('이벤트가 성공적으로 삭제(비활성화)되었습니다.');
-        console.log(response.data);
         loadEventList();
       } else {
         alert(response.data?.message || '이벤트 삭제에 실패했습니다.');

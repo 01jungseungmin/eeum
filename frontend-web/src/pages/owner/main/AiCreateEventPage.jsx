@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
@@ -9,23 +9,115 @@ import {
   Calendar,
   Clock,
 } from 'lucide-react';
+import { eventApi } from '../../../api/owner/eventApi';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const weekLaterStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+};
+
+// 수량 제한을 두지 않을 때 백엔드에 보낼 재고 수 (백엔드는 무제한 재고 개념이 없어 큰 값으로 대체)
+const UNLIMITED_STOCK = 999;
 
 export default function AiCreateEventPage() {
   const navigate = useNavigate();
 
+  const [products, setProducts] = useState([]);
+  const [recommendation, setRecommendation] = useState(null);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
   // 통합 폼 상태 관리
   const [formData, setFormData] = useState({
-    selectedProduct: '1', // '1': 김치찌개, '2': 된장찌개, '3': 불고기
+    selectedProduct: '',
     discountType: 'percent', // 'percent' | 'amount' | 'service'
     discountValue: '10',
-    startDate: '2026. 05. 31.',
-    endDate: '2026. 06. 30.',
+    startDate: todayStr(),
+    endDate: weekLaterStr(),
     timeType: 'custom', // 'all' | 'custom'
-    startTime: '오전 11:00',
-    endTime: '오후 02:00',
+    startTime: '11:00',
+    endTime: '14:00',
     quantityType: 'none', // 'none' | 'limit'
+    quantity: '30',
     isMatchingScore: true,
   });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoadingProducts(true);
+        const [productsRes, perfRes] = await Promise.all([
+          eventApi.getOwnerProducts(),
+          aiManagerApi.getEventPerformance(),
+        ]);
+
+        let activeProducts = [];
+        if (productsRes.data?.success) {
+          activeProducts = (productsRes.data.data || []).filter(
+            (product) => product.status !== 'INACTIVE',
+          );
+          setProducts(activeProducts);
+        }
+
+        const rec = perfRes.data?.success
+          ? perfRes.data.data?.nextEventRecommendation
+          : null;
+        setRecommendation(rec || null);
+
+        // AI 추천값으로 폼 기본값 채우기 (추천이 없으면 첫 상품만 선택)
+        setFormData((prev) => {
+          const next = { ...prev };
+          const recommendedActive =
+            rec &&
+            activeProducts.some(
+              (p) => p.productId === rec.recommendedProductId,
+            );
+
+          if (recommendedActive) {
+            next.selectedProduct = String(rec.recommendedProductId);
+          } else if (activeProducts.length > 0) {
+            next.selectedProduct = String(activeProducts[0].productId);
+          }
+
+          if (recommendedActive && rec.discountType) {
+            next.discountType = rec.discountType.toLowerCase();
+            if (rec.discountType === 'PERCENT' && rec.discountRate != null) {
+              next.discountValue = String(rec.discountRate);
+            } else if (
+              rec.discountType === 'AMOUNT' &&
+              rec.discountAmount != null
+            ) {
+              next.discountValue = String(rec.discountAmount);
+            }
+          }
+
+          if (recommendedActive && rec.recommendedTimeRange?.includes('~')) {
+            const [start, end] = rec.recommendedTimeRange
+              .split('~')
+              .map((s) => s.trim());
+            next.timeType = 'custom';
+            next.startTime = start;
+            next.endTime = end;
+          }
+
+          if (recommendedActive && rec.matchBasedExposure !== undefined) {
+            next.isMatchingScore = rec.matchBasedExposure;
+          }
+
+          return next;
+        });
+      } catch (error) {
+        console.error('데이터 조회 실패:', error);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // 상태 변경 공통 핸들러
   const handleChange = (key, value) => {
@@ -35,32 +127,83 @@ export default function AiCreateEventPage() {
     }));
   };
 
-  // 상품 정보 리스트
-  const products = [
-    {
-      id: '1',
-      name: '김치찌개 반찬 세트',
-      category: '세트메뉴',
-      price: '12,000원',
-    },
-    { id: '2', name: '된장찌개 반찬', category: '국·찌개', price: '8,000원' },
-    {
-      id: '3',
-      name: '불고기 반찬 (300g)',
-      category: '반찬류',
-      price: '12,000원',
-    },
-  ];
-
   // 현재 선택된 상품 정보
   const currentProduct = products.find(
-    (p) => p.id === formData.selectedProduct,
+    (p) => String(p.productId) === formData.selectedProduct,
   );
 
-  const handleSubmit = () => {
-    console.log('제출 데이터:', formData);
-    alert('이벤트가 등록되었습니다.');
-    navigate(-1);
+  // 할인 설정에 따른 실제 이벤트 가격 계산 (서비스 제공 = 0원)
+  const calcEventPrice = () => {
+    const originalPrice = currentProduct?.price || 0;
+    const value = Number(formData.discountValue) || 0;
+
+    if (formData.discountType === 'percent') {
+      return Math.max(0, Math.round(originalPrice * (1 - value / 100)));
+    }
+    if (formData.discountType === 'amount') {
+      return Math.max(0, originalPrice - value);
+    }
+    return 0; // service
+  };
+
+  const handleSubmit = async () => {
+    if (!currentProduct) {
+      alert('이벤트를 적용할 상품을 선택해주세요.');
+      return;
+    }
+
+    const eventPrice = calcEventPrice();
+    const eventStock =
+      formData.quantityType === 'limit'
+        ? Number(formData.quantity)
+        : UNLIMITED_STOCK;
+
+    if (formData.quantityType === 'limit' && (!eventStock || eventStock <= 0)) {
+      alert('이벤트 수량은 1개 이상이어야 합니다.');
+      return;
+    }
+
+    const startAt = `${formData.startDate}T${
+      formData.timeType === 'custom' ? formData.startTime : '00:00'
+    }:00`;
+    const endAt = `${formData.endDate}T${
+      formData.timeType === 'custom' ? formData.endTime : '23:59'
+    }:00`;
+
+    if (new Date(startAt) < new Date()) {
+      alert('시작 일시는 현재 시간보다 이후여야 합니다.');
+      return;
+    }
+    if (new Date(endAt) <= new Date(startAt)) {
+      alert('종료 일시는 시작 일시보다 이후여야 합니다.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await eventApi.createOwnerEventProduct({
+        productId: currentProduct.productId,
+        eventPrice,
+        eventStock,
+        startAt,
+        endAt,
+      });
+
+      if (response.data?.success) {
+        alert('이벤트가 등록되었습니다.');
+        navigate(-1);
+      } else {
+        alert(response.data?.message || '이벤트 등록에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('이벤트 등록 실패:', error);
+      alert(
+        error.response?.data?.error?.message ||
+          '이벤트 등록 중 오류가 발생했습니다.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -71,22 +214,24 @@ export default function AiCreateEventPage() {
         <span>AI 매니저로 돌아가기</span>
       </BackButton>
 
-      {/* AI 추천 요약 배너 */}
-      <AiBanner>
-        <AiIconBox>
-          <Sparkles
-            size={18}
-            color="#16a34a"
-          />
-        </AiIconBox>
-        <AiBannerText>
-          <strong>AI 추천 요약</strong>
-          <p>
-            AI가 추천한 이벤트 ·{' '}
-            <strong>김치찌개 반찬 세트 · 평일 점심 10% 할인</strong>
-          </p>
-        </AiBannerText>
-      </AiBanner>
+      {/* AI 추천 요약 배너 (추천 데이터가 있을 때만) */}
+      {recommendation && (
+        <AiBanner>
+          <AiIconBox>
+            <Sparkles
+              size={18}
+              color="#16a34a"
+            />
+          </AiIconBox>
+          <AiBannerText>
+            <strong>AI 추천 요약</strong>
+            <p>
+              {recommendation.reason ||
+                `AI가 추천한 이벤트 · ${recommendation.recommendedProductName || ''}`}
+            </p>
+          </AiBannerText>
+        </AiBanner>
+      )}
 
       <ContentGrid>
         {/* 좌측 입력 폼 영역 */}
@@ -97,33 +242,40 @@ export default function AiCreateEventPage() {
               <h2>이벤트 대상 상품</h2>
               <p>이벤트를 적용할 상품을 선택하세요</p>
             </CardHeader>
-            <ProductList>
-              {products.map((item) => {
-                const isSelected = formData.selectedProduct === item.id;
-                return (
-                  <ProductCard
-                    key={item.id}
-                    $isSelected={isSelected}
-                    onClick={() => handleChange('selectedProduct', item.id)}
-                  >
-                    <ProductLeft>
-                      <ProductIconBox $isSelected={isSelected}>
-                        <UtensilsCrossed size={18} />
-                      </ProductIconBox>
-                      <ProductInfo>
-                        <h4>{item.name}</h4>
-                        <p>
-                          {item.category} · {item.price}
-                        </p>
-                      </ProductInfo>
-                    </ProductLeft>
-                    <RadioCircle $isSelected={isSelected}>
-                      {isSelected && <RadioInner />}
-                    </RadioCircle>
-                  </ProductCard>
-                );
-              })}
-            </ProductList>
+            {loadingProducts ? (
+              <EmptyText>상품 목록을 불러오는 중...</EmptyText>
+            ) : products.length === 0 ? (
+              <EmptyText>등록된 판매 상품이 없습니다.</EmptyText>
+            ) : (
+              <ProductList>
+                {products.map((item) => {
+                  const isSelected =
+                    formData.selectedProduct === String(item.productId);
+                  return (
+                    <ProductCard
+                      key={item.productId}
+                      $isSelected={isSelected}
+                      onClick={() =>
+                        handleChange('selectedProduct', String(item.productId))
+                      }
+                    >
+                      <ProductLeft>
+                        <ProductIconBox $isSelected={isSelected}>
+                          <UtensilsCrossed size={18} />
+                        </ProductIconBox>
+                        <ProductInfo>
+                          <h4>{item.name}</h4>
+                          <p>{item.price.toLocaleString()}원</p>
+                        </ProductInfo>
+                      </ProductLeft>
+                      <RadioCircle $isSelected={isSelected}>
+                        {isSelected && <RadioInner />}
+                      </RadioCircle>
+                    </ProductCard>
+                  );
+                })}
+              </ProductList>
+            )}
           </Card>
 
           {/* 2. 할인 설정 */}
@@ -156,20 +308,35 @@ export default function AiCreateEventPage() {
               </TabContainer>
             </FormGroup>
 
-            <FormGroup style={{ marginTop: 16 }}>
-              <Label>할인율</Label>
-              <InputWithUnit>
-                <input
-                  type="text"
-                  value={formData.discountValue}
-                  onChange={(e) =>
-                    handleChange('discountValue', e.target.value)
-                  }
-                />
-                <span>{formData.discountType === 'percent' ? '%' : '원'}</span>
-              </InputWithUnit>
-              <HelperText>1~100% 사이로 입력하세요</HelperText>
-            </FormGroup>
+            {formData.discountType !== 'service' && (
+              <FormGroup style={{ marginTop: 16 }}>
+                <Label>
+                  {formData.discountType === 'percent' ? '할인율' : '할인 금액'}
+                </Label>
+                <InputWithUnit>
+                  <input
+                    type="number"
+                    min="0"
+                    max={formData.discountType === 'percent' ? 100 : undefined}
+                    value={formData.discountValue}
+                    onChange={(e) =>
+                      handleChange('discountValue', e.target.value)
+                    }
+                  />
+                  <span>
+                    {formData.discountType === 'percent' ? '%' : '원'}
+                  </span>
+                </InputWithUnit>
+                <HelperText>
+                  {formData.discountType === 'percent'
+                    ? '1~100% 사이로 입력하세요'
+                    : '원 단위로 입력하세요'}
+                </HelperText>
+              </FormGroup>
+            )}
+            {formData.discountType === 'service' && (
+              <HelperText>선택한 상품을 무료로 제공합니다 (0원)</HelperText>
+            )}
           </Card>
 
           {/* 3. 이벤트 기간 */}
@@ -183,7 +350,7 @@ export default function AiCreateEventPage() {
                 <Label>시작일</Label>
                 <InputWithIcon>
                   <input
-                    type="text"
+                    type="date"
                     value={formData.startDate}
                     onChange={(e) => handleChange('startDate', e.target.value)}
                   />
@@ -198,7 +365,7 @@ export default function AiCreateEventPage() {
                 <Label>종료일</Label>
                 <InputWithIcon>
                   <input
-                    type="text"
+                    type="date"
                     value={formData.endDate}
                     onChange={(e) => handleChange('endDate', e.target.value)}
                   />
@@ -234,7 +401,7 @@ export default function AiCreateEventPage() {
                   <Label>시작 시간</Label>
                   <InputWithIcon>
                     <input
-                      type="text"
+                      type="time"
                       value={formData.startTime}
                       onChange={(e) =>
                         handleChange('startTime', e.target.value)
@@ -251,7 +418,7 @@ export default function AiCreateEventPage() {
                   <Label>종료 시간</Label>
                   <InputWithIcon>
                     <input
-                      type="text"
+                      type="time"
                       value={formData.endTime}
                       onChange={(e) => handleChange('endTime', e.target.value)}
                     />
@@ -287,6 +454,21 @@ export default function AiCreateEventPage() {
                   수량 지정
                 </TabButton>
               </TabContainer>
+              {formData.quantityType === 'limit' ? (
+                <InputWithUnit style={{ marginTop: 12 }}>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.quantity}
+                    onChange={(e) => handleChange('quantity', e.target.value)}
+                  />
+                  <span>개</span>
+                </InputWithUnit>
+              ) : (
+                <HelperText>
+                  재고를 사실상 무제한({UNLIMITED_STOCK}개)으로 설정합니다.
+                </HelperText>
+              )}
             </FormGroup>
 
             <ToggleBox>
@@ -318,22 +500,28 @@ export default function AiCreateEventPage() {
               <PreviewRow>
                 <PreviewLabel>할인</PreviewLabel>
                 <PreviewHighlight>
-                  {formData.discountValue}
-                  {formData.discountType === 'percent' ? '% 할인' : '원 할인'}
+                  {formData.discountType === 'service'
+                    ? '무료 제공'
+                    : `${formData.discountValue}${
+                        formData.discountType === 'percent' ? '% 할인' : '원 할인'
+                      }`}
                 </PreviewHighlight>
+              </PreviewRow>
+              <PreviewRow>
+                <PreviewLabel>가격</PreviewLabel>
+                <PreviewValue>{calcEventPrice().toLocaleString()}원</PreviewValue>
               </PreviewRow>
               <PreviewRow>
                 <PreviewLabel>기간</PreviewLabel>
                 <PreviewValue>
-                  {formData.startDate.slice(6, 11)} ~{' '}
-                  {formData.endDate.slice(6, 11)}
+                  {formData.startDate} ~ {formData.endDate}
                 </PreviewValue>
               </PreviewRow>
               <PreviewRow>
                 <PreviewLabel>시간대</PreviewLabel>
                 <PreviewValue>
                   {formData.timeType === 'custom'
-                    ? `${formData.startTime.replace('오전 ', '').replace('오후 ', '')}~${formData.endTime.replace('오전 ', '').replace('오후 ', '')}`
+                    ? `${formData.startTime}~${formData.endTime}`
                     : '전체 시간'}
                 </PreviewValue>
               </PreviewRow>
@@ -347,8 +535,11 @@ export default function AiCreateEventPage() {
           </PreviewCard>
 
           <SubmitButtonGroup>
-            <SubmitButton onClick={handleSubmit}>
-              <Check size={18} /> 등록하기
+            <SubmitButton
+              onClick={handleSubmit}
+              disabled={submitting || loadingProducts || !currentProduct}
+            >
+              <Check size={18} /> {submitting ? '등록 중...' : '등록하기'}
             </SubmitButton>
             <CancelButton onClick={() => navigate(-1)}>취소</CancelButton>
           </SubmitButtonGroup>
@@ -609,6 +800,13 @@ const HelperText = styled.span`
   color: #94a3b8;
 `;
 
+const EmptyText = styled.div`
+  text-align: center;
+  padding: 30px 0;
+  color: #94a3b8;
+  font-size: 13px;
+`;
+
 const RowGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -761,6 +959,11 @@ const SubmitButton = styled.button`
 
   &:hover {
     background-color: #369a6a;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 `;
 

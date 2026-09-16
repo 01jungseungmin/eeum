@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { storeApi } from '../../../api/owner/storeApi';
 
 const Card = styled.div`
   background: white;
@@ -29,52 +31,165 @@ const Header = styled.div`
   }
 `;
 
-const data = [
-  { name: '김치찌개 반찬', value: 55 },
-  { name: '된장찌개 반찬', value: 40 },
-  { name: '불고기 반찬', value: 33 },
-  { name: '잡채', value: 20 },
-  { name: '계란말이', value: 12 },
-].reverse();
+const RankList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const RankRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+const RankBadge = styled.div`
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  background: ${(props) =>
+    props.$rank === 1 ? '#f5a623' : props.$rank === 2 ? '#9ca3af' : '#c98b5e'};
+`;
+
+const RankBody = styled.div`
+  flex: 1;
+  min-width: 0;
+`;
+
+const RankTop = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  gap: 8px;
+
+  .name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #262626;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .qty {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #5fa07e;
+  }
+`;
+
+const GaugeTrack = styled.div`
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #f1f3f5;
+  overflow: hidden;
+`;
+
+const GaugeFill = styled.div`
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #7fc8a0, #5fa07e);
+  width: ${(props) => props.$percent}%;
+  transition: width 0.4s ease;
+`;
+
+const EmptyText = styled.div`
+  text-align: center;
+  padding: 30px 0;
+  color: #bfbfbf;
+  font-size: 13px;
+`;
+
+// "최근 한 달" = 정확히 30일 전 ~ 지금 (달력상 월 경계 대신 고정 30일 창을 사용해
+// 말일 근처에서 setMonth()가 다음 달로 밀리는 문제를 피한다), LocalDateTime 형식으로 변환
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+const getLastMonthRange = () => {
+  const pad = (n) => String(n).padStart(2, '0');
+  const toLocalDateTime = (date) =>
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+      date.getHours(),
+    )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+
+  const to = new Date();
+  const from = new Date(to.getTime() - THIRTY_DAYS_MS);
+
+  return { from: toLocalDateTime(from), to: toLocalDateTime(to) };
+};
 
 function TopProducts() {
+  const navigate = useNavigate();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchTopProducts = async () => {
+    try {
+      setLoading(true);
+      const { from, to } = getLastMonthRange();
+      const response = await storeApi.getProductSales(from, to);
+
+      if (response?.success) {
+        console.log('인기 상품 조회 성공:', response.data);
+        setProducts((response.data || []).slice(0, 3));
+      }
+    } catch (error) {
+      console.error('인기 상품 조회 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    queueMicrotask(() => fetchTopProducts());
+  }, []);
+
+  const maxQuantity = products[0]?.soldQuantity || 1;
+
   return (
     <Card>
       <Header>
-        <h3>인기 상품 TOP 5</h3>
-        <span className="more">
+        <h3>인기 상품 TOP 3</h3>
+        <span
+          className="more"
+          onClick={() => navigate('/products')}
+        >
           전체 보기 <ChevronRight size={14} />
         </span>
       </Header>
-      <div style={{ width: '100%', height: 220 }}>
-        <BarChart
-          width={300}
-          height={220}
-          layout="vertical"
-          data={data}
-          margin={{ top: 0, right: 20, left: 30, bottom: 0 }}
-          style={{ width: '100%' }}
-        >
-          <XAxis
-            type="number"
-            hide
-          />
-          <YAxis
-            dataKey="name"
-            type="category"
-            axisLine={false}
-            tickLine={false}
-            stroke="#595959"
-            fontSize={11}
-          />
-          <Bar
-            dataKey="value"
-            fill="#5fa07e"
-            radius={[0, 6, 6, 0]}
-            barSize={14}
-          />
-        </BarChart>
-      </div>
+
+      {loading ? (
+        <EmptyText>불러오는 중...</EmptyText>
+      ) : products.length === 0 ? (
+        <EmptyText>최근 한 달간 판매된 상품이 없습니다.</EmptyText>
+      ) : (
+        <RankList>
+          {products.map((product, index) => (
+            <RankRow key={product.productId}>
+              <RankBadge $rank={index + 1}>{index + 1}</RankBadge>
+              <RankBody>
+                <RankTop>
+                  <span className="name">{product.productName}</span>
+                  <span className="qty">{product.soldQuantity}개 판매</span>
+                </RankTop>
+                <GaugeTrack>
+                  <GaugeFill
+                    $percent={(product.soldQuantity / maxQuantity) * 100}
+                  />
+                </GaugeTrack>
+              </RankBody>
+            </RankRow>
+          ))}
+        </RankList>
+      )}
     </Card>
   );
 }

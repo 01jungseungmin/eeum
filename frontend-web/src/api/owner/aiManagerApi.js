@@ -66,9 +66,8 @@ export const aiManagerApi = {
   createInquiryReplyDraft: (inquiryId, confirmDelete = false) => {
     return apiClient.post(
       `/owner/ai-manager/inquiries/${inquiryId}/reply-draft`,
-      {
-        params: { confirmDelete },
-      },
+      null,
+      { params: { confirmDelete } },
     );
   },
 
@@ -102,7 +101,7 @@ export const aiManagerApi = {
   // 6. 공지사항
   // 공지 등록, 공지 예약 등록, 공지 등록용 초안 생성
   createNotice: (messageId) => {
-    return apiClient.post(`/owner/ai-manager/notices/${messageId}/public`);
+    return apiClient.post(`/owner/ai-manager/notices/${messageId}/publish`);
   },
   scheduleNotice: (messageId, data) => {
     return apiClient.post(
@@ -111,7 +110,7 @@ export const aiManagerApi = {
     );
   },
   createNoticeDraft: (data) => {
-    return apiClient.patch('/owner/ai-manager/notices/draft', data);
+    return apiClient.post('/owner/ai-manager/notices/draft', data);
   },
 
   // 7. 운영 위험 조기정보
@@ -165,21 +164,26 @@ export const aiManagerApi = {
   // 9. 리뷰/문의 관리
   // 자동 대응 현황 조회, 반복 불만 대응 문구 생성, 공지 초안 생성, 리뷰 답글 초안 생성
   getReviewInquiryStatus: () => {
-    return apiClient.get('/owner/ai-manager/reviews-inquiries');
+    return apiClient.get('/owner/ai-manager/review-inquiries');
   },
   createComplaintDraft: (data) => {
     return apiClient.post(
-      '/owner/ai-manager/reviews-inquiries/complaint-draft',
+      '/owner/ai-manager/review-inquiries/complaint-draft',
       data,
     );
   },
-  createReviewNoticeDraft: () => {
-    return apiClient.patch('/owner/ai-manager/reviews-inquiries/notice-draft');
+  createReviewNoticeDraft: (data) => {
+    return apiClient.post(
+      '/owner/ai-manager/review-inquiries/notice-draft',
+      data,
+    );
   },
   createReviewReplyDraft: (reviewId, confirmDelete = false) => {
-    return apiClient.post(`/owner/ai-manager/reviews/${reviewId}/reply-draft`, {
-      params: { confirmDelete },
-    });
+    return apiClient.post(
+      `/owner/ai-manager/reviews/${reviewId}/reply-draft`,
+      null,
+      { params: { confirmDelete } },
+    );
   },
 
   // 10. 테스트
