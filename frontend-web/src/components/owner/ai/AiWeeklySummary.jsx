@@ -9,8 +9,15 @@ import {
   Repeat,
   ShoppingBag,
   CheckCircle,
+  Crown,
 } from 'lucide-react';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
+import PlanUpgradeModal from './modal/PlanUpgradeModal';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -156,11 +163,45 @@ const LoadingText = styled.div`
   text-align: center;
 `;
 
+const LockedButton = styled.button`
+  width: 100%;
+  background-color: #47a075;
+  color: #ffffff;
+  border: none;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #3b8762;
+  }
+`;
+
 export default function AiWeeklySummary() {
+  const { aiPlanType } = useAuth();
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [planLocked, setPlanLocked] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   useEffect(() => {
+    // 캐싱된 플랜으로 이미 BASIC 미만인 게 확실하면 요청 자체를 생략한다 —
+    // 안 그러면 403 + 브라우저/우리 콘솔에 에러 로그가 매번 찍힌다.
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.activitySummary)) {
+      queueMicrotask(() => {
+        setPlanLocked(true);
+        setLoading(false);
+      });
+      return;
+    }
+
     const fetchSummary = async () => {
       try {
         const response = await aiManagerApi.getActivitySummary();
@@ -169,20 +210,52 @@ export default function AiWeeklySummary() {
           setSummaryData(response.data.data);
         }
       } catch (error) {
-        console.error('AI 활동 요약 데이터를 불러오는 중 오류 발생:', error);
+        const status = error.response?.status;
+        const errorData = error.response?.data?.error || error.response?.data;
+        if (status === 403 || errorData?.code === 'AI_001') {
+          setPlanLocked(true);
+        } else {
+          console.error('AI 활동 요약 데이터를 불러오는 중 오류 발생:', error);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchSummary();
-  }, []);
+  }, [aiPlanType]);
 
   if (loading) {
     return (
       <CardContainer id="section-ai-summary">
         <LoadingText>데이터를 불러오는 중입니다...</LoadingText>
       </CardContainer>
+    );
+  }
+
+  if (planLocked) {
+    return (
+      <>
+        <CardContainer id="section-ai-summary">
+          <Header>
+            <IconBox>
+              <BarChart3 size={20} />
+            </IconBox>
+            <TitleArea>
+              <h3>AI 점장 활동 요약</h3>
+              <p>베이직 플랜부터 이용할 수 있는 기능이에요.</p>
+            </TitleArea>
+          </Header>
+          <LockedButton onClick={() => setIsUpgradeModalOpen(true)}>
+            <Crown size={16} /> 플랜 업그레이드
+          </LockedButton>
+        </CardContainer>
+        <PlanUpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          errorMessage="베이직 플랜부터 이용할 수 있는 기능이에요."
+        />
+      </>
     );
   }
 

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useLocation } from 'react-router-dom';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasRequiredPlan } from '../../../constants/aiPlanFeatures';
 
 import AiManagerReport from '../../../components/owner/ai/AiManagerReport';
 import AiCustomerCare from '../../../components/owner/ai/AiCustomerCare';
@@ -11,6 +13,7 @@ import AiLocationMatching from '../../../components/owner/ai/AiLocationMatching'
 import AiMarketingAutomation from '../../../components/owner/ai/AiMarketingAutomation';
 import AiOperationWarning from '../../../components/owner/ai/AiOperationWarning';
 import AiWeeklySummary from '../../../components/owner/ai/AiWeeklySummary';
+import AiBasicUpgradeBanner from '../../../components/owner/ai/AiBasicUpgradeBanner';
 
 const PageLayout = styled.div`
   display: flex;
@@ -40,10 +43,16 @@ const StatusMessage = styled.div`
 
 export default function AiManagerPage() {
   const location = useLocation();
+  const { aiPlanType } = useAuth();
 
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // 생활권 매칭 / 운영 위험 조기경보 / AI 활동 요약 / 마케팅 자동화는 전부
+  // BASIC부터 열리는 기능이라, 미만 플랜이면 4개 위젯을 각각 그리는 대신
+  // 아래에서 통합 배너 하나로 대체한다.
+  const isBasicLocked = !hasRequiredPlan(aiPlanType, 'BASIC');
 
   // 대시보드 API 호출
   useEffect(() => {
@@ -135,37 +144,63 @@ export default function AiManagerPage() {
         </div>
       </TwoColumnGrid>
 
-      {/* 5 & 6. 생활권 매칭 / 마케팅 자동화 (2단 그리드) */}
-      <TwoColumnGrid>
-        <div
-          id="section-ai-location"
-          style={{ scrollMarginTop: '24px' }}
-        >
-          <AiLocationMatching score={dashboardData?.localMatchScore} />
-        </div>
-        <div
-          id="section-ai-marketing"
-          style={{ scrollMarginTop: '24px' }}
-        >
-          <AiMarketingAutomation />
-        </div>
-      </TwoColumnGrid>
+      {/* 5~8. 생활권 매칭 / 마케팅 자동화 / 운영 위험 조기경보 / AI 활동 요약
+          — 전부 BASIC부터 열리는 기능이라, 미만 플랜이면 위젯 4개 대신
+          통합 업그레이드 배너 하나만 보여준다. 사이드바가 각 섹션으로
+          앵커 스크롤하므로, id는 그대로 유지하고 배너 바로 앞에 빈 앵커로
+          붙여둔다. */}
+      {isBasicLocked ? (
+        <>
+          <div
+            id="section-ai-location"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <div
+            id="section-ai-marketing"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <div
+            id="section-ai-warning"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <div
+            id="section-ai-summary"
+            style={{ scrollMarginTop: '24px' }}
+          />
+          <AiBasicUpgradeBanner />
+        </>
+      ) : (
+        <>
+          <TwoColumnGrid>
+            <div
+              id="section-ai-location"
+              style={{ scrollMarginTop: '24px' }}
+            >
+              <AiLocationMatching score={dashboardData?.localMatchScore} />
+            </div>
+            <div
+              id="section-ai-marketing"
+              style={{ scrollMarginTop: '24px' }}
+            >
+              <AiMarketingAutomation />
+            </div>
+          </TwoColumnGrid>
 
-      {/* 7. 운영 위험 조기경보 */}
-      <div
-        id="section-ai-warning"
-        style={{ scrollMarginTop: '24px' }}
-      >
-        <AiOperationWarning data={dashboardData?.operationRiskSummary} />
-      </div>
+          <div
+            id="section-ai-warning"
+            style={{ scrollMarginTop: '24px' }}
+          >
+            <AiOperationWarning data={dashboardData?.operationRiskSummary} />
+          </div>
 
-      {/* 8. AI 활동 요약 */}
-      <div
-        id="section-ai-summary"
-        style={{ scrollMarginTop: '24px' }}
-      >
-        <AiWeeklySummary data={dashboardData?.activitySummary} />
-      </div>
+          <div
+            id="section-ai-summary"
+            style={{ scrollMarginTop: '24px' }}
+          >
+            <AiWeeklySummary data={dashboardData?.activitySummary} />
+          </div>
+        </>
+      )}
     </PageLayout>
   );
 }

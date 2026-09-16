@@ -13,7 +13,11 @@ export const AI_PAGE_REQUIRED_PLAN = {
   operationRiskDetail: 'PRO', // AiOperationRiskDetailPage — OPERATION_RISK_DETAIL
   chat: 'BASIC', // AiChatPage — CHATBOT (메시지 전송 시점에 확인)
   powerUsageReport: 'PRO', // AiPowerUsageReportPage — ELECTRICITY_REPORT
+  locationMatchView: 'BASIC', // AiLocationMatching 대시보드 위젯 조회 — LOCAL_MATCH_VIEW
   locationMatchExposure: 'PRO', // AiLocationMatchingDetailPage 노출 시작 — LOCAL_MATCH_EXPOSURE
+  operationRiskSummary: 'BASIC', // AiOperationWarning 대시보드 위젯 조회 — OPERATION_RISK_SUMMARY
+  activitySummary: 'BASIC', // AiWeeklySummary 대시보드 위젯 조회 — ACTIVITY_SUMMARY
+  marketingDraft: 'BASIC', // AiMarketingAutomation 대시보드 위젯 초안 생성 — MARKETING_DRAFT
 };
 
 // 캐싱된 플랜(aiPlanType)이 필요한 플랜을 충족하는지 확인.
