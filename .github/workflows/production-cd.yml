@@ -164,31 +164,107 @@ jobs:
               frontend
           fi
 
-          echo "[6/7] Health checks"
+                    echo "[6/7] Health checks"
 
-          curl \
-            --fail \
-            --retry 20 \
-            --retry-delay 3 \
-            http://127.0.0.1:8080/actuator/health
+          echo "Waiting for backend health..."
+
+          for i in \$(seq 1 40); do
+            STATUS=\$(docker inspect \
+              --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+              eeum-backend)
+
+            echo "Backend health: \$STATUS"
+
+            if [ "\$STATUS" = "healthy" ]; then
+              break
+            fi
+
+            if [ "\$STATUS" = "unhealthy" ]; then
+              echo "Backend became unhealthy"
+              docker logs --tail 100 eeum-backend
+              exit 1
+            fi
+
+            sleep 3
+          done
+
+          STATUS=\$(docker inspect \
+            --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+            eeum-backend)
+
+          if [ "\$STATUS" != "healthy" ]; then
+            echo "Backend health timeout"
+            docker logs --tail 100 eeum-backend
+            exit 1
+          fi
+
+          echo "Waiting for frontend health..."
+
+          for i in \$(seq 1 20); do
+            STATUS=\$(docker inspect \
+              --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+              eeum-frontend)
+
+            echo "Frontend health: \$STATUS"
+
+            if [ "\$STATUS" = "healthy" ]; then
+              break
+            fi
+
+            if [ "\$STATUS" = "unhealthy" ]; then
+              echo "Frontend became unhealthy"
+              docker logs --tail 100 eeum-frontend
+              exit 1
+            fi
+
+            sleep 3
+          done
+
+          STATUS=\$(docker inspect \
+            --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+            eeum-frontend)
+
+          if [ "\$STATUS" != "healthy" ]; then
+            echo "Frontend health timeout"
+            docker logs --tail 100 eeum-frontend
+            exit 1
+          fi
+
+          echo "Checking local backend..."
 
           curl \
             --fail \
             --retry 10 \
             --retry-delay 2 \
+            --retry-all-errors \
+            http://127.0.0.1:8080/actuator/health
+
+          echo "Checking local frontend..."
+
+          curl \
+            --fail \
+            --retry 10 \
+            --retry-delay 2 \
+            --retry-all-errors \
             http://127.0.0.1:3000/ \
             > /dev/null
 
-          curl \
-            --fail \
-            --retry 10 \
-            --retry-delay 2 \
-            https://eeum.life/api/actuator/health
+          echo "Checking public backend..."
 
           curl \
             --fail \
             --retry 10 \
             --retry-delay 2 \
+            --retry-all-errors \
+            https://eeum.life/api/actuator/health
+
+          echo "Checking public frontend..."
+
+          curl \
+            --fail \
+            --retry 10 \
+            --retry-delay 2 \
+            --retry-all-errors \
             https://eeum.life/ \
             > /dev/null
 
