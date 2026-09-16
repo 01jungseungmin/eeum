@@ -12,7 +12,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/** 실패 이력을 AFTER_COMPLETION에서 별도 저장한다. 트랜잭션 밖 이벤트와 롤백도 기록해야 한다. */
+/**
+ * 운영 실패 이력을 남긴다.
+ *
+ * AFTER_COMPLETION이라 롤백된 경우에도 실행된다 — 실패 이력이 필요한 시점이 바로 그때다.
+ * fallbackExecution은 트랜잭션이 열리기 전에 터지는 스케줄러 ErrorHandler·Webhook
+ * 파싱 실패를 받기 위한 것이다. 저장을 writer에 위임하는 이유는, 여기에 직접 Transactional을
+ * 걸면 경계가 try 바깥에 놓여 rollback-only 트랜잭션의 커밋 예외를 잡지 못하기 때문이다.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

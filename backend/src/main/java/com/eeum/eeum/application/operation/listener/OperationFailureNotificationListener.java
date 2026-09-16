@@ -30,11 +30,11 @@ public class OperationFailureNotificationListener {
     private final RateLimitService rateLimitService;
 
     /**
-     * 또 @EventListener인 이유: 이 이벤트는 OperationFailureLogWriter의
+     * 트랜잭션 리스너가 아니라 @EventListener인 이유: 이 이벤트는 OperationFailureLogWriter의
      * 트랜잭션이 커밋된 뒤, 트랜잭션 밖에서 발행된다. 트랜잭션 리스너로 두면
      * 활성 트랜잭션이 없어 아예 실행되지 않는다.
      *
-     * 또 @Async를 붙이지 않는다 — 발행 지점이 이미 비동기 스레드라 한 번 더
+     * 여기에 @Async를 붙이지 않는다 — 발행 지점이 이미 비동기 스레드라 한 번 더
      * 넘길 이유가 없고, 풀이 포화될 때 불필요한 압력만 더한다.
      */
     @EventListener

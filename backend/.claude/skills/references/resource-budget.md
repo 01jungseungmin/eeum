@@ -15,18 +15,19 @@
 
 ## 자원 목록과 현재 예산
 
-아래 "기본값"은 `src/main/resources/application.yml`에 해당 설정이 **없어서** 프레임워크 기본값이 적용된다는 뜻이다.
-설정을 추가하면 이 표를 함께 갱신한다.
+운영 예산은 `application.yml`과 `application-prod.yml`을 합쳐 판단한다. 환경변수로 바꿀 수 있는 값은 표에 기본 환경값을 적고 실제 배포 값은 운영 환경에서 다시 확인한다.
 
 | 자원 | 현재 예산 | 출처 | 고갈 시 증상 |
 |---|---|---|---|
-| Tomcat 워커 스레드 | 200 (기본값) | 설정 없음 | 요청이 큐에 쌓이다 타임아웃 — 서버가 꺼진 것처럼 보임 |
-| Tomcat 최대 커넥션 | 8192 (기본값) | 설정 없음 | 신규 연결 거부, FD 고갈 |
+| Tomcat 워커 스레드 | **100** / min-spare 10 (prod 기본 환경값) | `application-prod.yml` (`server.tomcat.threads`) | 요청이 큐에 쌓이다 타임아웃 — 서버가 꺼진 것처럼 보임 |
+| Tomcat accept queue | **100** (prod 기본 환경값) | `application-prod.yml` (`server.tomcat.accept-count`) | 워커 포화 뒤 신규 연결 거부 |
+| Tomcat 최대 커넥션 | **8192** (prod 기본 환경값) | `application-prod.yml` (`server.tomcat.max-connections`) | 신규 연결 거부, FD 고갈 |
 | HikariCP 커넥션 풀 | **20** / connection-timeout 5s / max-lifetime 29분 / leak-detection 20s | `application.yml` (`spring.datasource.hikari`) | `Connection is not available, request timed out after 5000ms` |
 | `asyncTaskExecutor` (`@Async` 기본) | core 4 / max 16 / queue 100 / `WaitForQueueSpacePolicy(2s)` / `@Primary` | `config/AsyncConfig.java` | 큐 포화 시 제출 스레드가 최대 2초 대기, 그래도 자리가 없으면 작업 폐기(ERROR 로그) |
+| `chatBroadcastTaskExecutor` | core 1 / max 1 / queue 200 / 포화 시 폐기(로그) | `config/AsyncConfig.java` | 채팅 실시간 중계 1건 유실, REST 재동기화 필요 |
 | `applicationTaskExecutor` (MVC async 전용) | core 2 / max 8 / queue 100 / AbortPolicy | `config/AsyncConfig.java` | `Callable` 반환 엔드포인트가 거부됨 (현재 사용처 없음) |
 | `notificationPushTaskExecutor` | core 4 / max 8 / queue 200 / **포화 시 폐기(로그)** | `config/AsyncConfig.java` | FCM 발송 누락 (알림 레코드는 이미 커밋돼 앱에는 보임) |
-| `@Scheduled` 스레드 | **1 (기본값)** | 설정 없음 | 느린 스케줄러 하나가 나머지 전부를 지연시킴 |
+| `@Scheduled` 스레드 | **1 (명시값)** / 종료 대기 30초 | `config/SchedulingConfig.java` | 느린 스케줄러 하나가 나머지 전부를 지연시킴 |
 | SSE emitter | 계정당 1개 / 타임아웃 30분 / 하트비트 30초 | `infrastructure/sse/SseEmitterManager.java` | 하트비트 실패로 죽은 연결을 즉시 회수 |
 | SSE write 풀 (`sse-write`) | core 2 / max 8 / queue 500 / **포화 시 폐기(로그)** | `infrastructure/sse/SseEmitterManager.java` | 배지 전송 누락 (다음 이벤트나 재조회로 복구) |
 | Redis 일반 중계 풀 (`relay-`) | core 2 / max 8 / queue 200 / 포화 시 폐기(로그) | `infrastructure/realtime/RealtimeRelaySubscriber.java` | STOMP·unread 실시간 이벤트 1건 유실 |
@@ -38,7 +39,7 @@
 - **`applicationTaskExecutor`는 Spring MVC가 async executor를 이름으로 찾는 자리다.** 여기에 `@Async` 작업을 태우면 알림이 밀릴 때 MVC async도 함께 밀린다. `@Async`용 풀은 `asyncTaskExecutor`로 분리하고 `@Primary`로 기본 해석을 잡는다.
 - **Boot의 task 자동 설정은 Executor 빈 하나만 있어도 꺼진다.** `@ConditionalOnMissingBean(Executor.class)`이므로(Boot 4.0.6 확인), `applicationTaskExecutor`라는 이름을 비워 두면 Boot가 채워주는 것이 아니라 MVC async가 `SimpleAsyncTaskExecutor`(요청마다 새 스레드)로 떨어진다. 그 이름의 빈은 **직접 정의해야** 한다.
 - **큐 용량이 크면 `maxPoolSize`가 죽는다.** `ThreadPoolExecutor`는 큐가 가득 차기 전까지 core를 넘겨 스레드를 늘리지 않는다. queue를 500에서 100으로 줄여 max 16이 실제로 도달 가능하게 했다.
-- **Executor 빈이 둘 이상이면 한정자 없는 `@Async`가 조용히 깨진다.** 유일 빈 해석에 실패하고 이름이 `taskExecutor`인 빈도 없으면 `SimpleAsyncTaskExecutor`(작업마다 새 스레드)로 폴백한다. 예외가 나지 않으므로 `applicationTaskExecutor`에 `@Primary`가 필요하다. `config/AsyncExecutorWiringIntegrationTest`가 이 배선을 고정한다.
+- **Executor 빈이 둘 이상이면 한정자 없는 `@Async`가 조용히 깨진다.** 유일 빈 해석에 실패하고 이름이 `taskExecutor`인 빈도 없으면 `SimpleAsyncTaskExecutor`(작업마다 새 스레드)로 폴백한다. 예외가 나지 않으므로 `asyncTaskExecutor`에 `@Primary`가 필요하다. `config/AsyncExecutorWiringIntegrationTest`가 이 배선을 고정한다.
 - **버려도 되는 작업과 아닌 작업을 같은 풀에 두지 않는다.** 알림 생성(DB 저장)은 버리면 알림이 영영 생기지 않아 CallerRuns로 흡수해야 하고, FCM 발송은 이미 커밋된 알림의 전달일 뿐이라 버리는 편이 낫다. 한 풀에 두면 후자를 위해 전자를 버리거나, 전자를 위해 요청 스레드가 외부 HTTP를 기다린다.
 - **`REQUIRES_NEW`는 커넥션을 2개 점유한다.** 바깥 트랜잭션은 suspend 되어도 커넥션을 반납하지 않는다. 풀 크기가 10이면 이런 요청은 **동시 5개**가 상한이고, 10개가 동시에 들어오면 전원이 두 번째 커넥션을 기다리는 데드락이 된다.
 - **`CallerRunsPolicy`를 `@Async` 풀에 쓰면 안 된다.** 이 풀의 작업 상당수는 `AFTER_COMMIT` 콜백에서 제출된다. 그 스레드에서 실행되면 `@Transactional`(REQUIRED)이 **이미 커밋된 트랜잭션에 참여**해 DB 쓰기가 커밋되지 못하고 조용히 사라진다. 작업을 버리지 않았는데 결과는 유실이다. `REQUIRES_NEW`로 피하는 방법은 금지 패턴 3번에 걸린다(커넥션 2배 점유). 그래서 `WaitForQueueSpacePolicy`로 **제출 스레드 실행 자체를 없앴다** — 유실이 불가능해지는 것은 아니고 드물어지고 로그로 드러난다. 완전한 보장이 필요하면 durable outbox가 답이다.

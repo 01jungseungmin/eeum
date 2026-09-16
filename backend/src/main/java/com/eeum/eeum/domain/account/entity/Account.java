@@ -92,7 +92,14 @@ public class Account extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    /** 토큰 세대. 발급 시점의 값이 JWT ver claim에 박히고, 검증 때 현재 값과 대조한다. */
+    /**
+     * 토큰 세대. 발급 시점의 값이 JWT ver claim에 박히고, 검증 때 현재 값과 대조한다.
+     *
+     * 제재와 같은 트랜잭션에서 커밋되므로, 비동기 풀·인스턴스 간 신호 유실에 걸리는 Redis
+     * 삭제와 달리 회수가 보장된다. 시각이 아니라 정수인 이유: iat가 초 단위라 같은 초에
+     * 발급된 토큰을 구분 못 하고, 인스턴스 timezone이 다르면 판정이 갈리며, 제재 직후 발급된
+     * 토큰이 "더 늦은 시각"이라는 이유로 통과한다.
+     */
     @Column(name = "token_version", nullable = false,
             columnDefinition = "BIGINT NOT NULL DEFAULT 0")
     private Long tokenVersion = 0L;

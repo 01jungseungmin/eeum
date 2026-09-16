@@ -8,7 +8,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 실패 이력을 독립 트랜잭션으로 저장한다. */
+/**
+ * 실패 이력을 독립 트랜잭션으로 저장한다.
+ *
+ * REQUIRES_NEW인 이유: 실패 이력은 원 작업이 롤백돼도 남아야 하는 운영 데이터다.
+ * 별도 빈으로 분리한 이유는 전파 속성 때문이다 — 같은 클래스에서 this.write()로 부르면
+ * 프록시를 거치지 않아 REQUIRES_NEW가 조용히 무시된다. 덕분에 트랜잭션 경계가 호출자의
+ * try 안쪽에 놓여, 커밋 실패(UnexpectedRollbackException)까지 호출자가 잡을 수 있다.
+ */
 @Component
 @RequiredArgsConstructor
 public class OperationFailureLogWriter {

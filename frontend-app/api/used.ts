@@ -14,6 +14,7 @@ export interface UsedProductSummary {
   thumbnailUrl: string | null;
   favoriteCount: number;
   createdAt: string;
+  tradeLocationName: string | null;
 }
 
 export interface UsedProductListParams {
@@ -44,6 +45,43 @@ export interface CreateUsedProductReq {
   content: string;
   priceType: UsedProductPriceType;
   price: number;
+  // 거래 희망 장소(선택). 셋 다 있거나 셋 다 없어야 한다 — 서버가 부분 입력을 400으로 막는다.
+  tradeLocationName?: string | null;
+  tradeLatitude?: number | null;
+  tradeLongitude?: number | null;
+  tradePlaceId?: string | null;
+}
+
+export interface UsedProductImage {
+  imageId: number;
+  imageUrl: string;
+  displayOrder: number;
+  thumbnail: boolean;
+}
+
+export interface UsedProductDetail {
+  usedProductId: number;
+  sellerId: number;
+  sellerNickname: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  regionId: number | null;
+  regionName: string | null;
+  title: string;
+  content: string;
+  priceType: UsedProductPriceType;
+  price: number | null;
+  status: UsedProductStatus;
+  hidden: boolean;
+  viewCount: number;
+  favoriteCount: number;
+  createdAt: string;
+  modifiedAt: string;
+  images: UsedProductImage[];
+  tradeLocationName: string | null;
+  tradeLatitude: number | null;
+  tradeLongitude: number | null;
+  tradePlaceId: string | null;
 }
 
 export const usedApi = {
@@ -75,6 +113,12 @@ export const usedApi = {
       nextCursorValue: raw?.nextCursorValue ?? null,
       nextCursorId: raw?.nextCursorId ?? null,
     };
+  },
+
+  // 중고 게시글 상세 조회 (비회원도 조회 가능, 본인 글이 아니면 조회수가 오른다)
+  getUsedProduct: async (usedProductId: number): Promise<UsedProductDetail> => {
+    const res = await client.get(`/used/${usedProductId}`);
+    return res.data.data;
   },
 
   createUsedProduct: async (data: CreateUsedProductReq) => {

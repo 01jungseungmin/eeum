@@ -4,13 +4,42 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class RateLimitService {
+
+    private static final DefaultRedisScript<Long> INCREMENT_WITH_TTL_SCRIPT =
+            new DefaultRedisScript<>(
+                    """
+                    local count = redis.call('incr', KEYS[1])
+                    if redis.call('pttl', KEYS[1]) < 0 then
+                        redis.call('pexpire', KEYS[1], ARGV[1])
+                    end
+                    return count
+                    """,
+                    Long.class
+            );
+
+    private static final DefaultRedisScript<String> READ_WITH_TTL_REPAIR_SCRIPT =
+            new DefaultRedisScript<>(
+                    """
+                    local value = redis.call('get', KEYS[1])
+                    if not value then
+                        return nil
+                    end
+                    if redis.call('pttl', KEYS[1]) < 0 then
+                        redis.call('pexpire', KEYS[1], ARGV[1])
+                    end
+                    return value
+                    """,
+                    String.class
+            );
 
     private final StringRedisTemplate redisTemplate;
 
@@ -38,16 +67,14 @@ public class RateLimitService {
 
     // 카운터 증가 후 현재 값 반환 — 시간 구간별 발생량 집계용(Webhook 서명 실패 등)
     public long incrementAndGet(String key, Duration window) {
-        Long count = redisTemplate.opsForValue().increment(key);
-        if (count != null && count == 1L) {
-            redisTemplate.expire(key, window);
-        }
-        return count == null ? 0L : count;
+        return incrementWithTtl(key, window);
     }
 
     // 카운터형 — window 동안 누적된 실패 횟수가 maxAttempts 이상이면 차단 (로그인 실패 등)
-    public void checkNotBlocked(String key, int maxAttempts, ErrorCode errorCode) {
-        String value = redisTemplate.opsForValue().get(key);
+    public void checkNotBlocked(
+            String key, int maxAttempts, Duration window, ErrorCode errorCode
+    ) {
+        String value = readWithTtlRepair(key, window);
 
         if (value == null) {
             return;
@@ -70,28 +97,36 @@ public class RateLimitService {
     // 카운터형 — window 동안 누적 호출 횟수가 maxRequests를 초과하면 차단 (공개 API 스팸/과호출 방지 등).
     // checkNotBlocked와 달리 이 메서드 자체가 호출마다 카운트를 증가시킨다(선-검증 후 별도 기록이 필요 없음).
     public void checkAndIncrement(String key, int maxRequests, Duration window, ErrorCode errorCode) {
-        Long count = redisTemplate.opsForValue().increment(key);
-
-        if (count != null && count == 1L) {
-            redisTemplate.expire(key, window);
-        }
-
-        if (count != null && count > maxRequests) {
+        long count = incrementWithTtl(key, window);
+        if (count > maxRequests) {
             throw new BusinessException(errorCode);
         }
     }
 
     // 실패 1회 기록 — 최초 실패(count == 1) 시에만 TTL 설정
     public void recordFailure(String key, Duration window) {
-        Long count = redisTemplate.opsForValue().increment(key);
-
-        if (count != null && count == 1L) {
-            redisTemplate.expire(key, window);
-        }
+        incrementWithTtl(key, window);
     }
 
     // 성공 시 실패 카운트 초기화
     public void resetFailure(String key) {
         redisTemplate.delete(key);
+    }
+
+    private long incrementWithTtl(String key, Duration window) {
+        Long count = redisTemplate.execute(
+                INCREMENT_WITH_TTL_SCRIPT,
+                List.of(key),
+                String.valueOf(window.toMillis())
+        );
+        return count == null ? 0L : count;
+    }
+
+    private String readWithTtlRepair(String key, Duration window) {
+        return redisTemplate.execute(
+                READ_WITH_TTL_REPAIR_SCRIPT,
+                List.of(key),
+                String.valueOf(window.toMillis())
+        );
     }
 }

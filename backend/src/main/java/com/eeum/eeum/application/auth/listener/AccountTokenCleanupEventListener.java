@@ -37,7 +37,14 @@ public class AccountTokenCleanupEventListener {
         }
     }
 
-    /** Redis에 남은 토큰을 지운다 — 즉시성을 위한 최적화이지 회수의 보장이 아니다. */
+    /**
+     * Redis에 남은 토큰을 지운다 — 즉시성을 위한 최적화이지 회수의 보장이 아니다.
+     *
+     * 보장은 재발급이 계정 행을 잠그는 것과, 제재와 같은 트랜잭션에 기록한 무효화 시각이
+     * 맡는다. 그래서 여기서 락을 잡지 않는다 — 예전에는 재발급 락을 최대 10초 기다렸는데
+     * lease 만료·lockless fallback에서 경쟁이 다시 성립해 보장은 못 하고 비용만 냈다.
+     * 풀 포화로 버려져도 낡은 토큰이 Redis에 남을 뿐 무효화 시각에 걸린다.
+     */
     private void deleteTokens(AccountTokenCleanupEvent event) {
         Long accountId = event.accountId();
         if (event.deleteRefreshToken()) {

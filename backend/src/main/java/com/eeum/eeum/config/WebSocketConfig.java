@@ -15,7 +15,14 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-/** STOMP 브로커 설정 — 실시간 트래픽을 받는 인스턴스에서만 켠다. */
+/**
+ * STOMP 브로커 설정 — 실시간 트래픽을 받는 인스턴스에서만 켠다.
+ *
+ * 인메모리 브로커라 구독 정보가 JVM 안에만 있다. 인스턴스를 늘리면 A 서버에서 발행한 메시지가
+ * B 서버에 붙은 구독자에게 가지 않으므로, 커넥션을 한 인스턴스로 모으고 API 전용에서는 끈다.
+ * eeum.realtime.enabled=false로 끄며 기본값은 켬이다.
+ * 끄면 SimpMessagingTemplate 빈도 사라지므로, 그 빈에 의존하는 경로도 같은 조건으로 묶는다.
+ */
 @Configuration
 @EnableWebSocketMessageBroker
 @ConditionalOnProperty(name = "eeum.realtime.enabled", havingValue = "true", matchIfMissing = true)

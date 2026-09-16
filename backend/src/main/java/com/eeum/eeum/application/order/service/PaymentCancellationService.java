@@ -16,7 +16,14 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Duration;
 
-/** 전액 취소의 단일 진입점. 외부 PG 호출은 트랜잭션 밖에서, 내부 반영은 단계별 트랜잭션에서 수행한다. */
+/**
+ * 전액 취소의 단일 진입점. 고객 취소·환불 승인·주문 거절·PortOne Webhook이 모두 여기로 온다.
+ *
+ * Transactional을 걸지 않는 것은 의도다. PortOne 호출을 트랜잭션과 비관적 락 바깥에서 해야
+ * 외부 지연이 DB 커넥션과 주문 행을 붙잡지 않는다. DB 작업은 PaymentCancellationProcessor의
+ * 짧은 트랜잭션이 나눠 맡는다 — prepare(대상 확정) → PortOne 취소 → markPgCancelled(확정
+ * 사실만) → apply(결제·주문·재고·정산), 실패 시 requireManualReview(REQUIRES_NEW).
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

@@ -17,7 +17,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-/** SSE 실시간 알림 구독 — 실시간 트래픽을 받는 인스턴스에서만 켠다. */
+/**
+ * SSE 실시간 알림 구독 — 실시간 트래픽을 받는 인스턴스에서만 켠다.
+ *
+ * SseEmitter는 커넥션을 받은 JVM 메모리에만 있다. 인스턴스를 늘리면 A 서버에서 발생한 알림이
+ * B 서버에 붙은 구독자에게 가지 않으므로, SSE를 한 인스턴스로 모으고 API 전용에서는 끈다.
+ * eeum.realtime.enabled=false로 끄면 이 경로가 404가 되어, 잘못 라우팅된 요청이 영영
+ * 이벤트가 오지 않는 커넥션을 붙들고 있는 상황을 막는다. 기본값은 켬이다.
+ */
 @Tag(name = "16. Notification", description = "알림 API")
 @SecurityRequirement(name = "bearerAuth")
 @RestController

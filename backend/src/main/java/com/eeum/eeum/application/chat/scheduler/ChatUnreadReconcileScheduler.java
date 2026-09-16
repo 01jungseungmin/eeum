@@ -19,7 +19,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** 채팅 unread 캐시 ↔ DB 정합성 보정. */
+/**
+ * 채팅 unread 캐시(unread:chat:*) ↔ DB 정합성 보정.
+ *
+ * 알림함 배지를 보정하는 NotificationCleanupScheduler와 같은 역할인데, 채팅 쪽에는 보정
+ * 장치가 없어 한 번 어긋난 값이 영구히 남았다.
+ * 종료된 방의 방별 키는 사용자가 읽어서 회수할 수 없으므로 삭제하고, 전체 키는 활성 방
+ * 기준으로 재설정한다. 순회는 SCAN으로 한다 — KEYS는 Redis를 블로킹한다.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

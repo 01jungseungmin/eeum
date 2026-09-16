@@ -12,7 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** 사용자 쓰기 경로의 첫 단계 — 요청자 계정 행을 잠그고 사용 가능 상태를 확인한다. */
+/**
+ * 사용자 쓰기 경로의 첫 단계 — 요청자 계정 행을 잠그고 사용 가능 상태를 확인한다.
+ *
+ * 잠그지 않으면 탈퇴 트랜잭션과 겹쳐, 정리(찜 삭제·카운트 감소)가 끝난 뒤 같은 계정의 쓰기가
+ * 커밋돼 데이터가 되살아나거나 같은 카운터를 동시에 건드려 값이 어긋난다.
+ * 잠금 순서는 account → store/used_product → favorite/image로 고정한다 — 뒤집으면 교착이다.
+ * 상태 판정은 Account.assertWritable()이 탈퇴·정지·가입 미완료를 구분해 던진다.
+ */
 @Component
 @RequiredArgsConstructor
 public class AccountWriteGuard {
