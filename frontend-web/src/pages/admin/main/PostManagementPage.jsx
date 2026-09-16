@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import StatCards from '../../../components/admin/post/StatCards';
 import PostList from '../../../components/admin/post/PostList';

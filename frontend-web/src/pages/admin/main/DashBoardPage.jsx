@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import styled from 'styled-components';
 import {
   Users,
@@ -78,8 +77,6 @@ const BottomGridRow = styled.div`
 `;
 
 function DashboardPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-
   return (
     <DashboardWrapper>
       <AdminHeader>

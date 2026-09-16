@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { Plus, SquarePen, Trash2, GripVertical } from 'lucide-react';
 

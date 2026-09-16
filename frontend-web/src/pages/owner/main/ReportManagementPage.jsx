@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import SummaryCards from '../../../components/owner/report/SummartCards';
 import NoticeBanner from '../../../components/owner/report/NoticeBanner';
@@ -33,10 +33,6 @@ export default function ReportManagement() {
   const [detailData, setDetailData] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  useEffect(() => {
-    fetchReports();
-  }, []);
-
   const fetchReports = async () => {
     try {
       setLoading(true);
@@ -51,6 +47,10 @@ export default function ReportManagement() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    queueMicrotask(() => fetchReports());
+  }, []);
 
   // 상세 모달 열기 핸들러
   const handleOpenDetail = async (reportId) => {

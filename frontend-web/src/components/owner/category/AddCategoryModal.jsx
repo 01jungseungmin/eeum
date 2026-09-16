@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const ModalOverlay = styled.div`
@@ -118,7 +117,10 @@ function AddCategoryModal({
         <p className="caption">카테고리는 목록 맨 아래에 추가됩니다.</p>
 
         <div className="btn-group">
-          <button className="cancel" onClick={onClose}>
+          <button
+            className="cancel"
+            onClick={onClose}
+          >
             취소
           </button>
           <button

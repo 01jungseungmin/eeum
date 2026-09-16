@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { ImagePlus, Plus, Trash2, Star } from 'lucide-react';
 
@@ -232,9 +231,15 @@ function ImageUploaderGrid({
         {images.length < maxCount && (
           <AddButtonCard>
             {variant === 'product' ? (
-              <ImagePlus size={18} color="#8e94a0" />
+              <ImagePlus
+                size={18}
+                color="#8e94a0"
+              />
             ) : (
-              <Plus size={18} color="#8e94a0" />
+              <Plus
+                size={18}
+                color="#8e94a0"
+              />
             )}
             <span>추가</span>
             <input
@@ -247,15 +252,26 @@ function ImageUploaderGrid({
         )}
 
         {images.map((img) => (
-          <ImageItemCard key={img.id} $variant={variant} $isMain={img.isMain}>
-            <img src={img.url} alt="preview" />
+          <ImageItemCard
+            key={img.id}
+            $variant={variant}
+            $isMain={img.isMain}
+          >
+            <img
+              src={img.url}
+              alt="preview"
+            />
 
             {img.isMain &&
               (variant === 'store' ? (
                 <StoreMainBadge>대표</StoreMainBadge>
               ) : (
                 <ProductMainBadge>
-                  <Star size={10} fill="white" color="white" />
+                  <Star
+                    size={10}
+                    fill="white"
+                    color="white"
+                  />
                 </ProductMainBadge>
               ))}
 
@@ -267,7 +283,10 @@ function ImageUploaderGrid({
                   handleInternalDelete(img);
                 }}
               >
-                <Trash2 size={16} strokeWidth={2} />
+                <Trash2
+                  size={16}
+                  strokeWidth={2}
+                />
               </TrashDeleteButton>
 
               {!img.isMain && (

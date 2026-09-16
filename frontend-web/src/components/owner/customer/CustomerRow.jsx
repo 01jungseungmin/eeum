@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { Heart, Bell, Star, ChevronDown, ChevronUp } from 'lucide-react';
 import { customerApi } from '../../../api/owner/customerApi'; // 경로를 프로젝트 구조에 맞춰 유지해주세요.
@@ -244,7 +244,10 @@ export default function CustomerRow({ customer }) {
 
   return (
     <>
-      <Tr $isOpen={isOpen} onClick={handleToggle}>
+      <Tr
+        $isOpen={isOpen}
+        onClick={handleToggle}
+      >
         <Td style={{ paddingLeft: '24px' }}>
           <UserFlex>
             <Avatar>
@@ -266,10 +269,18 @@ export default function CustomerRow({ customer }) {
             </Badge>
             <IconGroup>
               {customer.favorite && (
-                <Heart size={14} color="#e53e3e" fill="#e53e3e" />
+                <Heart
+                  size={14}
+                  color="#e53e3e"
+                  fill="#e53e3e"
+                />
               )}
               {customer.chatParticipant && (
-                <Bell size={14} color="#4c51bf" fill="#4c51bf" />
+                <Bell
+                  size={14}
+                  color="#4c51bf"
+                  fill="#4c51bf"
+                />
               )}
             </IconGroup>
           </BadgeFlex>
@@ -285,7 +296,11 @@ export default function CustomerRow({ customer }) {
         <Td style={{ textAlign: 'center' }}>
           {customer.averageRating ? (
             <RatingFlex>
-              <Star size={12} color="#ecc94b" fill="#ecc94b" />
+              <Star
+                size={12}
+                color="#ecc94b"
+                fill="#ecc94b"
+              />
               {customer.averageRating.toFixed(1)} ({customer.reviewCount || 0})
             </RatingFlex>
           ) : (
@@ -298,7 +313,10 @@ export default function CustomerRow({ customer }) {
           {customer.lastOrderDate || '-'}
         </Td>
         <Td style={{ paddingRight: '24px', textAlign: 'center' }}>
-          <DetailButton $isOpen={isOpen} onClick={handleToggle}>
+          <DetailButton
+            $isOpen={isOpen}
+            onClick={handleToggle}
+          >
             주문 이력{' '}
             {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </DetailButton>

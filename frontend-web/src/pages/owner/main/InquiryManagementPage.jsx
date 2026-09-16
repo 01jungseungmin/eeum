@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import SummaryCards from '../../../components/owner/inquiry/SummaryCards';
 import FilterBar from '../../../components/owner/inquiry/FilterBar';
@@ -107,7 +107,7 @@ export default function InquiryManagement() {
   };
 
   useEffect(() => {
-    loadInquiries();
+    queueMicrotask(() => loadInquiries());
   }, []);
 
   // 사장님 대표 단톡방 개설 핸들러 함수

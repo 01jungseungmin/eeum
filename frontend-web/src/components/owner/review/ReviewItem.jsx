@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { MessageSquare, Flag, Star } from 'lucide-react';
 
-// --- Styled Components (경고 방지를 위해 transient props `$` 적용) ---
 const Card = styled.div`
   background: #ffffff;
   border-radius: 16px;
@@ -343,7 +342,10 @@ export default function ReviewItem({
               <CancelButton onClick={() => setIsFormOpen(false)}>
                 취소
               </CancelButton>
-              <SubmitButton $isEdit={!!review.reply} onClick={handleSubmit}>
+              <SubmitButton
+                $isEdit={!!review.reply}
+                onClick={handleSubmit}
+              >
                 {review.reply ? '수정 완료' : '답글 등록'}
               </SubmitButton>
             </div>

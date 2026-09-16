@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { X, ShoppingCart, Calendar, BookOpen, Star } from 'lucide-react';
+import { X, ShoppingCart, BookOpen, Star } from 'lucide-react';
 import { productApi } from '../../../api/owner/productApi';
 
 const ModalOverlay = styled.div`
@@ -319,13 +319,23 @@ function ProductDetailModal({ productId, onClose }) {
       text: '판매 상품',
       bg: '#eef2ff',
       color: '#4361ee',
-      icon: <ShoppingCart size={13} strokeWidth={2.5} />,
+      icon: (
+        <ShoppingCart
+          size={13}
+          strokeWidth={2.5}
+        />
+      ),
     },
     MENU: {
       text: '메뉴 상품',
       bg: '#f1f3f5',
       color: '#666',
-      icon: <BookOpen size={13} strokeWidth={2.5} />,
+      icon: (
+        <BookOpen
+          size={13}
+          strokeWidth={2.5}
+        />
+      ),
     },
   }[data.productType] || {
     text: data.productType,
@@ -346,16 +356,27 @@ function ProductDetailModal({ productId, onClose }) {
         <ScrollContent>
           <Header>
             <h2>상품 상세 정보</h2>
-            <X className="close-icon" size={20} onClick={onClose} />
+            <X
+              className="close-icon"
+              size={20}
+              onClick={onClose}
+            />
           </Header>
 
           <ImageList>
             {images.length > 0 ? (
               images.map((img) => (
-                <ImageBox key={img.imageId} $main={img.thumbnail}>
+                <ImageBox
+                  key={img.imageId}
+                  $main={img.thumbnail}
+                >
                   {img.thumbnail && (
                     <div className="main-badge">
-                      <Star size={10} fill="white" color="white" />
+                      <Star
+                        size={10}
+                        fill="white"
+                        color="white"
+                      />
                     </div>
                   )}
                   <img
@@ -374,11 +395,17 @@ function ProductDetailModal({ productId, onClose }) {
           </ImageList>
 
           <BadgeGroup>
-            <TypeBadge $bg={typeStyles.bg} $color={typeStyles.color}>
+            <TypeBadge
+              $bg={typeStyles.bg}
+              $color={typeStyles.color}
+            >
               {typeStyles.icon}
               {typeStyles.text}
             </TypeBadge>
-            <StatusBadge $bg={statusStyles.bg} $color={statusStyles.color}>
+            <StatusBadge
+              $bg={statusStyles.bg}
+              $color={statusStyles.color}
+            >
               {statusStyles.text}
             </StatusBadge>
           </BadgeGroup>
@@ -421,7 +448,10 @@ function ProductDetailModal({ productId, onClose }) {
             )}
             <InfoRow>
               <div className="label">설명</div>
-              <div className="value" style={{ color: '#666' }}>
+              <div
+                className="value"
+                style={{ color: '#666' }}
+              >
                 {data.description}
               </div>
             </InfoRow>

@@ -40,11 +40,11 @@ export const STATUS_FILTER_OPTIONS = [
   { label: '기각됨', value: 'DISMISSED' },
 ];
 
-// 신고 처리 조치 옵션
+// 신고 처리 조치 옵션 (백엔드 ReportAction enum과 값 일치)
 export const ACTION_OPTIONS = [
   { label: '게시글 숨김', value: 'HIDE_POST' },
   { label: '게시글 삭제', value: 'DELETE_POST' },
-  { label: '작성자 경고', value: 'WARN_USER' },
-  { label: '작성자 정지', value: 'SUSPEND_USER' },
+  { label: '작성자 경고', value: 'WARN_AUTHOR' },
+  { label: '작성자 정지', value: 'SUSPEND_AUTHOR' },
   { label: '신고 기각', value: 'DISMISS' },
 ];

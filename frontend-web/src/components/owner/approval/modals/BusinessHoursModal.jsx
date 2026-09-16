@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { X, Clock } from 'lucide-react'; // 깔끔한 아이콘 사용
-import { approvalApi } from '../../../../api/owner/ApprovalApi';
+import { approvalApi } from '../../../../api/owner/approvalApi';
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -310,7 +310,10 @@ function BusinessHoursModal({ onClose, onSuccess }) {
         {/* 모달 헤더 */}
         <ModalHeader>
           <HeaderTitle>
-            <Clock size={20} color="#00a651" />
+            <Clock
+              size={20}
+              color="#00a651"
+            />
             <h3>영업시간 수정</h3>
           </HeaderTitle>
           <IconButton onClick={onClose}>
@@ -326,7 +329,10 @@ function BusinessHoursModal({ onClose, onSuccess }) {
         <Form onSubmit={handleSubmit}>
           <HoursList>
             {businessHours.map((item, index) => (
-              <Row key={item.dayOfWeek} $isClosed={item.closed}>
+              <Row
+                key={item.dayOfWeek}
+                $isClosed={item.closed}
+              >
                 <DayLabel>{DAY_LABELS[item.dayOfWeek]}</DayLabel>
 
                 {/* 정기 휴무 체크박스 */}
@@ -367,10 +373,16 @@ function BusinessHoursModal({ onClose, onSuccess }) {
 
           {/* 모달 하단 버튼 바 */}
           <ButtonGroup>
-            <CancelButton type="button" onClick={onClose}>
+            <CancelButton
+              type="button"
+              onClick={onClose}
+            >
               취소
             </CancelButton>
-            <SubmitButton type="submit" disabled={loading}>
+            <SubmitButton
+              type="submit"
+              disabled={loading}
+            >
               {loading ? '저장 중...' : '변경사항 저장'}
             </SubmitButton>
           </ButtonGroup>

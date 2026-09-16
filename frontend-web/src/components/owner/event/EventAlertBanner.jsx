@@ -1,5 +1,3 @@
-// src/components/owner/event/EventAlertBanner.jsx
-import React from 'react';
 import styled from 'styled-components';
 import { AlertTriangle } from 'lucide-react';
 
@@ -26,7 +24,10 @@ const AlertBanner = styled.div`
 function EventAlertBanner() {
   return (
     <AlertBanner>
-      <AlertTriangle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+      <AlertTriangle
+        size={16}
+        style={{ marginTop: '2px', flexShrink: 0 }}
+      />
       <div>
         <div className="title">이벤트 가격 등록 안내</div>
         <div>

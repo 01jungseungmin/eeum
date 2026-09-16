@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import {
   ChevronUp,
@@ -197,11 +196,23 @@ function CategoryRow({
       {/* 순서 조정 */}
       <OrderColumn>
         <div className="arrows">
-          <button onClick={() => onMoveOrder(index, 'up')} disabled={isFirst}>
-            <ChevronUp size={14} strokeWidth={2.5} />
+          <button
+            onClick={() => onMoveOrder(index, 'up')}
+            disabled={isFirst}
+          >
+            <ChevronUp
+              size={14}
+              strokeWidth={2.5}
+            />
           </button>
-          <button onClick={() => onMoveOrder(index, 'down')} disabled={isLast}>
-            <ChevronDown size={14} strokeWidth={2.5} />
+          <button
+            onClick={() => onMoveOrder(index, 'down')}
+            disabled={isLast}
+          >
+            <ChevronDown
+              size={14}
+              strokeWidth={2.5}
+            />
           </button>
         </div>
         <div className="num">{index + 1}</div>
@@ -217,17 +228,32 @@ function CategoryRow({
               onChange={(e) => setEditingName(e.target.value)}
               autoFocus
             />
-            <button className="save" onClick={() => onSaveEdit(cat.id)}>
-              <Check size={16} strokeWidth={2.5} />
+            <button
+              className="save"
+              onClick={() => onSaveEdit(cat.id)}
+            >
+              <Check
+                size={16}
+                strokeWidth={2.5}
+              />
             </button>
-            <button className="cancel" onClick={onCancelEdit}>
-              <X size={16} strokeWidth={2.5} />
+            <button
+              className="cancel"
+              onClick={onCancelEdit}
+            >
+              <X
+                size={16}
+                strokeWidth={2.5}
+              />
             </button>
           </InlineEditInputWrapper>
         ) : (
           <>
             <TagIconWrapper $hidden={!cat.isVisible}>
-              <Tag size={14} fill={cat.isVisible ? '#00a651' : 'none'} />
+              <Tag
+                size={14}
+                fill={cat.isVisible ? '#00a651' : 'none'}
+              />
             </TagIconWrapper>
             <CategoryNameText $hidden={!cat.isVisible}>
               {cat.name}
@@ -249,11 +275,19 @@ function CategoryRow({
         >
           {cat.isVisible ? (
             <>
-              <Eye size={14} strokeWidth={2.5} /> 노출중
+              <Eye
+                size={14}
+                strokeWidth={2.5}
+              />{' '}
+              노출중
             </>
           ) : (
             <>
-              <EyeOff size={14} strokeWidth={2.5} /> 숨김
+              <EyeOff
+                size={14}
+                strokeWidth={2.5}
+              />{' '}
+              숨김
             </>
           )}
         </VisibilityButton>
@@ -261,7 +295,10 @@ function CategoryRow({
 
       {/* 관리 액션 아이콘 그룹 */}
       <ActionGroup>
-        <button className="edit" onClick={() => onStartEdit(cat)}>
+        <button
+          className="edit"
+          onClick={() => onStartEdit(cat)}
+        >
           <Pencil size={15} />
         </button>
         <button

@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const RowGroup = styled.div`
@@ -9,10 +8,6 @@ const RowGroup = styled.div`
   & > div {
     flex: 1; /* 카테고리와 가격 영역을 5:5 비율로 채웁니다 */
   }
-`;
-
-const FormGroup = styled.div`
-  margin-bottom: 20px;
 `;
 
 const Label = styled.label`
@@ -59,7 +54,6 @@ function MenuFormFields({
   setCategoryId,
   basePrice,
   setBasePrice,
-  stockQuantity,
   categories,
 }) {
   return (

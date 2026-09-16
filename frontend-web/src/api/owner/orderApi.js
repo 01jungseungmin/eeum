@@ -24,12 +24,9 @@ export const orderApi = {
 
   // 환불 승인 / 거절
   approveRefund: (orderId) => {
-    return apiClient.patch(`/api/v1/owner/orders/${orderId}/refund/approve`);
+    return apiClient.patch(`/owner/orders/${orderId}/refund/approve`);
   },
   rejectRefund: (orderId, data) => {
-    return apiClient.patch(
-      `/api/v1/owner/orders/${orderId}/refund/reject`,
-      data,
-    );
+    return apiClient.patch(`/owner/orders/${orderId}/refund/reject`, data);
   },
 };

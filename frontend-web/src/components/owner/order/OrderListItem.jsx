@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import {
   Package,
@@ -346,6 +346,12 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
       color: '#d97706',
       border: '#fef3c7',
     },
+    PAID: {
+      text: '결제완료',
+      bg: '#fffbeb',
+      color: '#d97706',
+      border: '#fef3c7',
+    },
     CONFIRMED: {
       text: '확인됨',
       bg: '#eff6ff',
@@ -394,7 +400,7 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
 
   useEffect(() => {
     if (isExpanded) {
-      fetchDetail();
+      queueMicrotask(() => fetchDetail());
     }
   }, [isExpanded, order.orderId]);
 
@@ -496,9 +502,15 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
             {currentStatus.text}
           </StatusBadge>
           {isExpanded ? (
-            <ChevronUp size={16} color="#94a3b8" />
+            <ChevronUp
+              size={16}
+              color="#94a3b8"
+            />
           ) : (
-            <ChevronDown size={16} color="#94a3b8" />
+            <ChevronDown
+              size={16}
+              color="#94a3b8"
+            />
           )}
         </RightArea>
       </HeaderRow>
@@ -547,7 +559,10 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
 
                 <PaymentBox>
                   <PayLeft>
-                    <CreditCard size={12} color="#64748b" />
+                    <CreditCard
+                      size={12}
+                      color="#64748b"
+                    />
                     <div>
                       <span className="card-name">
                         {isReservation
@@ -597,7 +612,10 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                   {/* 대기중 */}
                   <TimelineItem>
                     <ClockIconWrapper>
-                      <Clock size={10} color="#b45309" />
+                      <Clock
+                        size={10}
+                        color="#b45309"
+                      />
                     </ClockIconWrapper>
                     <div>
                       <p className="state">
@@ -723,8 +741,9 @@ function OrderListItem({ order, isExpanded, onToggle, onStatusUpdate }) {
                   </>
                 ) : (
                   <>
-                    {/* 일반 표준 프로세스 버튼 */}
-                    {detailData.orderStatus === 'PENDING' && (
+                    {/* 일반 표준 프로세스 버튼 (온라인 결제 완료 건은 PAID 상태로 대기중에 들어옴) */}
+                    {(detailData.orderStatus === 'PENDING' ||
+                      detailData.orderStatus === 'PAID') && (
                       <>
                         <Button
                           $variant="confirm"

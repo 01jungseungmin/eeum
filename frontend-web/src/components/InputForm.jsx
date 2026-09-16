@@ -132,7 +132,7 @@ const InputForm = forwardRef(
       // 🔐 1. 비밀번호 가드 검사 모드
       if (errorType === 'password') {
         const passwordRegex =
-          /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-]).{8,20}$/;
+          /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+{}[\]:;<>,.?~\\/-]).{8,20}$/;
         if (!passwordRegex.test(value)) {
           setMsg('영문/숫/특 조합 8자 이상');
           setIsValid(false);
@@ -188,7 +188,10 @@ const InputForm = forwardRef(
             inputMode={inputMode}
           />
           {buttonText && (
-            <ActionButton type="button" onClick={onButtonClick}>
+            <ActionButton
+              type="button"
+              onClick={onButtonClick}
+            >
               {buttonText}
             </ActionButton>
           )}

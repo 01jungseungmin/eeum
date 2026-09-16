@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import { Clock } from 'lucide-react';
 import { reservationApi } from '../../../api/owner/reservationApi';
@@ -217,6 +216,7 @@ export default function ReservationList({
         if (refreshTimeSlots) await refreshTimeSlots(selectedDate);
       }
     } catch (error) {
+      console.error('예약 확정 처리 실패:', error);
       alert('예약 확정 처리에 실패했습니다.');
     }
   };
@@ -244,6 +244,7 @@ export default function ReservationList({
         if (refreshTimeSlots) await refreshTimeSlots(selectedDate);
       }
     } catch (error) {
+      console.error('예약 거절 처리 실패:', error);
       alert('예약 거절 처리에 실패했습니다.');
     }
   };

@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 import {
   Star,
@@ -8,7 +7,6 @@ import {
   FileText,
   Eye,
   Clock,
-  CheckCircle,
 } from 'lucide-react';
 
 const CardContainer = styled.div`
@@ -152,10 +150,16 @@ export default function ReportItem({ item, onOpenDetail }) {
           <IconCircle $type={item.targetType}>{renderIcon()}</IconCircle>
           <BodyWrapper>
             <BadgeRow>
-              <Badge $bg="#fef3c7" $color="#b45309">
+              <Badge
+                $bg="#fef3c7"
+                $color="#b45309"
+              >
                 {TARGET_TYPE_MAP[item.targetType] || item.targetType}
               </Badge>
-              <Badge $bg="#fee2e2" $color="#dc2626">
+              <Badge
+                $bg="#fee2e2"
+                $color="#dc2626"
+              >
                 {REASON_MAP[item.reason] || item.reason}
               </Badge>
               <Badge

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { AlertTriangle } from 'lucide-react';
 import OrderSummaryCard from '../../../components/owner/order/OrderSummaryCard';
@@ -64,8 +64,9 @@ function OrderManagementPage() {
 
         setCounts({
           total: contentList.length,
-          waiting: contentList.filter((o) => o.orderStatus === 'PENDING')
-            .length,
+          waiting: contentList.filter(
+            (o) => o.orderStatus === 'PENDING' || o.orderStatus === 'PAID',
+          ).length,
           confirmed: contentList.filter(
             (o) => o.orderStatus === 'CONFIRMED' || o.orderStatus === 'READY',
           ).length,
@@ -81,7 +82,7 @@ function OrderManagementPage() {
   };
 
   useEffect(() => {
-    fetchOrders();
+    queueMicrotask(() => fetchOrders());
   }, [filterType]);
 
   // 클라이언트 사이드 검색어 필터링
@@ -103,15 +104,28 @@ function OrderManagementPage() {
     <Container>
       {/* 상단 현황판 */}
       <SummaryGrid>
-        <OrderSummaryCard title="전체" count={counts.total} $isActive={true} />
+        <OrderSummaryCard
+          title="전체"
+          count={counts.total}
+          $isActive={true}
+        />
         <OrderSummaryCard
           title="대기중"
           count={counts.waiting}
-          badge="처리 필요"
+          badge={counts.waiting > 0 ? '처리 필요' : undefined}
         />
-        <OrderSummaryCard title="확인됨" count={counts.confirmed} />
-        <OrderSummaryCard title="완료" count={counts.completed} />
-        <OrderSummaryCard title="취소됨" count={counts.canceled} />
+        <OrderSummaryCard
+          title="확인됨"
+          count={counts.confirmed}
+        />
+        <OrderSummaryCard
+          title="완료"
+          count={counts.completed}
+        />
+        <OrderSummaryCard
+          title="취소됨"
+          count={counts.canceled}
+        />
       </SummaryGrid>
 
       {/* 알림 배너 */}
@@ -136,7 +150,10 @@ function OrderManagementPage() {
       />
 
       {/* 💡 주문 리스트 컴포넌트 바인딩 및 핸들러 위임 */}
-      <OrderList orders={filteredOrders} onRefresh={fetchOrders} />
+      <OrderList
+        orders={filteredOrders}
+        onRefresh={fetchOrders}
+      />
     </Container>
   );
 }

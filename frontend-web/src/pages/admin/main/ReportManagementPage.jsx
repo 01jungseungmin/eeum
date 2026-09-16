@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import ReportStatCards from '../../../components/admin/report/ReportStatCards';
 import ReportList from '../../../components/admin/report/ReportList';
@@ -37,7 +37,7 @@ const ReportManagementPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchReports();
+    queueMicrotask(() => fetchReports());
   }, [fetchReports]);
 
   // 프론트엔드 상태(Status) 필터링

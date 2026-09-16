@@ -3,7 +3,6 @@ import InputForm from '../../../components/InputForm';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../../api/authApi';
-import axios from 'axios';
 
 const PageWrapper = styled.div`
   max-width: 400px;
@@ -51,7 +50,7 @@ function FindPassword() {
     e.preventDefault();
 
     try {
-      const response = await authApi.requestPasswordReset(email);
+      await authApi.requestPasswordReset(email);
 
       alert('인증코드가 이메일로 발송되었습니다. 이메일을 확인해주세요.');
     } catch (error) {
@@ -91,7 +90,7 @@ function FindPassword() {
     }
 
     try {
-      const response = await authApi.resetPassword({
+      await authApi.resetPassword({
         newPassword: newPassword,
         newPasswordConfirm: confirmPassword,
         passwordResetToken: token,

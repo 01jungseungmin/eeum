@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Plus } from 'lucide-react';
 
@@ -85,14 +85,12 @@ const FilterButton = styled.button`
 
 function EventPage() {
   const [events, setEvents] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState('ALL');
 
   const loadEventList = async () => {
-    setIsLoading(true);
     try {
       const response = await eventApi.getOwnerEventProducts();
       if (response.data && response.data.success) {
@@ -102,13 +100,11 @@ function EventPage() {
     } catch (error) {
       console.error('이벤트 목록 로드 에러:', error);
       alert('이벤트 상품 목록을 불러오는 도중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadEventList();
+    queueMicrotask(() => loadEventList());
   }, []);
 
   // 대시보드 상태값 연산 핸들링
@@ -306,7 +302,11 @@ function EventPage() {
         <CardHeader>
           <h2>이벤트 상품 목록 ({events.length}개)</h2>
           <AddButton onClick={handleCreateButtonClick}>
-            <Plus size={16} strokeWidth={2.5} /> 이벤트 등록
+            <Plus
+              size={16}
+              strokeWidth={2.5}
+            />{' '}
+            이벤트 등록
           </AddButton>
         </CardHeader>
 
