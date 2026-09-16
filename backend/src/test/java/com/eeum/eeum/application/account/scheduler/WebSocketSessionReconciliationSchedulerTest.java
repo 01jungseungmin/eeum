@@ -194,6 +194,28 @@ class WebSocketSessionReconciliationSchedulerTest {
     }
 
     @Test
+    void 연결_토큰이_만료된_WebSocket만_끊고_유효한_연결은_유지한다() {
+        // Given: STOMP 연결은 CONNECT 때만 인증하므로, 토큰 만료 뒤에도 대조가 없으면 계속 붙어 있다.
+        //        계정 상태·세대·블랙리스트는 모두 정상이라 만료 시각만이 회수 사유다.
+        WebSocketSessionRegistry.ConnectionCredentials expired =
+                new WebSocketSessionRegistry.ConnectionCredentials(
+                        1L, 2L, "expired", System.currentTimeMillis() - 1_000L);
+        WebSocketSessionRegistry.ConnectionCredentials valid = credentials(1L, 2L, "valid");
+        when(sessionRegistry.connectedCredentials()).thenReturn(Map.of("expired", expired, "valid", valid));
+        when(sseEmitterManager.connectedCredentials()).thenReturn(Map.of());
+        when(accountRepository.findAuthStates(anyCollection()))
+                .thenReturn(List.of(new AccountAuthState(1L, AccountStatus.ACTIVE, 2L)));
+
+        // When
+        scheduler.closeRevokedSessions();
+
+        // Then
+        verify(sessionRegistry).closeIfCurrent(
+                "expired", expired, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
+        verify(sessionRegistry, never()).closeIfCurrent(eq("valid"), eq(valid), any());
+    }
+
+    @Test
     void 붙어_있는_연결이_없으면_조회하지_않는다() {
         // Given: 스케줄러 스레드는 기본 1개다 — 할 일이 없으면 쿼리도 돌리지 않는다
         when(sessionRegistry.connectedCredentials()).thenReturn(Map.of());
