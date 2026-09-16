@@ -59,7 +59,6 @@ function OrderManagementPage() {
 
       if (response.data?.success) {
         const contentList = response.data.data.content || [];
-        console.log(contentList);
         setOrders(contentList);
 
         setCounts({

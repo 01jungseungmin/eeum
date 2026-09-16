@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import {
   Megaphone,
@@ -6,8 +6,17 @@ import {
   Sparkles,
   Send,
   RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+
+// UI 탭 키 ↔ 백엔드 AiNoticeType 매핑 (AiMarketingPage.jsx와 동일 규칙)
+const TYPE_MAP = {
+  event: 'EVENT',
+  holiday: 'TEMP_CLOSED',
+  menu: 'NEW_MENU',
+};
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -163,7 +172,33 @@ const RefreshButton = styled.button`
 
 export default function AiMarketingAutomation() {
   const [activeTab, setActiveTab] = useState('event');
+  const [draft, setDraft] = useState(null);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  const fetchDraft = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await aiManagerApi.createMarketingDraft({
+        noticeType: TYPE_MAP[activeTab],
+        tone: 'FRIENDLY',
+        channels: ['KAKAO_ALERT', 'STORE_NOTICE'],
+        confirmDelete: false,
+      });
+      if (response.data?.success) {
+        setDraft(response.data.data);
+      }
+    } catch (error) {
+      console.error('마케팅 문구 초안 생성 실패:', error);
+      setDraft(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    queueMicrotask(() => fetchDraft());
+  }, [fetchDraft]);
 
   return (
     <CardContainer id="section-ai-marketing">
@@ -210,20 +245,35 @@ export default function AiMarketingAutomation() {
           <Sparkles size={14} /> AI 생성 문구
         </AiMessageLabel>
         <AiMessageText>
-          🎉 [맛있는 반찬가게] 평일 점심 한정 이벤트!
-          <br />
-          김치찌개 반찬 세트를 10% 할인된 가격에 만나보세요. 정성 가득한 집밥
-          반찬, 오늘 점심은 이음에서 주문해 보세요 😋
+          {loading
+            ? '문구를 생성하는 중...'
+            : draft?.content || '문구 생성에 실패했습니다. 다시 시도해주세요.'}
         </AiMessageText>
       </AiMessageBox>
 
       {/* 하단 버튼 그룹 */}
       <ActionRow>
-        <SubmitButton onClick={() => navigate('/ai-manager/notice')}>
+        <SubmitButton
+          disabled={!draft}
+          onClick={() =>
+            navigate('/ai-manager/notice', {
+              state: {
+                noticeData: {
+                  messageId: draft?.messageId,
+                  content: draft?.content,
+                  estimatedReach: draft?.estimatedReach,
+                },
+              },
+            })
+          }
+        >
           <Send size={16} /> 공지 등록하기
         </SubmitButton>
-        <RefreshButton>
-          <RefreshCw size={14} /> 다시 생성
+        <RefreshButton
+          onClick={fetchDraft}
+          disabled={loading}
+        >
+          {loading ? <Loader2 size={14} /> : <RefreshCw size={14} />} 다시 생성
         </RefreshButton>
       </ActionRow>
     </CardContainer>

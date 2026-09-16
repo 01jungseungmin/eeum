@@ -38,7 +38,6 @@ export default function ReportManagement() {
       setLoading(true);
       const res = await reportApi.getReports({ page: 0, size: 50 });
       if (res.data && res.data.success) {
-        console.log('신고 목록:', res.data.data.content);
         setReports(res.data.data.content || []);
       }
     } catch (error) {
@@ -59,7 +58,6 @@ export default function ReportManagement() {
     try {
       const res = await reportApi.getReportDetail(reportId);
       if (res.data && res.data.success) {
-        console.log('상세 신고 데이터:', res.data.data);
         setDetailData(res.data.data);
       }
     } catch (error) {

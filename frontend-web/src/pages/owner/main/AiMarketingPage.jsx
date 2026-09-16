@@ -412,11 +412,11 @@ const FooterCaption = styled.p`
   margin-top: 8px;
 `;
 
-// UI용 탭 키 ↔ API 공지 유형 코드 매핑
+// UI용 탭 키 ↔ API 공지 유형 코드 매핑 (백엔드 AiNoticeType: EVENT/TEMP_CLOSED/NEW_MENU)
 const TYPE_MAP = {
   event: 'EVENT',
-  holiday: 'HOLIDAY',
-  menu: 'MENU',
+  holiday: 'TEMP_CLOSED',
+  menu: 'NEW_MENU',
 };
 
 // UI용 톤 키 ↔ API 톤 코드 매핑

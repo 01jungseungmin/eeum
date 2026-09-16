@@ -516,7 +516,6 @@ function ProductFormModal({
 
       // 수정 모드 (EDIT)
       if (mode === 'EDIT') {
-        console.log('🔄 [수정 모드] 상품 정보 업데이트:', productId);
         response = await productApi.updateOwnerProduct(productId, requestBody);
 
         if (response.data && response.data.success) {
@@ -622,7 +621,6 @@ function ProductFormModal({
         const newImages = images.filter((img) =>
           String(img.id).startsWith('temp-'),
         );
-        console.log();
         if (newImages.length > 0) {
           const imagePayload = {
             images: newImages.map((img, idx) => ({

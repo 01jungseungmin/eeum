@@ -233,7 +233,6 @@ export default function ReservationPage() {
 
       const response = await reservationApi.getVisitReservations({ status });
       if (response.data && response.data.success) {
-        console.log('주문 목록 로드 성공:', response.data.data?.content || []);
         setOrders(response.data.data?.content || []);
       }
     } catch (error) {
