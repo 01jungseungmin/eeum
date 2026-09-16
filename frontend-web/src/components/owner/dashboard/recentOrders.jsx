@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { orderApi } from '../../../api/owner/orderApi';
 
 const Card = styled.div`
   background: white;
@@ -90,52 +92,78 @@ const StatusTag = styled.span`
       ? '#e6f7ff'
       : props.$type === '대기중'
         ? '#fff7e6'
-        : '#f6ffed'};
+        : props.$type === '취소됨' || props.$type === '주문만료'
+          ? '#fff1f0'
+          : '#f6ffed'};
   color: ${(props) =>
     props.$type === '확인됨'
       ? '#1890ff'
       : props.$type === '대기중'
         ? '#faad14'
-        : '#52c41a'};
+        : props.$type === '취소됨' || props.$type === '주문만료'
+          ? '#ff4d4f'
+          : '#52c41a'};
 `;
 
-const orders = [
-  {
-    id: 1,
-    user: '이*민',
-    item: '김치찌개 반찬 세트',
-    time: '14분 전',
-    price: '18,000원',
-    status: '확인됨',
-  },
-  {
-    id: 2,
-    user: '박*수',
-    item: '불고기 반찬 (300g)',
-    time: '28분 전',
-    price: '12,000원',
-    status: '대기중',
-  },
-  {
-    id: 3,
-    user: '최*진',
-    item: '잡채 (200g)',
-    time: '1시간 전',
-    price: '24,000원',
-    status: '완료',
-  },
-  {
-    id: 4,
-    user: '김*영',
-    item: '계란말이 (1팩)',
-    time: '1시간 전',
-    price: '9,000원',
-    status: '대기중',
-  },
-];
+const EmptyText = styled.div`
+  text-align: center;
+  padding: 30px 0;
+  color: #bfbfbf;
+  font-size: 13px;
+`;
+
+// 백엔드 OrderStatus → 화면 표시용 상태 라벨
+const STATUS_LABEL = {
+  PENDING: '대기중',
+  PAID: '대기중',
+  CONFIRMED: '확인됨',
+  READY: '확인됨',
+  COMPLETED: '완료',
+  CANCELLED: '취소됨',
+  EXPIRED: '주문만료',
+};
+
+// 상대 시간 포맷 (NotificationItem.jsx의 formatTimeAgo와 동일한 규칙)
+const formatTimeAgo = (dateString) => {
+  if (!dateString) return '';
+  const diffMinutes = Math.floor((new Date() - new Date(dateString)) / 60000);
+
+  if (diffMinutes < 1) return '방금 전';
+  if (diffMinutes < 60) return `${diffMinutes}분 전`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}시간 전`;
+
+  return `${Math.floor(diffHours / 24)}일 전`;
+};
 
 function RecentOrders() {
   const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchRecentOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await orderApi.getOwnerOrders({
+        page: 0,
+        size: 3,
+        sort: 'createdAt,desc',
+      });
+
+      if (response.data?.success) {
+        setOrders(response.data.data.content || []);
+      }
+    } catch (error) {
+      console.error('최근 주문 조회 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    queueMicrotask(() => fetchRecentOrders());
+  }, []);
 
   return (
     <Card>
@@ -148,25 +176,44 @@ function RecentOrders() {
           전체 보기 <ChevronRight size={14} />
         </span>
       </Header>
-      <ListContainer>
-        {orders.map((order) => (
-          <OrderItem key={order.id}>
-            <div className="left-side">
-              <div className="avatar">{order.user[0]}</div>
-              <div className="info">
-                <div className="name">
-                  {order.user} · {order.item}
+      {loading ? (
+        <EmptyText>불러오는 중...</EmptyText>
+      ) : orders.length === 0 ? (
+        <EmptyText>최근 주문 내역이 없습니다.</EmptyText>
+      ) : (
+        <ListContainer>
+          {orders.map((order) => {
+            const itemName = order.items?.[0]?.productName || '주문 상품';
+            const extraCount = (order.items?.length || 1) - 1;
+            const statusLabel = STATUS_LABEL[order.orderStatus] || '완료';
+
+            return (
+              <OrderItem key={order.orderId}>
+                <div className="left-side">
+                  <div className="avatar">
+                    {order.customerNickname?.[0] || '?'}
+                  </div>
+                  <div className="info">
+                    <div className="name">
+                      {order.customerNickname} · {itemName}
+                      {extraCount > 0 ? ` 외 ${extraCount}건` : ''}
+                    </div>
+                    <div className="time">
+                      {formatTimeAgo(order.createdAt)}
+                    </div>
+                  </div>
                 </div>
-                <div className="time">{order.time}</div>
-              </div>
-            </div>
-            <div className="right-side">
-              <div className="price">{order.price}</div>
-              <StatusTag $type={order.status}>{order.status}</StatusTag>
-            </div>
-          </OrderItem>
-        ))}
-      </ListContainer>
+                <div className="right-side">
+                  <div className="price">
+                    {(order.totalPrice ?? 0).toLocaleString()}원
+                  </div>
+                  <StatusTag $type={statusLabel}>{statusLabel}</StatusTag>
+                </div>
+              </OrderItem>
+            );
+          })}
+        </ListContainer>
+      )}
     </Card>
   );
 }
