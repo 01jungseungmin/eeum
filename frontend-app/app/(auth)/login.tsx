@@ -232,13 +232,17 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.signupButton}
-              onPress={() => router.push('/(auth)/signup')} 
-              disabled={isLoading}
-            >
-              <Text style={styles.signupButtonText}>이메일로 회원가입</Text>
-            </TouchableOpacity>
+            {/* 웹 데모에서는 가입 경로를 막는다. 심사·투표자가 실명·연락처를 실제로 입력하면
+                수집한 개인정보의 보호 책임이 우리에게 생긴다 — 데모에는 그 경로가 없어야 한다. */}
+            {!isDemoLoginEnabled ? (
+              <TouchableOpacity
+                style={styles.signupButton}
+                onPress={() => router.push('/(auth)/signup')}
+                disabled={isLoading}
+              >
+                <Text style={styles.signupButtonText}>이메일로 회원가입</Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.dividerContainer}>
               <View style={styles.line} />

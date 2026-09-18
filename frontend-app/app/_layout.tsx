@@ -13,6 +13,10 @@ import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { getNotificationRoute } from '../utils/notificationRoute';
+import { applyWebAlertPatch } from '../utils/webAlertPatch';
+
+// 화면이 그려지기 전에 갈아끼워야 한다. 첫 Alert.alert 호출보다 늦으면 그 건은 그냥 사라진다.
+applyWebAlertPatch();
 
 SplashScreen.preventAutoHideAsync();
 
