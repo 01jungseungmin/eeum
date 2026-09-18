@@ -6,7 +6,14 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-/** PortOne 취소 응답 본문. 상태별 취소 객체와 두 금액 필드를 호환해 매핑한다. */
+/**
+ * PortOne 취소 API 응답 본문.
+ *
+ * v2는 cancellation 객체로 취소 건을 돌려주고, 상태에 따라 Succeeded/Requested/Failed로
+ * 나뉘지만 id와 status는 공통이다. 금액 필드명이 문서상 확정적이지 않아 두 이름을 모두 받는다
+ * — 응답 형태가 바뀌어 금액을 못 읽으면 정상 취소가 전부 수동 검토로 떨어지는 편이 더 위험하다.
+ * 실제 매핑은 PortOnePaymentClientContractTest가 고정한다.
+ */
 @Getter
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)

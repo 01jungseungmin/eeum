@@ -8,7 +8,14 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/** 커밋 후 unread를 비동기로 재계산해 요청 스레드의 커넥션과 응답 시간을 보호한다. */
+/**
+ * 커밋 이후의 unread 재계산과 배지 전송을 요청 스레드에서 떼어낸다.
+ *
+ * afterCommit은 커밋을 수행한 그 스레드에서 돌고 바깥 커넥션은 아직 반납 전이라,
+ * 콜백 안에서 DB를 읽으면 한 요청이 커넥션 2개를 동시에 쥔다.
+ * 폐기돼도 안전하다 — 호출부가 제출 직전에 캐시를 무효화해 다음 조회가 DB에서 복구한다.
+ * 실패를 삼키는 이유: 본 트랜잭션은 이미 커밋됐고 되돌릴 수 없다.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

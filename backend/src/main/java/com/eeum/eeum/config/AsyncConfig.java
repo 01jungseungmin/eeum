@@ -11,9 +11,12 @@ import java.time.Duration;
 import java.util.concurrent.Executor;
 
 /**
- * 비동기 실행 풀. 알림 저장과 FCM 전송을 분리해 포화 시 저장 작업을 버리지 않는다.
+ * 비동기 실행 풀. 포화 시 버려도 되는 작업인지를 기준으로 나눈다.
  *
- * MVC async 풀도 별도로 둔다. 풀 파라미터를 바꾸면 resource-budget.md도 갱신한다.
+ * 알림 생성(DB 저장)은 버리면 레코드가 아예 안 생기고, FCM 발송은 이미 커밋된 알림의
+ * 푸시라 건너뛰어도 된다. 한 풀을 공유하면 포화 시 제출 스레드가 FCM HTTP·SSE write에
+ * 묶이는데, afterCommit 시점에는 DB 커넥션을 쥔 채라 풀 고갈로 번진다.
+ * MVC async 풀은 이름이 겹치면 알림과 서로 밀리므로 따로 둔다(resource-budget.md 갱신 필요).
  */
 @Slf4j
 @Configuration

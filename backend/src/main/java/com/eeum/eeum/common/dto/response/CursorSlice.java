@@ -9,7 +9,16 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-/** 커서 무한 스크롤 응답. */
+/**
+ * 커서 무한 스크롤 응답.
+ *
+ * Slice를 쓰지 않는다. Slice는 페이지 번호 전제의 메타데이터(number·first·last)를 함께
+ * 내보내, 두 번째 페이지에도 number=0 / first=true가 실려 응답이 실제 위치를 잘못 설명한다.
+ * 다음 커서는 서버가 만들어 응답에 싣는다 — 정렬 기준이 바뀌면 조립 규칙도 바뀌므로
+ * 클라이언트가 목록 항목에서 정렬 키를 골라 맞출 일이 아니다.
+ *
+ * @param <T> 목록 항목 타입
+ */
 @Getter
 @Schema(description = "커서 무한 스크롤 응답")
 public class CursorSlice<T> {

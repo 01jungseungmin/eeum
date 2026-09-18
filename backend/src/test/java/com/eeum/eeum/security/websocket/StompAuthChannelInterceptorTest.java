@@ -20,6 +20,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
 import java.util.List;
+import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -96,6 +97,11 @@ class StompAuthChannelInterceptorTest {
         when(jwtProvider.getAccountId(TOKEN)).thenReturn(ACCOUNT_ID);
     }
 
+    private void givenConnectionCredentials() {
+        when(jwtProvider.getExpiration(TOKEN)).thenReturn(new Date(Long.MAX_VALUE));
+        when(tokenService.accessTokenFingerprint(TOKEN)).thenReturn("fingerprint");
+    }
+
     private void givenTokenVersion(Long version) {
         when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(version);
     }
@@ -106,6 +112,7 @@ class StompAuthChannelInterceptorTest {
     void 활성_계정은_연결이_허용되고_Principal이_설정된다() {
         // Given
         givenValidToken();
+        givenConnectionCredentials();
         StompHeaderAccessor accessor = connectAccessor();
 
         // When
@@ -116,7 +123,8 @@ class StompAuthChannelInterceptorTest {
         assertThat(accessor.getUser().getName()).isEqualTo(String.valueOf(ACCOUNT_ID));
         verify(accountWriteGuard).assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any());
         // 제재·탈퇴 시 이 연결을 찾아 끊으려면 계정에 묶여 있어야 한다
-        verify(sessionRegistry).bindAccount(eq(accessor.getSessionId()), eq(ACCOUNT_ID), any());
+        verify(sessionRegistry).bindAccount(
+                eq(accessor.getSessionId()), eq(ACCOUNT_ID), any(), eq("fingerprint"), eq(Long.MAX_VALUE));
     }
 
     @Test
@@ -144,7 +152,7 @@ class StompAuthChannelInterceptorTest {
         // When & Then
         assertThatThrownBy(() -> interceptor.preSend(toMessage(connectAccessor()), channel))
                 .isInstanceOf(MessageDeliveryException.class);
-        verify(sessionRegistry, never()).bindAccount(any(), anyLong(), any());
+        verify(sessionRegistry, never()).bindAccount(any(), anyLong(), any(), any(), anyLong());
     }
 
     @Test
@@ -180,6 +188,7 @@ class StompAuthChannelInterceptorTest {
     void 연결_시점의_토큰_세대를_세션에_기록한다() {
         // Given: 주기적 대조가 이 값과 DB를 비교해 회수된 연결을 찾는다
         givenValidToken();
+        givenConnectionCredentials();
         when(accountWriteGuard.assertUsableTokenWithoutLock(eq(ACCOUNT_ID), any())).thenReturn(7L);
         StompHeaderAccessor accessor = connectAccessor();
 
@@ -187,7 +196,8 @@ class StompAuthChannelInterceptorTest {
         interceptor.preSend(toMessage(accessor), channel);
 
         // Then
-        verify(sessionRegistry).bindAccount(eq(accessor.getSessionId()), eq(ACCOUNT_ID), eq(7L));
+        verify(sessionRegistry).bindAccount(
+                eq(accessor.getSessionId()), eq(ACCOUNT_ID), eq(7L), eq("fingerprint"), eq(Long.MAX_VALUE));
     }
 
     @Test

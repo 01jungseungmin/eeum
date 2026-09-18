@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
@@ -12,20 +12,101 @@ import {
   Info,
 } from 'lucide-react';
 
-// 모달 컴포넌트 (경로에 맞게 수정해 주세요)
 import ComplaintReplyModal from '../../../components/owner/ai/modal/ComplaintReplyModal';
+import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+
+// 상대 시간 포맷 (NotificationItem.jsx의 formatTimeAgo와 동일한 규칙)
+const formatTimeAgo = (dateString) => {
+  if (!dateString) return '';
+  const diffMinutes = Math.floor((new Date() - new Date(dateString)) / 60000);
+
+  if (diffMinutes < 1) return '방금 전';
+  if (diffMinutes < 60) return `${diffMinutes}분 전`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}시간 전`;
+
+  return `${Math.floor(diffHours / 24)}일 전`;
+};
 
 export default function AiReviewDetailNoticePage() {
   const navigate = useNavigate();
 
-  // 모달 상태 관리
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedReviewId, setSelectedReviewId] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleOpenModal = (reviewId = 1) => {
-    setSelectedReviewId(reviewId);
-    setIsModalOpen(true);
+  // 모달 상태 관리
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    type: 'review',
+    targetId: null,
+    keyword: undefined,
+    subtitle: undefined,
+  });
+
+  const fetchOverview = async () => {
+    try {
+      setLoading(true);
+      const response = await aiManagerApi.getReviewInquiryStatus();
+      if (response.data?.success) {
+        setOverview(response.data.data);
+      }
+    } catch (error) {
+      console.error('리뷰/문의 자동 대응 현황 조회 실패:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    queueMicrotask(() => fetchOverview());
+  }, []);
+
+  const openReviewModal = (review) => {
+    setModalState({
+      isOpen: true,
+      type: 'review',
+      targetId: review.reviewId,
+      keyword: undefined,
+      subtitle: `별점 ${review.rating}점 · ${formatTimeAgo(review.createdAt)}`,
+    });
+  };
+
+  const openInquiryModal = (inquiry) => {
+    setModalState({
+      isOpen: true,
+      type: 'inquiry',
+      targetId: inquiry.inquiryId,
+      keyword: undefined,
+      subtitle: inquiry.title,
+    });
+  };
+
+  const openComplaintModal = (keyword) => {
+    setModalState({
+      isOpen: true,
+      type: 'complaint',
+      targetId: null,
+      keyword,
+      subtitle: `'${keyword}' 관련`,
+    });
+  };
+
+  const closeModal = () => setModalState((prev) => ({ ...prev, isOpen: false }));
+
+  const unansweredReviews = overview?.unansweredReviews || [];
+  const unansweredInquiries = overview?.unansweredInquiries || [];
+  const complaintKeywords = overview?.complaintKeywords || [];
+
+  if (loading) {
+    return (
+      <PageWrapper>
+        <Container>
+          <EmptyText>불러오는 중...</EmptyText>
+        </Container>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper>
@@ -55,16 +136,18 @@ export default function AiReviewDetailNoticePage() {
         <MainGrid>
           {/* 좌측 영역 */}
           <LeftColumn>
-            {/* 경고 배너 */}
-            <WarningBanner>
-              <WarningTitle>
-                <AlertTriangle size={16} /> 최근 2주 리뷰에서 '대기 시간' 표현이
-                5회 반복됐어요.
-              </WarningTitle>
-              <WarningSub>
-                별점은 유지 중이지만, 불만이 쌓이고 있습니다.
-              </WarningSub>
-            </WarningBanner>
+            {/* 경고 배너 (반복 불만 키워드가 있을 때만) */}
+            {complaintKeywords.length > 0 && (
+              <WarningBanner>
+                <WarningTitle>
+                  <AlertTriangle size={16} /> 최근 2주 반복 불만 키워드가{' '}
+                  {complaintKeywords.length}건 감지됐어요.
+                </WarningTitle>
+                {overview?.recommendedResponse && (
+                  <WarningSub>{overview.recommendedResponse}</WarningSub>
+                )}
+              </WarningBanner>
+            )}
 
             {/* 미답변 현황 카드 */}
             <Card>
@@ -72,41 +155,58 @@ export default function AiReviewDetailNoticePage() {
                 <h3>미답변 현황</h3>
                 <p>답글·답변을 기다리는 항목</p>
               </CardHeader>
-              <ItemList>
-                <ItemRow>
-                  <ItemLeft>
-                    <ItemIconBox
-                      $bgColor="#fef9c3"
-                      $color="#ca8a04"
-                    >
-                      <Star size={18} />
-                    </ItemIconBox>
-                    <ItemText>
-                      <h4>미답변 리뷰</h4>
-                      <p>3건 · 답글을 기다리고 있어요</p>
-                    </ItemText>
-                  </ItemLeft>
-                  <OutlineBtn onClick={() => handleOpenModal(1)}>
-                    답글 초안 보기
-                  </OutlineBtn>
-                </ItemRow>
+              {unansweredReviews.length === 0 &&
+              unansweredInquiries.length === 0 ? (
+                <EmptyText>
+                  {overview?.emptyMessage || '미답변 항목이 없습니다.'}
+                </EmptyText>
+              ) : (
+                <ItemList>
+                  {unansweredReviews.map((review) => (
+                    <ItemRow key={`review-${review.reviewId}`}>
+                      <ItemLeft>
+                        <ItemIconBox
+                          $bgColor="#fef9c3"
+                          $color="#ca8a04"
+                        >
+                          <Star size={18} />
+                        </ItemIconBox>
+                        <ItemText>
+                          <h4>미답변 리뷰 · 별점 {review.rating}점</h4>
+                          <p>
+                            {review.content} · {formatTimeAgo(review.createdAt)}
+                          </p>
+                        </ItemText>
+                      </ItemLeft>
+                      <OutlineBtn onClick={() => openReviewModal(review)}>
+                        답글 초안 보기
+                      </OutlineBtn>
+                    </ItemRow>
+                  ))}
 
-                <ItemRow>
-                  <ItemLeft>
-                    <ItemIconBox
-                      $bgColor="#e0f2fe"
-                      $color="#0284c7"
-                    >
-                      <MessageCircle size={18} />
-                    </ItemIconBox>
-                    <ItemText>
-                      <h4>미답변 문의</h4>
-                      <p>2건 · 주차, 영업시간 관련</p>
-                    </ItemText>
-                  </ItemLeft>
-                  <OutlineBtn>답변 초안 보기</OutlineBtn>
-                </ItemRow>
-              </ItemList>
+                  {unansweredInquiries.map((inquiry) => (
+                    <ItemRow key={`inquiry-${inquiry.inquiryId}`}>
+                      <ItemLeft>
+                        <ItemIconBox
+                          $bgColor="#e0f2fe"
+                          $color="#0284c7"
+                        >
+                          <MessageCircle size={18} />
+                        </ItemIconBox>
+                        <ItemText>
+                          <h4>미답변 문의</h4>
+                          <p>
+                            {inquiry.title} · {formatTimeAgo(inquiry.createdAt)}
+                          </p>
+                        </ItemText>
+                      </ItemLeft>
+                      <OutlineBtn onClick={() => openInquiryModal(inquiry)}>
+                        답변 초안 보기
+                      </OutlineBtn>
+                    </ItemRow>
+                  ))}
+                </ItemList>
+              )}
             </Card>
 
             {/* 반복 불만 키워드 카드 */}
@@ -114,55 +214,44 @@ export default function AiReviewDetailNoticePage() {
               <CardHeaderBetween>
                 <CardHeader>
                   <h3>반복 불만 키워드</h3>
-                  <p>최근 리뷰·신고에서 반복 감지된 신호</p>
+                  <p>최근 리뷰·문의에서 반복 감지된 신호</p>
                 </CardHeader>
-                <CautionBadge>
-                  <AlertTriangle size={12} /> 주의
-                </CautionBadge>
+                {complaintKeywords.length > 0 && (
+                  <CautionBadge>
+                    <AlertTriangle size={12} /> 주의
+                  </CautionBadge>
+                )}
               </CardHeaderBetween>
 
-              <KeywordList>
-                <KeywordItem>
-                  <KeywordLeft>
-                    <KeywordTag
-                      $color="#e11d48"
-                      $bgColor="#ffe4e6"
-                    >
-                      대기 시간
-                    </KeywordTag>
-                    <KeywordInfo>
-                      <strong>리뷰 5건</strong>
-                      <span>2주 연속 감지</span>
-                    </KeywordInfo>
-                  </KeywordLeft>
-                  <KeywordCount $color="#e11d48">5건</KeywordCount>
-                </KeywordItem>
+              {complaintKeywords.length === 0 ? (
+                <EmptyText>감지된 반복 불만 키워드가 없습니다.</EmptyText>
+              ) : (
+                <KeywordList>
+                  {complaintKeywords.map((keyword) => (
+                    <KeywordItem key={keyword}>
+                      <KeywordLeft>
+                        <KeywordTag
+                          $color="#e11d48"
+                          $bgColor="#ffe4e6"
+                        >
+                          {keyword}
+                        </KeywordTag>
+                      </KeywordLeft>
+                      <OutlineBtn onClick={() => openComplaintModal(keyword)}>
+                        답글 초안 만들기
+                      </OutlineBtn>
+                    </KeywordItem>
+                  ))}
 
-                <KeywordItem>
-                  <KeywordLeft>
-                    <KeywordTag
-                      $color="#e11d48"
-                      $bgColor="#ffe4e6"
-                    >
-                      위생
-                    </KeywordTag>
-                    <KeywordInfo>
-                      <strong>리뷰 3 · 신고 1</strong>
-                      <span>2주 연속 감지</span>
-                    </KeywordInfo>
-                  </KeywordLeft>
-                  <KeywordCount $color="#e11d48">4건</KeywordCount>
-                </KeywordItem>
-
-                <AdviceBox>
-                  <Info size={16} />
-                  <span>
-                    '대기 시간' 관련 불만이 쌓이고 있어요. 조리 동선 점검과 안내
-                    공지를 권장해요.
-                  </span>
-                </AdviceBox>
-              </KeywordList>
-              <FooterCaption>출처: 이음 리뷰·문의·신고 데이터</FooterCaption>
+                  {overview?.recommendedResponse && (
+                    <AdviceBox>
+                      <Info size={16} />
+                      <span>{overview.recommendedResponse}</span>
+                    </AdviceBox>
+                  )}
+                </KeywordList>
+              )}
+              <FooterCaption>출처: 이음 리뷰·문의 데이터</FooterCaption>
             </Card>
           </LeftColumn>
 
@@ -173,21 +262,39 @@ export default function AiReviewDetailNoticePage() {
               <SummaryList>
                 <SummaryItem>
                   <span>미답변 리뷰</span>
-                  <CountText $color="#ca8a04">3건</CountText>
+                  <CountText $color="#ca8a04">
+                    {overview?.unansweredReviewCount ?? 0}건
+                  </CountText>
                 </SummaryItem>
                 <SummaryItem>
                   <span>미답변 문의</span>
-                  <CountText $color="#0284c7">2건</CountText>
+                  <CountText $color="#0284c7">
+                    {overview?.unansweredInquiryCount ?? 0}건
+                  </CountText>
                 </SummaryItem>
                 <SummaryItem>
                   <span>반복 불만 키워드</span>
-                  <CountText $color="#e11d48">2건</CountText>
+                  <CountText $color="#e11d48">
+                    {complaintKeywords.length}건
+                  </CountText>
                 </SummaryItem>
               </SummaryList>
             </SummaryCard>
 
             <ActionButtons>
-              <PrimaryBtn onClick={() => handleOpenModal(1)}>
+              <PrimaryBtn
+                disabled={
+                  unansweredReviews.length === 0 &&
+                  complaintKeywords.length === 0
+                }
+                onClick={() => {
+                  if (unansweredReviews.length > 0) {
+                    openReviewModal(unansweredReviews[0]);
+                  } else if (complaintKeywords.length > 0) {
+                    openComplaintModal(complaintKeywords[0]);
+                  }
+                }}
+              >
                 <MessageSquare size={16} /> 답글 초안 만들기
               </PrimaryBtn>
               <SecondaryBtn onClick={() => navigate('/ai-manager/notice')}>
@@ -200,10 +307,13 @@ export default function AiReviewDetailNoticePage() {
 
       {/* 답글 초안 모달 */}
       <ComplaintReplyModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        reviewId={selectedReviewId}
-        topic="대기 시간"
+        isOpen={modalState.isOpen}
+        onClose={closeModal}
+        type={modalState.type}
+        targetId={modalState.targetId}
+        keyword={modalState.keyword}
+        subtitle={modalState.subtitle}
+        onSuccess={fetchOverview}
       />
     </PageWrapper>
   );
@@ -476,26 +586,6 @@ const KeywordTag = styled.div`
   font-weight: 700;
 `;
 
-const KeywordInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  strong {
-    font-size: 13px;
-    color: #111827;
-  }
-  span {
-    font-size: 11px;
-    color: #9ca3af;
-    margin-top: 1px;
-  }
-`;
-
-const KeywordCount = styled.span`
-  font-size: 14px;
-  font-weight: 700;
-  color: ${(props) => props.$color || '#111827'};
-`;
-
 const AdviceBox = styled.div`
   background-color: #fff1f2;
   border: 1px solid #ffe4e6;
@@ -513,6 +603,13 @@ const FooterCaption = styled.span`
   font-size: 11px;
   color: #9ca3af;
   margin-top: -4px;
+`;
+
+const EmptyText = styled.div`
+  text-align: center;
+  padding: 30px 0;
+  color: #9ca3af;
+  font-size: 13px;
 `;
 
 const SummaryCard = styled.div`
@@ -572,6 +669,11 @@ const PrimaryBtn = styled.button`
 
   &:hover {
     background-color: #369a6a;
+  }
+
+  &:disabled {
+    background-color: #cbd5e1;
+    cursor: not-allowed;
   }
 `;
 

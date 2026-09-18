@@ -21,7 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
-/** AI 플랜 구독/결제 연동. */
+/**
+ * AI 플랜 구독·결제 연동. 결제 검증 전에는 플랜을 바꾸지 않고, Webhook·검증은 멱등 처리한다.
+ *
+ * 공개 메서드에 Transactional을 걸지 않는다. 락을 먼저 잡고, DB 쓰기는
+ * AiPlanPaymentCommandExecutor의 트랜잭션이 커밋까지 마친 뒤에 락을 푼다.
+ * 과거에는 락이 트랜잭션 안에서 풀려 커밋 전에 틈이 생겼고, 그 틈으로 Webhook과 클라이언트
+ * 리다이렉트가 동시 진입해 같은 결제에 활성 구독이 2개 생겼다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

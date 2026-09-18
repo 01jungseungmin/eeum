@@ -6,10 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // REST API 및 SSE 프록시
+      // REST API 및 SSE 프록시 (로컬 백엔드는 /api 접두사가 없으므로 벗겨서 전달)
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
       // WebSocket 프록시
       '/ws': {

@@ -47,7 +47,14 @@ public class NotificationCleanupScheduler {
         log.info("[NotificationCleanup] 오래된 알림 삭제: count={}, threshold={}", deleted, threshold);
     }
 
-    /** 5분마다 — Redis unread 캐시를 DB 기준으로 보정한다 (키 패턴: unread:account:*). */
+    /**
+     * 5분마다 Redis unread 캐시를 DB 기준으로 보정한다(키 패턴: unread:account:*).
+     *
+     * 순회는 SCAN으로 한다 — KEYS는 매칭이 끝날 때까지 Redis 전체를 블로킹한다.
+     * 집계는 배치 단위로 한 번에 하고 불일치한 계정만 재계산한다. 재계산이 계정 행 비관적
+     * 락을 잡으므로, 전부 돌리면 5분마다 전 계정 행을 차례로 잠그는 셈이다(금지 패턴 7).
+     * 풀 크기 1인 스케줄러 스레드라 여기서 오래 머물면 1초 주기 Outbox가 함께 멈춘다.
+     */
     @Scheduled(fixedRate = 300_000)
     @SchedulerLock(name = "recalculateUnreadCounts", lockAtMostFor = "PT10M", lockAtLeastFor = "PT2M")
     public void recalculateUnreadCounts() {

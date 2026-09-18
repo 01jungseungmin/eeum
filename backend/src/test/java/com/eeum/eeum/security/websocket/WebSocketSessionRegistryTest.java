@@ -5,6 +5,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,6 +23,8 @@ import static org.mockito.Mockito.when;
  */
 class WebSocketSessionRegistryTest {
 
+    private static final long NOT_EXPIRED = Long.MAX_VALUE;
+
     private final WebSocketSessionRegistry registry = new WebSocketSessionRegistry();
 
     private WebSocketSession session(String id) {
@@ -37,8 +40,8 @@ class WebSocketSessionRegistryTest {
         WebSocketSession tablet = session("s2");
         registry.register(phone);
         registry.register(tablet);
-        registry.bindAccount("s1", 1L, 0L);
-        registry.bindAccount("s2", 1L, 0L);
+        registry.bindAccount("s1", 1L, 0L, "f1", NOT_EXPIRED);
+        registry.bindAccount("s2", 1L, 0L, "f2", NOT_EXPIRED);
 
         // When
         int closed = registry.closeAll(1L, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
@@ -57,8 +60,8 @@ class WebSocketSessionRegistryTest {
         WebSocketSession other = session("s2");
         registry.register(mine);
         registry.register(other);
-        registry.bindAccount("s1", 1L, 0L);
-        registry.bindAccount("s2", 2L, 0L);
+        registry.bindAccount("s1", 1L, 0L, "f1", NOT_EXPIRED);
+        registry.bindAccount("s2", 2L, 0L, "f2", NOT_EXPIRED);
 
         // When
         registry.closeAll(1L, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
@@ -73,7 +76,7 @@ class WebSocketSessionRegistryTest {
     void 연결이_끊기면_계정_인덱스에서도_빠진다() {
         // Given: 세션만 지우고 계정 인덱스를 두면 끊긴 ID가 계속 쌓인다
         registry.register(session("s1"));
-        registry.bindAccount("s1", 1L, 0L);
+        registry.bindAccount("s1", 1L, 0L, "f1", NOT_EXPIRED);
 
         // When
         registry.unregister("s1");
@@ -90,8 +93,8 @@ class WebSocketSessionRegistryTest {
         doThrow(new IOException("already closed")).when(broken).close(any());
         registry.register(broken);
         registry.register(alive);
-        registry.bindAccount("s1", 1L, 0L);
-        registry.bindAccount("s2", 1L, 0L);
+        registry.bindAccount("s1", 1L, 0L, "f1", NOT_EXPIRED);
+        registry.bindAccount("s2", 1L, 0L, "f2", NOT_EXPIRED);
 
         // When
         int closed = registry.closeAll(1L, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
@@ -105,5 +108,50 @@ class WebSocketSessionRegistryTest {
     void 세션이_없는_계정은_조용히_넘어간다() {
         // When & Then
         assertThat(registry.closeAll(999L, CloseStatus.NORMAL)).isZero();
+    }
+
+    @Test
+    void 같은_계정의_서로_다른_토큰_세대를_세션별로_보존한다() {
+        // Given: 비밀번호 변경 뒤 새 연결이 생겨도 이전 연결의 세대가 사라지면 안 된다.
+        registry.register(session("old"));
+        registry.register(session("current"));
+        registry.bindAccount("old", 1L, 0L, "old-fingerprint", NOT_EXPIRED);
+        registry.bindAccount("current", 1L, 1L, "current-fingerprint", NOT_EXPIRED);
+
+        // When
+        Map<String, WebSocketSessionRegistry.ConnectionCredentials> credentials =
+                registry.connectedCredentials();
+
+        // Then
+        assertThat(credentials).containsEntry("old",
+                new WebSocketSessionRegistry.ConnectionCredentials(
+                        1L, 0L, "old-fingerprint", NOT_EXPIRED));
+        assertThat(credentials).containsEntry("current",
+                new WebSocketSessionRegistry.ConnectionCredentials(
+                        1L, 1L, "current-fingerprint", NOT_EXPIRED));
+    }
+
+    @Test
+    void 회수된_세션만_닫고_현재_세대_세션은_유지한다() throws Exception {
+        // Given
+        WebSocketSession old = session("old");
+        WebSocketSession current = session("current");
+        WebSocketSessionRegistry.ConnectionCredentials oldCredentials =
+                new WebSocketSessionRegistry.ConnectionCredentials(
+                        1L, 0L, "old-fingerprint", NOT_EXPIRED);
+        registry.register(old);
+        registry.register(current);
+        registry.bindAccount("old", 1L, 0L, "old-fingerprint", NOT_EXPIRED);
+        registry.bindAccount("current", 1L, 1L, "current-fingerprint", NOT_EXPIRED);
+
+        // When
+        boolean closed = registry.closeIfCurrent(
+                "old", oldCredentials, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
+
+        // Then
+        assertThat(closed).isTrue();
+        verify(old).close(WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
+        verify(current, never()).close(any());
+        assertThat(registry.sessionCount(1L)).isEqualTo(1);
     }
 }

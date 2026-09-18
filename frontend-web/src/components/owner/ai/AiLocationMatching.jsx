@@ -3,6 +3,12 @@ import styled from 'styled-components';
 import { MapPin, ChevronRight, Crown, Users } from 'lucide-react';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi'; // 파일 경로에 맞게 수정
 import { useNavigate } from 'react-router-dom';
+import PlanUpgradeModal from './modal/PlanUpgradeModal';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
 
 const CardContainer = styled.div`
   background: #ffffff;
@@ -206,10 +212,29 @@ const SubmitButton = styled.button`
 export default function AiLocationMatching() {
   const [matchData, setMatchData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [planLocked, setPlanLocked] = useState(false);
+  const [upgradeMessage, setUpgradeMessage] = useState('');
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
 
   useEffect(() => {
+    // 캐싱된 플랜으로 이미 BASIC 미만인 게 확실하면 API 호출 자체를 생략한다.
+    // 403이 뜨는 걸 기다렸다가 처리하면 매번 콘솔에 에러 로그(우리 코드의
+    // console.error + 브라우저가 자동으로 찍는 "Failed to load resource")가
+    // 남는데, 둘 다 요청을 아예 안 보내야 없앨 수 있다.
+    if (
+      !hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.locationMatchView)
+    ) {
+      queueMicrotask(() => {
+        setPlanLocked(true);
+        setUpgradeMessage('베이직 플랜부터 이용할 수 있는 기능이에요.');
+        setLoading(false);
+      });
+      return;
+    }
+
     const fetchLocalMatch = async () => {
       try {
         const response = await aiManagerApi.getLocalMatchAnalysis();
@@ -217,16 +242,63 @@ export default function AiLocationMatching() {
           setMatchData(response.data.data);
         }
       } catch (error) {
-        console.error('생활권 매칭 데이터 조회 실패:', error);
+        // aiPlanType이 아직 로딩되기 전의 레이스 구간에서만 여기로 온다 —
+        // 그 외에는 위 사전 체크에서 이미 걸러진다.
+        const status = error.response?.status;
+        const errorData = error.response?.data?.error || error.response?.data;
+        if (status === 403 || errorData?.code === 'AI_001') {
+          setPlanLocked(true);
+          setUpgradeMessage(
+            errorData?.message || '베이직 플랜부터 이용할 수 있는 기능이에요.',
+          );
+        } else {
+          console.error('생활권 매칭 데이터 조회 실패:', error);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchLocalMatch();
-  }, []);
+  }, [aiPlanType]);
 
   if (loading) return <div>로딩 중...</div>;
+
+  if (planLocked) {
+    return (
+      <>
+        <CardContainer id="section-ai-location">
+          <Header>
+            <HeaderLeft>
+              <IconBox>
+                <MapPin size={20} />
+              </IconBox>
+              <div>
+                <TitleArea>
+                  <h3>생활권 매칭 매니저</h3>
+                  <Badge>Basic 이상</Badge>
+                </TitleArea>
+              </div>
+            </HeaderLeft>
+          </Header>
+          <p
+            style={{ color: '#6b7280', textAlign: 'center', padding: '20px 0' }}
+          >
+            {upgradeMessage}
+          </p>
+          <SubmitButton onClick={() => setIsUpgradeModalOpen(true)}>
+            <Crown size={16} /> 플랜 업그레이드
+          </SubmitButton>
+        </CardContainer>
+        <PlanUpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          errorMessage={upgradeMessage}
+        />
+      </>
+    );
+  }
+
   if (!matchData) return null;
 
   const {

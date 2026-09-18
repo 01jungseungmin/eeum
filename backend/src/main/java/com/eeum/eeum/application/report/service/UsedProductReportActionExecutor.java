@@ -71,7 +71,14 @@ public class UsedProductReportActionExecutor implements ReportTargetActionExecut
         return product.getSeller().getAccountId();
     }
 
-    /** 게시글 삭제. */
+    /**
+     * 게시글 삭제. 예약을 먼저 정리한다.
+     *
+     * 사용자 삭제 경로는 예약 중인 글의 삭제를 아예 막지만, 관리자 조치는 불법 게시글을
+     * 즉시 내려야 해서 막을 수 없다. 구매자가 겪는 상황은 같으므로 차단 대신 예약을 취소하고
+     * 알린다. 정리하지 않으면 예약이 RESERVED로 영구히 남는다 — 삭제된 글은 상태 전이 경로가
+     * 걸러내 판매자도 그 예약을 취소할 수 없다.
+     */
     private Long deleteProduct(Long usedProductId) {
         UsedProduct product = getProductForUpdate(usedProductId);
         Long sellerAccountId = product.getSeller().getAccountId();

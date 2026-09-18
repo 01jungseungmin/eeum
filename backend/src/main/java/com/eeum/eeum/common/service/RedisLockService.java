@@ -3,6 +3,7 @@ package com.eeum.eeum.common.service;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,7 @@ import java.util.function.Supplier;
 // 이 락은 "동시 진입 축소(빠른 실패)" 용도로 사용하고, lease는 임계구역 최대 소요시간보다 넉넉히 잡는다.
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class RedisLockService {
 
     private static final DefaultRedisScript<Long> RELEASE_SCRIPT =
@@ -65,7 +67,14 @@ public class RedisLockService {
         try {
             return supplier.get();
         } finally {
-            releaseLock(key, lockValue);
+            try {
+                releaseLock(key, lockValue);
+            } catch (RuntimeException releaseFailure) {
+                // 임계구역의 DB 작업은 이미 커밋됐을 수 있다. 해제 실패로 그 결과나 원래 예외를
+                // 바꾸지 않고, lease 만료까지 남은 락은 운영 로그로 추적한다.
+                log.error("Redis 락 해제 실패 — lease 만료까지 재획득이 지연될 수 있음. key={}",
+                        key, releaseFailure);
+            }
         }
     }
 

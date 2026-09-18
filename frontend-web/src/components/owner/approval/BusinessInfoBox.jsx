@@ -119,7 +119,6 @@ const BusinessInfoBox = () => {
       const response = await accountApi.getOwnerAccountInfo();
 
       if (response.data.success) {
-        console.log(response.data.data);
         setOwnerData(response.data.data);
       }
     } catch (error) {

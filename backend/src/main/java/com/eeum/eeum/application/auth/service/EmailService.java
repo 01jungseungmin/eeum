@@ -66,7 +66,11 @@ public class EmailService {
     // 인증 코드 검증 후 1회성 인증 토큰 반환
     public String verifyCodeAndIssueToken(String email, String code) {
         String failKey = RateLimitKeys.emailCodeVerifyFail(email);
-        rateLimitService.checkNotBlocked(failKey, MAX_CODE_VERIFY_ATTEMPTS, ErrorCode.AUTH_RATE_LIMITED);
+        rateLimitService.checkNotBlocked(
+                failKey,
+                MAX_CODE_VERIFY_ATTEMPTS,
+                Duration.ofSeconds(codeExpiration),
+                ErrorCode.AUTH_RATE_LIMITED);
 
         String stored = redisUtil.get(EMAIL_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));
@@ -122,7 +126,11 @@ public class EmailService {
     // 인증 토큰 발급 (비밀번호 재설정 요청 시 같이 보내는 값)
     public void verifyPasswordResetCode(String email, String code) {
         String failKey = RateLimitKeys.passwordResetVerifyFail(email);
-        rateLimitService.checkNotBlocked(failKey, MAX_CODE_VERIFY_ATTEMPTS, ErrorCode.AUTH_RATE_LIMITED);
+        rateLimitService.checkNotBlocked(
+                failKey,
+                MAX_CODE_VERIFY_ATTEMPTS,
+                Duration.ofSeconds(codeExpiration),
+                ErrorCode.AUTH_RATE_LIMITED);
 
         String stored = redisUtil.get(PASSWORD_RESET_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));

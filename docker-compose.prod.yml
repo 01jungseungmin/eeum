@@ -58,11 +58,46 @@ services:
       - redis-data:/data
 
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-eeum-frontend:latest}
+    build:
+      context: ./frontend-web
+      args:
+        # Vite가 빌드 시점에 번들에 박아 넣는 값이라 런타임 environment:로는
+        # 전달이 안 된다 — .env.prod(EC2 호스트, 이 저장소 밖)에 실제 값을
+        # 채워둬야 한다. 값이 없으면 빈 문자열로 빌드되고, 플랜 구독 결제
+        # 버튼을 누를 때 PortOne SDK가 "storeId 파라미터는 필수 입력입니다"로 막는다.
+        VITE_PORTONE_STORE_ID: ${VITE_PORTONE_STORE_ID:?VITE_PORTONE_STORE_ID가 .env.prod에 없습니다 - AI 플랜 결제가 깨집니다}
+        VITE_PORTONE_CHANNEL_KEY: ${VITE_PORTONE_CHANNEL_KEY:?VITE_PORTONE_CHANNEL_KEY가 .env.prod에 없습니다 - AI 플랜 결제가 깨집니다}
+
+    container_name: eeum-frontend
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:3000:80"
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
     logging:
       driver: json-file

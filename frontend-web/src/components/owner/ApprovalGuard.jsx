@@ -1,8 +1,9 @@
 import { Navigate, Outlet, useOutletContext } from "react-router-dom";
 
 function ApprovalGuard() {
-  // 💡 부모(MainLayout)가 이미 받아온 승인 상태를 실시간으로 공유받음
-  const { approvalStatus } = useOutletContext();
+  // 💡 부모(MainLayout)가 이미 받아온 승인 상태 등을 실시간으로 공유받음
+  const outletContext = useOutletContext();
+  const { approvalStatus } = outletContext;
 
   // 아직 상태를 불러오는 중이라면 대기
   if (approvalStatus === null) {
@@ -18,8 +19,8 @@ function ApprovalGuard() {
     return <Navigate to="/approval-status" replace />;
   }
 
-  // 승인 완료 유저만 통과
-  return <Outlet />;
+  // 승인 완료 유저만 통과 (MainLayout이 내려준 context를 그대로 하위 라우트에 전달)
+  return <Outlet context={outletContext} />;
 }
 
 export default ApprovalGuard;

@@ -1,131 +1,97 @@
-import { useState } from 'react';
 import styled from 'styled-components';
 import {
   Star,
   ChevronRight,
   AlertTriangle,
   MessageSquare,
-  Megaphone,
   MessageCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import ComplaintReplyModal from '../../../components/owner/ai/modal/ComplaintReplyModal';
 
-export default function AiReviewResponse() {
+// data: dashboardData?.reviewInquirySummary (ReviewInquirySummaryDto)
+// { unansweredReviewCount, unansweredInquiryCount, complaintKeywordCount }
+export default function AiReviewResponse({ data }) {
   const navigate = useNavigate();
-
-  // 모달 통합 상태 관리 (open 여부, 모달 타입, 대상 ID 등)
-  const [modalState, setModalState] = useState({
-    isOpen: false,
-    type: 'review', // 'review' | 'inquiry' | 'complaint'
-    targetId: null,
-  });
-
-  // 모달 열기 핸들러
-  const handleOpenModal = (type, targetId = null) => {
-    setModalState({
-      isOpen: true,
-      type,
-      targetId,
-    });
-  };
-
-  // 모달 닫기 핸들러
-  const handleCloseModal = () => {
-    setModalState((prev) => ({ ...prev, isOpen: false }));
-  };
+  const d = data || {};
+  const unansweredReviewCount = d.unansweredReviewCount ?? 0;
+  const unansweredInquiryCount = d.unansweredInquiryCount ?? 0;
+  const complaintKeywordCount = d.complaintKeywordCount ?? 0;
 
   return (
-    <>
-      <CardContainer id="section-ai-review">
-        <Header>
-          <HeaderLeft>
-            <IconBox>
-              <Star size={20} />
-            </IconBox>
-            <TitleArea>
-              <h3>리뷰·문의 자동 대응</h3>
-              <p>답글 초안 · 반복 불만 감지</p>
-            </TitleArea>
-          </HeaderLeft>
+    <CardContainer id="section-ai-review">
+      <Header>
+        <HeaderLeft>
+          <IconBox>
+            <Star size={20} />
+          </IconBox>
+          <TitleArea>
+            <h3>리뷰·문의 자동 대응</h3>
+            <p>답글 초안 · 반복 불만 감지</p>
+          </TitleArea>
+        </HeaderLeft>
 
-          <MoreButton onClick={() => navigate('/ai-manager/review')}>
-            더보기 <ChevronRight size={16} />
-          </MoreButton>
-        </Header>
+        <MoreButton onClick={() => navigate('/ai-manager/review')}>
+          더보기 <ChevronRight size={16} />
+        </MoreButton>
+      </Header>
 
-        {/* 1. 반복 불만 경고 박스 */}
+      {/* 1. 반복 불만 경고 박스 (실제 반복 불만 키워드가 있을 때만 노출) */}
+      {complaintKeywordCount > 0 && (
         <WarningBox>
           <WarningHeader>
-            <AlertTriangle size={16} /> 최근 2주 리뷰에서 '대기 시간' 표현이 5회
-            반복됐어요.
+            <AlertTriangle size={16} /> 최근 2주 반복 불만 키워드가{' '}
+            {complaintKeywordCount}건 감지됐어요.
           </WarningHeader>
-          <WarningSub>별점은 유지 중이지만, 불만이 쌓이고 있습니다.</WarningSub>
+          <WarningSub>자세한 키워드와 대응 문구는 상세 페이지에서 확인하세요.</WarningSub>
           <WarningButtonGroup>
             <ActionBtn
               $primary
-              onClick={() => handleOpenModal('complaint', 'complaint-1')}
+              onClick={() => navigate('/ai-manager/review')}
             >
               <MessageSquare size={14} /> 답글 초안 만들기
             </ActionBtn>
-            <ActionBtn onClick={() => navigate('/notices/create')}>
-              <Megaphone size={14} /> 공지 문구 만들기
-            </ActionBtn>
           </WarningButtonGroup>
         </WarningBox>
+      )}
 
-        {/* 2. 미답변 리뷰 */}
-        <ItemRow>
-          <ItemLeft>
-            <ItemIconBox
-              $bgColor="#fef9c3"
-              $color="#ca8a04"
-            >
-              <Star size={18} />
-            </ItemIconBox>
-            <ItemText>
-              <h4>미답변 리뷰</h4>
-              <p>3건 · 답글을 기다리고 있어요</p>
-            </ItemText>
-          </ItemLeft>
-          <OutlineBtn onClick={() => handleOpenModal('review', 'review-1')}>
-            답글 초안 보기
-          </OutlineBtn>
-        </ItemRow>
+      {/* 2. 미답변 리뷰 */}
+      <ItemRow>
+        <ItemLeft>
+          <ItemIconBox
+            $bgColor="#fef9c3"
+            $color="#ca8a04"
+          >
+            <Star size={18} />
+          </ItemIconBox>
+          <ItemText>
+            <h4>미답변 리뷰</h4>
+            <p>{unansweredReviewCount}건 · 답글을 기다리고 있어요</p>
+          </ItemText>
+        </ItemLeft>
+        <OutlineBtn onClick={() => navigate('/ai-manager/review')}>
+          답글 초안 보기
+        </OutlineBtn>
+      </ItemRow>
 
-        {/* 3. 미답변 문의 */}
-        <ItemRow>
-          <ItemLeft>
-            <ItemIconBox
-              $bgColor="#e0f2fe"
-              $color="#0284c7"
-            >
-              <MessageCircle size={18} />
-            </ItemIconBox>
-            <ItemText>
-              <h4>미답변 문의</h4>
-              <p>2건 · 주차, 영업시간 관련</p>
-            </ItemText>
-          </ItemLeft>
-          <OutlineBtn onClick={() => handleOpenModal('inquiry', 'inquiry-1')}>
-            답변 초안 보기
-          </OutlineBtn>
-        </ItemRow>
-      </CardContainer>
-
-      {/* 동적 통합 모달 */}
-      <ComplaintReplyModal
-        key={
-          modalState.isOpen
-            ? `${modalState.type}-${modalState.targetId}`
-            : 'closed'
-        }
-        isOpen={modalState.isOpen}
-        onClose={handleCloseModal}
-        type={modalState.type}
-        targetId={modalState.targetId}
-      />
-    </>
+      {/* 3. 미답변 문의 */}
+      <ItemRow>
+        <ItemLeft>
+          <ItemIconBox
+            $bgColor="#e0f2fe"
+            $color="#0284c7"
+          >
+            <MessageCircle size={18} />
+          </ItemIconBox>
+          <ItemText>
+            <h4>미답변 문의</h4>
+            <p>{unansweredInquiryCount}건</p>
+          </ItemText>
+        </ItemLeft>
+        <OutlineBtn onClick={() => navigate('/ai-manager/review')}>
+          답변 초안 보기
+        </OutlineBtn>
+      </ItemRow>
+    </CardContainer>
   );
 }
 

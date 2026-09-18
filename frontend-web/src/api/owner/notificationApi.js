@@ -3,8 +3,10 @@ import { apiClient, currentAccessToken } from '../apiClient';
 export const notificationApi = {
   // SSE 연결에 필요한 BaseURL과 메모리에 저장된 AccessToken 추출
   getSubscribeInfo: () => {
-    // apiClient의 baseURL이 상대경로이거나 없을 경우를 대비한 fallback
-    const baseURL = apiClient.defaults.baseURL || 'http://localhost:8080';
+    // 운영에서는 baseURL이 보통 상대경로(/api)다 — EventSource는 상대 URL을
+    // 현재 페이지 origin 기준으로 알아서 resolve하므로 그대로 써도 된다.
+    // apiClient.defaults.baseURL이 비어있는 예외적인 경우에만 로컬 fallback 사용.
+    const baseURL = apiClient.defaults.baseURL || '/api';
 
     return {
       url: `${baseURL}/notifications/subscribe`,

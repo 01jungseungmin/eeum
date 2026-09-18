@@ -32,6 +32,7 @@ function MainLayout() {
   const { accessToken, isLoading: authLoading } = useAuth();
 
   const [approvalStatus, setApprovalStatus] = useState(null);
+  const [dashboardData, setDashboardData] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
@@ -56,6 +57,7 @@ function MainLayout() {
         // 대시보드 정보 처리
         if (dashboardRes && dashboardRes.success) {
           const serverData = dashboardRes.data;
+          setDashboardData(serverData);
 
           // 방금 개설되어 로컬에 true 흔적이 있거나 백엔드가 true를 주면 존재(true)로 판정
           const isCreatedInLocal =
@@ -130,7 +132,7 @@ function MainLayout() {
       <MainContent>
         <TopNavbar />
         <PageContainer>
-          <Outlet context={{ approvalStatus }} />
+          <Outlet context={{ approvalStatus, dashboardData }} />
         </PageContainer>
       </MainContent>
     </LayoutWrapper>

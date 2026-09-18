@@ -10,7 +10,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** 계정별 WebSocket 세션 레지스트리 — 제재·탈퇴 시 이미 열린 연결을 끊기 위해 필요하다. */
+/**
+ * 계정별 WebSocket 세션 레지스트리 — 제재·탈퇴 시 이미 열린 연결을 끊기 위해 필요하다.
+ *
+ * 인바운드 프레임에는 상태 검사가 있지만 수신은 인바운드가 아니라, 이미 구독한 연결은
+ * 메시지·읽음·타이핑을 계속 받는다. 인터셉터로는 막을 수 없다.
+ * 세션은 커넥션을 받은 JVM에만 있어 다른 인스턴스의 세션은 끊지 못한다(WebSocketConfig 전제).
+ * 계정 바인딩은 세션 등록보다 늦다 — 등록은 HTTP 업그레이드 직후, 계정은 CONNECT 인증 후다.
+ */
 @Slf4j
 @Component
 public class WebSocketSessionRegistry {
@@ -20,8 +27,8 @@ public class WebSocketSessionRegistry {
 
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<Long, Set<String>> sessionIdsByAccount = new ConcurrentHashMap<>();
-    // 연결 시점의 토큰 세대. 주기적 대조가 이 값과 DB를 비교해 회수된 연결을 찾는다.
-    private final Map<Long, Long> tokenVersionByAccount = new ConcurrentHashMap<>();
+    // 한 계정의 여러 기기가 서로 다른 세대·토큰으로 연결될 수 있어 세션별로 보관한다.
+    private final Map<String, ConnectionCredentials> credentialsBySession = new ConcurrentHashMap<>();
 
     // HTTP 업그레이드 직후. 아직 인증 전이라 계정은 모른다.
     public void register(WebSocketSession session) {
@@ -29,21 +36,26 @@ public class WebSocketSessionRegistry {
     }
 
     // STOMP CONNECT 인증 후. 한 계정이 여러 기기로 붙을 수 있어 집합으로 둔다.
-    public void bindAccount(String sessionId, Long accountId, Long tokenVersion) {
+    public void bindAccount(
+            String sessionId,
+            Long accountId,
+            Long tokenVersion,
+            String tokenFingerprint,
+            long tokenExpiresAtEpochMilli
+    ) {
         if (sessionId == null || accountId == null) {
             return;
         }
         sessionIdsByAccount
                 .computeIfAbsent(accountId, id -> ConcurrentHashMap.newKeySet())
                 .add(sessionId);
-        if (tokenVersion != null) {
-            tokenVersionByAccount.put(accountId, tokenVersion);
-        }
+        credentialsBySession.put(sessionId, new ConnectionCredentials(
+                accountId, tokenVersion, tokenFingerprint, tokenExpiresAtEpochMilli));
     }
 
-    /** 이 인스턴스에 붙어 있는 계정과 연결 시점의 토큰 세대. 주기적 대조용. */
-    public Map<Long, Long> connectedTokenVersions() {
-        return Map.copyOf(tokenVersionByAccount);
+    /** 이 인스턴스에 붙어 있는 세션과 연결 시점의 인증 정보. 주기적 대조용. */
+    public Map<String, ConnectionCredentials> connectedCredentials() {
+        return Map.copyOf(credentialsBySession);
     }
 
     /**
@@ -53,9 +65,10 @@ public class WebSocketSessionRegistry {
      */
     public void unregister(String sessionId) {
         sessions.remove(sessionId);
-        sessionIdsByAccount.values().forEach(ids -> ids.remove(sessionId));
-        sessionIdsByAccount.entrySet().removeIf(entry -> entry.getValue().isEmpty());
-        tokenVersionByAccount.keySet().removeIf(accountId -> !sessionIdsByAccount.containsKey(accountId));
+        ConnectionCredentials credentials = credentialsBySession.remove(sessionId);
+        if (credentials != null) {
+            removeAccountIndex(credentials.accountId(), sessionId);
+        }
     }
 
     /**
@@ -64,7 +77,6 @@ public class WebSocketSessionRegistry {
      * @return 실제로 끊은 세션 수
      */
     public int closeAll(Long accountId, CloseStatus status) {
-        tokenVersionByAccount.remove(accountId);
         Set<String> sessionIds = sessionIdsByAccount.remove(accountId);
         if (sessionIds == null || sessionIds.isEmpty()) {
             return 0;
@@ -72,6 +84,7 @@ public class WebSocketSessionRegistry {
 
         int closed = 0;
         for (String sessionId : sessionIds) {
+            credentialsBySession.remove(sessionId);
             WebSocketSession session = sessions.remove(sessionId);
             if (session == null) {
                 continue;
@@ -87,9 +100,48 @@ public class WebSocketSessionRegistry {
         return closed;
     }
 
+    /** 대조 때 본 인증 정보가 아직 같은 세션에 붙어 있을 때만 해당 연결을 끊는다. */
+    public boolean closeIfCurrent(
+            String sessionId,
+            ConnectionCredentials expectedCredentials,
+            CloseStatus status
+    ) {
+        if (!credentialsBySession.remove(sessionId, expectedCredentials)) {
+            return false;
+        }
+        removeAccountIndex(expectedCredentials.accountId(), sessionId);
+        WebSocketSession session = sessions.remove(sessionId);
+        if (session == null) {
+            return false;
+        }
+        try {
+            session.close(status);
+            return true;
+        } catch (IOException | IllegalStateException e) {
+            log.warn("WebSocket 세션 종료 실패: accountId={}, sessionId={}",
+                    expectedCredentials.accountId(), sessionId, e);
+            return false;
+        }
+    }
+
+    private void removeAccountIndex(Long accountId, String sessionId) {
+        sessionIdsByAccount.computeIfPresent(accountId, (id, sessionIds) -> {
+            sessionIds.remove(sessionId);
+            return sessionIds.isEmpty() ? null : sessionIds;
+        });
+    }
+
     // 테스트·운영 점검용
     public int sessionCount(Long accountId) {
         Set<String> ids = sessionIdsByAccount.get(accountId);
         return ids == null ? 0 : ids.size();
+    }
+
+    public record ConnectionCredentials(
+            Long accountId,
+            Long tokenVersion,
+            String tokenFingerprint,
+            long tokenExpiresAtEpochMilli
+    ) {
     }
 }

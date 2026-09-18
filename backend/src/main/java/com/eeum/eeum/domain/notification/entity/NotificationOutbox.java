@@ -10,7 +10,15 @@ import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 
-/** 알림 생성 요청을 원 트랜잭션과 함께 커밋해 두는 outbox. */
+/**
+ * 알림 생성 요청을 원 트랜잭션과 함께 커밋해 두는 outbox.
+ *
+ * 예전에는 AFTER_COMMIT + 비동기로 처리해, 풀이 포화되면 작업이 버려져 알림이 아예 생기지
+ * 않았는데 원 요청은 성공으로 끝나 아무도 몰랐다. 이 행은 메시지 저장과 같은 트랜잭션에서
+ * 커밋되므로 풀이 포화되든 인스턴스가 죽든 기록이 남는다.
+ * 중복 방지는 상태 전이를 알림 생성과 같은 트랜잭션에 묶어서 한다 — 알림만 만들어지고
+ * DONE을 못 남기는 창이 없다.
+ */
 @Entity
 @Table(
         name = "notification_outbox",
