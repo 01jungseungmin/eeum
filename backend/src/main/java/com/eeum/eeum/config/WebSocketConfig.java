@@ -3,6 +3,7 @@ package com.eeum.eeum.config;
 import com.eeum.eeum.security.websocket.StompAuthChannelInterceptor;
 import com.eeum.eeum.security.websocket.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -14,6 +15,8 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+import java.util.List;
 
 /**
  * STOMP 브로커 설정 — 실시간 트래픽을 받는 인스턴스에서만 켠다.
@@ -32,17 +35,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
     private final WebSocketSessionRegistry sessionRegistry;
 
+    // REST와 같은 목록(cors.allowed-origins)을 쓴다. 따로 관리하면 여기에만 배포 도메인이
+    // 빠져서, API는 되는데 채팅만 연결이 끊기는 상태가 된다.
+    @Value("${cors.allowed-origins}")
+    private List<String> allowedOrigins;
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns(
-                        "http://localhost:3000",
-                        "http://localhost:8081",
-                        "http://localhost:5173",
-                        "http://localhost:63342",
-                        "https://eeum.life",
-                        "https://www.eeum.life"
-                );
+                .setAllowedOriginPatterns(allowedOrigins.toArray(new String[0]));
     }
 
     @Override
