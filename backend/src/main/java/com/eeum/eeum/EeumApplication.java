@@ -15,7 +15,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 		PortOneProperties.class,
 		AiProviderProperties.class,
 		com.eeum.eeum.infrastructure.alimtalk.AlimtalkProperties.class,
-		com.eeum.eeum.infrastructure.external.config.PublicDataProperties.class
+		com.eeum.eeum.infrastructure.external.config.PublicDataProperties.class,
+		com.eeum.eeum.infrastructure.geo.KakaoLocalProperties.class
 })
 public class EeumApplication {
 
