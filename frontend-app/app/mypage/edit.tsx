@@ -11,10 +11,18 @@ import { useRouter } from 'expo-router';
 import { Text } from '../../components/CustomText'; 
 import { userApi, MyInfoResponse } from '../../api/user';
 import { uploadImageAssets } from '../../utils/imageUpload';
+import { isDemoLoginEnabled } from '../../utils/demoAccount';
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  
+
+  // 공유 체험 계정의 프로필을 한 사람이 바꾸면 이후 모든 심사자가 그 화면을 보게 된다.
+  useEffect(() => {
+    if (isDemoLoginEnabled) {
+      router.replace('/(tabs)/profile');
+    }
+  }, []);
+
   const [userInfo, setUserInfo] = useState<MyInfoResponse | null>(null);
   const [nickname, setNickname] = useState('');
   const [name, setName] = useState('');

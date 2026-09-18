@@ -7,7 +7,8 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import axios from 'axios';
 
-import { regionApi } from '../api/region'; 
+import { regionApi } from '../api/region';
+import { blockIfDemo } from '../utils/demoAccount'; 
 
 export default function RegionSearchScreen() {
   const router = useRouter();
@@ -65,6 +66,9 @@ export default function RegionSearchScreen() {
 
   // 3. 지역 등록 함수
   const handleAddRegion = async (regionId: number, name: string) => {
+    // 홈에서 버튼을 막아도 /region-search URL로 직접 들어올 수 있다.
+    if (blockIfDemo('동네 추가')) return;
+
     Alert.alert("동네 등록", `'${name}'을(를) 활동 지역으로 등록할까요?`, [
       { text: "취소", style: "cancel" },
       { 
