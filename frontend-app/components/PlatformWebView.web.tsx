@@ -19,6 +19,9 @@ export type PlatformWebViewHandle = {
 
 // iframe 안의 문서는 window.ReactNativeWebView를 모른다. 네이티브와 같은 이름으로
 // 부모에게 postMessage를 넘겨줘야 kakaoMapHtml 같은 기존 HTML을 고치지 않고 재사용할 수 있다.
+// public/webview-host.html — 빌드 결과물 루트에 그대로 복사된다.
+const HOST_DOCUMENT = '/webview-host.html';
+
 const BRIDGE_SCRIPT = `<script>
   window.ReactNativeWebView = {
     postMessage: function (message) { window.parent.postMessage(message, '*'); }
@@ -35,6 +38,8 @@ function injectBridge(html: string): string {
 const PlatformWebView = forwardRef<PlatformWebViewHandle, Props>(
   ({ source, onMessage, style }, ref) => {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    // document.write가 끝나면 load가 한 번 더 뜬다. 막지 않으면 계속 다시 쓴다.
+    const hasWrittenRef = useRef(false);
 
     useImperativeHandle(ref, () => ({
       injectJavaScript: (script: string) => {
@@ -70,6 +75,22 @@ const PlatformWebView = forwardRef<PlatformWebViewHandle, Props>(
       ...(style ?? {}),
     };
 
+    // 같은 출처의 빈 문서를 띄운 뒤 내용을 써 넣는다. srcdoc을 쓰면 문서 URL이
+    // about:srcdoc이라 그 안의 카카오 지도 SDK가 location.protocol을 http로 읽고,
+    // HTTPS 배포본에서 후속 스크립트가 mixed content로 차단돼 지도가 뜨지 않는다.
+    // document.write는 문서 URL을 바꾸지 않으므로 https가 유지된다.
+    const handleLoad = () => {
+      if (source.uri || hasWrittenRef.current) return;
+
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return;
+
+      hasWrittenRef.current = true;
+      doc.open();
+      doc.write(injectBridge(source.html ?? ''));
+      doc.close();
+    };
+
     if (source.uri) {
       return <iframe ref={iframeRef} src={source.uri} style={iframeStyle} />;
     }
@@ -77,7 +98,8 @@ const PlatformWebView = forwardRef<PlatformWebViewHandle, Props>(
     return (
       <iframe
         ref={iframeRef}
-        srcDoc={injectBridge(source.html ?? '')}
+        src={HOST_DOCUMENT}
+        onLoad={handleLoad}
         style={iframeStyle}
       />
     );
