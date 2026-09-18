@@ -4,7 +4,7 @@ import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
+import WebView from '../../components/PlatformWebView';
 
 import { orderApi } from '../../api/order';
 import { userApi } from '@/api/user';

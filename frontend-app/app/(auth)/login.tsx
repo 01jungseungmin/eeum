@@ -17,8 +17,8 @@ import axios from 'axios';
 import { client } from '../../api/client'; 
 import { Text } from '../../components/CustomText';
 import { saveTokens } from '../../utils/secureStore';
-import * as KakaoLogin from '@react-native-seoul/kakao-login';
-import NaverLogin from '@react-native-seoul/naver-login';
+import { isSocialLoginAvailable, loginWithKakao, loginWithNaver } from '../../utils/socialLogin';
+import { isDemoLoginEnabled, loginWithDemoAccount } from '../../utils/demoAccount';
 import { registerForPushNotificationsAsync } from '../../utils/notification';
 
 export default function LoginScreen() {
@@ -81,16 +81,32 @@ export default function LoginScreen() {
     }
   };
 
+  // 공모전 심사자용 데모 진입 (웹 데모 빌드에서만 노출)
+  const handleDemoLogin = async () => {
+    if (isLoading) return;
+
+    setIsLoading(true);
+    try {
+      if (await loginWithDemoAccount()) {
+        router.replace('/(tabs)');
+      } else {
+        Alert.alert('데모 로그인 실패', '잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 카카오 로그인 핸들러
   const handleKakaoLogin = async () => {
     try {
       // 1. 카카오톡 앱을 열어서 로그인을 시도하고, 카카오 토큰을 받아온다.
-      const result = await KakaoLogin.login();
+      const kakaoAccessToken = await loginWithKakao();
 
       // 2. 백엔드 API 호출
     const response = await client.post('/auth/login/oauth', {
       provider: 'KAKAO',
-      accessToken: result.accessToken
+      accessToken: kakaoAccessToken
     });
 
     // 3. 백엔드 응답 처리
@@ -125,20 +141,13 @@ export default function LoginScreen() {
   // 네이버 로그인 핸들러
   const handleNaverLogin = async () => {
     try {
-      NaverLogin.initialize({
-        appName: 'EEUM',
-        consumerKey: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID as string,
-        consumerSecret: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET as string,
-        serviceUrlSchemeIOS: 'eeum',
-      });
+      const naverAccessToken = await loginWithNaver();
 
-      const { successResponse } = await NaverLogin.login();
-    
-    if (successResponse) {
+    if (naverAccessToken) {
       // 2. 백엔드 API 호출
       const response = await client.post('/auth/login/oauth', {
         provider: 'NAVER',
-        accessToken: successResponse.accessToken
+        accessToken: naverAccessToken
       });
 
       // 3. 백엔드 응답 처리
@@ -237,15 +246,31 @@ export default function LoginScreen() {
               <View style={styles.line} />
             </View>
 
-            <TouchableOpacity style={styles.kakaoButton} onPress={handleKakaoLogin}>
-              <Text style={styles.kakaoIcon}>💬</Text> 
-              <Text style={styles.kakaoButtonText}>카카오로 로그인</Text>
-            </TouchableOpacity>
+            {/* 소셜 SDK는 네이티브 전용이라 웹 데모에서는 누르면 실패한다. 대신 데모 진입을 둔다. */}
+            {isSocialLoginAvailable ? (
+              <>
+                <TouchableOpacity style={styles.kakaoButton} onPress={handleKakaoLogin}>
+                  <Text style={styles.kakaoIcon}>💬</Text>
+                  <Text style={styles.kakaoButtonText}>카카오로 로그인</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity style={styles.naverButton} onPress={handleNaverLogin}>
-              <Text style={styles.naverIcon}>N</Text>
-              <Text style={styles.naverButtonText}>네이버로 로그인</Text>
-            </TouchableOpacity>
+                <TouchableOpacity style={styles.naverButton} onPress={handleNaverLogin}>
+                  <Text style={styles.naverIcon}>N</Text>
+                  <Text style={styles.naverButtonText}>네이버로 로그인</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+
+            {isDemoLoginEnabled ? (
+              <TouchableOpacity
+                style={styles.demoButton}
+                onPress={handleDemoLogin}
+                disabled={isLoading}
+              >
+                <Text style={styles.demoButtonText}>데모 계정으로 둘러보기</Text>
+                <Text style={styles.demoButtonHint}>가입 없이 바로 체험할 수 있어요</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </SafeAreaView>
       </TouchableWithoutFeedback>
@@ -277,5 +302,8 @@ const styles = StyleSheet.create({
   kakaoButtonText: { color: '#000000', fontSize: 15, fontWeight: 'bold' },
   naverButton: { backgroundColor: '#03C75A', paddingVertical: 15, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   naverIcon: { position: 'absolute', left: 20, fontSize: 18, color: '#fff', fontWeight: '900' },
-  naverButtonText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' }
+  naverButtonText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  demoButton: { backgroundColor: '#00A859', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
+  demoButtonText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  demoButtonHint: { color: '#DFF3E8', fontSize: 11, marginTop: 3 }
 });

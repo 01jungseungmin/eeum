@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npx expo export -p web --output-dir dist-web",
+  "outputDirectory": "dist-web",
+  "installCommand": "npm ci",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
