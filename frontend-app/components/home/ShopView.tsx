@@ -5,6 +5,7 @@ import { Text } from '../CustomText';
 
 import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
 import { shopApi } from '../../api/shop';
+import EventBannerCarousel from './EventBannerCarousel';
 
 interface ShopViewProps {
   router: any;
@@ -78,9 +79,7 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-      <View style={styles.bannerPlaceholder}>
-        <Text style={{ color: '#fff' }}>이벤트 배너</Text>
-      </View>
+      <EventBannerCarousel router={router} />
 
       {/* 1. 우리 동네 상점 영역 */}
       <View style={styles.sectionContainer}>
@@ -159,7 +158,6 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
 }
 
 const styles = StyleSheet.create({
-  bannerPlaceholder: { height: 180, backgroundColor: '#386641', justifyContent: 'center', alignItems: 'center', marginHorizontal: 20, borderRadius: 8, marginBottom: 25 },
   sectionContainer: { paddingLeft: 20, marginBottom: 35 }, 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingRight: 20, alignItems: 'center', marginBottom: 15 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
