@@ -127,7 +127,7 @@ export default function ReservationsScreen() {
 
         <View style={styles.cardBody}>
           <Image 
-            source={{ uri: 'https://via.placeholder.com/150' }} 
+            source={{ uri: 'https://placehold.co/150.png' }} 
             style={styles.cardImage} 
           />
           <View style={styles.cardInfo}>

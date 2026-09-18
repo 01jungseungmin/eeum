@@ -135,7 +135,7 @@ export default function ReservationConfirmScreen() {
             <Text fontWeight="bold" style={styles.shopName}>{shopInfo?.name || '상점 이름'}</Text>
             <View style={styles.shopInfoBox}>
               <Image 
-                source={{ uri: shopInfo?.images?.[0]?.imageUrl || 'https://via.placeholder.com/100' }} 
+                source={{ uri: shopInfo?.images?.[0]?.imageUrl || 'https://placehold.co/100.png' }} 
                 style={styles.shopImage} 
               />
               <View style={styles.shopDetails}>
