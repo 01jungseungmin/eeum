@@ -4,6 +4,7 @@ import com.eeum.eeum.application.account.dto.request.LocationDto;
 import com.eeum.eeum.application.account.dto.request.RegionRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountRegionResponseDto;
 import com.eeum.eeum.application.account.service.AccountRegionService;
+import com.eeum.eeum.application.account.service.AccountRegionVerificationService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +26,7 @@ import java.util.List;
 public class AccountRegionController {
 
     private final AccountRegionService accountRegionService;
+    private final AccountRegionVerificationService accountRegionVerificationService;
 
     @Operation(summary = "활동 지역 목록 조회", description = "등록된 활동 지역 목록을 조회합니다.")
     @GetMapping
@@ -54,14 +56,14 @@ public class AccountRegionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
-    @Operation(summary = "활동 지역 GPS 인증", description = "현재 GPS 위치로 등록된 지역을 인증합니다.")
+    @Operation(summary = "활동 지역 GPS 인증", description = "현재 GPS 좌표가 속한 법정동이 등록한 동과 같으면 인증합니다.")
     @PatchMapping("/{accountRegionId}/verify")
     public ResponseEntity<ApiResponse<AccountRegionResponseDto>> verifyRegion(
             @PathVariable Long accountRegionId,
             @Valid @RequestBody LocationDto request
     ) {
         Long accountId = SecurityUtil.getCurrentAccountId();
-        AccountRegionResponseDto response = accountRegionService.verifyRegion(accountId, accountRegionId, request);
+        AccountRegionResponseDto response = accountRegionVerificationService.verifyRegion(accountId, accountRegionId, request);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
