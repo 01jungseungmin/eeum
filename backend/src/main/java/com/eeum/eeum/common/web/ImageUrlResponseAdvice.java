@@ -64,7 +64,7 @@ public class ImageUrlResponseAdvice implements ResponseBodyAdvice<Object> {
             Map.Entry<String, JsonNode> field = fields.next();
             JsonNode value = field.getValue();
             if (isImageUrlField(field.getKey()) && value.isTextual()
-                    && fileStorageService.isFinalObjectKey(value.asText())) {
+                    && fileStorageService.isResolvableImageRef(value.asText())) {
                 objectNode.put(field.getKey(), fileStorageService.resolveImageUrl(value.asText()));
                 continue;
             }
