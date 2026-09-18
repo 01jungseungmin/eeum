@@ -155,11 +155,23 @@ const ActionButton = styled.button`
   width: 100%;
   padding: 10px;
   background-color: ${(props) =>
-    props.$isSent ? '#f3f4f6' : props.$secondary ? '#ffffff' : '#3bba84'};
+    props.$isSent || props.$disabled
+      ? '#f3f4f6'
+      : props.$secondary
+        ? '#ffffff'
+        : '#3bba84'};
   color: ${(props) =>
-    props.$isSent ? '#9ca3af' : props.$secondary ? '#374151' : '#ffffff'};
+    props.$isSent || props.$disabled
+      ? '#9ca3af'
+      : props.$secondary
+        ? '#374151'
+        : '#ffffff'};
   border: ${(props) =>
-    props.$isSent ? 'none' : props.$secondary ? '1px solid #e5e7eb' : 'none'};
+    props.$isSent || props.$disabled
+      ? 'none'
+      : props.$secondary
+        ? '1px solid #e5e7eb'
+        : 'none'};
   border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
@@ -167,11 +179,12 @@ const ActionButton = styled.button`
   align-items: center;
   justify-content: center;
   gap: 6px;
-  cursor: ${(props) => (props.$isSent ? 'default' : 'pointer')};
+  cursor: ${(props) =>
+    props.$isSent || props.$disabled ? 'default' : 'pointer'};
   transition: opacity 0.2s;
 
   &:hover {
-    opacity: ${(props) => (props.$isSent ? 1 : 0.9)};
+    opacity: ${(props) => (props.$isSent || props.$disabled ? 1 : 0.9)};
   }
 `;
 
@@ -191,7 +204,13 @@ export default function CustomerCareCard({
     message,
     tag,
     secondaryAction,
+    sendable = true,
   } = data;
+
+  // sendable=false(대상 고객 0명)이면 클릭해도 아무 일도 안 일어나는데,
+  // 버튼 겉모습은 눌리는 것처럼 그대로라 "고장났다"로 오해하기 쉽다 —
+  // 실제로 비활성화 상태로 보이게 하고 이유를 텍스트로 알려준다.
+  const isDisabled = !isSent && !secondaryAction && !sendable;
 
   return (
     <CardContainer $variant={variant}>
@@ -251,12 +270,16 @@ export default function CustomerCareCard({
         <ActionButton
           $isSent={isSent}
           $secondary={secondaryAction}
+          $disabled={isDisabled}
+          disabled={isDisabled}
           onClick={() => onActionClick && onActionClick(data)}
         >
           {isSent ? (
             <>
-              <Check size={14} /> 전송 예약됨
+              <Check size={14} /> 전송 완료
             </>
+          ) : isDisabled ? (
+            '보낼 대상 고객 없음'
           ) : secondaryAction ? (
             '답변 초안 보기'
           ) : (
