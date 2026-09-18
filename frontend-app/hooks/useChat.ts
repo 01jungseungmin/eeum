@@ -1,12 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { Client } from '@stomp/stompjs';
-import { getAccessToken } from '../utils/secureStore'; 
+import { getAccessToken } from '../utils/secureStore';
 import * as encoding from 'text-encoding';
 
 if (typeof global.TextEncoder === 'undefined') {
   global.TextEncoder = encoding.TextEncoder;
   global.TextDecoder = encoding.TextDecoder;
 }
+
+/**
+ * React Native의 WebSocket 구현을 위한 우회 옵션이다. 브라우저에는 적용하면 안 된다.
+ *
+ * appendMissingNULLonIncoming은 수신 프레임 끝에 NULL을 덧붙이는데, 브라우저는 서버가
+ * 보낸 정상적인 NULL 종료 프레임을 그대로 받으므로 프레임이 깨져 구독 콜백이 호출되지
+ * 않는다. 연결과 전송은 멀쩡해서, 메시지를 보내면 서버에는 저장되는데 화면에는 안 뜨고
+ * 방을 나갔다 들어와야(REST 재조회) 보이는 증상이 된다.
+ */
+const NATIVE_WS_FRAME_OPTIONS = Platform.OS === 'web'
+  ? {}
+  : { forceBinaryWSFrames: true, appendMissingNULLonIncoming: true };
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
@@ -38,10 +51,9 @@ export const useChatStomp = (roomId: number) => {
         connectHeaders: {
           Authorization: `Bearer ${token}`, 
         },
-        reconnectDelay: 5000, 
-        forceBinaryWSFrames: true,
-        appendMissingNULLonIncoming: true,
-        
+        reconnectDelay: 5000,
+        ...NATIVE_WS_FRAME_OPTIONS,
+
         onConnect: () => {
           console.log('✅ STOMP 웹소켓 연결 성공!');
           setIsConnected(true);

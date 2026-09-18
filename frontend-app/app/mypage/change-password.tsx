@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, StyleSheet, TextInput, TouchableOpacity, 
   ActivityIndicator, Alert, ScrollView 
@@ -9,10 +9,19 @@ import { useRouter } from 'expo-router';
 
 import { Text } from '../../components/CustomText'; 
 import { userApi } from '../../api/user';
+import { isDemoLoginEnabled } from '../../utils/demoAccount';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
-  
+
+  // 가장 위험한 경로다. 비밀번호가 바뀌면 빌드에 박힌 자격증명이 무효가 되어
+  // 이후 들어오는 모든 심사자의 자동 로그인이 실패하고 로그인 화면에서 막힌다.
+  useEffect(() => {
+    if (isDemoLoginEnabled) {
+      router.replace('/(tabs)/profile');
+    }
+  }, []);
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

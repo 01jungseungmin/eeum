@@ -36,7 +36,7 @@ class ImageUrlResponseAdviceHttpTest {
     @Test
     void 실제_HTTP_JSON_응답에서_objectKey가_presigned_URL로_변환된다() throws Exception {
         // Given
-        when(fileStorageService.isFinalObjectKey("used/7/thumb.webp")).thenReturn(true);
+        when(fileStorageService.isResolvableImageRef("used/7/thumb.webp")).thenReturn(true);
         when(fileStorageService.resolveImageUrl("used/7/thumb.webp"))
                 .thenReturn("https://signed.example/thumb");
 
@@ -51,7 +51,7 @@ class ImageUrlResponseAdviceHttpTest {
     void advice를_거친_응답의_timestamp는_ISO_문자열로_직렬화된다() throws Exception {
         // Given: advice가 body를 JsonNode로 다시 만들기 때문에, 그 매퍼의 날짜 설정이 응답 형식이 된다.
         //        숫자 배열([2026,9,15,...])로 바뀌면 클라이언트의 날짜 파싱이 깨진다.
-        when(fileStorageService.isFinalObjectKey("used/7/thumb.webp")).thenReturn(true);
+        when(fileStorageService.isResolvableImageRef("used/7/thumb.webp")).thenReturn(true);
         when(fileStorageService.resolveImageUrl("used/7/thumb.webp"))
                 .thenReturn("https://signed.example/thumb");
 

@@ -20,10 +20,30 @@ cd frontend-app
 #    .env를 바꿔도 이전 환경변수가 그대로 번들에 박힌다.
 npx expo export -p web --output-dir dist-web --clear
 
-# 2. 산출물 디렉터리에서 배포 (dist-web/vercel.json이 빌드를 끄고 SPA rewrite만 건다)
+# 2. 배포용 후처리. 건너뛰면 아이콘이 전부 깨지고 동적 경로가 404가 된다 (아래 설명)
+node scripts/prepare-web-deploy.mjs dist-web
+
+# 3. 산출물 디렉터리에서 배포
 cd dist-web
 npx vercel deploy --yes --prod --token <VERCEL_TOKEN>
 ```
+
+`vercel deploy`는 처음 한 번 프로젝트를 물어본다. **반드시 `eeum-web-demo`에 연결할 것** —
+`--clear` 빌드가 `dist-web/.vercel`(프로젝트 링크)까지 지우기 때문에, 새로 물어볼 때
+엉뚱한 이름으로 만들면 심사자에게 준 URL이 아닌 새 URL로 배포된다.
+
+### 2단계가 필요한 이유
+
+`prepare-web-deploy.mjs`가 두 가지를 한다. 둘 다 `--clear` 빌드가 매번 없애므로 자동화했다.
+
+**에셋 경로에서 `node_modules` 제거.** Metro는 의존성 에셋을
+`dist-web/assets/node_modules/@expo/vector-icons/...`로 내보내는데, Vercel CLI는 경로에
+`node_modules`가 들어간 파일을 업로드에서 **무조건** 제외한다 (`.vercelignore`의 `!` 부정
+패턴으로도, `--archive`로도 안 된다). 그러면 폰트 요청이 SPA rewrite에 걸려 `index.html`을
+받고 브라우저가 `OTS parsing error: invalid sfntVersion`을 내며 **아이콘이 전부 깨진다.**
+
+**`dist-web/vercel.json` 생성.** 없으면 Vercel이 `package.json`도 없는 디렉터리에서
+`npm ci`를 돌리다 배포가 실패하고, SPA rewrite가 빠져 `/used-trade/1` 같은 동적 경로가 404가 된다.
 
 `vercel login`은 컴퓨터 이름이 ASCII가 아니면 실패한다(HTTP 헤더에 호스트명이 들어간다).
 그 경우 https://vercel.com/account/tokens 에서 토큰을 만들어 `--token`으로 넘긴다.
