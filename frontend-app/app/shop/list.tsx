@@ -140,7 +140,7 @@ export default function ShopListScreen() {
   };
 
   const renderShopCard = ({ item }: any) => {
-    const thumbnailUrl = item.thumbnailUrl || 'https://via.placeholder.com/300/E8F5E9/00A859?text=Store';
+    const thumbnailUrl = item.thumbnailUrl || 'https://placehold.co/300/E8F5E9/00A859.png?text=Store';
     
     const rating = item.rating || 0;
     const reviewCount = item.reviewCount || 0;

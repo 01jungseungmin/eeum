@@ -4,6 +4,7 @@ import {
   ThemeProvider,
 } from '@react-navigation/native';
 import { Stack, useRouter } from 'expo-router';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useFonts } from 'expo-font';
@@ -12,18 +13,28 @@ import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { getNotificationRoute } from '../utils/notificationRoute';
+import { applyWebAlertPatch } from '../utils/webAlertPatch';
+
+// 화면이 그려지기 전에 갈아끼워야 한다. 첫 Alert.alert 호출보다 늦으면 그 건은 그냥 사라진다.
+applyWebAlertPatch();
 
 SplashScreen.preventAutoHideAsync();
 
+// 푸시 알림은 네이티브 기기 전용이다. 웹 데모 빌드에서 이 설정·리스너가 돌면
+// 모듈이 없어 루트 레이아웃 평가 단계에서 터지고 화면이 통째로 비어 버린다.
+const isPushSupported = Platform.OS !== 'web';
+
 // 앱이 켜져 있을 때 알림이 오면 화면에 어떻게 띄울지 설정
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,    // 앱 사용 중 상단에 팝업 배너 띄우기
-    shouldShowList: true,      // 스마트폰의 알림 센터 목록에 남기기
-    shouldPlaySound: true,     // 알림음 재생
-    shouldSetBadge: true,      // 앱 아이콘 우측 상단 숫자 뱃지 업데이트
-  }),
-});
+if (isPushSupported) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,    // 앱 사용 중 상단에 팝업 배너 띄우기
+      shouldShowList: true,      // 스마트폰의 알림 센터 목록에 남기기
+      shouldPlaySound: true,     // 알림음 재생
+      shouldSetBadge: true,      // 앱 아이콘 우측 상단 숫자 뱃지 업데이트
+    }),
+  });
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -36,6 +47,8 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    if (!isPushSupported) return;
+
     // 네이티브 푸시 토큰(FCM/APNs) 등록은 utils/notification.ts의
     // registerForPushNotificationsAsync가 로그인/자동로그인 시점에 전담한다.
     // 여기서 Expo Push Token을 추가로 등록하면 마지막에 저장된 토큰으로
