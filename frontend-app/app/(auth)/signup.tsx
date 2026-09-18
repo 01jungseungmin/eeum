@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   StyleSheet, View, TextInput, TouchableOpacity, 
   SafeAreaView, ScrollView, Alert, 
@@ -10,9 +10,18 @@ import { client } from '../../api/client';
 import { Text } from '../../components/CustomText';
 import { saveTokens } from '../../utils/secureStore';
 import { registerForPushNotificationsAsync } from '../../utils/notification';
+import { isDemoLoginEnabled } from '../../utils/demoAccount';
 
 export default function SignupScreen() {
   const router = useRouter();
+
+  // 로그인 화면에서 가입 버튼을 숨겨도 /signup URL로 직접 들어올 수 있다.
+  // 웹 데모에는 실명·연락처를 수집하는 경로가 아예 없어야 하므로 화면 자체를 막는다.
+  useEffect(() => {
+    if (isDemoLoginEnabled) {
+      router.replace('/(auth)/login');
+    }
+  }, []);
   // (tempToken이 있으면 소셜 가입, 없으면 일반 가입으로 구분됩니다)
   const { tempToken } = useLocalSearchParams();
 

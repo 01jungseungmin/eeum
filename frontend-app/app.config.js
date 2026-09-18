@@ -89,7 +89,17 @@ module.exports = {
           color: "#00A859" 
         }
       ]
-    ],    
+    ],
+
+    // 공모전 심사용 웹 데모 빌드 대상이다. output: "single"은 SPA 한 벌로 떨어져
+    // 정적 호스팅에서 fallback 한 줄이면 모든 라우트가 뜬다 — static은 라우트마다
+    // HTML이 생겨 [id] 동적 경로가 404가 된다.
+    web: {
+      bundler: "metro",
+      output: "single",
+      favicon: "./assets/images/icon.png"
+    },
+
     experiments: {
       typedRoutes: true
     }

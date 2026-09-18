@@ -85,7 +85,7 @@ export default function EventListScreen() {
                 onPress={() => router.push(`/shop/${product.storeId}` as any)}
               >
                 <View style={styles.imageContainer}>
-                  <Image source={{ uri: product.thumbnailUrl || 'https://via.placeholder.com/200' }} style={styles.image} />
+                  <Image source={{ uri: product.thumbnailUrl || 'https://placehold.co/200.png' }} style={styles.image} />
                   <View style={styles.stockBadge}>
                     <Text style={styles.stockText}>잔여 {product.remainingStock}개</Text>
                   </View>

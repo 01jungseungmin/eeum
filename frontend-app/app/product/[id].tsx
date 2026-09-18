@@ -189,7 +189,7 @@ export default function ProductDetailScreen() {
 
   if (!productDetail) return null;
 
-  const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://via.placeholder.com/600x600/E8F5E9/00A859?text=Product';
+  const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://placehold.co/600x600/E8F5E9/00A859.png?text=Product';
   const pPrice = productDetail.price || 0;
   const pEventPrice = productDetail.eventPrice || 0;
   const hasEvent = productDetail.hasEvent === true;

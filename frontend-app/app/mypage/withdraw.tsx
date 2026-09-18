@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, StyleSheet, TextInput, TouchableOpacity, 
   ActivityIndicator, Alert, ScrollView 
@@ -10,10 +10,19 @@ import { useRouter } from 'expo-router';
 import { Text } from '../../components/CustomText'; 
 import { userApi } from '../../api/user';
 import { clearTokens } from '../../utils/secureStore'; // 로그아웃 처리를 위한 토큰 삭제 함수
+import { isDemoLoginEnabled } from '../../utils/demoAccount';
 
 export default function WithdrawScreen() {
   const router = useRouter();
-  
+
+  // 데모 비밀번호는 웹 번들에 그대로 박혀 누구나 꺼낼 수 있다. 심사 기간 중 데모 계정이
+  // 탈퇴되면 모든 심사자의 체험 경로가 함께 끊기므로 웹 데모에서는 이 화면을 막는다.
+  useEffect(() => {
+    if (isDemoLoginEnabled) {
+      router.replace('/(tabs)/profile');
+    }
+  }, []);
+
   const [password, setPassword] = useState('');
   const [isChecked, setIsChecked] = useState(false); // 유의사항 동의 여부
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -176,7 +176,7 @@ export default function ShopDetailScreen() {
   if (!shopDetail) return null;
 
   const categoryName = shopDetail.categoryName || '기타';
-  const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://via.placeholder.com/600x400/E8F5E9/00A859?text=Cover';
+  const coverImageUrl = shopDetail.images?.[0]?.imageUrl || 'https://placehold.co/600x400/E8F5E9/00A859.png?text=Cover';
   const isRestaurant = shopDetail.categoryId === 1 || shopDetail.categoryId === 2;
 
   return (
