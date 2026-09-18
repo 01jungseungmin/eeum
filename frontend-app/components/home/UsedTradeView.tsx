@@ -215,7 +215,7 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
           >
             <View style={styles.imageContainer}>
               {/* 대표 사진 렌더링 (Swagger 명세 필드명에 맞게 조정 필요) */}
-              <Image source={{ uri: item.thumbnailUrl || item.img || 'https://via.placeholder.com/150' }} style={styles.productImage} />
+              <Image source={{ uri: item.thumbnailUrl || item.img || 'https://placehold.co/150.png' }} style={styles.productImage} />
               
               {item.status === 'RESERVED' && (
                 <View style={[styles.statusBadge, { backgroundColor: '#1B854A' }]}>

@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/CustomText';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import WebView, { WebViewMessageEvent } from '../../components/PlatformWebView';
 import * as Location from 'expo-location'; 
 import { useRouter } from 'expo-router'; 
 

@@ -106,7 +106,7 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
                 style={styles.shopCard}
                 onPress={() => router.push(`/shop/${shop.storeId}` as any)}
               >
-                <Image source={{ uri: shop.thumbnailUrl || 'https://via.placeholder.com/150/F0F0F0/CCCCCC' }} style={styles.shopImage} />
+                <Image source={{ uri: shop.thumbnailUrl || 'https://placehold.co/150/F0F0F0/CCCCCC.png' }} style={styles.shopImage} />
                 <Text style={styles.shopCategory}>{shop.categoryName || getCategoryName(shop.categoryId)}</Text>
                 <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
               </TouchableOpacity>
@@ -135,7 +135,7 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
                 onPress={() => router.push(`/shop/${product.storeId}` as any)}
               >
                 <View style={styles.eventImageContainer}>
-                  <Image source={{ uri: product.thumbnailUrl || 'https://via.placeholder.com/150/F0F0F0/CCCCCC' }} style={styles.shopImage} />
+                  <Image source={{ uri: product.thumbnailUrl || 'https://placehold.co/150/F0F0F0/CCCCCC.png' }} style={styles.shopImage} />
                   <View style={styles.stockBadge}>
                     <Text style={styles.stockText}>잔여 {product.remainingStock}개</Text>
                   </View>

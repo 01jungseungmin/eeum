@@ -159,7 +159,7 @@ export default function FavoritesScreen() {
       onPress={() => router.push(`/shop/${item.storeId}` as any)}
     >
       <Image
-        source={{ uri: item.thumbnailUrl || 'https://via.placeholder.com/150' }}
+        source={{ uri: item.thumbnailUrl || 'https://placehold.co/150.png' }}
         style={styles.cardImage}
       />
 
@@ -192,7 +192,7 @@ export default function FavoritesScreen() {
   const renderUsedProductItem = ({ item }: { item: FavoriteUsedProduct }) => (
     <View style={styles.cardContainer}>
       <Image
-        source={{ uri: item.thumbnailUrl || 'https://via.placeholder.com/150' }}
+        source={{ uri: item.thumbnailUrl || 'https://placehold.co/150.png' }}
         style={styles.cardImage}
       />
 

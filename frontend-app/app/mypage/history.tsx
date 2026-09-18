@@ -54,7 +54,7 @@ export default function HistoryScreen() {
       ? item.paidAt.replace('T', ' ').substring(0, 16) 
       : '결제일시 없음';
       
-    const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://via.placeholder.com/150';
+    const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://placehold.co/150.png';
 
     const isReviewCompleted = item.hasReview === true;
 

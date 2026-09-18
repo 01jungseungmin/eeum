@@ -1,5 +1,11 @@
 -- =============================================
 -- 이음(Eeum) 더미 데이터
+--
+-- ※ 반드시 utf8mb4 커넥션으로 적재할 것. 그렇지 않으면 한글이
+--   이중 인코딩되어 "김치찌개" -> "ê¹€ì¹˜ì°Œê°œ" 로 저장된다.
+--     docker exec -i eeum-mysql mysql -uroot -proot \
+--       --default-character-set=utf8mb4 eeum < dummy.sql
+--   이미 깨진 DB는 backend/db/fix_mojibake.sql 로 복구 가능.
 -- =============================================
 
 SET FOREIGN_KEY_CHECKS = 0;
@@ -153,17 +159,29 @@ INSERT INTO product (product_id, store_id, product_category_id, name, descriptio
 -- =============================================
 
 INSERT INTO product_image (product_image_id, product_id, image_url, display_order, is_thumbnail, created_at, modified_at) VALUES
-(1,  1, 'https://via.placeholder.com/400x300?text=김치찌개',      1, TRUE,  NOW(), NOW()),
-(2,  2, 'https://via.placeholder.com/400x300?text=된장찌개',      1, TRUE,  NOW(), NOW()),
-(3,  3, 'https://via.placeholder.com/400x300?text=깍두기',        1, TRUE,  NOW(), NOW()),
-(4,  3, 'https://via.placeholder.com/400x300?text=깍두기-2',      2, FALSE, NOW(), NOW()),
-(5,  4, 'https://via.placeholder.com/400x300?text=배추김치',      1, TRUE,  NOW(), NOW()),
-(6,  5, 'https://via.placeholder.com/400x300?text=도시락예약',    1, TRUE,  NOW(), NOW()),
-(7,  6, 'https://via.placeholder.com/400x300?text=아메리카노',    1, TRUE,  NOW(), NOW()),
-(8,  7, 'https://via.placeholder.com/400x300?text=카페라떼',      1, TRUE,  NOW(), NOW()),
-(9,  8, 'https://via.placeholder.com/400x300?text=초코스무디',    1, TRUE,  NOW(), NOW()),
-(10, 9, 'https://via.placeholder.com/400x300?text=크로플',        1, TRUE,  NOW(), NOW()),
-(11,10, 'https://via.placeholder.com/400x300?text=티라미수',      1, TRUE,  NOW(), NOW());
+(1,  1, 'https://images.unsplash.com/photo-1580651315530-69c8e0026377?w=800&h=600&fit=crop',      1, TRUE,  NOW(), NOW()),
+(2,  2, 'https://images.unsplash.com/photo-1635363638580-c2809d049eee?w=800&h=600&fit=crop',      1, TRUE,  NOW(), NOW()),
+(3,  3, 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800&h=600&fit=crop',        1, TRUE,  NOW(), NOW()),
+(4,  3, 'https://images.unsplash.com/photo-1553163147-622ab57be1c7?w=800&h=600&fit=crop',      2, FALSE, NOW(), NOW()),
+(5,  4, 'https://images.unsplash.com/photo-1548943487-a2e4e43b4853?w=800&h=600&fit=crop',      1, TRUE,  NOW(), NOW()),
+(6,  5, 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&h=600&fit=crop',    1, TRUE,  NOW(), NOW()),
+(7,  6, 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=800&h=600&fit=crop',    1, TRUE,  NOW(), NOW()),
+(8,  7, 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800&h=600&fit=crop',      1, TRUE,  NOW(), NOW()),
+(9,  8, 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=800&h=600&fit=crop',    1, TRUE,  NOW(), NOW()),
+(10, 9, 'https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=800&h=600&fit=crop',        1, TRUE,  NOW(), NOW()),
+(11,10, 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&h=600&fit=crop',      1, TRUE,  NOW(), NOW());
+
+-- =============================================
+-- 11-1. StoreImage 더미 데이터
+-- =============================================
+
+INSERT INTO store_image (store_image_id, store_id, image_url, display_order, is_thumbnail, created_at, modified_at) VALUES
+(1, 1, 'https://images.unsplash.com/photo-1498654896293-37aacf113fd9?w=1200&h=800&fit=crop', 1, TRUE,  NOW(), NOW()),  -- 맛있는 반찬가게
+(2, 1, 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=1200&h=800&fit=crop', 2, FALSE, NOW(), NOW()),
+(3, 2, 'https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=1200&h=800&fit=crop', 1, TRUE,  NOW(), NOW()),  -- 청운 카페
+(4, 2, 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1200&h=800&fit=crop', 2, FALSE, NOW(), NOW()),
+(5, 3, 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1200&h=800&fit=crop', 1, TRUE,  NOW(), NOW()),  -- 궁정 도시락
+(6, 3, 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=800&fit=crop', 2, FALSE, NOW(), NOW());
 
 -- =============================================
 -- 12. EventProduct 더미 데이터

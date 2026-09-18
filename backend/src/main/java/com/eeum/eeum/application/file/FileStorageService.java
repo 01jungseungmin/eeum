@@ -266,7 +266,8 @@ public class FileStorageService {
 
     // 도메인 Service가 대상 리소스의 공개/참여자 권한을 확인한 후 호출한다.
     public String resolveImageUrl(String imageUrl) {
-        if (!isFinalObjectKey(imageUrl)) {
+        String objectKey = toSignableObjectKey(imageUrl);
+        if (objectKey == null) {
             return imageUrl;
         }
         // 저장소가 설정되지 않은 환경(로컬·테스트)에서는 서명할 수단이 없다. 여기서 던지면
@@ -274,7 +275,72 @@ public class FileStorageService {
         if (!properties.isConfigured()) {
             return imageUrl;
         }
-        return createPresignedGetUrl(imageUrl).downloadUrl();
+        return createPresignedGetUrl(objectKey).downloadUrl();
+    }
+
+    // 응답 직전 치환 대상인지 판단한다. 외부 CDN URL은 건드리지 않는다.
+    public boolean isResolvableImageRef(String imageUrl) {
+        return toSignableObjectKey(imageUrl) != null;
+    }
+
+    /**
+     * 서명할 object key를 얻는다. 서명 대상이 아니면 null이다.
+     *
+     * objectKey 대신 완성된 S3 URL이 저장된 행이 있다. 버킷이 비공개라 그대로 내보내면
+     * 브라우저가 403을 받으므로, 우리 버킷을 가리키는 URL은 key로 되돌려 서명한다.
+     */
+    private String toSignableObjectKey(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return null;
+        }
+        if (isFinalObjectKey(imageUrl)) {
+            return imageUrl;
+        }
+        return extractOwnBucketObjectKey(imageUrl);
+    }
+
+    private String extractOwnBucketObjectKey(String imageUrl) {
+        if (!properties.isConfigured()) {
+            return null;
+        }
+        for (String prefix : ownBucketUrlPrefixes()) {
+            if (!imageUrl.startsWith(prefix)) {
+                continue;
+            }
+            String remainder = imageUrl.substring(prefix.length());
+            // 이미 서명된 URL은 그대로 쓸 수 있다 — 다시 서명하면 만료 시각만 흔든다.
+            if (remainder.contains("X-Amz-Signature")) {
+                return null;
+            }
+            int queryStart = remainder.indexOf('?');
+            String rawKey = queryStart < 0 ? remainder : remainder.substring(0, queryStart);
+            String objectKey = decodePercentEncoding(rawKey);
+            return objectKey.isBlank() ? null : objectKey;
+        }
+        return null;
+    }
+
+    // 호스트 형식은 버킷 생성 시점과 리전에 따라 갈린다. 세 가지를 모두 인정한다.
+    private List<String> ownBucketUrlPrefixes() {
+        String bucket = properties.bucket();
+        String region = properties.region();
+        return List.of(
+                "https://" + bucket + ".s3." + region + ".amazonaws.com/",
+                "https://" + bucket + ".s3.amazonaws.com/",
+                "https://s3." + region + ".amazonaws.com/" + bucket + "/"
+        );
+    }
+
+    // URLDecoder는 '+'를 공백으로 바꾼다 — S3 key의 '+'는 살려야 하므로 %XX만 되돌린다.
+    private String decodePercentEncoding(String value) {
+        if (value.indexOf('%') < 0) {
+            return value;
+        }
+        try {
+            return java.net.URLDecoder.decode(value.replace("+", "%2B"), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException malformed) {
+            return value;
+        }
     }
 
     // DB 저장 Service가 호출하는 순수 참조 검증이다. S3 I/O는 confirm 단계에서만 수행한다.
