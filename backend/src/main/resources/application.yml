@@ -104,6 +104,12 @@ fcm:
   # 발표/시연 시 실제 FCM 발송이 필요하면 --spring.profiles.active=demo 로 기동
   # demo 프로필: FcmPushAdapter(실제 발송) + FCM 단건 테스트 API(/owner/ai-manager/test/fcm) 모두 활성
 
+cors:
+  # 브라우저에서 이 API를 부르는 출처 목록. 값이 코드에 박혀 있으면 배포 URL이 바뀔 때마다
+  # 백엔드를 다시 빌드해야 하므로 환경변수로 뺀다. setAllowedOriginPatterns를 쓰므로
+  # https://*.vercel.app 같은 와일드카드가 그대로 동작한다.
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8081,http://localhost:5173,http://localhost:63342,http://localhost:4173,https://eeum.life,https://*.vercel.app}
+
 storage:
   s3:
     bucket: ${S3_BUCKET:}

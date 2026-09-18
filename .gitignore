@@ -64,3 +64,7 @@ logs/
 docker/data/
 
 secrets/firebase-service-account.json
+
+# Vercel 배포 토큰 (로컬 전용, 절대 커밋 금지)
+.vercel-token
+.vercel/
