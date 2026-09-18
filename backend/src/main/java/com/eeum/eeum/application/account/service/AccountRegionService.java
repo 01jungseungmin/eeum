@@ -1,6 +1,5 @@
 package com.eeum.eeum.application.account.service;
 
-import com.eeum.eeum.application.account.dto.request.LocationDto;
 import com.eeum.eeum.application.account.dto.request.RegionRequestDto;
 import com.eeum.eeum.application.account.dto.response.AccountRegionResponseDto;
 import com.eeum.eeum.application.account.mapper.AccountRegionMapper;
@@ -27,7 +26,6 @@ import java.util.List;
 public class AccountRegionService {
 
     private static final int MAX_REGION_COUNT = 2;
-    private static final double EARTH_RADIUS_KM = 6371.0;
 
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
@@ -78,27 +76,21 @@ public class AccountRegionService {
     }
 
     // ===================== GPS 인증 =====================
+    // 좌표 대조는 외부 API라 AccountRegionVerificationService가 트랜잭션 밖에서 하고,
+    // 여기는 그 앞뒤의 조회·저장 구간만 맡는다.
 
+    @Transactional(readOnly = true)
+    public String getRegionCode(Long accountId, Long accountRegionId) {
+        return getOwnedAccountRegion(accountRegionId, accountId).getRegion().getRegionCode();
+    }
+
+    /**
+     * 현재 좌표가 이 지역의 법정동임을 확인한 뒤에만 호출한다.
+     */
     @Transactional
-    public AccountRegionResponseDto verifyRegion(Long accountId, Long accountRegionId, LocationDto request) {
+    public AccountRegionResponseDto completeVerification(Long accountId, Long accountRegionId) {
         Account account = getAccount(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
-        Region region = accountRegion.getRegion();
-
-        // GPS 거리 계산 (Haversine 공식)
-        // Region의 중심 좌표는 Location 엔티티에서 조회해야 하지만
-        // Location은 별도 조회가 필요 → 여기서는 Region.radius(미터) 기준으로 검증
-        Location location = locationRepository.findByRegion_RegionId(region.getRegionId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.REGION_LOCATION_NOT_FOUND));
-        double distanceKm = calculateDistance(
-                request.getLatitude(),
-                request.getLongitude(),
-                location.getLatitude(),
-                location.getLongitude()
-        );
-        if (distanceKm * 1000 > region.getRadius()) {
-            throw new BusinessException(ErrorCode.REGION_GPS_MISMATCH);
-        }
 
         accountRegion.verify();
 
@@ -108,8 +100,7 @@ public class AccountRegionService {
         }
 
         log.info("활동 지역 GPS 인증 완료: accountId={}, accountRegionId={}", accountId, accountRegionId);
-        // 거리 검증에 쓴 location을 그대로 넘긴다 — 같은 행을 다시 조회할 이유가 없다.
-        return accountRegionMapper.toRegionDto(accountRegion, account, location);
+        return accountRegionMapper.toRegionDto(accountRegion, account, findLocation(accountRegion.getRegionId()));
     }
 
     // ===================== 특정 지역 조회 =====================
@@ -178,16 +169,6 @@ public class AccountRegionService {
         return accountRegionRepository
                 .findByAccountRegionIdAndAccount_AccountId(accountRegionId, accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REGION_NOT_FOUND));
-    }
-
-    // Haversine 공식으로 두 좌표 간 거리(km) 계산
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
 }
