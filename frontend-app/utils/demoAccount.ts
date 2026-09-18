@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { client } from '../api/client';
 import { saveTokens } from './secureStore';
 
@@ -16,6 +16,27 @@ export const isDemoLoginEnabled =
   Platform.OS === 'web' && DEMO_EMAIL.length > 0 && DEMO_PASSWORD.length > 0;
 
 export const demoEmail = DEMO_EMAIL;
+
+/**
+ * 데모 계정은 심사자 전원이 동시에 쓰는 하나의 계정이다. 한 사람이 계정 상태를 바꾸면
+ * 그 뒤로 들어오는 모든 사람의 화면이 함께 망가진다. 실제로 겪은 것들:
+ *
+ *   비밀번호 변경 → 빌드에 박힌 자격증명이 무효가 되어 자동 로그인이 전부 실패한다
+ *   대표 지역 변경·삭제 → 홈이 "등록된 상점이 없어요"가 된다
+ *
+ * 그래서 계정 상태를 바꾸는 경로는 데모에서 막는다. 조회는 전부 열어둔다.
+ * 네이티브 앱은 isDemoLoginEnabled가 false라 아무 영향이 없다.
+ */
+export function blockIfDemo(actionName: string): boolean {
+  if (!isDemoLoginEnabled) return false;
+
+  Alert.alert(
+    '체험판에서는 막혀 있어요',
+    `${actionName}은(는) 여러 명이 함께 쓰는 체험 계정이라 막아두었습니다.\n` +
+      '둘러보기는 그대로 하실 수 있어요.'
+  );
+  return true;
+}
 
 export async function loginWithDemoAccount(): Promise<boolean> {
   if (!isDemoLoginEnabled) return false;

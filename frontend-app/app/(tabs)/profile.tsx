@@ -12,7 +12,8 @@ import { userApi, MyInfoResponse } from '../../api/user';
 import { notificationApi } from '../../api/notification';
 
 import { client } from '../../api/client';
-import { getRefreshToken, clearTokens } from '../../utils/secureStore'; 
+import { getRefreshToken, clearTokens } from '../../utils/secureStore';
+import { isDemoLoginEnabled } from '../../utils/demoAccount'; 
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -108,15 +109,21 @@ export default function ProfileScreen() {
         <View style={styles.divider} />
 
         {/* 나의 메뉴 리스트들 */}
-        <View style={styles.menuSectionContainer}>
-          <SectionHeader title="나의 중고 거래" />
-          <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="중고 거래 내역" iconName="bag-handle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="받은 리뷰" iconName="star-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="보낸 리뷰" iconName="star-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-        </View>
+        {/* 아직 구현되지 않아 누르면 "준비 중입니다"만 뜨는 항목들이다.
+            심사자에게는 미완성으로 보이므로 데모에서는 섹션째 감춘다. */}
+        {!isDemoLoginEnabled && (
+          <>
+            <View style={styles.menuSectionContainer}>
+              <SectionHeader title="나의 중고 거래" />
+              <MenuItem title="찜 목록" iconName="heart-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+              <MenuItem title="중고 거래 내역" iconName="bag-handle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+              <MenuItem title="받은 리뷰" iconName="star-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+              <MenuItem title="보낸 리뷰" iconName="star-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+            </View>
 
-        <View style={styles.divider} />
+            <View style={styles.divider} />
+          </>
+        )}
 
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 동네 상점 거래" />
@@ -142,10 +149,18 @@ export default function ProfileScreen() {
 
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="설정" />
-          <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/mypage/edit' as any)} />
-          <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/mypage/change-password' as any)} />
+          {/* 계정 상태를 바꾸는 메뉴다. 공유 체험 계정에서는 한 사람의 변경이
+              이후 모든 심사자에게 그대로 남는다. */}
+          {!isDemoLoginEnabled && (
+            <>
+              <MenuItem title="회원정보 수정" iconName="settings-outline" onPress={() => router.push('/mypage/edit' as any)} />
+              <MenuItem title="비밀번호 변경" iconName="lock-closed-outline" onPress={() => router.push('/mypage/change-password' as any)} />
+            </>
+          )}
           <MenuItem title="알림 설정" iconName="notifications-outline" onPress={() => router.push('/mypage/notification-setting' as any)} />
-          <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/mypage/withdraw' as any)} />
+          {!isDemoLoginEnabled && (
+            <MenuItem title="회원탈퇴" iconName="person-remove-outline" onPress={() => router.push('/mypage/withdraw' as any)} />
+          )}
           <MenuItem 
             title="관리자에게 문의하기" 
             iconName="headset-outline" 
@@ -158,13 +173,17 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.divider} />
+        {!isDemoLoginEnabled && (
+          <>
+            <View style={styles.divider} />
 
-        <View style={styles.menuSectionContainer}>
-          <SectionHeader title="고객 지원" />
-          <MenuItem title="고객센터" iconName="help-circle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-          <MenuItem title="공지사항" iconName="document-text-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
-        </View>
+            <View style={styles.menuSectionContainer}>
+              <SectionHeader title="고객 지원" />
+              <MenuItem title="고객센터" iconName="help-circle-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+              <MenuItem title="공지사항" iconName="document-text-outline" onPress={() => Alert.alert('알림', '준비 중입니다.')} />
+            </View>
+          </>
+        )}
 
         <TouchableOpacity 
           style={styles.logoutButton} 

@@ -10,6 +10,7 @@ import UsedTradeView from '../../components/home/UsedTradeView';
 import RegionModal from '../../components/home/RegionModal';
 
 import { regionApi } from '../../api/region';
+import { blockIfDemo } from '../../utils/demoAccount';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -67,6 +68,7 @@ export default function HomeScreen() {
   };
 
   const handleSetPrimary = async (id: number) => {
+    if (blockIfDemo('대표 동네 변경')) return;
     if (isRegionLoading) return;
     setIsRegionLoading(true);
     try {
@@ -81,6 +83,7 @@ export default function HomeScreen() {
   };
 
   const handleDeleteRegion = (id: number) => {
+    if (blockIfDemo('동네 삭제')) return;
     if (isRegionLoading) return;
     Alert.alert("삭제", "이 동네를 삭제하시겠습니까?", [
       { text: "취소", style: "cancel" },
@@ -104,6 +107,7 @@ export default function HomeScreen() {
   };
 
   const handleVerifyRegion = async (id: number) => {
+    if (blockIfDemo('동네 인증')) return;
     if (isRegionLoading) return;
     setIsRegionLoading(true);
     try {
@@ -131,6 +135,7 @@ export default function HomeScreen() {
   };
 
   const handleAddRegion = () => {
+    if (blockIfDemo('동네 추가')) return;
     if (regions.length >= 2) {
       Alert.alert(
         "동네 추가 불가", 
