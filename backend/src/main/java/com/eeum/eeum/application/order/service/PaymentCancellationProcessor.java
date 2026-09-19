@@ -12,6 +12,7 @@ import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
+import com.eeum.eeum.domain.order.enums.PaymentCancellationStatus;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.RefundStatus;
 import com.eeum.eeum.domain.order.event.OrderStatusChangedEvent;
@@ -93,6 +94,13 @@ public class PaymentCancellationProcessor {
                 return null;
             }
         }
+        if (operation != null && operation.isPgCancelled()) {
+            // PG 취소 확정 커밋 뒤 프로세스가 종료된 경우에는 외부를 다시 호출하지 않고
+            // 내부 반영 단계부터 재개한다.
+            return new PaymentCancellationPlan(operation.getPaymentCancellationOperationId(),
+                    payment.getPortonePaymentId(), operation.getRequestedAmount(), operation.getReason(),
+                    true, false, operation.getRequestedAt());
+        }
         if (operation != null && operation.isManualReviewRequired()) {
             // 사람이 수습 중인 건을 자동 경로가 다시 건드리면 상태가 더 꼬인다.
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
@@ -146,6 +154,18 @@ public class PaymentCancellationProcessor {
                 payment.getRemainingAmount(),
                 reason,
                 operation.isPgCancelled(), false, operation.getRequestedAt());
+    }
+
+    @Transactional
+    public void reopenLatePaidPayment(Long orderId, String pgProvider) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if (order.getStatus() != OrderStatus.CANCELLED && order.getStatus() != OrderStatus.EXPIRED) {
+            throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+        payment.reopenForLateExternalPayment(pgProvider);
     }
 
     /**
@@ -248,6 +268,20 @@ public class PaymentCancellationProcessor {
                 result.cancellationId(), result.status(), result.cancelledAmount(), LocalDateTime.now());
     }
 
+    @Transactional
+    public boolean confirmExternalCancellation(Long orderId) {
+        var operationOptional = cancellationOperationRepository.findByOrderIdWithPessimisticLock(orderId);
+        if (operationOptional.isEmpty()) {
+            return false;
+        }
+        PaymentCancellationOperation operation = operationOptional.get();
+        if (operation.getStatus() == PaymentCancellationStatus.COMPLETED) {
+            return true;
+        }
+        operation.confirmExternalCancellation(operation.getRequestedAmount(), LocalDateTime.now());
+        return true;
+    }
+
     /** PG 호출 자체가 실패한 경우. 돈이 움직이지 않았으므로 재시도 가능한 상태로 되돌린다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markPgFailed(Long operationId, String failureCode, String failureReason) {
@@ -293,7 +327,8 @@ public class PaymentCancellationProcessor {
         }
 
         // 재고 복원과 주문 종료는 이미 끝난 주문에서 건너뛴다 — 재시도해도 재고가 두 번 늘지 않는다.
-        if (order.getStatus() != OrderStatus.CANCELLED && order.getStatus() != OrderStatus.EXPIRED) {
+        if (order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.PAID
+                || order.getStatus() == OrderStatus.CONFIRMED || order.getStatus() == OrderStatus.READY) {
             orderService.restoreStockForOrder(orderId);
             order.cancel(reason);
         }

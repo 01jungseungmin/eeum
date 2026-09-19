@@ -79,6 +79,18 @@ public class PaymentCancellationService {
         cancel(orderId, trigger, reason, false);
     }
 
+    /** 종료된 주문에 늦게 확인된 PG 결제는 주문을 되살리지 않고 즉시 멱등 취소 작업으로 수습한다. */
+    public void cancelLatePaidOrder(Long orderId, String pgProvider) {
+        redisLockService.executeWithLock(
+                LockKeys.order(orderId), CANCEL_LOCK_LEASE_TIME, ErrorCode.LOCK_ORDER_FAILED,
+                () -> {
+                    processor.reopenLatePaidPayment(orderId, pgProvider);
+                    cancelWithLock(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
+                            "만료 또는 취소 후 늦게 확인된 PortOne 결제", false);
+                    return null;
+                });
+    }
+
     /** 외부 부분 취소의 누적 금액을 원장과 정산 항목에 반영한다. */
     public void reconcileExternalPartialCancellation(Long orderId, BigDecimal cumulativeCancelledAmount) {
         reconcileExternalPartialCancellation(orderId, cumulativeCancelledAmount, null, null);
@@ -132,6 +144,13 @@ public class PaymentCancellationService {
             String reason,
             boolean pgAlreadyCancelled
     ) {
+        if (pgAlreadyCancelled) {
+            // 비동기 취소의 REQUESTED 응답 뒤 최종 CANCELLED Webhook이 오면, 수동 격리
+            // 상태를 다시 열어 내부 원장 반영까지 진행한다.
+            // 작업 행이 없는 PENDING 외부 취소인 경우에만 false를 반환해 prepare가 새 작업을 만든다.
+            // 금액·지급 상태가 맞지 않는 기존 작업은 예외를 숨기지 않고 수동 검토로 남긴다.
+            processor.confirmExternalCancellation(orderId);
+        }
         PaymentCancellationPlan plan;
         try {
             plan = processor.prepare(orderId, trigger, reason);
