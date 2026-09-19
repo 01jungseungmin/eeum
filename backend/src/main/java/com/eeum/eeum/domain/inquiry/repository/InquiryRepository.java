@@ -39,4 +39,11 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long>, Inquiry
 
     // 대시보드 요약 — 미답변 관리자 문의 건수
     long countByTargetTypeAndStatus(InquiryTargetType targetType, InquiryStatus status);
+
+    // 관리자 대시보드 처리 대기 — 가장 오래된 / 가장 최근 문의
+    Optional<Inquiry> findFirstByTargetTypeAndStatusOrderByCreatedAtAsc(
+            InquiryTargetType targetType, InquiryStatus status);
+
+    Optional<Inquiry> findFirstByTargetTypeAndStatusOrderByCreatedAtDesc(
+            InquiryTargetType targetType, InquiryStatus status);
 }
