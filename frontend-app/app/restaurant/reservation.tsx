@@ -9,6 +9,20 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { shopApi } from '../../api/shop';
 import { reservationApi } from '../../api/reservation';
+import { getApiErrorMessage } from '../../utils/apiError';
+
+/**
+ * 화면에 보이는 그 날짜를 그대로 YYYY-MM-DD 로 만든다.
+ *
+ * toISOString()을 쓰면 안 된다 — UTC 기준이라 한국(UTC+9)에서는 오전 9시 이전에
+ * 날짜가 하루 뒤로 밀린다. 버튼 라벨은 getDate()(로컬)로 그리는데 전송값만 밀려서,
+ * 아침에 들어온 사용자는 "오늘" 버튼을 눌렀는데 어제가 전송돼 예약이 통째로 막혔다.
+ */
+const toLocalDateString = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+};
 
 export default function ReservationInputScreen() {
   const router = useRouter();
@@ -23,13 +37,15 @@ export default function ReservationInputScreen() {
   // 동적 시간대 로딩을 위한 State 추가
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  // 시간대를 못 불러온 사유. 서버가 알려준 문구를 그대로 담는다.
+  const [slotError, setSlotError] = useState<string | null>(null);
 
   // 오늘부터 7일간의 날짜를 동적으로 생성
   const generateDates = () => {
     const dates = [];
     const today = new Date();
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    
+
     for (let i = 0; i < 7; i++) {
       const nextDate = new Date(today);
       nextDate.setDate(today.getDate() + i);
@@ -38,7 +54,7 @@ export default function ReservationInputScreen() {
         date: nextDate.getDate(),
         month: nextDate.getMonth() + 1,
         // API 요청용 포맷 (YYYY-MM-DD)
-        fullDate: nextDate.toISOString().split('T')[0] 
+        fullDate: toLocalDateString(nextDate)
       });
     }
     return dates;
@@ -66,12 +82,14 @@ export default function ReservationInputScreen() {
     if (!storeId || !selectedDate || !peopleCount.trim()) {
       setTimeSlots([]);
       setSelectedTime(null);
+      setSlotError(null);
       return;
     }
 
     const fetchTimeSlots = async () => {
       try {
         setIsLoadingSlots(true);
+        setSlotError(null);
         const data = await reservationApi.getAvailableTimeSlots(Number(storeId), {
           date: selectedDate.fullDate,
           partySize: Number(peopleCount)
@@ -81,6 +99,10 @@ export default function ReservationInputScreen() {
       } catch (error) {
         console.error('시간대 로딩 실패', error);
         setTimeSlots([]);
+        // 서버는 사유를 정확히 알려준다 — 예약 설정 없음, 휴무일, 당일예약 불가 등.
+        // 이걸 삼키면 화면이 "날짜와 인원을 입력하세요"라고만 말해서, 이미 입력한
+        // 사용자에게는 거짓말이 된다.
+        setSlotError(getApiErrorMessage(error, '예약 가능한 시간을 불러오지 못했어요.'));
       } finally {
         setIsLoadingSlots(false);
       }
@@ -182,11 +204,35 @@ export default function ReservationInputScreen() {
               <ActivityIndicator size="small" color="#00A859" />
               <Text style={styles.emptySlotText}>예약 가능한 시간을 찾고 있어요...</Text>
             </View>
-          ) : timeSlots.length === 0 ? (
+          ) : slotError ? (
+            // 서버가 막은 경우 (예약 설정 없음, 휴무일, 당일예약 불가 등)
+            <View style={styles.emptySlotBox}>
+              <Ionicons name="alert-circle-outline" size={24} color="#FF8A65" style={{ marginBottom: 8 }} />
+              <Text style={styles.emptySlotText}>{slotError}</Text>
+            </View>
+          ) : !selectedDate || !peopleCount.trim() ? (
+            // 아직 입력이 덜 된 경우 — 원래 이 안내는 여기서만 맞다
             <View style={styles.emptySlotBox}>
               <Ionicons name="information-circle-outline" size={24} color="#999" style={{ marginBottom: 8 }} />
               <Text style={styles.emptySlotText}>
                 방문 날짜와 인원을 먼저 입력하시면{'\n'}예약 가능한 시간대가 표시됩니다.
+              </Text>
+            </View>
+          ) : timeSlots.length === 0 ? (
+            // 입력은 끝났는데 슬롯이 0개 — 그날 운영 시간대가 없다는 뜻이다
+            <View style={styles.emptySlotBox}>
+              <Ionicons name="information-circle-outline" size={24} color="#999" style={{ marginBottom: 8 }} />
+              <Text style={styles.emptySlotText}>
+                이 날짜에는 예약할 수 있는 시간대가 없어요.{'\n'}다른 날짜를 선택해 주세요.
+              </Text>
+            </View>
+          ) : timeSlots.every((slot) => !slot.available) ? (
+            // 시간대는 있는데 전부 불가 — 대개 인원수에 맞는 테이블이 없는 경우다.
+            // 시간 칸을 전부 회색으로만 보여주면 왜 안 되는지 알 수 없다.
+            <View style={styles.emptySlotBox}>
+              <Ionicons name="people-outline" size={24} color="#999" style={{ marginBottom: 8 }} />
+              <Text style={styles.emptySlotText}>
+                {peopleCount}명이 앉을 수 있는 자리가 없어요.{'\n'}인원을 줄이거나 다른 날짜를 선택해 주세요.
               </Text>
             </View>
           ) : (
