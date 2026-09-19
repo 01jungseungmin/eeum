@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,4 +41,23 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long>, Inquiry
 
     // 대시보드 요약 — 미답변 관리자 문의 건수
     long countByTargetTypeAndStatus(InquiryTargetType targetType, InquiryStatus status);
+
+    // 관리자 대시보드 처리 대기 — 대상·상태별 문의의 유형별 건수
+    @Query("""
+        SELECT new com.eeum.eeum.domain.inquiry.repository.InquiryCategoryCount(i.category, COUNT(i))
+        FROM Inquiry i
+        WHERE i.targetType = :targetType AND i.status = :status
+        GROUP BY i.category
+        """)
+    List<InquiryCategoryCount> countByCategoryForTargetTypeAndStatus(
+            @Param("targetType") InquiryTargetType targetType,
+            @Param("status") InquiryStatus status
+    );
+
+    // 관리자 대시보드 처리 대기 — 가장 오래된 / 가장 최근 문의
+    Optional<Inquiry> findFirstByTargetTypeAndStatusOrderByCreatedAtAsc(
+            InquiryTargetType targetType, InquiryStatus status);
+
+    Optional<Inquiry> findFirstByTargetTypeAndStatusOrderByCreatedAtDesc(
+            InquiryTargetType targetType, InquiryStatus status);
 }

@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.dashboard;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
 import com.eeum.eeum.application.dashboard.service.AdminDashboardService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,5 +41,23 @@ public class AdminDashboardController {
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<AdminDashboardSummaryResponseDto>> getSummary() {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getSummary()));
+    }
+
+    @Operation(
+            summary = "대시보드 처리 대기 항목",
+            description = """
+                    관리자가 처리해야 할 대기 건을 항목별 건수·세부 분류·대기 시각과 함께 반환합니다.
+
+                    - 사장 가입 승인: 심사 요청된 승인 대기 건. 가장 최근 신청 상점명 포함
+                    - 신고: 미처리(PENDING) 신고. 사유별 건수(`countByReason`)
+                    - 문의: 미답변(PENDING) 관리자 문의. 유형별 건수(`countByCategory`)
+                    - 분류별 건수 맵은 발생하지 않은 키도 0으로 채워 항상 같은 형태로 내려갑니다
+                    - `oldest*` 시각으로 오래 방치된 항목을 긴급으로 표시할 수 있습니다. 대기 건이 없으면 시각 필드는 null입니다
+                    - 건수는 `GET /admin/dashboard/summary`의 pending* 값과 같은 기준입니다
+                    """
+    )
+    @GetMapping("/pending-actions")
+    public ResponseEntity<ApiResponse<AdminPendingActionsResponseDto>> getPendingActions() {
+        return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getPendingActions()));
     }
 }

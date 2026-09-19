@@ -1,18 +1,27 @@
 package com.eeum.eeum.application.dashboard.service;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.inquiry.entity.Inquiry;
+import com.eeum.eeum.domain.inquiry.enums.InquiryCategory;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
+import com.eeum.eeum.domain.inquiry.repository.InquiryCategoryCount;
 import com.eeum.eeum.domain.inquiry.repository.InquiryRepository;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
+import com.eeum.eeum.domain.report.entity.Report;
+import com.eeum.eeum.domain.report.enums.ReportReason;
 import com.eeum.eeum.domain.report.enums.ReportStatus;
+import com.eeum.eeum.domain.report.repository.ReportReasonCount;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
+import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,10 +32,13 @@ import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- * 관리자 대시보드 상단 KPI 집계.
+ * 관리자 대시보드 집계 — 상단 KPI와 처리 대기 항목.
  *
  * 운영 실패·신고·문의 중심의 AdminOperationService.getSummary와 달리
  * 회원·사업장·거래 규모와 처리 대기 건수를 한 번에 내려준다.
@@ -83,6 +95,84 @@ public class AdminDashboardService {
                 .pendingInquiries(pendingInquiries)
                 .aggregatedAt(now)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public AdminPendingActionsResponseDto getPendingActions() {
+        return AdminPendingActionsResponseDto.builder()
+                .ownerApprovals(pendingOwnerApprovals())
+                .reports(pendingReports())
+                .inquiries(pendingInquiries())
+                .build();
+    }
+
+    private AdminPendingActionsResponseDto.OwnerApprovals pendingOwnerApprovals() {
+        Optional<OwnerInfo> latest = ownerInfoRepository
+                .findFirstByApprovalStatusAndReviewRequestedAtIsNotNullOrderByReviewRequestedAtDesc(ApprovalStatus.PENDING);
+
+        // 상점은 사장 가입 시 함께 만들어지지만, 없는 데이터가 섞여 있어도 대시보드는 떠야 한다
+        String latestStoreName = latest
+                .flatMap(info -> storeRepository.findByAccount_AccountId(info.getAccount().getAccountId()))
+                .map(Store::getName)
+                .orElse(null);
+
+        return AdminPendingActionsResponseDto.OwnerApprovals.builder()
+                .count(ownerInfoRepository.countByApprovalStatusAndReviewRequestedAtIsNotNull(ApprovalStatus.PENDING))
+                .latestStoreName(latestStoreName)
+                .latestRequestedAt(latest.map(OwnerInfo::getReviewRequestedAt).orElse(null))
+                .oldestRequestedAt(ownerInfoRepository
+                        .findFirstByApprovalStatusAndReviewRequestedAtIsNotNullOrderByReviewRequestedAtAsc(ApprovalStatus.PENDING)
+                        .map(OwnerInfo::getReviewRequestedAt)
+                        .orElse(null))
+                .build();
+    }
+
+    private AdminPendingActionsResponseDto.Reports pendingReports() {
+        Map<ReportReason, Long> countByReason = zeroFilled(ReportReason.class);
+        for (ReportReasonCount row : reportRepository.countByReasonForStatus(ReportStatus.PENDING)) {
+            countByReason.put(row.reason(), row.count());
+        }
+
+        return AdminPendingActionsResponseDto.Reports.builder()
+                .count(sum(countByReason))
+                .countByReason(countByReason)
+                .latestReportedAt(reportRepository.findFirstByStatusOrderByCreatedAtDesc(ReportStatus.PENDING)
+                        .map(Report::getCreatedAt).orElse(null))
+                .oldestReportedAt(reportRepository.findFirstByStatusOrderByCreatedAtAsc(ReportStatus.PENDING)
+                        .map(Report::getCreatedAt).orElse(null))
+                .build();
+    }
+
+    private AdminPendingActionsResponseDto.Inquiries pendingInquiries() {
+        Map<InquiryCategory, Long> countByCategory = zeroFilled(InquiryCategory.class);
+        for (InquiryCategoryCount row : inquiryRepository.countByCategoryForTargetTypeAndStatus(
+                InquiryTargetType.ADMIN, InquiryStatus.PENDING)) {
+            countByCategory.put(row.category(), row.count());
+        }
+
+        return AdminPendingActionsResponseDto.Inquiries.builder()
+                .count(sum(countByCategory))
+                .countByCategory(countByCategory)
+                .latestCreatedAt(inquiryRepository
+                        .findFirstByTargetTypeAndStatusOrderByCreatedAtDesc(InquiryTargetType.ADMIN, InquiryStatus.PENDING)
+                        .map(Inquiry::getCreatedAt).orElse(null))
+                .oldestCreatedAt(inquiryRepository
+                        .findFirstByTargetTypeAndStatusOrderByCreatedAtAsc(InquiryTargetType.ADMIN, InquiryStatus.PENDING)
+                        .map(Inquiry::getCreatedAt).orElse(null))
+                .build();
+    }
+
+    // 없는 키를 0으로 채워 응답 형태를 고정한다 — 키가 빠지면 프론트가 매번 존재 여부를 확인해야 한다
+    private static <E extends Enum<E>> Map<E, Long> zeroFilled(Class<E> type) {
+        Map<E, Long> result = new EnumMap<>(type);
+        for (E value : type.getEnumConstants()) {
+            result.put(value, 0L);
+        }
+        return result;
+    }
+
+    private static long sum(Map<?, Long> counts) {
+        return counts.values().stream().mapToLong(Long::longValue).sum();
     }
 
     static BigDecimal changeRate(long current, long previous) {
