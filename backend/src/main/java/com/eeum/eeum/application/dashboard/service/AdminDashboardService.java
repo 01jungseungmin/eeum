@@ -2,6 +2,8 @@ package com.eeum.eeum.application.dashboard.service;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
+import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
@@ -23,6 +25,8 @@ import com.eeum.eeum.domain.report.repository.ReportReasonCount;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,15 +34,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Optional;
 
 /**
- * 관리자 대시보드 집계 — 상단 KPI와 처리 대기 항목.
+ * 관리자 대시보드 집계 — 상단 KPI, 처리 대기 항목, 가입자 추이.
  *
  * 운영 실패·신고·문의 중심의 AdminOperationService.getSummary와 달리
  * 회원·사업장·거래 규모와 처리 대기 건수를 한 번에 내려준다.
@@ -55,6 +62,11 @@ public class AdminDashboardService {
     // 결제·확정 이후 단계만 거래로 본다. PENDING은 결제 전, CANCELLED·EXPIRED는 성사되지 않은 주문이다
     private static final List<OrderStatus> TRANSACTION_STATUSES = List.of(
             OrderStatus.PAID, OrderStatus.CONFIRMED, OrderStatus.READY, OrderStatus.COMPLETED);
+
+    private static final int DEFAULT_SIGNUP_DAYS = 7;
+
+    // 가입 시각을 모두 읽어 애플리케이션에서 일자별로 묶으므로 조회 기간에 상한을 둔다
+    private static final int MAX_SIGNUP_DAYS = 90;
 
     private final AccountRepository accountRepository;
     private final StoreRepository storeRepository;
@@ -173,6 +185,48 @@ public class AdminDashboardService {
 
     private static long sum(Map<?, Long> counts) {
         return counts.values().stream().mapToLong(Long::longValue).sum();
+    }
+
+    /**
+     * 오늘을 포함한 최근 days일의 일자별 가입자 수.
+     * 회원 기준은 요약의 전체 회원과 같다(관리자·탈퇴·가입 미완료 제외).
+     */
+    @Transactional(readOnly = true)
+    public AdminSignupTrendResponseDto getSignupTrend(SignupMemberType type, Integer days) {
+        int period = days == null ? DEFAULT_SIGNUP_DAYS : days;
+        if (period < 1 || period > MAX_SIGNUP_DAYS) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+        SignupMemberType memberType = type == null ? SignupMemberType.GENERAL : type;
+
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(period - 1L);
+
+        Map<LocalDate, Long> countByDate = new TreeMap<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            countByDate.put(date, 0L);
+        }
+        List<LocalDateTime> signupTimes = accountRepository.findSignupTimes(
+                memberType == SignupMemberType.OWNER, MEMBER_ROLES, MEMBER_STATUSES,
+                from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+        for (LocalDateTime signupTime : signupTimes) {
+            countByDate.merge(signupTime.toLocalDate(), 1L, Long::sum);
+        }
+
+        List<AdminSignupTrendResponseDto.Daily> daily = new ArrayList<>(countByDate.size());
+        countByDate.forEach((date, count) -> daily.add(AdminSignupTrendResponseDto.Daily.builder()
+                .date(date)
+                .dayOfWeek(date.getDayOfWeek())
+                .count(count)
+                .build()));
+
+        return AdminSignupTrendResponseDto.builder()
+                .type(memberType)
+                .from(from)
+                .to(to)
+                .total(signupTimes.size())
+                .daily(daily)
+                .build();
     }
 
     static BigDecimal changeRate(long current, long previous) {

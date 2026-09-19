@@ -2,10 +2,12 @@ package com.eeum.eeum.domain.account.repository;
 
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.QAccount;
+import com.eeum.eeum.domain.account.entity.QOwnerInfo;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -14,6 +16,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -122,5 +126,32 @@ public class AccountRepositoryImpl implements AccountRepositoryCustom {
         }
 
         return account.createdAt.desc();
+    }
+
+    @Override
+    public List<LocalDateTime> findSignupTimes(
+            boolean ownerApplicant,
+            Collection<AccountRole> roles,
+            Collection<AccountStatus> statuses,
+            LocalDateTime from,
+            LocalDateTime to
+    ) {
+        QOwnerInfo ownerInfo = QOwnerInfo.ownerInfo;
+        BooleanExpression hasOwnerInfo = JPAExpressions.selectOne()
+                .from(ownerInfo)
+                .where(ownerInfo.account.accountId.eq(account.accountId))
+                .exists();
+
+        return queryFactory
+                .select(account.createdAt)
+                .from(account)
+                .where(
+                        account.role.in(roles),
+                        account.status.in(statuses),
+                        account.createdAt.goe(from),
+                        account.createdAt.lt(to),
+                        ownerApplicant ? hasOwnerInfo : hasOwnerInfo.not()
+                )
+                .fetch();
     }
 }

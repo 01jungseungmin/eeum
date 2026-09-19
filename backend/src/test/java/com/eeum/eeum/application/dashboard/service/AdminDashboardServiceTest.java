@@ -2,6 +2,8 @@ package com.eeum.eeum.application.dashboard.service;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
+import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
@@ -19,6 +21,7 @@ import com.eeum.eeum.domain.report.repository.ReportReasonCount;
 import com.eeum.eeum.domain.report.repository.ReportRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
+import com.eeum.eeum.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,14 +30,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -185,5 +191,48 @@ class AdminDashboardServiceTest {
         assertThat(result.getReports().getLatestReportedAt()).isNull();
         assertThat(result.getInquiries().getCount()).isZero();
         assertThat(result.getInquiries().getOldestCreatedAt()).isNull();
+    }
+
+    // ─────────────────── 가입자 추이 ───────────────────
+
+    @Test
+    void 가입자_추이는_오늘을_포함한_N일을_가입자_없는_날까지_0으로_채운다() {
+        LocalDate today = LocalDate.now();
+        when(accountRepository.findSignupTimes(eq(true), anyCollection(), anyCollection(), any(), any()))
+                .thenReturn(List.of(
+                        today.atTime(9, 0),
+                        today.atTime(18, 30),
+                        today.minusDays(2).atTime(12, 0)));
+
+        AdminSignupTrendResponseDto result = adminDashboardService.getSignupTrend(SignupMemberType.OWNER, 7);
+
+        assertThat(result.getType()).isEqualTo(SignupMemberType.OWNER);
+        assertThat(result.getFrom()).isEqualTo(today.minusDays(6));
+        assertThat(result.getTo()).isEqualTo(today);
+        assertThat(result.getTotal()).isEqualTo(3L);
+        assertThat(result.getDaily()).hasSize(7);
+        assertThat(result.getDaily().get(0).getDate()).isEqualTo(today.minusDays(6));
+        assertThat(result.getDaily().get(4).getCount()).isEqualTo(1L);
+        assertThat(result.getDaily().get(5).getCount()).isZero();
+        assertThat(result.getDaily().get(6).getCount()).isEqualTo(2L);
+        assertThat(result.getDaily().get(6).getDayOfWeek()).isEqualTo(today.getDayOfWeek());
+    }
+
+    @Test
+    void 가입자_추이는_오늘_자정부터_내일_자정_전까지를_조회_구간으로_쓴다() {
+        LocalDate today = LocalDate.now();
+
+        adminDashboardService.getSignupTrend(null, null);
+
+        verify(accountRepository).findSignupTimes(eq(false), anyCollection(), anyCollection(),
+                eq(today.minusDays(6).atStartOfDay()), eq(today.plusDays(1).atStartOfDay()));
+    }
+
+    @Test
+    void 가입자_추이_조회_일수가_범위를_벗어나면_예외가_발생한다() {
+        assertThatThrownBy(() -> adminDashboardService.getSignupTrend(SignupMemberType.GENERAL, 0))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> adminDashboardService.getSignupTrend(SignupMemberType.GENERAL, 91))
+                .isInstanceOf(BusinessException.class);
     }
 }

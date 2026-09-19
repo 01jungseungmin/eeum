@@ -2,9 +2,12 @@ package com.eeum.eeum.api.dashboard;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
+import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
 import com.eeum.eeum.application.dashboard.service.AdminDashboardService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "35. Admin - Dashboard", description = "관리자 대시보드 지표")
@@ -59,5 +63,26 @@ public class AdminDashboardController {
     @GetMapping("/pending-actions")
     public ResponseEntity<ApiResponse<AdminPendingActionsResponseDto>> getPendingActions() {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getPendingActions()));
+    }
+
+    @Operation(
+            summary = "대시보드 가입자 추이",
+            description = """
+                    오늘을 포함한 최근 N일의 일자별 가입자 수를 반환합니다. 가입자가 없는 날도 0으로 포함됩니다.
+
+                    - `type=GENERAL`: 일반 회원으로 가입한 계정
+                    - `type=OWNER`: 사장으로 가입한 계정(사업자 정보 보유). 승인 여부와 무관하게 가입 시점에 셉니다
+                    - 회원 기준은 요약의 전체 회원과 같습니다(관리자·탈퇴·가입 미완료 제외)
+                    - `days`는 1~90, 생략 시 7입니다
+                    """
+    )
+    @GetMapping("/signups")
+    public ResponseEntity<ApiResponse<AdminSignupTrendResponseDto>> getSignupTrend(
+            @Parameter(description = "가입자 구분 (GENERAL·OWNER). 생략 시 GENERAL")
+            @RequestParam(required = false) SignupMemberType type,
+            @Parameter(description = "조회 일수 (1~90). 생략 시 7", example = "7")
+            @RequestParam(required = false) Integer days
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getSignupTrend(type, days)));
     }
 }
