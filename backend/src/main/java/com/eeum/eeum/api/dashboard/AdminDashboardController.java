@@ -3,6 +3,7 @@ package com.eeum.eeum.api.dashboard;
 import com.eeum.eeum.application.dashboard.dto.response.AdminActivityResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminRegionMemberResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
 import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
 import com.eeum.eeum.application.dashboard.service.AdminDashboardActivityService;
@@ -96,7 +97,7 @@ public class AdminDashboardController {
             description = """
                     회원 가입·가게 등록·결제 완료·신고 접수를 최신순으로 합쳐 반환합니다.
 
-                    - `MEMBER_SIGNUP`: description은 대표 동네의 구 이름(없으면 null)
+                    - `MEMBER_SIGNUP`: description은 대표 동네(인증 완료)의 구 이름. 없으면 null
                     - `STORE_REGISTERED`: description은 상점명
                     - `PAYMENT_COMPLETED`: description은 상점명, `amount`는 결제 금액. 결제 완료 시각(paidAt) 기준
                     - `REPORT_RECEIVED`: description은 "신고 사유 · 신고 대상"
@@ -109,5 +110,24 @@ public class AdminDashboardController {
             @RequestParam(required = false) Integer limit
     ) {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardActivityService.getRecentActivities(limit)));
+    }
+
+    @Operation(
+            summary = "대시보드 지역별 활동 사용자",
+            description = """
+                    대표 동네 기준 구·군별 회원 수를 많은 순으로 반환합니다.
+
+                    - 대표 동네의 동네 인증을 마친 회원만 셉니다
+                    - 회원 기준은 요약의 전체 회원과 같습니다(관리자·탈퇴·가입 미완료 제외)
+                    - 같은 이름의 구(예: 서울 중구·부산 중구)가 섞이지 않도록 시·도와 함께 묶습니다
+                    - `limit`은 1~50, 생략 시 6입니다
+                    """
+    )
+    @GetMapping("/regions")
+    public ResponseEntity<ApiResponse<List<AdminRegionMemberResponseDto>>> getRegionMembers(
+            @Parameter(description = "조회할 구·군 수 (1~50). 생략 시 6", example = "6")
+            @RequestParam(required = false) Integer limit
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getRegionMembers(limit)));
     }
 }

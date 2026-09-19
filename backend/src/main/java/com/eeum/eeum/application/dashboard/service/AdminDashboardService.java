@@ -2,6 +2,7 @@ package com.eeum.eeum.application.dashboard.service;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminRegionMemberResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
 import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
 import com.eeum.eeum.domain.account.entity.OwnerInfo;
@@ -45,7 +46,7 @@ import java.util.TreeMap;
 import java.util.Optional;
 
 /**
- * 관리자 대시보드 집계 — 상단 KPI, 처리 대기 항목, 가입자 추이.
+ * 관리자 대시보드 집계 — 상단 KPI, 처리 대기 항목, 가입자 추이, 지역별 회원.
  *
  * 운영 실패·신고·문의 중심의 AdminOperationService.getSummary와 달리
  * 회원·사업장·거래 규모와 처리 대기 건수를 한 번에 내려준다.
@@ -67,6 +68,9 @@ public class AdminDashboardService {
 
     // 가입 시각을 모두 읽어 애플리케이션에서 일자별로 묶으므로 조회 기간에 상한을 둔다
     private static final int MAX_SIGNUP_DAYS = 90;
+
+    private static final int DEFAULT_REGION_LIMIT = 6;
+    private static final int MAX_REGION_LIMIT = 50;
 
     private final AccountRepository accountRepository;
     private final StoreRepository storeRepository;
@@ -227,6 +231,22 @@ public class AdminDashboardService {
                 .total(signupTimes.size())
                 .daily(daily)
                 .build();
+    }
+
+    /**
+     * 대표 동네 기준 구·군별 회원 수 상위 limit개.
+     * 동네 인증을 마친 회원만 센다 — 가입만 하고 동네 활동을 시작하지 않은 계정은 제외된다.
+     */
+    @Transactional(readOnly = true)
+    public List<AdminRegionMemberResponseDto> getRegionMembers(Integer limit) {
+        int size = limit == null ? DEFAULT_REGION_LIMIT : limit;
+        if (size < 1 || size > MAX_REGION_LIMIT) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_PARAMETER);
+        }
+
+        return accountRepository.countVerifiedMembersByRegion(MEMBER_ROLES, MEMBER_STATUSES, size).stream()
+                .map(AdminRegionMemberResponseDto::from)
+                .toList();
     }
 
     static BigDecimal changeRate(long current, long previous) {

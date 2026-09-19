@@ -2,6 +2,7 @@ package com.eeum.eeum.application.dashboard.service;
 
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
+import com.eeum.eeum.application.dashboard.dto.response.AdminRegionMemberResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
 import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
 import com.eeum.eeum.domain.account.entity.Account;
@@ -9,6 +10,7 @@ import com.eeum.eeum.domain.account.entity.OwnerInfo;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.account.repository.RegionMemberCount;
 import com.eeum.eeum.domain.inquiry.enums.InquiryCategory;
 import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
@@ -38,6 +40,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
@@ -233,6 +236,33 @@ class AdminDashboardServiceTest {
         assertThatThrownBy(() -> adminDashboardService.getSignupTrend(SignupMemberType.GENERAL, 0))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> adminDashboardService.getSignupTrend(SignupMemberType.GENERAL, 91))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    // ─────────────────── 지역별 활동 사용자 ───────────────────
+
+    @Test
+    void 지역별_회원_수는_기본_6개를_조회해_그대로_내려준다() {
+        when(accountRepository.countVerifiedMembersByRegion(anyCollection(), anyCollection(), eq(6)))
+                .thenReturn(List.of(
+                        new RegionMemberCount("서울특별시", "강남구", 2842L),
+                        new RegionMemberCount("서울특별시", "서초구", 2104L)));
+
+        List<AdminRegionMemberResponseDto> result = adminDashboardService.getRegionMembers(null);
+
+        assertThat(result)
+                .extracting(AdminRegionMemberResponseDto::getGunGu, AdminRegionMemberResponseDto::getMemberCount)
+                .containsExactly(
+                        tuple("강남구", 2842L),
+                        tuple("서초구", 2104L));
+        assertThat(result.get(0).getSiDo()).isEqualTo("서울특별시");
+    }
+
+    @Test
+    void 지역별_조회_개수가_범위를_벗어나면_예외가_발생한다() {
+        assertThatThrownBy(() -> adminDashboardService.getRegionMembers(0))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> adminDashboardService.getRegionMembers(51))
                 .isInstanceOf(BusinessException.class);
     }
 }

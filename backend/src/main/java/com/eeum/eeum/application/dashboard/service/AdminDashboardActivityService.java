@@ -3,11 +3,11 @@ package com.eeum.eeum.application.dashboard.service;
 import com.eeum.eeum.application.dashboard.dto.response.AdminActivityResponseDto;
 import com.eeum.eeum.application.dashboard.enums.DashboardActivityType;
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.account.entity.Region;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
-import com.eeum.eeum.domain.account.repository.RegionRepository;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.order.repository.PaymentActivity;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -50,7 +50,7 @@ public class AdminDashboardActivityService {
     private static final List<AccountStatus> MEMBER_STATUSES = List.of(AccountStatus.ACTIVE, AccountStatus.SUSPENDED);
 
     private final AccountRepository accountRepository;
-    private final RegionRepository regionRepository;
+    private final AccountRegionRepository accountRegionRepository;
     private final StoreRepository storeRepository;
     private final PaymentRepository paymentRepository;
     private final ReportRepository reportRepository;
@@ -79,23 +79,30 @@ public class AdminDashboardActivityService {
         List<Account> accounts =
                 accountRepository.findByRoleInAndStatusInOrderByCreatedAtDesc(MEMBER_ROLES, MEMBER_STATUSES, top);
 
-        List<Long> regionIds = accounts.stream()
+        // primary_region_id는 region이 아니라 account_region의 ID다
+        List<Long> primaryAccountRegionIds = accounts.stream()
                 .map(Account::getPrimaryRegionId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        Map<Long, Region> regions = regionRepository.findAllById(regionIds).stream()
-                .collect(Collectors.toMap(Region::getRegionId, Function.identity()));
+        Map<Long, AccountRegion> primaryRegions = primaryAccountRegionIds.isEmpty()
+                ? Map.of()
+                : accountRegionRepository.findAllWithRegionByIdIn(primaryAccountRegionIds).stream()
+                        .collect(Collectors.toMap(AccountRegion::getAccountRegionId, Function.identity()));
 
         return accounts.stream()
                 .map(account -> {
-                    Region region = account.getPrimaryRegionId() == null
-                            ? null : regions.get(account.getPrimaryRegionId());
+                    AccountRegion primary = account.getPrimaryRegionId() == null
+                            ? null : primaryRegions.get(account.getPrimaryRegionId());
+                    // 커뮤니티 공개 판정(PrimaryRegionResolver)과 같이 본인 소유·인증 완료 지역만 인정한다
+                    boolean usable = primary != null
+                            && primary.isVerified()
+                            && account.getAccountId().equals(primary.getAccount().getAccountId());
                     return AdminActivityResponseDto.builder()
                             .type(DashboardActivityType.MEMBER_SIGNUP)
                             .targetId(account.getAccountId())
                             .title("새 회원 가입")
-                            .description(region == null ? null : region.getGunGu())
+                            .description(usable ? primary.getRegion().getGunGu() : null)
                             .occurredAt(account.getCreatedAt())
                             .build();
                 })

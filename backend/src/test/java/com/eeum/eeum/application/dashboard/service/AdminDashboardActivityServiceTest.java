@@ -3,9 +3,10 @@ package com.eeum.eeum.application.dashboard.service;
 import com.eeum.eeum.application.dashboard.dto.response.AdminActivityResponseDto;
 import com.eeum.eeum.application.dashboard.enums.DashboardActivityType;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
-import com.eeum.eeum.domain.account.repository.RegionRepository;
+import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.order.repository.PaymentActivity;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -41,7 +42,7 @@ class AdminDashboardActivityServiceTest {
     private static final LocalDateTime BASE = LocalDateTime.of(2026, 9, 19, 12, 0);
 
     @Mock private AccountRepository accountRepository;
-    @Mock private RegionRepository regionRepository;
+    @Mock private AccountRegionRepository accountRegionRepository;
     @Mock private StoreRepository storeRepository;
     @Mock private PaymentRepository paymentRepository;
     @Mock private ReportRepository reportRepository;
@@ -55,12 +56,10 @@ class AdminDashboardActivityServiceTest {
         when(account.getAccountId()).thenReturn(1L);
         when(account.getPrimaryRegionId()).thenReturn(100L);
         when(account.getCreatedAt()).thenReturn(BASE);
-        Region region = mock(Region.class);
-        when(region.getRegionId()).thenReturn(100L);
-        when(region.getGunGu()).thenReturn("강남구");
         when(accountRepository.findByRoleInAndStatusInOrderByCreatedAtDesc(anyCollection(), anyCollection(), any()))
                 .thenReturn(List.of(account));
-        when(regionRepository.findAllById(List.of(100L))).thenReturn(List.of(region));
+        AccountRegion primary = accountRegion(100L, account, true, "강남구");
+        when(accountRegionRepository.findAllWithRegionByIdIn(List.of(100L))).thenReturn(List.of(primary));
 
         Store store = mock(Store.class);
         when(store.getStoreId()).thenReturn(2L);
@@ -128,5 +127,36 @@ class AdminDashboardActivityServiceTest {
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> adminDashboardActivityService.getRecentActivities(51))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 대표_동네가_인증되지_않았으면_설명이_null이다() {
+        Account account = mock(Account.class);
+        when(account.getAccountId()).thenReturn(1L);
+        when(account.getPrimaryRegionId()).thenReturn(100L);
+        when(account.getCreatedAt()).thenReturn(BASE);
+        when(accountRepository.findByRoleInAndStatusInOrderByCreatedAtDesc(anyCollection(), anyCollection(), any()))
+                .thenReturn(List.of(account));
+        AccountRegion unverified = mock(AccountRegion.class);
+        when(unverified.getAccountRegionId()).thenReturn(100L);
+        when(unverified.isVerified()).thenReturn(false);
+        when(accountRegionRepository.findAllWithRegionByIdIn(List.of(100L))).thenReturn(List.of(unverified));
+
+        List<AdminActivityResponseDto> result = adminDashboardActivityService.getRecentActivities(null);
+
+        assertThat(result).singleElement()
+                .extracting(AdminActivityResponseDto::getDescription)
+                .isNull();
+    }
+
+    private AccountRegion accountRegion(Long accountRegionId, Account owner, boolean verified, String gunGu) {
+        Region region = mock(Region.class);
+        when(region.getGunGu()).thenReturn(gunGu);
+        AccountRegion accountRegion = mock(AccountRegion.class);
+        when(accountRegion.getAccountRegionId()).thenReturn(accountRegionId);
+        when(accountRegion.isVerified()).thenReturn(verified);
+        when(accountRegion.getAccount()).thenReturn(owner);
+        when(accountRegion.getRegion()).thenReturn(region);
+        return accountRegion;
     }
 }

@@ -29,4 +29,15 @@ public interface AccountRepositoryCustom {
             LocalDateTime from,
             LocalDateTime to
     );
+
+    /**
+     * 대표 지역 기준 구·군별 회원 수를 많은 순으로 조회한다.
+     * 대표 지역이 인증 완료(verified)인 회원만 센다.
+     * account.primary_region_id는 region이 아니라 account_region의 ID다.
+     */
+    List<RegionMemberCount> countVerifiedMembersByRegion(
+            Collection<AccountRole> roles,
+            Collection<AccountStatus> statuses,
+            int limit
+    );
 }

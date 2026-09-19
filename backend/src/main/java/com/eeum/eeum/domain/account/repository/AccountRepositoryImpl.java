@@ -2,10 +2,13 @@ package com.eeum.eeum.domain.account.repository;
 
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.entity.QAccount;
+import com.eeum.eeum.domain.account.entity.QAccountRegion;
 import com.eeum.eeum.domain.account.entity.QOwnerInfo;
+import com.eeum.eeum.domain.account.entity.QRegion;
 import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -152,6 +155,35 @@ public class AccountRepositoryImpl implements AccountRepositoryCustom {
                         account.createdAt.lt(to),
                         ownerApplicant ? hasOwnerInfo : hasOwnerInfo.not()
                 )
+                .fetch();
+    }
+
+    @Override
+    public List<RegionMemberCount> countVerifiedMembersByRegion(
+            Collection<AccountRole> roles,
+            Collection<AccountStatus> statuses,
+            int limit
+    ) {
+        QAccountRegion accountRegion = QAccountRegion.accountRegion;
+        QRegion region = QRegion.region;
+
+        return queryFactory
+                .select(Projections.constructor(RegionMemberCount.class,
+                        region.siDo, region.gunGu, account.count()))
+                .from(account)
+                // 남의 account_region을 가리키는 오염 데이터가 섞여도 세지 않도록 소유자까지 맞춘다
+                .join(accountRegion).on(
+                        accountRegion.accountRegionId.eq(account.primaryRegionId),
+                        accountRegion.account.accountId.eq(account.accountId))
+                .join(accountRegion.region, region)
+                .where(
+                        account.role.in(roles),
+                        account.status.in(statuses),
+                        accountRegion.verified.isTrue()
+                )
+                .groupBy(region.siDo, region.gunGu)
+                .orderBy(account.count().desc(), region.siDo.asc(), region.gunGu.asc())
+                .limit(limit)
                 .fetch();
     }
 }
