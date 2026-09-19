@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
+import { getReviewAvailability } from '../../utils/reviewAvailability';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,12 +55,9 @@ export default function OrderDetailScreen() {
   const diffDays = diffTime / (1000 * 60 * 60 * 24);
   const isWithin7Days = diffDays <= 7;
 
-  // 리뷰는 거래가 끝난 주문에만 쓸 수 있다 — 백엔드가 COMPLETED 만 받는다
-  // (StoreReviewService.createReview). PAID 까지 완료로 치면 결제만 끝낸 주문에도
-  // "리뷰 작성" 버튼이 떠서, 누르면 반드시 실패하는 버튼이 된다.
-  // COMPLETED 로 넘기는 건 사장이 수령 완료를 눌러야 한다.
-  const isCompleted = order.status === 'COMPLETED';
-  const hasReview = order.hasReview === true;
+  // 리뷰를 쓸 수 있는지는 구매 내역과 같은 규칙을 쓴다 (utils/reviewAvailability).
+  // 백엔드가 COMPLETED 만 받고, 거기까지 가려면 사장이 수령 완료를 눌러야 한다.
+  const review = getReviewAvailability(order.status, order.hasReview === true);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -119,21 +117,17 @@ export default function OrderDetailScreen() {
           <Text fontWeight="bold" style={styles.outlineBtnText}>전화하기</Text>
         </TouchableOpacity>
         
-        {/* ✨ 리뷰 작성 여부, 기한 만료, 작성 가능 상태를 분기 처리 */}
-        {isCompleted ? (
-          hasReview ? (
-            <View style={[styles.solidBtn, { backgroundColor: '#F0F9F4', borderWidth: 1, borderColor: '#00A859' }]}>
-              <Text fontWeight="bold" style={[styles.solidBtnText, { color: '#00A859' }]}>리뷰 작성 완료</Text>
-            </View>
-          ) : isWithin7Days ? (
-            <TouchableOpacity 
+        {/* 리뷰: 작성 가능 / 이미 작성 / 아직 못 씀 / 기간 만료 */}
+        {review.state === 'available' && (
+          isWithin7Days ? (
+            <TouchableOpacity
               style={styles.solidBtn}
               onPress={() => router.push({
-                pathname: '/review/write' as any, 
-                params: { 
+                pathname: '/review/write' as any,
+                params: {
                   orderId: order.orderId,
                   storeId: order.storeId,
-                  storeName: order.storeName 
+                  storeName: order.storeName
                 }
               })}
             >
@@ -144,7 +138,21 @@ export default function OrderDetailScreen() {
               <Text fontWeight="bold" style={styles.solidBtnText}>리뷰 기간 만료</Text>
             </View>
           )
-        ) : null}
+        )}
+
+        {review.state === 'done' && (
+          <View style={[styles.solidBtn, { backgroundColor: '#F0F9F4', borderWidth: 1, borderColor: '#00A859' }]}>
+            <Text fontWeight="bold" style={[styles.solidBtnText, { color: '#00A859' }]}>{review.message}</Text>
+          </View>
+        )}
+
+        {/* 아직 못 쓰는 동안에도 왜 못 쓰는지 알려준다 */}
+        {review.state === 'pending' && (
+          <View style={styles.reviewPendingBox}>
+            <Ionicons name="time-outline" size={16} color="#999" style={{ marginRight: 6 }} />
+            <Text style={styles.reviewPendingText}>{review.message}</Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -173,5 +181,8 @@ const styles = StyleSheet.create({
   outlineBtn: { flex: 1, paddingVertical: 15, borderRadius: 8, borderWidth: 1, borderColor: '#00A859', alignItems: 'center' },
   outlineBtnText: { color: '#00A859' },
   solidBtn: { flex: 1, paddingVertical: 15, borderRadius: 8, backgroundColor: '#00A859', alignItems: 'center' },
+  // 아직 리뷰를 못 쓰는 상태. 버튼이 아니라 안내라는 게 보이게 회색 박스로 둔다.
+  reviewPendingBox: { flex: 1, paddingVertical: 15, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#F5F5F5', borderWidth: 1, borderColor: '#EEE', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  reviewPendingText: { color: '#999', fontSize: 13, flexShrink: 1 },
   solidBtnText: { color: '#fff' }
 });
