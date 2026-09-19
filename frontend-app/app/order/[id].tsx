@@ -54,8 +54,11 @@ export default function OrderDetailScreen() {
   const diffDays = diffTime / (1000 * 60 * 60 * 24);
   const isWithin7Days = diffDays <= 7;
 
-  // 완료 상태 및 리뷰 작성 여부 확인
-  const isCompleted = order.status === 'PAID' || order.status === 'COMPLETED';
+  // 리뷰는 거래가 끝난 주문에만 쓸 수 있다 — 백엔드가 COMPLETED 만 받는다
+  // (StoreReviewService.createReview). PAID 까지 완료로 치면 결제만 끝낸 주문에도
+  // "리뷰 작성" 버튼이 떠서, 누르면 반드시 실패하는 버튼이 된다.
+  // COMPLETED 로 넘기는 건 사장이 수령 완료를 눌러야 한다.
+  const isCompleted = order.status === 'COMPLETED';
   const hasReview = order.hasReview === true;
 
   return (
