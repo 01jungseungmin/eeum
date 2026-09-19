@@ -105,7 +105,10 @@ export default function RootLayout() {
         <Stack.Screen name="product/[id]" />
         <Stack.Screen name="shop/[id]" />
         <Stack.Screen name="search/index" />
-        <Stack.Screen name="notification-settings" options={{ animation: 'slide_from_right' }} />
+        {/* 파일은 app/mypage/notification-setting.tsx 다 (단수, mypage 아래).
+            이름이 어긋나 있던 동안 expo-router가 "No route named ..." 경고를 내고
+            이 화면만 전환 애니메이션이 빠졌다. */}
+        <Stack.Screen name="mypage/notification-setting" options={{ animation: 'slide_from_right' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
