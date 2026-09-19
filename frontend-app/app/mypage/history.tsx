@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { orderApi } from '@/api/order';
+import { getReviewAvailability } from '../../utils/reviewAvailability';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -80,7 +81,7 @@ export default function HistoryScreen() {
 
     const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://placehold.co/150.png';
 
-    const isReviewCompleted = item.hasReview === true;
+    const review = getReviewAvailability(item.status, item.hasReview === true);
 
     return (
       <TouchableOpacity 
@@ -111,22 +112,34 @@ export default function HistoryScreen() {
           </View>
         </View>
 
-        {item.status === 'COMPLETED' && (
-          isReviewCompleted ? (
-            <View style={[styles.reviewButton, { backgroundColor: '#F5F5F5', borderColor: '#EEE' }]}>
-              <Text fontWeight="bold" style={[styles.reviewButtonText, { color: '#999' }]}>리뷰 작성 완료</Text>
-            </View>
-          ) : (
-            <TouchableOpacity 
-              style={styles.reviewButton}
-              onPress={(e) => {
-                e.stopPropagation(); 
-                router.push(`/review/write?storeId=${item.storeId}&orderId=${item.orderId}`);
-              }}
-            >
-              <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
-            </TouchableOpacity>
-          )
+        {review.state === 'available' && (
+          <TouchableOpacity
+            style={styles.reviewButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/review/write?storeId=${item.storeId}&orderId=${item.orderId}`);
+            }}
+          >
+            <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
+          </TouchableOpacity>
+        )}
+
+        {review.state === 'done' && (
+          <View style={[styles.reviewButton, styles.reviewButtonMuted]}>
+            <Text fontWeight="bold" style={[styles.reviewButtonText, styles.reviewButtonTextMuted]}>
+              {review.message}
+            </Text>
+          </View>
+        )}
+
+        {/* 아직 못 쓰는 동안에도 왜 못 쓰는지 알려준다 — 안 띄우면 기능이 없는 줄 안다 */}
+        {review.state === 'pending' && (
+          <View style={[styles.reviewButton, styles.reviewButtonMuted]}>
+            <Ionicons name="time-outline" size={15} color="#999" style={{ marginRight: 6 }} />
+            <Text style={[styles.reviewButtonText, styles.reviewButtonTextMuted]}>
+              {review.message}
+            </Text>
+          </View>
         )}
       </TouchableOpacity>
     );
@@ -189,9 +202,13 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, justifyContent: 'center' },
   shopName: { fontSize: 16, color: '#333', marginBottom: 6 },
   amountText: { fontSize: 14, color: '#555', fontWeight: '600' },
-  reviewButton: { 
-    marginTop: 12, backgroundColor: '#F0F9F4', paddingVertical: 12, 
-    borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00A859' 
+  reviewButton: {
+    marginTop: 12, backgroundColor: '#F0F9F4', paddingVertical: 12,
+    borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#00A859'
   },
-  reviewButtonText: { color: '#00A859', fontSize: 14 }
+  reviewButtonText: { color: '#00A859', fontSize: 14 },
+  // 작성 완료·대기 상태는 눌리지 않는다는 걸 색으로 먼저 알린다.
+  reviewButtonMuted: { backgroundColor: '#F5F5F5', borderColor: '#EEE' },
+  reviewButtonTextMuted: { color: '#999' }
 });
