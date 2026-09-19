@@ -4,6 +4,7 @@ import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.application.product.dto.response.*;
 import com.eeum.eeum.common.dto.response.ImageResponseDto;
 import com.eeum.eeum.domain.product.entity.*;
+import com.eeum.eeum.domain.product.enums.EventProductStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -43,6 +44,7 @@ public class ProductMapper {
                 .remainingStock(eventProduct.getRemainingStock())
                 .startAt(eventProduct.getStartAt())
                 .endAt(eventProduct.getEndAt())
+                .active(eventProduct.getStatus() == EventProductStatus.ACTIVE)
                 .ongoing(eventProduct.isOngoing())
                 .eventStatus(eventProduct.resolveDisplayStatus())
                 .build();
