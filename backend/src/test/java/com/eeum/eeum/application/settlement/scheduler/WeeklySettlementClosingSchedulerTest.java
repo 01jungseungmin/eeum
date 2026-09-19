@@ -126,7 +126,7 @@ class WeeklySettlementClosingSchedulerTest {
     }
 
     @Test
-    void 이미_수습_이력으로_표시한_누락_원장은_다시_기록하지_않는다() {
+    void 이미_수습_이력으로_표시한_누락_원장도_실패_이력_유실을_막기_위해_다시_기록한다() {
         // given
         when(ownerRevenueRepository.findLateEligibleIds(eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class)))
                 .thenReturn(List.of(9L));
@@ -137,7 +137,7 @@ class WeeklySettlementClosingSchedulerTest {
         scheduler.closeWeeklySettlements();
 
         // then
-        verify(operationFailureRecorder, never()).record(
+        verify(operationFailureRecorder).record(
                 eq(OperationFailureCategory.SCHEDULER), anyString(), anyString(), eq("9"),
                 eq("SETTLEMENT_OUTSIDE_PERIOD"), anyString(), anyString());
     }
