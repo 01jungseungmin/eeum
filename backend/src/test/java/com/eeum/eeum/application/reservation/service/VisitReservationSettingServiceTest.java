@@ -117,7 +117,8 @@ class VisitReservationSettingServiceTest {
     }
 
     @Test
-    void 예약_설정_조회_시_설정이_없으면_RESERVATION_SETTING_NOT_FOUND() {
+    void 예약_설정_조회_시_설정이_없으면_저장하지_않은_기본값을_반환한다() {
+        // given
         Long ownerAccountId = 1L;
         Account owner = createAccount(ownerAccountId);
         Store store = createStore(10L, owner);
@@ -125,10 +126,15 @@ class VisitReservationSettingServiceTest {
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> visitReservationSettingService.getSetting(ownerAccountId))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.RESERVATION_SETTING_NOT_FOUND);
+        // when
+        VisitReservationSettingResponseDto result = visitReservationSettingService.getSetting(ownerAccountId);
+
+        // then
+        assertThat(result.getEnabled()).isFalse();
+        assertThat(result.getSlotIntervalMinutes()).isEqualTo(30);
+        assertThat(result.getStartTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(result.getEndTime()).isEqualTo(LocalTime.of(18, 0));
+        verify(storeVisitReservationSettingRepository, never()).save(any());
     }
 
     // ──────────────── updateSetting ────────────────
@@ -180,6 +186,37 @@ class VisitReservationSettingServiceTest {
         assertThat(result.getCancelDeadlineMinutes()).isEqualTo(60);
         assertThat(result.getStartTime()).isEqualTo(LocalTime.of(10, 0));
         assertThat(result.getEndTime()).isEqualTo(LocalTime.of(20, 0));
+    }
+
+    @Test
+    void 예약_설정_수정_시_설정이_없으면_기본값을_저장한_뒤_수정한다() {
+        // given
+        setupPassthroughLockAndTransaction();
+        Long ownerAccountId = 1L;
+        Account owner = createAccount(ownerAccountId);
+        Store store = createStore(10L, owner);
+
+        VisitReservationSettingUpdateRequestDto request = new VisitReservationSettingUpdateRequestDto();
+        ReflectionTestUtils.setField(request, "enabled", true);
+        ReflectionTestUtils.setField(request, "slotIntervalMinutes", 60);
+        ReflectionTestUtils.setField(request, "sameDayReservationAllowed", false);
+        ReflectionTestUtils.setField(request, "cancelDeadlineMinutes", 60);
+        ReflectionTestUtils.setField(request, "startTime", LocalTime.of(10, 0));
+        ReflectionTestUtils.setField(request, "endTime", LocalTime.of(20, 0));
+
+        when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
+        when(storeVisitReservationSettingRepository.save(any(StoreVisitReservationSetting.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        VisitReservationSettingResponseDto result = visitReservationSettingService.updateSetting(ownerAccountId, request);
+
+        // then
+        verify(storeVisitReservationSettingRepository).save(any(StoreVisitReservationSetting.class));
+        assertThat(result.getEnabled()).isTrue();
+        assertThat(result.getSlotIntervalMinutes()).isEqualTo(60);
+        assertThat(result.getStartTime()).isEqualTo(LocalTime.of(10, 0));
     }
 
     // ──────────────── getTimeSlots ────────────────
