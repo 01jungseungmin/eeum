@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, StyleSheet, ScrollView, TouchableOpacity, 
-  Dimensions, ActivityIndicator, Alert, Image 
+import {
+  View, StyleSheet, ScrollView, TouchableOpacity,
+  useWindowDimensions, ActivityIndicator, Alert, Image,
+  NativeScrollEvent, NativeSyntheticEvent
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,12 +14,47 @@ import { regionApi } from '../../api/region';
 import { chatApi } from '../../api/chat';
 import { cartApi } from '../../api/cart';
 
-const { width } = Dimensions.get('window');
+// 상품 상세 이미지. 백엔드 ProductDetailResponseDto.images 가 그대로 내려온다.
+interface ProductImage {
+  imageId: number;
+  imageUrl: string;
+  displayOrder: number;
+  thumbnail?: boolean;
+  isThumbnail?: boolean;
+}
+
+const PLACEHOLDER_IMAGE = 'https://placehold.co/600x600/E8F5E9/00A859.png?text=Product';
+
+/**
+ * 상세 이미지 목록을 노출 순서대로 정리한다.
+ *
+ * 대표 이미지를 맨 앞으로 끌어올린다 — displayOrder만 믿으면 목록 화면의 썸네일과
+ * 상세 첫 장이 서로 다른 사진이 되는 경우가 생긴다.
+ * (isThumbnail은 Lombok/Jackson이 thumbnail 로 내려보내므로 두 이름을 다 본다.)
+ */
+function sortProductImages(raw: any): ProductImage[] {
+  const images: ProductImage[] = Array.isArray(raw) ? raw : [];
+
+  return images
+    .filter((image) => typeof image?.imageUrl === 'string' && image.imageUrl.length > 0)
+    .slice()
+    .sort((a, b) => {
+      const aThumb = (a.thumbnail ?? a.isThumbnail) ? 0 : 1;
+      const bThumb = (b.thumbnail ?? b.isThumbnail) ? 0 : 1;
+      if (aThumb !== bThumb) return aThumb - bThumb;
+      return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+    });
+}
 
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id, isRestaurant } = useLocalSearchParams();
-  
+
+  // 웹 데모는 PC 창 너비가 아니라 폰 틀 너비(430px)로 보정돼 들어온다.
+  // 모듈 로드 시점에 한 번 재면 그 보정과 창 크기 변경을 둘 다 놓친다.
+  const { width } = useWindowDimensions();
+  const [imageIndex, setImageIndex] = useState(0);
+
   const insets = useSafeAreaInsets(); 
 
   const [isLoading, setIsLoading] = useState(true);
@@ -101,6 +137,11 @@ export default function ProductDetailScreen() {
     });
 
     return (basePrice + optionAdditionalPrice) * quantity;
+  };
+
+  const handleImageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (width <= 0) return;
+    setImageIndex(Math.round(event.nativeEvent.contentOffset.x / width));
   };
 
   // 💡 옵션 선택 핸들러
@@ -189,7 +230,9 @@ export default function ProductDetailScreen() {
 
   if (!productDetail) return null;
 
-  const productImgUrl = productDetail.imageUrl || productDetail.thumbnailUrl || 'https://placehold.co/600x600/E8F5E9/00A859.png?text=Product';
+  // 백엔드는 상세 이미지를 images 배열로만 준다. 예전 코드가 보던 imageUrl/thumbnailUrl은
+  // 응답에 없는 필드라 항상 플레이스홀더가 떴다 — 배열을 먼저 보고, 비었을 때만 대체 이미지를 쓴다.
+  const productImages = sortProductImages(productDetail.images);
   const pPrice = productDetail.price || 0;
   const pEventPrice = productDetail.eventPrice || 0;
   const hasEvent = productDetail.hasEvent === true;
@@ -209,8 +252,36 @@ export default function ProductDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 180 }}>
-        {/* 상품 이미지 */}
-        <Image source={{ uri: productImgUrl }} style={styles.productImg} />
+        {/* 상품 이미지 — 여러 장이면 좌우로 넘겨 본다 */}
+        <View style={[styles.imageContainer, { width, height: width }]}>
+          {productImages.length > 0 ? (
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handleImageScroll}
+            >
+              {productImages.map((image, index) => (
+                <Image
+                  key={`product-image-${image.imageId ?? index}`}
+                  source={{ uri: image.imageUrl }}
+                  style={{ width, height: width }}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <Image source={{ uri: PLACEHOLDER_IMAGE }} style={{ width, height: width }} />
+          )}
+
+          {productImages.length > 1 && (
+            <View style={styles.imageBadge}>
+              <Text style={styles.imageBadgeText}>
+                {imageIndex + 1} / {productImages.length}
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* 상품 정보 섹션 */}
         <View style={styles.infoSection}>
@@ -382,7 +453,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, color: '#333' },
-  productImg: { width: width, height: width, backgroundColor: '#F9F9F9' },
+  // 크기는 화면 너비에 따라 달라져 인라인으로 준다. 여기엔 크기와 무관한 것만 둔다.
+  imageContainer: { position: 'relative', backgroundColor: '#F9F9F9' },
+  imageBadge: { position: 'absolute', bottom: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14 },
+  imageBadgeText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   infoSection: { padding: 20 },
   productName: { fontSize: 22, color: '#333', marginBottom: 8 },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
