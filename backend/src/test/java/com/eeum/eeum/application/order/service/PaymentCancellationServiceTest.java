@@ -298,4 +298,43 @@ class PaymentCancellationServiceTest {
                 OPERATION_ID, "portone-1", AMOUNT, "사유",
                 alreadyPgCancelled, pgOutcomeUnknown, LocalDateTime.now());
     }
+
+    // ─────────────────── 늦은 결제 취소 ───────────────────
+
+    @Test
+    void 늦은_결제가_이미_환불된_건이면_PG를_다시_호출하지_않는다() {
+        // given
+        when(processor.reopenLatePaidPayment(ORDER_ID, "TEST")).thenReturn(false);
+
+        // when
+        service.cancelLatePaidOrder(ORDER_ID, "TEST");
+
+        // then
+        verify(processor, never()).prepare(any(), any(), anyString());
+        verify(portOnePaymentClient, never()).cancelPayment(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void 늦은_결제는_되살린_뒤_PG_취소와_내부_반영까지_진행한다() {
+        // given
+        when(processor.reopenLatePaidPayment(ORDER_ID, "TEST")).thenReturn(true);
+        when(portOnePaymentClient.cancelPayment(anyString(), any(), anyString(), anyString()))
+                .thenReturn(new PortOneCancelResult("SUCCEEDED", "c-1", AMOUNT));
+
+        // when
+        service.cancelLatePaidOrder(ORDER_ID, "TEST");
+
+        // then
+        verify(processor).markPgCancelled(eq(OPERATION_ID), any());
+        verify(processor).applyCancellation(eq(OPERATION_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK), anyString());
+    }
+
+    @Test
+    void 외부_취소는_PortOne_누적_취소액으로_확정_여부를_판단한다() {
+        // when
+        service.cancel(ORDER_ID, PaymentCancellationTrigger.PORTONE_WEBHOOK, "외부 취소", true, AMOUNT);
+
+        // then
+        verify(processor).confirmExternalCancellation(ORDER_ID, AMOUNT);
+    }
 }

@@ -156,8 +156,11 @@ public class PaymentCancellationProcessor {
                 operation.isPgCancelled(), false, operation.getRequestedAt());
     }
 
+    /**
+     * @return false면 이미 늦은 결제 취소까지 끝난 건이라 PG를 다시 호출하지 않는다.
+     */
     @Transactional
-    public void reopenLatePaidPayment(Long orderId, String pgProvider) {
+    public boolean reopenLatePaidPayment(Long orderId, String pgProvider) {
         Order order = orderRepository.findByIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
@@ -165,7 +168,19 @@ public class PaymentCancellationProcessor {
         if (order.getStatus() != OrderStatus.CANCELLED && order.getStatus() != OrderStatus.EXPIRED) {
             throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
+        PaymentCancellationOperation operation = cancellationOperationRepository
+                .findByOrderIdWithPessimisticLock(orderId)
+                .orElse(null);
+        if (payment.getStatus() == PaymentStatus.PAID) {
+            // 앞선 시도가 결제를 되살린 뒤 PG 취소에서 실패한 경우 — 취소 작업만 재개한다.
+            return true;
+        }
+        if (operation != null && operation.isCompleted()) {
+            // 재전송된 PAID Webhook이 조회 시점 차이로 늦게 도착한 경우 — 환불은 이미 끝났다.
+            return false;
+        }
         payment.reopenForLateExternalPayment(pgProvider);
+        return true;
     }
 
     /**
@@ -268,15 +283,38 @@ public class PaymentCancellationProcessor {
                 result.cancellationId(), result.status(), result.cancelledAmount(), LocalDateTime.now());
     }
 
+    /**
+     * 최종 CANCELLED Webhook으로 REQUESTED/격리/PG 확정 작업을 확정 취소로 수렴시킨다.
+     * 그 밖의 상태(작업 없음, PG 호출 실패 후 PENDING 등)는 prepare가 기존 경로로 처리한다.
+     *
+     * @param externalCancelledAmount PortOne 결제 조회의 누적 취소 금액. null이면 검증할 수 없어 확정하지 않는다.
+     */
     @Transactional
-    public boolean confirmExternalCancellation(Long orderId) {
-        var operationOptional = cancellationOperationRepository.findByOrderIdWithPessimisticLock(orderId);
-        if (operationOptional.isEmpty()) {
+    public boolean confirmExternalCancellation(Long orderId, BigDecimal externalCancelledAmount) {
+        orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        PaymentCancellationOperation operation = cancellationOperationRepository
+                .findByOrderIdWithPessimisticLock(orderId)
+                .orElse(null);
+        if (operation == null) {
             return false;
         }
-        PaymentCancellationOperation operation = operationOptional.get();
-        if (operation.getStatus() == PaymentCancellationStatus.COMPLETED) {
+        if (operation.isCompleted()) {
             return true;
+        }
+        if (operation.getStatus() != PaymentCancellationStatus.PG_CANCEL_REQUESTED
+                && operation.getStatus() != PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED
+                && operation.getStatus() != PaymentCancellationStatus.PG_CANCELLED) {
+            return false;
+        }
+        if (externalCancelledAmount == null) {
+            return false;
+        }
+        // CANCELLED는 전액 취소다. PortOne 누적 취소액이 원 결제액과 다르면 원장을 확정하지 않는다.
+        if (externalCancelledAmount.compareTo(payment.getAmount()) != 0) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
         }
         operation.confirmExternalCancellation(operation.getRequestedAmount(), LocalDateTime.now());
         return true;

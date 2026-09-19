@@ -243,14 +243,14 @@ public class PaymentService {
             // PG가 이미 취소됐으므로 재호출하지 않는다. Payment·Order·재고·정산은 공통 취소
             // 작업이 짧은 독립 트랜잭션으로 함께 반영한다. 주문 락은 cancel()이 잡는다.
             paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
-                    "PortOne 외부 취소 Webhook", true);
+                    "PortOne 외부 취소 Webhook", true, externalPayment.getCancelledAmount());
             return;
         }
         if ("PARTIAL_CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
             if (externalPayment.getCancelledAmount() != null
                     && externalPayment.getCancelledAmount().compareTo(externalPayment.getAmount()) == 0) {
                 paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
-                        "PortOne 외부 전액 취소 Webhook", true);
+                        "PortOne 외부 전액 취소 Webhook", true, externalPayment.getCancelledAmount());
                 return;
             }
             paymentCancellationService.reconcileExternalPartialCancellation(
@@ -260,7 +260,14 @@ public class PaymentService {
 
         if ("PAID".equalsIgnoreCase(externalPayment.getStatus())) {
             Payment currentPayment = paymentRepository.findByOrder_OrderId(orderId).orElse(null);
-            if (currentPayment != null && currentPayment.getStatus() == PaymentStatus.CANCELLED) {
+            Order currentOrder = orderRepository.findById(orderId).orElse(null);
+            // 주문이 이미 끝났으면 결제 상태와 무관하게 늦은 결제 취소로 보낸다. 앞선 시도가 결제를
+            // 되살린 뒤 PG 취소에 실패했어도 재전송된 Webhook이 같은 경로로 재시도하게 한다.
+            boolean orderClosed = currentOrder != null
+                    && (currentOrder.getStatus() == OrderStatus.EXPIRED
+                    || currentOrder.getStatus() == OrderStatus.CANCELLED);
+            if (orderClosed
+                    || (currentPayment != null && currentPayment.getStatus() == PaymentStatus.CANCELLED)) {
                 paymentCancellationService.cancelLatePaidOrder(orderId, externalPayment.getPgProvider());
                 return;
             }

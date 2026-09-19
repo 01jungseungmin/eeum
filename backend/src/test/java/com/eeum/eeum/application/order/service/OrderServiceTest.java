@@ -124,7 +124,7 @@ class OrderServiceTest {
         OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(cartRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         // 락 획득 후 조회한 이벤트 상품도 이미 진행 종료 상태
         when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
@@ -165,7 +165,7 @@ class OrderServiceTest {
         OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(cartRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         // 락 기반 조회에서 empty → orElseThrow fires
         when(eventProductRepository.findByIdWithPessimisticLock(missingEventProductId))
@@ -208,7 +208,7 @@ class OrderServiceTest {
         OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
 
         when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(cartRepository.findByAccount_AccountId(accountId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
                 .thenReturn(Optional.of(soldOutEvent));

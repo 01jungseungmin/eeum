@@ -64,12 +64,25 @@ public class PaymentCancellationService {
             String reason,
             boolean pgAlreadyCancelled
     ) {
+        cancel(orderId, trigger, reason, pgAlreadyCancelled, null);
+    }
+
+    /**
+     * @param externalCancelledAmount PortOne 결제 조회의 누적 취소 금액 — 외부 취소 확정 시 전액 여부 검증에 쓴다.
+     */
+    public void cancel(
+            Long orderId,
+            PaymentCancellationTrigger trigger,
+            String reason,
+            boolean pgAlreadyCancelled,
+            BigDecimal externalCancelledAmount
+    ) {
         redisLockService.executeWithLock(
                 LockKeys.order(orderId),
                 CANCEL_LOCK_LEASE_TIME,
                 ErrorCode.LOCK_ORDER_FAILED,
                 () -> {
-                    cancelWithLock(orderId, trigger, reason, pgAlreadyCancelled);
+                    cancelWithLock(orderId, trigger, reason, pgAlreadyCancelled, externalCancelledAmount);
                     return null;
                 }
         );
@@ -84,9 +97,10 @@ public class PaymentCancellationService {
         redisLockService.executeWithLock(
                 LockKeys.order(orderId), CANCEL_LOCK_LEASE_TIME, ErrorCode.LOCK_ORDER_FAILED,
                 () -> {
-                    processor.reopenLatePaidPayment(orderId, pgProvider);
-                    cancelWithLock(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
-                            "만료 또는 취소 후 늦게 확인된 PortOne 결제", false);
+                    if (processor.reopenLatePaidPayment(orderId, pgProvider)) {
+                        cancelWithLock(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
+                                "만료 또는 취소 후 늦게 확인된 PortOne 결제", false, null);
+                    }
                     return null;
                 });
     }
@@ -142,14 +156,13 @@ public class PaymentCancellationService {
             Long orderId,
             PaymentCancellationTrigger trigger,
             String reason,
-            boolean pgAlreadyCancelled
+            boolean pgAlreadyCancelled,
+            BigDecimal externalCancelledAmount
     ) {
         if (pgAlreadyCancelled) {
-            // 비동기 취소의 REQUESTED 응답 뒤 최종 CANCELLED Webhook이 오면, 수동 격리
-            // 상태를 다시 열어 내부 원장 반영까지 진행한다.
-            // 작업 행이 없는 PENDING 외부 취소인 경우에만 false를 반환해 prepare가 새 작업을 만든다.
-            // 금액·지급 상태가 맞지 않는 기존 작업은 예외를 숨기지 않고 수동 검토로 남긴다.
-            processor.confirmExternalCancellation(orderId);
+            // REQUESTED 응답 뒤 최종 CANCELLED Webhook이 오면 확정 취소로 수렴시킨다.
+            // 확정 대상이 아닌 상태는 prepare가 처리하고, 누적 취소액이 원 결제액과 다르면 수동 검토로 남긴다.
+            processor.confirmExternalCancellation(orderId, externalCancelledAmount);
         }
         PaymentCancellationPlan plan;
         try {

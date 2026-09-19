@@ -6,6 +6,7 @@ import com.eeum.eeum.domain.order.entity.Order;
 import com.eeum.eeum.domain.order.entity.Payment;
 import com.eeum.eeum.domain.order.entity.PaymentCancellationOperation;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
+import com.eeum.eeum.domain.order.enums.PaymentCancellationStatus;
 import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
@@ -25,7 +26,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.math.BigDecimal;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -100,5 +104,143 @@ class PaymentCancellationProcessorTest {
 
         verifyNoInteractions(ownerRevenueService, orderService, eventPublisher);
         verify(cancellationOperationRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    // ─────────────────── 외부 취소 확정 ───────────────────
+
+    @Test
+    void PG_호출_실패로_PENDING인_작업은_외부_취소_확정을_건너뛰고_prepare에_맡긴다() {
+        // given — PG 취소 호출이 실패해 작업이 PENDING으로 돌아간 뒤 콘솔 취소 Webhook이 왔다
+        Long orderId = 2L;
+        PaymentCancellationOperation operation = givenCancellationTarget(orderId, PaymentCancellationStatus.PENDING);
+
+        // when
+        boolean confirmed = processor.confirmExternalCancellation(orderId, AMOUNT);
+
+        // then
+        assertThat(confirmed).isFalse();
+        verify(operation, never()).confirmExternalCancellation(any(), any());
+    }
+
+    @Test
+    void REQUESTED_작업은_PortOne_누적_취소액이_결제액과_같으면_취소를_확정한다() {
+        // given
+        Long orderId = 2L;
+        PaymentCancellationOperation operation =
+                givenCancellationTarget(orderId, PaymentCancellationStatus.PG_CANCEL_REQUESTED);
+        when(operation.getRequestedAmount()).thenReturn(AMOUNT);
+
+        // when
+        boolean confirmed = processor.confirmExternalCancellation(orderId, AMOUNT);
+
+        // then
+        assertThat(confirmed).isTrue();
+        verify(operation).confirmExternalCancellation(eq(AMOUNT), any());
+    }
+
+    @Test
+    void PortOne_누적_취소액이_결제액과_다르면_취소를_확정하지_않고_수동_검토로_보낸다() {
+        // given
+        Long orderId = 2L;
+        PaymentCancellationOperation operation =
+                givenCancellationTarget(orderId, PaymentCancellationStatus.PG_CANCEL_REQUESTED);
+
+        // when & then
+        assertThatThrownBy(() -> processor.confirmExternalCancellation(orderId, new BigDecimal("4000")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        verify(operation, never()).confirmExternalCancellation(any(), any());
+    }
+
+    @Test
+    void PortOne_취소액을_알_수_없으면_외부_취소를_확정하지_않는다() {
+        // given
+        Long orderId = 2L;
+        PaymentCancellationOperation operation =
+                givenCancellationTarget(orderId, PaymentCancellationStatus.PG_CANCEL_REQUESTED);
+
+        // when
+        boolean confirmed = processor.confirmExternalCancellation(orderId, null);
+
+        // then
+        assertThat(confirmed).isFalse();
+        verify(operation, never()).confirmExternalCancellation(any(), any());
+    }
+
+    // ─────────────────── 늦은 결제 되살리기 ───────────────────
+
+    @Test
+    void 만료_주문의_늦은_결제는_결제를_되살려_취소_대상으로_만든다() {
+        // given
+        Long orderId = 2L;
+        Payment payment = givenLatePaidTarget(orderId, PaymentStatus.CANCELLED, null);
+
+        // when
+        boolean reopened = processor.reopenLatePaidPayment(orderId, "TEST");
+
+        // then
+        assertThat(reopened).isTrue();
+        verify(payment).reopenForLateExternalPayment("TEST");
+    }
+
+    @Test
+    void 이미_되살린_결제는_다시_되살리지_않고_취소만_재개한다() {
+        // given — 앞선 시도가 결제를 PAID로 되살린 뒤 PG 취소에서 실패했다
+        Long orderId = 2L;
+        Payment payment = givenLatePaidTarget(orderId, PaymentStatus.PAID, null);
+
+        // when
+        boolean reopened = processor.reopenLatePaidPayment(orderId, "TEST");
+
+        // then
+        assertThat(reopened).isTrue();
+        verify(payment, never()).reopenForLateExternalPayment(any());
+    }
+
+    @Test
+    void 늦은_결제_취소가_끝난_뒤_재전송된_Webhook은_결제를_되살리지_않는다() {
+        // given
+        Long orderId = 2L;
+        PaymentCancellationOperation completed = org.mockito.Mockito.mock(PaymentCancellationOperation.class);
+        when(completed.isCompleted()).thenReturn(true);
+        Payment payment = givenLatePaidTarget(orderId, PaymentStatus.CANCELLED, completed);
+
+        // when
+        boolean reopened = processor.reopenLatePaidPayment(orderId, "TEST");
+
+        // then
+        assertThat(reopened).isFalse();
+        verify(payment, never()).reopenForLateExternalPayment(any());
+    }
+
+    private static final BigDecimal AMOUNT = new BigDecimal("10000");
+
+    private PaymentCancellationOperation givenCancellationTarget(Long orderId, PaymentCancellationStatus status) {
+        Payment payment = org.mockito.Mockito.mock(Payment.class);
+        org.mockito.Mockito.lenient().when(payment.getAmount()).thenReturn(AMOUNT);
+        PaymentCancellationOperation operation = org.mockito.Mockito.mock(PaymentCancellationOperation.class);
+        org.mockito.Mockito.lenient().when(operation.getStatus()).thenReturn(status);
+        org.mockito.Mockito.lenient().when(operation.isCompleted())
+                .thenReturn(status == PaymentCancellationStatus.COMPLETED);
+        when(orderRepository.findByIdWithPessimisticLock(orderId))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(Order.class)));
+        when(paymentRepository.findByOrderIdWithPessimisticLock(orderId)).thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByOrderIdWithPessimisticLock(orderId))
+                .thenReturn(Optional.of(operation));
+        return operation;
+    }
+
+    private Payment givenLatePaidTarget(Long orderId, PaymentStatus paymentStatus,
+                                        PaymentCancellationOperation operation) {
+        Order order = org.mockito.Mockito.mock(Order.class);
+        when(order.getStatus()).thenReturn(OrderStatus.EXPIRED);
+        Payment payment = org.mockito.Mockito.mock(Payment.class);
+        when(payment.getStatus()).thenReturn(paymentStatus);
+        when(orderRepository.findByIdWithPessimisticLock(orderId)).thenReturn(Optional.of(order));
+        when(paymentRepository.findByOrderIdWithPessimisticLock(orderId)).thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByOrderIdWithPessimisticLock(orderId))
+                .thenReturn(Optional.ofNullable(operation));
+        return payment;
     }
 }
