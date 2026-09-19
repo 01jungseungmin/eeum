@@ -1,12 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, ActivityIndicator, Modal, Pressable } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, Image, useWindowDimensions, ActivityIndicator, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 import { usedApi, UsedProductStatus } from '../../api/used';
 import { USED_CATEGORIES, USED_SORT_OPTIONS, UsedSortKey } from '../../constants/usedCategories';
 import { useFocusEffect } from 'expo-router';
-
-const { width } = Dimensions.get('window');
 
 interface UsedTradeViewProps {
   router: any;
@@ -14,6 +12,12 @@ interface UsedTradeViewProps {
 }
 
 export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) {
+  // 웹 데모는 PC 창 너비가 아니라 폰 틀 너비로 보정된 값이 들어온다. 모듈 로드 시점에
+  // 한 번 재면 그 보정도, 창 크기 변경도 놓친다.
+  const { width } = useWindowDimensions();
+  // 2열 그리드. 좌우 여백 15 + 카드 사이 15 을 뺀 나머지를 반으로 나눈다.
+  const cardWidth = (width - 45) / 2;
+
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
@@ -210,10 +214,10 @@ export default function UsedTradeView({ router, regionId }: UsedTradeViewProps) 
         }
         renderItem={({ item }) => (
           <TouchableOpacity 
-            style={styles.productCard} 
+            style={[styles.productCard, { width: cardWidth }]}
             onPress={() => router.push({ pathname: '/used-trade/[id]', params: { id: item.usedProductId || item.id } })}
           >
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, { height: cardWidth }]}>
               {/* 대표 사진 렌더링 (Swagger 명세 필드명에 맞게 조정 필요) */}
               <Image source={{ uri: item.thumbnailUrl || item.img || 'https://placehold.co/150.png' }} style={styles.productImage} />
               
@@ -307,9 +311,10 @@ const styles = StyleSheet.create({
   sortText: { fontSize: 13, color: '#666' },
   
   rowWrapper: { justifyContent: 'space-between', paddingHorizontal: 15 },
-  productCard: { width: (width - 45) / 2, marginBottom: 20 },
+  // 너비/높이는 화면 너비에 따라 달라져 인라인으로 준다.
+  productCard: { marginBottom: 20 },
   
-  imageContainer: { width: '100%', height: (width - 45) / 2, borderRadius: 8, overflow: 'hidden', backgroundColor: '#F9F9F9', position: 'relative' },
+  imageContainer: { width: '100%', borderRadius: 8, overflow: 'hidden', backgroundColor: '#F9F9F9', position: 'relative' },
   productImage: { width: '100%', height: '100%' },
   statusBadge: { position: 'absolute', top: 0, left: 0, paddingHorizontal: 8, paddingVertical: 4, borderBottomRightRadius: 8 },
   statusBadgeText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
