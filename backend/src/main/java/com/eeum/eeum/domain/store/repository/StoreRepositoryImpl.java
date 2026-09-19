@@ -227,4 +227,17 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
 
         return count == null ? 0 : count;
     }
+
+    // 관리자 대시보드 "신규 가게 등록" 피드 — 활성 사업장 수와 같은 기준을 쓴다.
+    // 상점은 사장 가입 시점에 만들어지므로 거르지 않으면 승인 전·탈퇴 상점까지 섞인다
+    @Override
+    public List<Store> findRecentPubliclyVisible(int limit) {
+        return queryFactory
+                .selectFrom(store)
+                .join(store.account, account)
+                .where(StoreVisibilityPredicate.publiclyVisible(store, account))
+                .orderBy(store.createdAt.desc(), store.storeId.desc())
+                .limit(limit)
+                .fetch();
+    }
 }

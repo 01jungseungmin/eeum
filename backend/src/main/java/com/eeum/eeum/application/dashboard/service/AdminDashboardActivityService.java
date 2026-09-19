@@ -8,6 +8,7 @@ import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.repository.PaymentActivity;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -49,6 +50,10 @@ public class AdminDashboardActivityService {
     private static final List<AccountRole> MEMBER_ROLES = List.of(AccountRole.ROLE_USER, AccountRole.ROLE_OWNER);
     private static final List<AccountStatus> MEMBER_STATUSES = List.of(AccountStatus.ACTIVE, AccountStatus.SUSPENDED);
 
+    // 부분 환불은 거래 자체는 성사된 것이므로 포함한다. 전액 취소·환불·실패는 제외
+    private static final List<PaymentStatus> COMPLETED_PAYMENT_STATUSES =
+            List.of(PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED);
+
     private final AccountRepository accountRepository;
     private final AccountRegionRepository accountRegionRepository;
     private final StoreRepository storeRepository;
@@ -65,7 +70,7 @@ public class AdminDashboardActivityService {
 
         List<AdminActivityResponseDto> activities = new ArrayList<>();
         activities.addAll(signups(top));
-        activities.addAll(storeRegistrations(top));
+        activities.addAll(storeRegistrations(size));
         activities.addAll(payments(top));
         activities.addAll(reports(top));
 
@@ -109,8 +114,8 @@ public class AdminDashboardActivityService {
                 .toList();
     }
 
-    private List<AdminActivityResponseDto> storeRegistrations(Pageable top) {
-        return storeRepository.findAllByOrderByCreatedAtDesc(top).stream()
+    private List<AdminActivityResponseDto> storeRegistrations(int size) {
+        return storeRepository.findRecentPubliclyVisible(size).stream()
                 .map((Store store) -> AdminActivityResponseDto.builder()
                         .type(DashboardActivityType.STORE_REGISTERED)
                         .targetId(store.getStoreId())
@@ -122,7 +127,7 @@ public class AdminDashboardActivityService {
     }
 
     private List<AdminActivityResponseDto> payments(Pageable top) {
-        return paymentRepository.findRecentPaymentActivities(top).stream()
+        return paymentRepository.findRecentPaymentActivities(COMPLETED_PAYMENT_STATUSES, top).stream()
                 .map((PaymentActivity payment) -> AdminActivityResponseDto.builder()
                         .type(DashboardActivityType.PAYMENT_COMPLETED)
                         .targetId(payment.paymentId())

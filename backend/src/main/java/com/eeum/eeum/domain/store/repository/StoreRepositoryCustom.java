@@ -22,4 +22,7 @@ public interface StoreRepositoryCustom {
 
     // 공개 노출 가능한 상점 수. createdFrom이 있으면 그 이후 생성된 상점만 센다
     long countPubliclyVisible(LocalDateTime createdFrom);
+
+    // 공개 노출 가능한 상점을 생성 최신순으로 limit개
+    List<Store> findRecentPubliclyVisible(int limit);
 }

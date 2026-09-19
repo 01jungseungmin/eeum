@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.account.entity.AccountRegion;
 import com.eeum.eeum.domain.account.entity.Region;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
+import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.repository.PaymentActivity;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.report.entity.Report;
@@ -33,7 +34,6 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,9 +65,11 @@ class AdminDashboardActivityServiceTest {
         when(store.getStoreId()).thenReturn(2L);
         when(store.getName()).thenReturn("온담 커피");
         when(store.getCreatedAt()).thenReturn(BASE.minusMinutes(5));
-        when(storeRepository.findAllByOrderByCreatedAtDesc(any())).thenReturn(List.of(store));
+        when(storeRepository.findRecentPubliclyVisible(3)).thenReturn(List.of(store));
 
-        when(paymentRepository.findRecentPaymentActivities(any())).thenReturn(List.of(
+        when(paymentRepository.findRecentPaymentActivities(
+                List.of(PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED), PageRequest.of(0, 3)))
+                .thenReturn(List.of(
                 new PaymentActivity(3L, "오늘 반찬", new BigDecimal("47500"), BASE.minusMinutes(8))));
 
         Report report = mock(Report.class);
@@ -87,7 +89,6 @@ class AdminDashboardActivityServiceTest {
                         tuple(DashboardActivityType.STORE_REGISTERED, 2L, "온담 커피"),
                         tuple(DashboardActivityType.PAYMENT_COMPLETED, 3L, "오늘 반찬"));
         assertThat(result.get(2).getAmount()).isEqualByComparingTo("47500");
-        verify(storeRepository).findAllByOrderByCreatedAtDesc(PageRequest.of(0, 3));
     }
 
     @Test

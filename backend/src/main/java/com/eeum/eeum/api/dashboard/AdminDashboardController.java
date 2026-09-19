@@ -98,8 +98,8 @@ public class AdminDashboardController {
                     회원 가입·가게 등록·결제 완료·신고 접수를 최신순으로 합쳐 반환합니다.
 
                     - `MEMBER_SIGNUP`: description은 대표 동네(인증 완료)의 구 이름. 없으면 null
-                    - `STORE_REGISTERED`: description은 상점명
-                    - `PAYMENT_COMPLETED`: description은 상점명, `amount`는 결제 금액. 결제 완료 시각(paidAt) 기준
+                    - `STORE_REGISTERED`: description은 상점명. 공개 노출되는 상점(사장 승인 완료·계정 활성·상점 미정지)만, 상점 생성 시각 기준
+                    - `PAYMENT_COMPLETED`: description은 상점명, `amount`는 결제 금액. 결제 완료 시각(paidAt) 기준. 전액 취소·환불된 결제는 제외, 부분 환불은 포함(amount는 원 결제 금액)
                     - `REPORT_RECEIVED`: description은 "신고 사유 · 신고 대상"
                     - `limit`은 1~50, 생략 시 10입니다
                     """

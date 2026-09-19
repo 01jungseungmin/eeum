@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -109,7 +108,4 @@ public interface StoreRepository extends JpaRepository<Store, Long>,StoreReposit
         s.version = s.version + 1
         """, nativeQuery = true)
     int recalculateAllFavoriteCounts();
-
-    // 관리자 대시보드 실시간 활동 — 최근 등록 상점
-    List<Store> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }
