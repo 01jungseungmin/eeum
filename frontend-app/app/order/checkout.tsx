@@ -16,6 +16,21 @@ import {
   verifyPaymentWithPendingOrder,
   type PendingOrder
 } from '../../utils/paymentCompletion';
+import { isWebPaymentSupported, requestWebPayment } from '../../utils/webPayment';
+
+// 포트원에 넘길 결제 파라미터. 네이티브는 이 값으로 웹뷰 HTML을 만들고,
+// 웹은 같은 값을 브라우저 SDK에 그대로 넘긴다.
+interface PaymentData {
+  orderNumber: string;
+  paymentId: string;
+  totalAmount: number;
+  orderName: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  portonePayMethod: string;
+  easyPayProvider: string;
+}
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -43,7 +58,7 @@ export default function CheckoutScreen() {
   });
 
   // 포트원 동적 파라미터 세팅 세트
-  const [paymentData, setPaymentData] = useState({
+  const [paymentData, setPaymentData] = useState<PaymentData>({
     orderNumber: '',
     paymentId: '',
     totalAmount: 0,
@@ -84,18 +99,76 @@ export default function CheckoutScreen() {
     }, [])
   );
 
+  /**
+   * 웹 데모에서 PG 결제를 켜두지 않았으면 여기서 끊는다.
+   *
+   * 주문을 먼저 만들고 결제창에서 막으면 재고가 줄고 미결제 주문이 남는다
+   * (15분 뒤 만료되긴 하지만 심사 중에 품절로 보일 수 있다). 그래서 createOrder
+   * 호출 전에 확인한다. 현장결제는 PG를 거치지 않으므로 웹에서도 그대로 된다.
+   */
+  const blockUnsupportedWebPayment = (): boolean => {
+    if (Platform.OS !== 'web') return false;
+    if (selectedPayMethod === 'ONSITE') return false;
+    if (isWebPaymentSupported) return false;
+
+    Alert.alert(
+      '체험판에서는 결제까지는 안 돼요',
+      '심사용 체험판이라 실제 카드 결제는 막아두었습니다.\n' +
+        '"현장결제"를 고르시면 주문 접수까지 그대로 체험하실 수 있어요.'
+    );
+    return true;
+  };
+
+  /**
+   * 결제창 열기. 네이티브는 웹뷰를 띄우고, 웹은 포트원 브라우저 SDK를 직접 부른다.
+   * 복귀 대비 저장은 두 경로가 공통이다 — 외부 결제앱이든 모바일 브라우저 리다이렉트든
+   * 이 화면의 state가 날아간 뒤에 검증이 이어져야 한다.
+   */
+  const openPaymentWindow = async (data: PaymentData, order: PendingOrder) => {
+    await savePendingOrder(order);
+
+    if (Platform.OS !== 'web') {
+      setIsPaymentVisible(true);
+      return;
+    }
+
+    const result = await requestWebPayment({
+      paymentId: data.paymentId,
+      orderName: data.orderName,
+      totalAmount: data.totalAmount,
+      payMethod: data.portonePayMethod,
+      easyPayProvider: data.easyPayProvider,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      customerEmail: data.customerEmail
+    });
+
+    // 모바일 브라우저는 결제창이 페이지를 가져갔다. 곧 /payment/success 로 돌아오므로
+    // 이 화면에서 더 할 일이 없다.
+    if (result.status === 'redirecting') return;
+
+    if (result.status === 'failed') {
+      Alert.alert('결제 실패', result.message);
+      return;
+    }
+
+    await completePayment(result.paymentId, order);
+  };
+
   const handlePayment = async () => {
+    if (blockUnsupportedWebPayment()) return;
+
     // 안전장치: 만약 이미 한 번 주문생성이 완료되어 주문번호가 있다면,
     // 백엔드 API를 다시 호출하지 않고 (장바구니 비어있음 에러 방지) 곧바로 결제창만 다시 열어줍니다.
     if (currentOrderNumber && selectedPayMethod !== 'ONSITE') {
-      setPaymentData((prev) => ({
-        ...prev,
+      const retryData: PaymentData = {
+        ...paymentData,
         portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
         easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
-      }));
+      };
+      setPaymentData(retryData);
       // 재시도도 외부 앱으로 나갈 수 있다. 복귀 대비는 첫 시도와 동일하게 해둔다.
-      await savePendingOrder(buildPendingOrder(currentOrderNumber, currentOrderId));
-      setIsPaymentVisible(true);
+      await openPaymentWindow(retryData, buildPendingOrder(currentOrderNumber, currentOrderId));
       return;
     }
 
@@ -129,24 +202,26 @@ export default function CheckoutScreen() {
       }
 
       // 토스페이먼츠 단일 채널 및 간편결제 프로바이더 데이터 동적 주입
-      setPaymentData({
+      const nextPaymentData: PaymentData = {
         orderNumber: orderResponse.orderNumber,
-        paymentId: orderResponse.paymentId,          
-        totalAmount: orderResponse.totalPrice,           
+        paymentId: orderResponse.paymentId,
+        totalAmount: orderResponse.totalPrice,
         orderName: orderResponse.orderName,
-        customerName: userInfo.name,        
-        customerEmail: (userInfo.email && userInfo.email.includes('@') && !userInfo.email.includes('*')) 
-                        ? userInfo.email 
+        customerName: userInfo.name,
+        customerEmail: (userInfo.email && userInfo.email.includes('@') && !userInfo.email.includes('*'))
+                        ? userInfo.email
                         : 'test@eeum.com',
         customerPhone: userInfo.phone,
         portonePayMethod: selectedPayMethod === 'EASY_PAY' ? 'EASY_PAY' : selectedPayMethod,
         easyPayProvider: selectedPayMethod === 'EASY_PAY' ? easyPayProvider : ''
-      });
+      };
+      setPaymentData(nextPaymentData);
 
-      await savePendingOrder(
+      // 방금 부른 setState는 아직 반영 전이다. 웹 SDK에는 state가 아니라 방금 만든 값을 넘긴다.
+      await openPaymentWindow(
+        nextPaymentData,
         buildPendingOrder(orderResponse.orderNumber, String(orderResponse.orderId || '1'))
       );
-      setIsPaymentVisible(true);
     } catch (error) {
       console.error(error);
       Alert.alert("주문 생성 실패", "결제 준비 중 문제가 발생했습니다.");
@@ -178,16 +253,18 @@ export default function CheckoutScreen() {
    * 웹뷰 안에서 끝난 결제의 검증. 외부 앱을 거치지 않았으므로 화면 state가 살아 있어
    * 딥링크 착지 화면(/payment/success)까지 갈 필요 없이 여기서 바로 처리한다.
    */
-  const completePayment = async (paymentId: string) => {
+  const completePayment = async (paymentId: string, knownOrder?: PendingOrder) => {
     if (!paymentId || verifiedPaymentIdRef.current === paymentId) {
       return;
     }
     verifiedPaymentIdRef.current = paymentId;
     setIsPaymentVisible(false);
 
+    // 웹은 주문 생성 직후 결제까지 한 흐름으로 이어져 state가 아직 비어 있을 수 있다.
+    // 호출부가 알고 있는 주문을 그대로 받는다.
     const result = await verifyPaymentWithPendingOrder(
       paymentId,
-      buildPendingOrder(currentOrderNumber, currentOrderId)
+      knownOrder ?? buildPendingOrder(currentOrderNumber, currentOrderId)
     );
 
     if (result.status === 'success') {
