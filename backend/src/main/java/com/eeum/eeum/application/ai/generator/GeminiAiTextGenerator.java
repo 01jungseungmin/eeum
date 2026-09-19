@@ -11,6 +11,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -35,6 +39,10 @@ public class GeminiAiTextGenerator implements AiTextGenerator {
     // Gemini 언어 이탈(러시아어/한자/일본어 등 혼입) 감지용 — 발견 시 template fallback 처리
     private static final Pattern FOREIGN_SCRIPT_PATTERN = Pattern.compile(
             "[\\u0400-\\u04FF\\u0370-\\u03FF\\u0600-\\u06FF\\u4E00-\\u9FFF\\u3040-\\u30FF\\u0900-\\u097F]");
+
+    // 키워드에 없는 날짜/요일을 LLM이 지어냈는지 감지 — "9월 28일", "9/28", "(목)" 형태
+    private static final Pattern DATE_EXPRESSION_PATTERN = Pattern.compile(
+            "\\d{1,2}\\s*월\\s*\\d{1,2}\\s*일|\\d{1,2}\\s*/\\s*\\d{1,2}|\\([월화수목금토일]\\)");
 
     private final AiModelRouter router;
     private final TemplateAiTextGenerator templateFallback;
@@ -257,12 +265,27 @@ public class GeminiAiTextGenerator implements AiTextGenerator {
                 가게 이름: %s
                 공지 유형: %s
                 톤: %s
-                핵심 키워드: %s""".formatted(
+                핵심 키워드: %s
+                오늘 날짜: %s""".formatted(
                 storeName, noticeType.getDisplayName(), toneGuide(tone),
-                keyword != null && !keyword.isBlank() ? keyword : "없음");
+                keyword != null && !keyword.isBlank() ? keyword : "없음",
+                todayLabel());
         try {
-            String raw = router.generate(AiTaskType.EVENT_MARKETING_COPY, SYSTEM_PROMPT, prompt).content();
-            return parseTitledText(raw, "[" + storeName + "] " + noticeType.getDisplayName());
+            String defaultTitle = "[" + storeName + "] " + noticeType.getDisplayName();
+            AiText text = parseTitledText(
+                    router.generate(AiTaskType.EVENT_MARKETING_COPY, SYSTEM_PROMPT, prompt).content(), defaultTitle);
+
+            if (hasInventedDate(text, keyword)) {
+                log.warn("[AI-GENERATOR] marketingCopy 키워드에 없는 날짜 생성 — 1회 재시도");
+                text = parseTitledText(
+                        router.generate(AiTaskType.EVENT_MARKETING_COPY, SYSTEM_PROMPT, prompt).content(), defaultTitle);
+            }
+
+            if (hasInventedDate(text, keyword)) {
+                throw new AiClientException(AiProviderType.GEMINI, "키워드에 없는 날짜가 포함된 응답입니다");
+            }
+
+            return text;
         } catch (AiClientException e) {
             return fallback("marketingCopy", e,
                     () -> templateFallback.marketingCopy(storeName, noticeType, tone, keyword));
@@ -290,12 +313,27 @@ public class GeminiAiTextGenerator implements AiTextGenerator {
                 가게 이름: %s
                 공지 유형: %s
                 톤: %s
-                핵심 키워드: %s""".formatted(
+                핵심 키워드: %s
+                오늘 날짜: %s""".formatted(
                 storeName, noticeType.getDisplayName(), toneGuide(tone),
-                keyword != null && !keyword.isBlank() ? keyword : "없음");
+                keyword != null && !keyword.isBlank() ? keyword : "없음",
+                todayLabel());
         try {
-            String raw = router.generate(AiTaskType.STORE_NOTICE_DRAFT, SYSTEM_PROMPT, prompt).content();
-            return parseTitledText(raw, "[" + storeName + "] " + noticeType.getDisplayName());
+            String defaultTitle = "[" + storeName + "] " + noticeType.getDisplayName();
+            AiText text = parseTitledText(
+                    router.generate(AiTaskType.STORE_NOTICE_DRAFT, SYSTEM_PROMPT, prompt).content(), defaultTitle);
+
+            if (hasInventedDate(text, keyword)) {
+                log.warn("[AI-GENERATOR] noticeCopy 키워드에 없는 날짜 생성 — 1회 재시도");
+                text = parseTitledText(
+                        router.generate(AiTaskType.STORE_NOTICE_DRAFT, SYSTEM_PROMPT, prompt).content(), defaultTitle);
+            }
+
+            if (hasInventedDate(text, keyword)) {
+                throw new AiClientException(AiProviderType.GEMINI, "키워드에 없는 날짜가 포함된 응답입니다");
+            }
+
+            return text;
         } catch (AiClientException e) {
             return fallback("noticeCopy", e,
                     () -> templateFallback.noticeCopy(storeName, noticeType, tone, keyword));
@@ -303,6 +341,22 @@ public class GeminiAiTextGenerator implements AiTextGenerator {
     }
 
     // ===================== 내부 유틸 =====================
+
+    // 키워드에 숫자(날짜 근거)가 없는데 본문/제목에 날짜·요일 표현이 있으면 LLM이 지어낸 것으로 본다
+    private boolean hasInventedDate(AiText text, String keyword) {
+        if (keyword != null && keyword.chars().anyMatch(Character::isDigit)) {
+            return false;
+        }
+        String combined = (text.title() == null ? "" : text.title()) + " "
+                + (text.content() == null ? "" : text.content());
+        return DATE_EXPRESSION_PATTERN.matcher(combined).find();
+    }
+
+    private String todayLabel() {
+        LocalDate today = LocalDate.now();
+        return today.format(DateTimeFormatter.ofPattern("yyyy년 M월 d일"))
+                + " (" + today.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.KOREAN) + ")";
+    }
 
     // JSON 파싱 성공 시 title/content 분리, 실패 시 기본 제목 + LLM 원문 content 사용
     AiText parseTitledText(String raw, String defaultTitle) {
