@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, TouchableOpacity, useWindowDimensions, ActivityIndicator, Alert, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -7,8 +7,6 @@ import { Text } from '../../components/CustomText';
 import { usedApi, UsedProductDetail } from '../../api/used';
 import { favoriteApi } from '../../api/favorite';
 import { userApi } from '../../api/user';
-
-const { width } = Dimensions.get('window');
 
 const STATUS_LABEL: Record<string, string> = {
   RESERVED: '예약중',
@@ -40,6 +38,10 @@ export default function UsedTradeDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const usedProductId = Number(id);
+
+  // 웹 데모는 PC 창 너비가 아니라 폰 틀 너비로 보정된 값이 들어온다. 모듈 로드 시점에
+  // 한 번 재면 그 보정도, 창 크기 변경도 놓친다.
+  const { width } = useWindowDimensions();
 
   const [product, setProduct] = useState<UsedProductDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,6 +105,7 @@ export default function UsedTradeDetailScreen() {
   );
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (width <= 0) return;
     setImageIndex(Math.round(e.nativeEvent.contentOffset.x / width));
   };
 
@@ -206,7 +209,7 @@ export default function UsedTradeDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* 2. 상품 이미지 영역 */}
-        <View style={styles.imageContainer}>
+        <View style={[styles.imageContainer, { width, height: width }]}>
           {images.length > 0 ? (
             <ScrollView
               horizontal
@@ -218,13 +221,13 @@ export default function UsedTradeDetailScreen() {
                 <Image
                   key={image.imageId}
                   source={{ uri: image.imageUrl }}
-                  style={styles.productImage}
+                  style={[styles.productImage, { width }]}
                   resizeMode="cover"
                 />
               ))}
             </ScrollView>
           ) : (
-            <View style={[styles.productImage, styles.center, styles.emptyImage]}>
+            <View style={[styles.productImage, styles.center, styles.emptyImage, { width }]}>
               <Ionicons name="image-outline" size={48} color="#CCC" />
             </View>
           )}
@@ -337,8 +340,9 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 100 },
 
   // 이미지 영역
-  imageContainer: { width: width, height: width, position: 'relative' }, // 1:1 비율
-  productImage: { width: width, height: '100%' },
+  // 크기는 화면 너비에 따라 달라져 인라인으로 준다 (1:1 비율).
+  imageContainer: { position: 'relative' },
+  productImage: { height: '100%' },
   emptyImage: { backgroundColor: '#F5F5F5' },
   imageBadge: { position: 'absolute', bottom: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14 },
   imageBadgeText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },

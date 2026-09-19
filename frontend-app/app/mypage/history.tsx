@@ -40,20 +40,44 @@ export default function HistoryScreen() {
     }
   };
 
+  // 백엔드 OrderStatus 7개를 그대로 받는다.
+  // 예전에는 COMPLETED 하나만 초록으로 두고 나머지를 전부 "취소/환불"로 칠해서,
+  // 방금 결제를 마친 주문(PAID)이나 접수된 현장결제 주문(PENDING)까지
+  // 빨간 취소로 보였다.
   const getStatusStyle = (status: string) => {
-    if (status === 'COMPLETED') {
-      return { text: '이용 완료', color: '#00A859', bgColor: '#E8F5E9' };
+    switch (status) {
+      case 'PENDING':
+        // 현장결제는 여기서 멈춘다 — 매장에서 받을 때 결제하므로 정상 상태다.
+        return { text: '주문 접수', color: '#F59E0B', bgColor: '#FFF7E6' };
+      case 'PAID':
+        return { text: '결제 완료', color: '#00A859', bgColor: '#E8F5E9' };
+      case 'CONFIRMED':
+        return { text: '사장님 확인', color: '#2563EB', bgColor: '#E8F0FE' };
+      case 'READY':
+        return { text: '준비 완료', color: '#2563EB', bgColor: '#E8F0FE' };
+      case 'COMPLETED':
+        return { text: '이용 완료', color: '#00A859', bgColor: '#E8F5E9' };
+      case 'EXPIRED':
+        return { text: '기한 만료', color: '#888', bgColor: '#F0F0F0' };
+      case 'CANCELLED':
+        return { text: '취소/환불', color: '#FF5252', bgColor: '#FFEBEE' };
+      default:
+        // 상태가 늘어나도 빨간 취소로 오인되지 않게 중립색으로 떨어뜨린다.
+        return { text: status || '주문', color: '#888', bgColor: '#F0F0F0' };
     }
-    return { text: '취소/환불', color: '#FF5252', bgColor: '#FFEBEE' };
   };
 
   const renderHistoryItem = ({ item }: { item: any }) => {
     const statusStyle = getStatusStyle(item.status);
 
-    const formattedDate = item.paidAt 
-      ? item.paidAt.replace('T', ' ').substring(0, 16) 
-      : '결제일시 없음';
-      
+    // 현장결제는 paidAt이 없다(매장에서 결제한다). 주문한 시각이라도 보여준다 —
+    // 방금 넣은 주문이 "결제일시 없음"으로 뜨면 실패한 것처럼 보인다.
+    const timestamp = item.paidAt || item.createdAt;
+    const formattedDate = timestamp
+      ? timestamp.replace('T', ' ').substring(0, 16)
+      : '주문일시 없음';
+
+
     const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://placehold.co/150.png';
 
     const isReviewCompleted = item.hasReview === true;

@@ -1,16 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 import { orderApi } from '../api/order';
 
 /**
  * 결제 완료 후 돌아올 주소.
  *
- * 웹뷰 안에서 끝나는 결제(카드 등)는 http://localhost 로도 낚아챌 수 있지만,
+ * 네이티브: 웹뷰 안에서 끝나는 결제(카드 등)는 http://localhost 로도 낚아챌 수 있지만,
  * 토스·카카오페이처럼 외부 앱으로 전환되는 결제는 그 앱이 http://localhost 로
  * 우리 앱을 다시 열 방법이 없다. 결제는 됐는데 사용자는 결제앱에 갇히고
  * 검증 호출이 누락돼 주문이 미완료로 남는다. 앱 스킴을 써야 복귀가 성립한다.
+ *
+ * 웹 데모: 브라우저는 eeum:// 를 열지 못한다. 결제창이 돌아올 곳은 배포된 그 페이지뿐이라
+ * 현재 오리진의 /payment/success 를 쓴다 (SPA 라우트라 같은 화면이 그대로 뜬다).
+ * 배포 도메인을 하드코딩하지 않아야 프리뷰 URL·로컬 개발에서도 그대로 동작한다.
  */
-export const PAYMENT_REDIRECT_URL = 'eeum://payment/success';
+export const PAYMENT_REDIRECT_URL =
+  Platform.OS === 'web' && typeof window !== 'undefined'
+    ? `${window.location.origin}/payment/success`
+    : 'eeum://payment/success';
 
 // 외부 결제앱이 떠 있는 동안 OS가 우리 앱을 메모리에서 밀어낼 수 있다.
 // 그 경우 복귀는 콜드 스타트라 화면 state가 전부 날아가므로 주문 정보를 따로 남긴다.

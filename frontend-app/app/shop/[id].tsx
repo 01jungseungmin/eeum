@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -10,8 +10,6 @@ import { favoriteApi } from '../../api/favorite';
 import { reviewApi } from '../../api/review';
 import { regionApi } from '@/api/region';
 import { chatApi } from '../../api/chat';
-
-const { width } = Dimensions.get('window');
 
 const getProductCategoryId = (product: any) => {
   const id = 
