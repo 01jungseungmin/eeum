@@ -9,11 +9,13 @@ import { useRouter } from 'expo-router';
 
 // ✨ 경로를 ../ 로 통일했습니다! (app 폴더 바로 아래에 있기 때문)
 import { Text } from '../../components/CustomText'; 
-import { userApi, MyInfoResponse, RegionInfo } from '../../api/user';
+import { userApi, MyInfoResponse, ProfileStats, RegionInfo } from '../../api/user';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 export default function ProfileViewScreen() {
   const router = useRouter();
   const [userInfo, setUserInfo] = useState<MyInfoResponse | null>(null);
+  const [stats, setStats] = useState<ProfileStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // 내 정보 조회 API 호출
@@ -22,9 +24,15 @@ export default function ProfileViewScreen() {
       try {
         const data = await userApi.getMyInfo();
         setUserInfo(data);
+
+        // 통계는 accountId가 있어야 조회할 수 있어 내 정보 다음에 부른다.
+        // 실패해도 프로필 본문은 그대로 보여준다 — 안에서 항목별로 0 처리한다.
+        if (data?.accountId) {
+          setStats(await userApi.getMyProfileStats(data.accountId));
+        }
       } catch (error) {
         console.error('프로필 로딩 에러:', error);
-        Alert.alert('오류', '프로필 정보를 불러오는데 실패했습니다.');
+        Alert.alert('오류', getApiErrorMessage(error, '프로필 정보를 불러오는데 실패했습니다.'));
       } finally {
         setIsLoading(false);
       }
@@ -79,31 +87,23 @@ export default function ProfileViewScreen() {
           <Text style={styles.addressText}>{addressText}</Text>
         </View>
 
-        {/* 2. 활동 통계 영역 (API 연동) */}
+        {/* 2. 활동 통계 영역 — /accounts/me 가 주지 않아 화면에서 모아 온다 */}
         <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            {/* 데이터가 없을 경우 기본값 0 표시 */}
-            <Text fontWeight="bold" style={styles.statNumber}>
-              {userInfo?.receivedReviewCount ?? 0}
-            </Text>
-            <Text style={styles.statLabel}>받은 리뷰</Text>
-          </View>
-          <View style={styles.statDivider} />
-          
-          <View style={styles.statItem}>
-            <Text fontWeight="bold" style={styles.statNumber}>
-              {userInfo?.sentReviewCount ?? 0}
-            </Text>
-            <Text style={styles.statLabel}>보낸 리뷰</Text>
-          </View>
-          <View style={styles.statDivider} />
-          
-          <View style={styles.statItem}>
-            <Text fontWeight="bold" style={styles.statNumber}>
-              {userInfo?.tradeCount ?? 0}
-            </Text>
-            <Text style={styles.statLabel}>거래 횟수</Text>
-          </View>
+          {[
+            { label: '받은 리뷰', value: stats?.receivedReviewCount },
+            { label: '보낸 리뷰', value: stats?.sentReviewCount },
+            { label: '거래 횟수', value: stats?.tradeCount },
+          ].map((stat, index) => (
+            <React.Fragment key={stat.label}>
+              {index > 0 && <View style={styles.statDivider} />}
+              <View style={styles.statItem}>
+                <Text fontWeight="bold" style={styles.statNumber}>
+                  {stat.value ?? 0}
+                </Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </View>
+            </React.Fragment>
+          ))}
         </View>
 
         {/* 3. 자기소개 영역 (API 연동) */}
