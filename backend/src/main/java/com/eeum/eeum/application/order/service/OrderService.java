@@ -79,7 +79,7 @@ public class OrderService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        Cart cart = cartRepository.findByAccount_AccountId(accountId)
+        Cart cart = cartRepository.findByAccountIdWithPessimisticLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
 
         List<CartItem> cartItems = cartItemRepository.findByCart_CartId(cart.getCartId());
@@ -255,6 +255,11 @@ public class OrderService {
 
         Payment payment = paymentRepository.findByOrder_OrderId(orderId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+            throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
 
         payment.requestRefund(request.getReason());
     }

@@ -137,7 +137,7 @@ public class StoreOrderService {
 
     public void rejectOrder(Long ownerId, Long orderId, String reason) {
         PaymentStatus paymentStatus = cancellationAuthorizer.authorizeRejection(ownerId, orderId);
-        if (paymentStatus == PaymentStatus.PAID) {
+        if (paymentStatus == PaymentStatus.PAID || paymentStatus == PaymentStatus.PARTIALLY_REFUNDED) {
             paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.OWNER_ORDER_REJECT, reason);
             return;
         }
@@ -175,7 +175,8 @@ public class StoreOrderService {
             return;
         }
 
-        if (payment.getStatus() != PaymentStatus.PAID) {
+        if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
         }
     }
