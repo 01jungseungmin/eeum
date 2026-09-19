@@ -62,4 +62,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     Optional<Report> findFirstByStatusOrderByCreatedAtAsc(ReportStatus status);
 
     Optional<Report> findFirstByStatusOrderByCreatedAtDesc(ReportStatus status);
+
+    // 관리자 대시보드 실시간 활동 — 최근 접수 신고
+    List<Report> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

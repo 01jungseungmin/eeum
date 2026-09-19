@@ -103,4 +103,11 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
             Collection<AccountStatus> statuses,
             LocalDateTime createdFrom
     );
+
+    // 관리자 대시보드 실시간 활동 — 최근 가입 회원
+    List<Account> findByRoleInAndStatusInOrderByCreatedAtDesc(
+            Collection<AccountRole> roles,
+            Collection<AccountStatus> statuses,
+            Pageable pageable
+    );
 }

@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
@@ -62,4 +63,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByPortonePaymentIdWithPessimisticLock(
             @Param("portonePaymentId") String portonePaymentId
     );
+
+    // 관리자 대시보드 실시간 활동 — 최근 결제 완료 건. 상점명까지 한 번에 읽어 N+1을 피한다
+    @Query("""
+        SELECT new com.eeum.eeum.domain.order.repository.PaymentActivity(p.paymentId, s.name, p.amount, p.paidAt)
+        FROM Payment p
+        JOIN p.order o
+        JOIN o.store s
+        WHERE p.paidAt IS NOT NULL
+        ORDER BY p.paidAt DESC
+        """)
+    List<PaymentActivity> findRecentPaymentActivities(Pageable pageable);
 }

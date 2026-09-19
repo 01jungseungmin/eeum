@@ -1,9 +1,11 @@
 package com.eeum.eeum.api.dashboard;
 
+import com.eeum.eeum.application.dashboard.dto.response.AdminActivityResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminDashboardSummaryResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminPendingActionsResponseDto;
 import com.eeum.eeum.application.dashboard.dto.response.AdminSignupTrendResponseDto;
 import com.eeum.eeum.application.dashboard.enums.SignupMemberType;
+import com.eeum.eeum.application.dashboard.service.AdminDashboardActivityService;
 import com.eeum.eeum.application.dashboard.service.AdminDashboardService;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Tag(name = "35. Admin - Dashboard", description = "관리자 대시보드 지표")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminDashboardController {
 
     private final AdminDashboardService adminDashboardService;
+    private final AdminDashboardActivityService adminDashboardActivityService;
 
     @Operation(
             summary = "대시보드 KPI 요약",
@@ -84,5 +89,25 @@ public class AdminDashboardController {
             @RequestParam(required = false) Integer days
     ) {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getSignupTrend(type, days)));
+    }
+
+    @Operation(
+            summary = "대시보드 실시간 활동",
+            description = """
+                    회원 가입·가게 등록·결제 완료·신고 접수를 최신순으로 합쳐 반환합니다.
+
+                    - `MEMBER_SIGNUP`: description은 대표 동네의 구 이름(없으면 null)
+                    - `STORE_REGISTERED`: description은 상점명
+                    - `PAYMENT_COMPLETED`: description은 상점명, `amount`는 결제 금액. 결제 완료 시각(paidAt) 기준
+                    - `REPORT_RECEIVED`: description은 "신고 사유 · 신고 대상"
+                    - `limit`은 1~50, 생략 시 10입니다
+                    """
+    )
+    @GetMapping("/activities")
+    public ResponseEntity<ApiResponse<List<AdminActivityResponseDto>>> getActivities(
+            @Parameter(description = "조회 건수 (1~50). 생략 시 10", example = "10")
+            @RequestParam(required = false) Integer limit
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(adminDashboardActivityService.getRecentActivities(limit)));
     }
 }
