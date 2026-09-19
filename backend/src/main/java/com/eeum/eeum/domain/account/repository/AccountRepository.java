@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.account.repository;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import org.springframework.data.domain.Page;
@@ -92,4 +93,14 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Account a WHERE a.accountId = :accountId")
     Optional<Account> findByIdWithLock(@Param("accountId") Long accountId);
+
+    // 관리자 대시보드 요약 — 회원 수
+    long countByRoleInAndStatusIn(Collection<AccountRole> roles, Collection<AccountStatus> statuses);
+
+    // 관리자 대시보드 요약 — 기간 내 신규 회원 수
+    long countByRoleInAndStatusInAndCreatedAtGreaterThanEqual(
+            Collection<AccountRole> roles,
+            Collection<AccountStatus> statuses,
+            LocalDateTime createdFrom
+    );
 }

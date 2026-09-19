@@ -170,4 +170,10 @@ public interface OrderRepository extends JpaRepository<Order, Long>, OrderReposi
             @Param("threshold") LocalDateTime threshold
     );
 
+    // 관리자 대시보드 요약 — 기간 내 거래 건수 [from, to)
+    long countByStatusInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            Collection<OrderStatus> statuses,
+            LocalDateTime from,
+            LocalDateTime to
+    );
 }

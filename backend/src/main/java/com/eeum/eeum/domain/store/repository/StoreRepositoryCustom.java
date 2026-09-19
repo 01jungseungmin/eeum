@@ -6,6 +6,7 @@ import com.eeum.eeum.domain.store.entity.Store;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface StoreRepositoryCustom {
@@ -18,4 +19,7 @@ public interface StoreRepositoryCustom {
 
     // 공개 노출 가능한 상점인지 — 조건은 StoreVisibilityPredicate 한 곳에서 관리한다.
     boolean isPubliclyVisible(Long storeId);
+
+    // 공개 노출 가능한 상점 수. createdFrom이 있으면 그 이후 생성된 상점만 센다
+    long countPubliclyVisible(LocalDateTime createdFrom);
 }

@@ -19,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -210,5 +211,20 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 .fetchFirst();
 
         return found != null;
+    }
+
+    // 관리자 대시보드의 "활성 사업장" 수 — 사용자에게 실제로 보이는 상점과 같은 기준을 쓴다.
+    @Override
+    public long countPubliclyVisible(LocalDateTime createdFrom) {
+        Long count = queryFactory
+                .select(store.count())
+                .from(store)
+                .join(store.account, account)
+                .where(
+                        StoreVisibilityPredicate.publiclyVisible(store, account),
+                        createdFrom != null ? store.createdAt.goe(createdFrom) : null)
+                .fetchOne();
+
+        return count == null ? 0 : count;
     }
 }
