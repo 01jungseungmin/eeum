@@ -262,6 +262,12 @@ export const ADMIN_MENU_CONFIG = [
         icon: <Users {...iconProps} />,
       },
       {
+        id: 'admin-stores',
+        name: '상점 관리',
+        path: '/admin/stores',
+        icon: <Store {...iconProps} />,
+      },
+      {
         id: 'admin-approval',
         name: '사장 승인',
         path: '/admin/approval',
