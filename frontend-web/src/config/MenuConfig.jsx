@@ -262,6 +262,12 @@ export const ADMIN_MENU_CONFIG = [
         icon: <Users {...iconProps} />,
       },
       {
+        id: 'admin-settlements',
+        name: '정산 관리',
+        path: '/admin/settlements',
+        icon: <CreditCard {...iconProps} />,
+      },
+      {
         id: 'admin-stores',
         name: '상점 관리',
         path: '/admin/stores',
