@@ -3,9 +3,9 @@ package com.eeum.eeum.security.jwt;
 import com.eeum.eeum.common.dto.response.ApiResponse;
 import com.eeum.eeum.exception.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
@@ -16,10 +16,11 @@ import java.io.IOException;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule());
+    // 공용 ObjectMapper 빈 사용 — 직접 생성하면 timestamp가 배열로 직렬화돼 REST 응답 형식과 달라진다
+    private final ObjectMapper objectMapper;
 
     @Override
     public void commence(

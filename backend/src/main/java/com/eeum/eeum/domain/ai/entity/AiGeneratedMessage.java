@@ -140,7 +140,10 @@ public class AiGeneratedMessage extends BaseEntity {
     }
 
     public void cancel() {
-        validateTransitable();
+        // 발송 전이면 초안(DRAFT)도 취소 가능 — 수정 없이 버리는 초안을 정리할 수 있어야 한다
+        if (this.status != AiMessageStatus.DRAFT) {
+            validateTransitable();
+        }
         this.status = AiMessageStatus.CANCELLED;
         this.scheduledAt = null;
     }

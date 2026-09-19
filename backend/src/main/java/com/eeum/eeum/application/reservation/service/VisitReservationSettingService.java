@@ -49,7 +49,7 @@ public class VisitReservationSettingService {
     @Transactional(readOnly = true)
     public VisitReservationSettingResponseDto getSetting(Long ownerAccountId) {
         Store store = getOwnerStore(ownerAccountId);
-        StoreVisitReservationSetting setting = getSettingByStore(store);
+        StoreVisitReservationSetting setting = getSettingOrDefault(store);
         return toSettingDto(setting);
     }
 
@@ -65,7 +65,7 @@ public class VisitReservationSettingService {
                 () -> transactionTemplate.execute(status -> {
                     validateSettingRequest(request);
 
-                    StoreVisitReservationSetting setting = getSettingByStore(store);
+                    StoreVisitReservationSetting setting = getOrCreateSetting(store);
                     setting.update(
                             request.getEnabled(),
                             request.getSlotIntervalMinutes(),
@@ -87,7 +87,7 @@ public class VisitReservationSettingService {
             LocalDate date
     ) {
         Store store = getOwnerStore(ownerAccountId);
-        StoreVisitReservationSetting setting = getSettingByStore(store);
+        StoreVisitReservationSetting setting = getSettingOrDefault(store);
 
         List<LocalTime> slotTimes = generateSlotTimes(setting);
         Map<LocalTime, VisitReservationTimeSlot> overrideMap = buildOverrideMap(store.getStoreId(), date);
@@ -123,7 +123,7 @@ public class VisitReservationSettingService {
             Store store,
             VisitReservationTimeSlotUpdateRequestDto request
     ) {
-        StoreVisitReservationSetting setting = getSettingByStore(store);
+        StoreVisitReservationSetting setting = getOrCreateSetting(store);
         List<LocalTime> slotTimes = generateSlotTimes(setting);
 
         for (VisitReservationTimeSlotItemRequestDto item : request.getSlots()) {
@@ -180,10 +180,19 @@ public class VisitReservationSettingService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
     }
 
-    private StoreVisitReservationSetting getSettingByStore(Store store) {
+    // 설정은 가게 승인 시점에 만들어지므로, 그 경로를 거치지 않은 가게는 행이 없을 수 있다.
+    // 조회는 저장하지 않은 기본값으로 응답하고, 수정 시점에 기본값 행을 만든다.
+    private StoreVisitReservationSetting getSettingOrDefault(Store store) {
         return storeVisitReservationSettingRepository
                 .findByStore_StoreId(store.getStoreId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SETTING_NOT_FOUND));
+                .orElseGet(() -> StoreVisitReservationSetting.createDefault(store));
+    }
+
+    private StoreVisitReservationSetting getOrCreateSetting(Store store) {
+        return storeVisitReservationSettingRepository
+                .findByStore_StoreId(store.getStoreId())
+                .orElseGet(() -> storeVisitReservationSettingRepository.save(
+                        StoreVisitReservationSetting.createDefault(store)));
     }
 
     private void validateSettingRequest(VisitReservationSettingUpdateRequestDto request) {
