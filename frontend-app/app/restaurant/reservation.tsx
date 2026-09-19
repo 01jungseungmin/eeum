@@ -9,7 +9,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { shopApi } from '../../api/shop';
 import { reservationApi } from '../../api/reservation';
-import { getApiErrorMessage } from '../../utils/apiError';
+import { getApiError, getApiErrorMessage } from '../../utils/apiError';
+import {
+  isStoreLevelReservationBlock,
+  getStoreLevelReservationHint
+} from '../../utils/reservationAvailability';
 
 /**
  * 화면에 보이는 그 날짜를 그대로 YYYY-MM-DD 로 만든다.
@@ -39,6 +43,10 @@ export default function ReservationInputScreen() {
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   // 시간대를 못 불러온 사유. 서버가 알려준 문구를 그대로 담는다.
   const [slotError, setSlotError] = useState<string | null>(null);
+
+  // 이 상점이 예약 자체를 받지 않는 경우. 날짜·인원과 무관하므로 들어오자마자 확인한다.
+  const [storeBlock, setStoreBlock] = useState<{ reason: string; hint: string } | null>(null);
+  const [isCheckingStore, setIsCheckingStore] = useState(true);
 
   // 오늘부터 7일간의 날짜를 동적으로 생성
   const generateDates = () => {
@@ -74,6 +82,40 @@ export default function ReservationInputScreen() {
       }
     };
     if (storeId) fetchShop();
+  }, [storeId]);
+
+  // 1-2. 이 상점이 예약을 받기는 하는지 미리 확인한다.
+  //
+  // 상점 상세에는 예약 가능 여부 필드가 없어서(StoreDetailResponseDto) 시간대 API로
+  // 두드려 본다. 내일 날짜로 물어보는 이유는 '당일예약 불가' 설정에 걸려 상점이
+  // 막힌 것처럼 오해하지 않기 위해서다.
+  useEffect(() => {
+    if (!storeId) return;
+
+    let isActive = true;
+    const probe = async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      try {
+        await reservationApi.getAvailableTimeSlots(Number(storeId), {
+          date: toLocalDateString(tomorrow)
+        });
+        if (isActive) setStoreBlock(null);
+      } catch (error) {
+        const { code, message } = getApiError(error, '예약 정보를 확인하지 못했어요.');
+        // 날짜 단위 실패(휴무일 등)는 여기서 판단하지 않는다. 다른 날짜를 고르면 되므로
+        // 폼을 그대로 열어두고, 사유는 날짜를 고른 뒤 시간대 영역에서 보여준다.
+        if (isActive && isStoreLevelReservationBlock(code)) {
+          setStoreBlock({ reason: message, hint: getStoreLevelReservationHint(code) });
+        }
+      } finally {
+        if (isActive) setIsCheckingStore(false);
+      }
+    };
+
+    probe();
+    return () => { isActive = false; };
   }, [storeId]);
 
   // 2. 날짜나 인원이 변경되면 백엔드에서 예약 가능 시간대를 불러오는 로직 (디바운스 적용)
@@ -134,7 +176,9 @@ export default function ReservationInputScreen() {
     });
   };
 
-  if (!shopInfo) {
+  // 예약 가능 여부 확인이 끝나기 전에 폼을 그리면, 예약을 안 받는 상점에서
+  // 날짜·인원 입력칸이 잠깐 떴다가 접힌다. 둘 다 끝난 뒤에 그린다.
+  if (!shopInfo || isCheckingStore) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#00A859" /></View>;
   }
 
@@ -154,6 +198,22 @@ export default function ReservationInputScreen() {
           <Text style={styles.shopAddress}>{shopInfo.address}</Text>
         </View>
 
+        {/* 이 상점이 예약을 받지 않으면 날짜·인원을 고르게 할 이유가 없다.
+            폼을 접고 사유만 보여준다. */}
+        {storeBlock && (
+          <View style={styles.blockedBox}>
+            <Ionicons name="calendar-outline" size={36} color="#BBB" style={{ marginBottom: 12 }} />
+            <Text fontWeight="bold" style={styles.blockedTitle}>예약을 받지 않는 상점이에요</Text>
+            <Text style={styles.blockedReason}>{storeBlock.reason}</Text>
+            <Text style={styles.blockedHint}>{storeBlock.hint}</Text>
+            <TouchableOpacity style={styles.blockedBtn} onPress={() => router.back()}>
+              <Text fontWeight="bold" style={styles.blockedBtnText}>상점으로 돌아가기</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!storeBlock && (
+        <>
         {/* 1. 방문 날짜 선택 */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -283,17 +343,21 @@ export default function ReservationInputScreen() {
             onChangeText={setRequestText}
           />
         </View>
+        </>
+        )}
       </ScrollView>
 
-      <View style={styles.bottomBar}>
-        <TouchableOpacity 
-          style={[styles.submitBtn, isFormValid && styles.submitBtnActive]} 
-          disabled={!isFormValid}
-          onPress={handleNext}
-        >
-          <Text fontWeight="bold" style={styles.submitBtnText}>예약 계속하기</Text>
-        </TouchableOpacity>
-      </View>
+      {!storeBlock && (
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[styles.submitBtn, isFormValid && styles.submitBtnActive]}
+            disabled={!isFormValid}
+            onPress={handleNext}
+          >
+            <Text fontWeight="bold" style={styles.submitBtnText}>예약 계속하기</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -305,6 +369,13 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, color: '#333' },
   scrollContent: { padding: 20, paddingBottom: 100 },
   infoBox: { backgroundColor: '#F4F5F7', padding: 20, borderRadius: 8, marginBottom: 25 },
+  // 예약을 받지 않는 상점 안내. 폼 대신 이것만 보여준다.
+  blockedBox: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+  blockedTitle: { fontSize: 17, color: '#333', marginBottom: 10 },
+  blockedReason: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 6 },
+  blockedHint: { fontSize: 13, color: '#999', textAlign: 'center', lineHeight: 20 },
+  blockedBtn: { marginTop: 24, paddingVertical: 13, paddingHorizontal: 28, borderRadius: 8, borderWidth: 1, borderColor: '#00A859' },
+  blockedBtnText: { color: '#00A859', fontSize: 14 },
   shopName: { fontSize: 18, color: '#333', marginBottom: 6 },
   shopAddress: { fontSize: 13, color: '#666' },
   section: { marginBottom: 30 },
