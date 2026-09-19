@@ -17,6 +17,8 @@ public interface AiPlanSubscriptionRepository extends JpaRepository<AiPlanSubscr
 
     List<AiPlanSubscription> findByStore_StoreIdAndActiveTrue(Long storeId);
 
+    Optional<AiPlanSubscription> findByPayment_AiPlanPaymentId(Long aiPlanPaymentId);
+
     // 만료 스케줄러 — 만료일이 지난 활성 구독 조회
     List<AiPlanSubscription> findByActiveTrueAndExpiredAtBefore(LocalDateTime now);
 

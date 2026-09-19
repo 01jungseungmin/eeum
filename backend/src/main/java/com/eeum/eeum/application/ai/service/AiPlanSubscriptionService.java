@@ -6,6 +6,10 @@ import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
+import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.order.service.PortOnePaymentClient;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.ai.repository.AiPlanPaymentRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
@@ -42,6 +46,8 @@ public class AiPlanSubscriptionService {
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     private final AiPlanPaymentCommandExecutor paymentCommandExecutor;
     private final RedisLockService redisLockService;
+    private final PortOnePaymentClient portOnePaymentClient;
+    private final OperationFailureRecorder operationFailureRecorder;
 
     // 구독 취소 시 즉시 FREE로 내릴지 (기본: 결제 기간 종료일까지 유지)
     @Value("${ai.plan.cancel-immediately:false}")
@@ -86,17 +92,65 @@ public class AiPlanSubscriptionService {
             log.warn("[AI-PLAN] 등록되지 않은 AI 플랜 결제 Webhook: 무시");
             return;
         }
-        applyPaidSubscription(paymentId);
+        PortOnePaymentInfo paymentInfo = portOnePaymentClient.getPayment(paymentId);
+        if ("CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
+            redisLockService.executeWithLock(
+                    LockKeys.aiPlanPayment(paymentId), PAYMENT_LOCK_LEASE,
+                    () -> paymentCommandExecutor.cancelPaidSubscriptionInTx(paymentId));
+            return;
+        }
+        if ("PARTIAL_CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND, "AiPlanSubscriptionService.handleWebhook",
+                    "PAYMENT", paymentId, "AI_PLAN_PARTIAL_CANCELLATION_MANUAL_REVIEW",
+                    "AI 플랜 부분 취소는 권한/기간 정책 확인 전까지 자동 반영하지 않습니다.", null);
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        }
+        if (!"PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
+            throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
+        }
+        applyPaidSubscription(paymentId, paymentInfo);
     }
 
     // 결제 검증 + 구독 반영 — 락을 먼저 잡고, Executor의 @Transactional 메서드가 커밋을 마친 뒤에만 락을 해제한다.
     // Webhook과 completePayment가 동시에 들어와도 같은 paymentId 락으로 직렬화되고, 두 번째 진입은
     // 첫 번째가 커밋한 최신 상태(PAID)를 읽으므로 중복 구독 생성 없이 멱등 스킵/복구 경로로만 흐른다.
     private void applyPaidSubscription(String paymentId) {
+        PortOnePaymentInfo paymentInfo;
+        try {
+            paymentInfo = portOnePaymentClient.getPayment(paymentId);
+        } catch (RuntimeException e) {
+            operationFailureRecorder.record(
+                    OperationFailureCategory.EXTERNAL_API, "AiPlanSubscriptionService.getPayment",
+                    "PAYMENT", paymentId, e, null);
+            throw e;
+        }
+        applyPaidSubscription(paymentId, paymentInfo);
+    }
+
+    private void applyPaidSubscription(String paymentId, PortOnePaymentInfo paymentInfo) {
+        AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentId(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())
+                && paymentInfo.getAmount() != null
+                && payment.getAmount().compareTo(paymentInfo.getAmount()) != 0) {
+            cancelMismatchedPayment(paymentId, paymentInfo.getAmount());
+        }
         redisLockService.executeWithLock(
                 LockKeys.aiPlanPayment(paymentId),
                 PAYMENT_LOCK_LEASE,
-                () -> paymentCommandExecutor.applyPaidSubscriptionInTx(paymentId));
+                () -> paymentCommandExecutor.applyPaidSubscriptionInTx(paymentId, paymentInfo));
+    }
+
+    private void cancelMismatchedPayment(String paymentId, java.math.BigDecimal amount) {
+        try {
+            portOnePaymentClient.cancelPayment(paymentId, amount, "AI 플랜 결제 금액 불일치 — 자동 환불");
+        } catch (RuntimeException e) {
+            log.error("[AI-PLAN] 금액 불일치 자동 환불 실패 — 수동 확인 필요: paymentId={}", paymentId, e);
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND, "AiPlanSubscriptionService.autoCancel",
+                    "PAYMENT", paymentId, e, "결제 금액 불일치 자동 환불 실패, amount=" + amount);
+        }
     }
 
     // 구독 취소 — 정책값에 따라 즉시 FREE 또는 기간 종료까지 유지

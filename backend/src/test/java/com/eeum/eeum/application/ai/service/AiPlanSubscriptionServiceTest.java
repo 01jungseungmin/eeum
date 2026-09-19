@@ -4,6 +4,9 @@ import com.eeum.eeum.application.ai.dto.request.AiPlanSubscribeRequestDto;
 import com.eeum.eeum.application.ai.dto.response.AiPlanSubscribeResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
+import com.eeum.eeum.application.order.service.PortOnePaymentClient;
+import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
 import com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus;
@@ -53,6 +56,8 @@ class AiPlanSubscriptionServiceTest {
     @Mock private AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     @Mock private AiPlanPaymentCommandExecutor paymentCommandExecutor;
     @Mock private RedisLockService redisLockService;
+    @Mock private PortOnePaymentClient portOnePaymentClient;
+    @Mock private OperationFailureRecorder operationFailureRecorder;
 
     private static final Long OWNER_ID = 100L;
     private static final Long STORE_ID = 1L;
@@ -142,6 +147,8 @@ class AiPlanSubscriptionServiceTest {
         stubRunnableLockPassThrough();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
         when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PAID").amount(payment.getAmount()).build());
 
         // when
         AiPlanSubscribeResponseDto response = subscriptionService.completePayment(OWNER_ID, PAYMENT_ID);
@@ -150,9 +157,9 @@ class AiPlanSubscriptionServiceTest {
         assertThat(response.paymentId()).isEqualTo(PAYMENT_ID);
         verify(redisLockService).executeWithLock(
                 eq(LockKeys.aiPlanPayment(PAYMENT_ID)), any(Duration.class), any(Runnable.class));
-        verify(paymentCommandExecutor).applyPaidSubscriptionInTx(PAYMENT_ID);
-        // 소유권 확인 조회 1회 + Executor 실행 후 최신 상태 재조회 1회
-        verify(aiPlanPaymentRepository, times(2)).findByPortonePaymentId(PAYMENT_ID);
+        verify(paymentCommandExecutor).applyPaidSubscriptionInTx(eq(PAYMENT_ID), any(PortOnePaymentInfo.class));
+        // 소유권 확인 1회 + 외부 검증 응답의 금액 대조 1회 + 최신 상태 재조회 1회
+        verify(aiPlanPaymentRepository, times(3)).findByPortonePaymentId(PAYMENT_ID);
     }
 
     @Test
@@ -191,6 +198,8 @@ class AiPlanSubscriptionServiceTest {
         stubRunnableLockPassThrough();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
         when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PAID").amount(payment.getAmount()).build());
 
         // when
         subscriptionService.handleWebhook(PAYMENT_ID);
@@ -198,7 +207,7 @@ class AiPlanSubscriptionServiceTest {
         // then
         verify(redisLockService).executeWithLock(
                 eq(LockKeys.aiPlanPayment(PAYMENT_ID)), any(Duration.class), any(Runnable.class));
-        verify(paymentCommandExecutor).applyPaidSubscriptionInTx(PAYMENT_ID);
+        verify(paymentCommandExecutor).applyPaidSubscriptionInTx(eq(PAYMENT_ID), any(PortOnePaymentInfo.class));
     }
 
     @Test
