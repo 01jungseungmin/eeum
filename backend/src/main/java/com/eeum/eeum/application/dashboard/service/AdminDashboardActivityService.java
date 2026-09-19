@@ -71,7 +71,7 @@ public class AdminDashboardActivityService {
         List<AdminActivityResponseDto> activities = new ArrayList<>();
         activities.addAll(signups(top));
         activities.addAll(storeRegistrations(size));
-        activities.addAll(payments(top));
+        activities.addAll(payments(size));
         activities.addAll(reports(top));
 
         return activities.stream()
@@ -92,7 +92,7 @@ public class AdminDashboardActivityService {
                 .toList();
         Map<Long, AccountRegion> primaryRegions = primaryAccountRegionIds.isEmpty()
                 ? Map.of()
-                : accountRegionRepository.findAllWithRegionByIdIn(primaryAccountRegionIds).stream()
+                : accountRegionRepository.findByAccountRegionIdIn(primaryAccountRegionIds).stream()
                         .collect(Collectors.toMap(AccountRegion::getAccountRegionId, Function.identity()));
 
         return accounts.stream()
@@ -126,8 +126,8 @@ public class AdminDashboardActivityService {
                 .toList();
     }
 
-    private List<AdminActivityResponseDto> payments(Pageable top) {
-        return paymentRepository.findRecentPaymentActivities(COMPLETED_PAYMENT_STATUSES, top).stream()
+    private List<AdminActivityResponseDto> payments(int size) {
+        return paymentRepository.findRecentPaymentActivities(COMPLETED_PAYMENT_STATUSES, size).stream()
                 .map((PaymentActivity payment) -> AdminActivityResponseDto.builder()
                         .type(DashboardActivityType.PAYMENT_COMPLETED)
                         .targetId(payment.paymentId())

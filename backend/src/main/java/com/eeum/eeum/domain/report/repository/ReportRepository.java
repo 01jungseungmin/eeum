@@ -17,7 +17,7 @@ import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 
-public interface ReportRepository extends JpaRepository<Report, Long> {
+public interface ReportRepository extends JpaRepository<Report, Long>, ReportRepositoryCustom {
 
     @EntityGraph(attributePaths = {"reporter"})
     Optional<Report> findByReportId(Long reportId);
@@ -48,15 +48,6 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
 
     // 대시보드 요약 — 미처리(PENDING) 신고 건수
     long countByStatus(ReportStatus status);
-
-    // 관리자 대시보드 처리 대기 — 상태별 신고의 사유별 건수
-    @Query("""
-        SELECT new com.eeum.eeum.domain.report.repository.ReportReasonCount(r.reason, COUNT(r))
-        FROM Report r
-        WHERE r.status = :status
-        GROUP BY r.reason
-        """)
-    List<ReportReasonCount> countByReasonForStatus(@Param("status") ReportStatus status);
 
     // 관리자 대시보드 처리 대기 — 가장 오래된 / 가장 최근 신고
     Optional<Report> findFirstByStatusOrderByCreatedAtAsc(ReportStatus status);

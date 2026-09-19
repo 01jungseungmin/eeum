@@ -22,7 +22,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,7 +58,7 @@ class AdminDashboardActivityServiceTest {
         when(accountRepository.findByRoleInAndStatusInOrderByCreatedAtDesc(anyCollection(), anyCollection(), any()))
                 .thenReturn(List.of(account));
         AccountRegion primary = accountRegion(100L, account, true, "강남구");
-        when(accountRegionRepository.findAllWithRegionByIdIn(List.of(100L))).thenReturn(List.of(primary));
+        when(accountRegionRepository.findByAccountRegionIdIn(List.of(100L))).thenReturn(List.of(primary));
 
         Store store = mock(Store.class);
         when(store.getStoreId()).thenReturn(2L);
@@ -68,7 +67,7 @@ class AdminDashboardActivityServiceTest {
         when(storeRepository.findRecentPubliclyVisible(3)).thenReturn(List.of(store));
 
         when(paymentRepository.findRecentPaymentActivities(
-                List.of(PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED), PageRequest.of(0, 3)))
+                List.of(PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED), 3))
                 .thenReturn(List.of(
                 new PaymentActivity(3L, "오늘 반찬", new BigDecimal("47500"), BASE.minusMinutes(8))));
 
@@ -141,7 +140,7 @@ class AdminDashboardActivityServiceTest {
         AccountRegion unverified = mock(AccountRegion.class);
         when(unverified.getAccountRegionId()).thenReturn(100L);
         when(unverified.isVerified()).thenReturn(false);
-        when(accountRegionRepository.findAllWithRegionByIdIn(List.of(100L))).thenReturn(List.of(unverified));
+        when(accountRegionRepository.findByAccountRegionIdIn(List.of(100L))).thenReturn(List.of(unverified));
 
         List<AdminActivityResponseDto> result = adminDashboardActivityService.getRecentActivities(null);
 

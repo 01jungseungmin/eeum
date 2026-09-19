@@ -7,6 +7,8 @@ import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
+
 public interface InquiryRepositoryCustom {
 
     /**
@@ -26,5 +28,11 @@ public interface InquiryRepositoryCustom {
             InquiryCategory category,
             String keyword,
             Pageable pageable
+    );
+
+    // 관리자 대시보드 처리 대기 — 대상·상태별 문의의 유형별 건수. 건수가 0인 유형은 행이 없다
+    List<InquiryCategoryCount> countByCategoryForTargetTypeAndStatus(
+            InquiryTargetType targetType,
+            InquiryStatus status
     );
 }
