@@ -43,7 +43,8 @@ public class AdminDashboardController {
                     - 회원: 일반·사장 계정 중 활성·정지 상태. 관리자·탈퇴·가입 미완료 제외
                     - 활성 사업장: 사용자에게 공개 노출되는 상점(사장 승인 완료·계정 활성·상점 미정지)
                     - "이번 주"는 월요일 00:00부터 현재까지입니다
-                    - 거래: 결제 완료 이후 상태(PAID·CONFIRMED·READY·COMPLETED) 주문
+                    - 신규 회원은 계정 생성 시각, 신규 사업장은 상점 생성 시각(사장 가입 시점) 기준입니다. 승인 시각은 기록되지 않아 쓰지 않습니다
+                    - 거래: 해당 기간에 생성된 주문 중 현재 결제 완료 이후 상태(PAID·CONFIRMED·READY·COMPLETED)인 주문. 결제 시각이 아니라 주문 생성 시각 기준입니다
                     - 전일 대비는 어제 같은 시각까지의 거래와 비교합니다. 어제 거래가 0건이면 `orderChangeRate`는 null입니다
                     - 처리 대기: 심사 요청된 사장 승인 대기 + 미처리 신고 + 미답변 관리자 문의
                     """
@@ -98,7 +99,7 @@ public class AdminDashboardController {
                     회원 가입·가게 등록·결제 완료·신고 접수를 최신순으로 합쳐 반환합니다.
 
                     - `MEMBER_SIGNUP`: description은 대표 동네(인증 완료)의 구 이름. 없으면 null
-                    - `STORE_REGISTERED`: description은 상점명. 공개 노출되는 상점(사장 승인 완료·계정 활성·상점 미정지)만, 상점 생성 시각 기준
+                    - `STORE_REGISTERED`: description은 상점명. 공개 노출되는 상점(사장 승인 완료·계정 활성·상점 미정지)만. 시각은 승인 시각이 아니라 상점 생성 시각(사장 가입 시점)
                     - `PAYMENT_COMPLETED`: description은 상점명, `amount`는 결제 금액. 결제 완료 시각(paidAt) 기준. 전액 취소·환불된 결제는 제외, 부분 환불은 포함(amount는 원 결제 금액)
                     - `REPORT_RECEIVED`: description은 "신고 사유 · 신고 대상"
                     - `limit`은 1~50, 생략 시 10입니다
