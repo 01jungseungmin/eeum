@@ -45,6 +45,8 @@ import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPa
 import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
 import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
+import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
+import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -137,6 +139,14 @@ function App() {
         <Route
           path="/admin/settlements"
           element={<AdminSettlementManagementPage />}
+        />
+        <Route
+          path="/admin/stores"
+          element={<AdminStoreManagementPage />}
+        />
+        <Route
+          path="/admin/stores/:storeId"
+          element={<AdminStoreDetailPage />}
         />
         <Route
           path="/admin/reports"
