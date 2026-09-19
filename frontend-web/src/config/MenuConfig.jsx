@@ -204,7 +204,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'sales',
         name: '매출/정산',
-        path: '/9',
+        path: '/settlement',
         icon: <TrendingUp {...iconProps} />,
         subtitle: '이번 달 정산 예정 금액과 매출을 확인하세요',
       },

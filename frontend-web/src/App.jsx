@@ -38,6 +38,7 @@ import AiPowerUsageReportPage from './pages/owner/main/AiPowerUsageReportPage';
 import AdminReportManagementPage from './pages/admin/main/ReportManagementPage';
 import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
+import SalesSettlementPage from './pages/owner/main/SalesSettlementPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
@@ -220,6 +221,10 @@ function App() {
           <Route
             path="/notifications"
             element={<NotificationPage />}
+          />
+          <Route
+            path="/settlement"
+            element={<SalesSettlementPage />}
           />
           <Route
             path="/ai-manager"
