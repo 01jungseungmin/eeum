@@ -13,6 +13,7 @@ import { shopApi } from '../../api/shop';
 import { regionApi } from '../../api/region';
 import { chatApi } from '../../api/chat';
 import { cartApi } from '../../api/cart';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 // 상품 상세 이미지. 백엔드 ProductDetailResponseDto.images 가 그대로 내려온다.
 interface ProductImage {
@@ -48,7 +49,9 @@ function sortProductImages(raw: any): ProductImage[] {
 
 export default function ProductDetailScreen() {
   const router = useRouter();
-  const { id, isRestaurant } = useLocalSearchParams();
+  // isRestaurant 파라미터는 상점 화면이 계속 넘기지만 더 이상 쓰지 않는다.
+  // 식당 메뉴와 일반 상품이 같은 장바구니·결제 경로를 타기 때문이다.
+  const { id } = useLocalSearchParams();
 
   // 웹 데모는 PC 창 너비가 아니라 폰 틀 너비(430px)로 보정돼 들어온다.
   // 모듈 로드 시점에 한 번 재면 그 보정과 창 크기 변경을 둘 다 놓친다.
@@ -66,7 +69,6 @@ export default function ProductDetailScreen() {
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const productIdNum = typeof id === 'string' ? Number(id) : 1;
-  const isRestaurantProd = isRestaurant === 'true';
 
   useEffect(() => {
     const fetchProductData = async () => {
@@ -170,28 +172,29 @@ export default function ProductDetailScreen() {
       }
     }
 
-    if (isRestaurantProd) {
-      Alert.alert('성공', '메뉴 선택이 완료되었습니다. 주문 화면으로 이동합니다.');
-      router.push(`/order/${productIdNum}` as any);
-    } else {
-      try {
-        // 선택한 옵션 아이디들 추출 (서버 API 규격에 맞게 변환 가능)
-        const optionItemIds = Object.values(selectedOptions).map((item: any) => item.itemId);
+    // 식당 메뉴도 일반 상품과 같은 경로를 탄다.
+    //
+    // 예전에는 식당 상품만 router.push(`/order/${productIdNum}`) 로 빠졌는데,
+    // /order/[id] 는 주문 상세 화면이라 GET /orders/{상품ID} 를 불러 404가 났다.
+    // 상품 ID를 주문 ID 자리에 넣은 것이다. 식당 전용 주문 화면은 존재하지 않고,
+    // 백엔드도 주문을 장바구니에서만 만든다(OrderService.createOrder 가 장바구니를 읽는다).
+    try {
+      // 선택한 옵션 아이디들 추출 (서버 API 규격에 맞게 변환 가능)
+      const optionItemIds = Object.values(selectedOptions).map((item: any) => item.itemId);
 
-        await cartApi.addCartItem({ 
-          productId: productIdNum, 
-          quantity: quantity,
-          selectedOptionItemIds: optionItemIds 
-        });
-      
-        Alert.alert('장바구니 담기 성공', `${productDetail?.name} ${quantity}개가 장바구니에 담겼습니다.`, [
-          { text: '쇼핑 계속하기', style: 'cancel' },
-          { text: '장바구니 보기', onPress: () => router.push('/cart') }
-        ]);
-      } catch (error) {
-        console.error("장바구니 담기 오류:", error);
-        Alert.alert('오류', '장바구니에 상품을 담는데 실패했습니다.');
-      }
+      await cartApi.addCartItem({
+        productId: productIdNum,
+        quantity: quantity,
+        selectedOptionItemIds: optionItemIds
+      });
+
+      Alert.alert('장바구니 담기 성공', `${productDetail?.name} ${quantity}개가 장바구니에 담겼습니다.`, [
+        { text: '쇼핑 계속하기', style: 'cancel' },
+        { text: '장바구니 보기', onPress: () => router.push('/cart') }
+      ]);
+    } catch (error) {
+      console.error("장바구니 담기 오류:", error);
+      Alert.alert('오류', getApiErrorMessage(error, '장바구니에 상품을 담는데 실패했습니다.'));
     }
   };
 
@@ -379,9 +382,8 @@ export default function ProductDetailScreen() {
           </View>
         )}
 
-        {/* 수량 선택 섹션 (식당 메뉴가 아닐 때만 노출) */}
-        {!isRestaurantProd && (
-          <View style={styles.quantitySection}>
+        {/* 수량 선택 섹션 — 식당 메뉴도 장바구니 경로를 타므로 똑같이 필요하다 */}
+        <View style={styles.quantitySection}>
             <Text fontWeight="bold" style={styles.quantityLabel}>수량</Text>
             <View style={styles.quantityController}>
               <TouchableOpacity 
@@ -390,16 +392,15 @@ export default function ProductDetailScreen() {
               >
                 <Ionicons name="remove" size={18} color="#333" />
               </TouchableOpacity>
-              <Text fontWeight="bold" style={styles.qtyText}>{quantity}</Text>
-              <TouchableOpacity 
-                style={styles.qtyBtn} 
-                onPress={() => setQuantity(prev => prev + 1)}
-              >
-                <Ionicons name="add" size={18} color="#333" />
-              </TouchableOpacity>
-            </View>
+            <Text fontWeight="bold" style={styles.qtyText}>{quantity}</Text>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => setQuantity(prev => prev + 1)}
+            >
+              <Ionicons name="add" size={18} color="#333" />
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
       </ScrollView>
 
       {/* 하단 구매 / 채팅 버튼 바 */}
@@ -412,7 +413,7 @@ export default function ProductDetailScreen() {
 
         <TouchableOpacity style={styles.primaryBtn} onPress={handleAction}>
           <Text fontWeight="bold" style={styles.primaryBtnText}>
-            {isRestaurantProd ? '메뉴 선택하기' : '장바구니 담기'}
+            장바구니 담기
           </Text>
         </TouchableOpacity>
 
