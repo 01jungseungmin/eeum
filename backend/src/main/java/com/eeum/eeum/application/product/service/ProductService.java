@@ -59,9 +59,7 @@ public class ProductService {
                 )
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
 
-        BigDecimal price = request.getBasePrice() == null
-                ? BigDecimal.ZERO
-                : BigDecimal.valueOf(request.getBasePrice());
+        BigDecimal price = BigDecimal.valueOf(request.getBasePrice());
 
         String description = request.getDescription() == null
                 ? "" : request.getDescription();
@@ -84,17 +82,20 @@ public class ProductService {
                                             ProductUpdateRequestDto request) {
         Product product = getProductWithOwnerCheck(accountId, productId);
 
-        ProductCategory productCategory = productCategoryRepository
-                .findByProductCategoryIdAndStore_StoreId(
-                        request.getCategoryId(),
-                        product.getStore().getStoreId()
-                )
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
+        // categoryId/description 미전송 시 기존 값 유지 — PATCH 부분 수정 의미를 지킨다
+        ProductCategory productCategory = request.getCategoryId() == null
+                ? product.getProductCategory()
+                : productCategoryRepository
+                        .findByProductCategoryIdAndStore_StoreId(
+                                request.getCategoryId(),
+                                product.getStore().getStoreId()
+                        )
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_NOT_FOUND));
 
         product.update_info(
                 productCategory,
                 request.getName(),
-                request.getDescription() == null ? "" : request.getDescription(),
+                request.getDescription() == null ? product.getDescription() : request.getDescription(),
                 BigDecimal.valueOf(request.getBasePrice()),
                 request.getProductType()
         );
