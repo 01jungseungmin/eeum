@@ -11,8 +11,8 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import DashboardCard from '../../../components/owner/dashboard/DashBoardCard';
-// import SalesChart from '../../../components/owner/dashboard/SalesChart';
-// import CategoryChart from '../../../components/owner/dashboard/CategoryChart';
+import SalesChart from '../../../components/owner/dashboard/SalesChart';
+// import CategoryChart from '../../../components/owner/dashboard/CategoryChart'; // 카테고리별 판매 비율 - 별도 상품/카테고리 연동 작업 필요
 import TopProducts from '../../../components/owner/dashboard/TopProducts';
 import RecentOrders from '../../../components/owner/dashboard/recentOrders';
 import RecentReviews from '../../../components/owner/dashboard/RecentReviews';
@@ -81,11 +81,11 @@ const WelcomeBanner = styled.div`
   }
 `;
 
-// const BottomGridRow1 = styled.div`
-//   display: grid;
-//   grid-template-columns: 2fr 1fr;
-//   gap: 20px;
-// `;
+const BottomGridRow1 = styled.div`
+  display: grid;
+  grid-template-columns: 1fr; // CategoryChart는 별도 연동 전까지 SalesChart 단독 전체폭
+  gap: 20px;
+`;
 
 const BottomGridRow2 = styled.div`
   display: grid;
@@ -194,10 +194,9 @@ function DashboardPage() {
         />
       </GridSection>
 
-      {/* <BottomGridRow1>
+      <BottomGridRow1>
         <SalesChart />
-        <CategoryChart />
-      </BottomGridRow1> */}
+      </BottomGridRow1>
 
       <BottomGridRow2>
         <TopProducts />
