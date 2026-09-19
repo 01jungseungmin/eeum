@@ -67,7 +67,7 @@ public class CartService {
     public CartResponseDto addItem(Long accountId, CartItemAddRequestDto request) {
         validateRequest(request);
 
-        Cart cart = getOrCreateCart(accountId);
+        Cart cart = getOrCreateCartForWrite(accountId);
 
         if (request.getProductId() != null) {
             addProductToCart(cart, request);
@@ -84,7 +84,7 @@ public class CartService {
             Long cartItemId,
             CartItemUpdateRequestDto request
     ) {
-        Cart cart = getOrCreateCart(accountId);
+        Cart cart = getOrCreateCartForWrite(accountId);
 
         CartItem item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
@@ -102,7 +102,7 @@ public class CartService {
 
     @Transactional
     public CartResponseDto removeItem(Long accountId, Long cartItemId) {
-        Cart cart = getOrCreateCart(accountId);
+        Cart cart = getOrCreateCartForWrite(accountId);
 
         CartItem item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
@@ -123,7 +123,7 @@ public class CartService {
 
     @Transactional
     public void clearCart(Long accountId) {
-        Cart cart = getOrCreateCart(accountId);
+        Cart cart = getOrCreateCartForWrite(accountId);
         cartItemRepository.deleteByCart_CartId(cart.getCartId());
         cart.clear();
     }
@@ -389,13 +389,20 @@ public class CartService {
     private Cart getOrCreateCart(Long accountId) {
         return cartRepository.findByAccount_AccountId(accountId)
                 .orElseGet(() -> {
-                    Account account = accountRepository.findById(accountId)
+                    // 카트 행이 아직 없을 때는 존재하지 않는 행에 대한 cart 락을 잡을 수 없다.
+                    // 계정 행을 mutex로 써서 첫 조회/생성을 직렬화하고 UNIQUE(account_id) 충돌을 막는다.
+                    Account account = accountRepository.findByIdWithLock(accountId)
                             .orElseThrow(() -> new BusinessException(
                                     ErrorCode.ACCOUNT_NOT_FOUND
                             ));
-
-                    return cartRepository.save(Cart.create(account));
+                    return cartRepository.findByAccount_AccountId(accountId)
+                            .orElseGet(() -> cartRepository.save(Cart.create(account)));
                 });
+    }
+
+    private Cart getOrCreateCartForWrite(Long accountId) {
+        return cartRepository.findByAccountIdWithPessimisticLock(accountId)
+                .orElseGet(() -> getOrCreateCart(accountId));
     }
 
     private CartItemResponseDto toCartItemDto(CartItem item) {
