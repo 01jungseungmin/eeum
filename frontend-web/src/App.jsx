@@ -44,6 +44,7 @@ import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
 import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
 import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
+import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -132,6 +133,10 @@ function App() {
         <Route
           path="/admin/members"
           element={<MemberPage />}
+        />
+        <Route
+          path="/admin/settlements"
+          element={<AdminSettlementManagementPage />}
         />
         <Route
           path="/admin/reports"
