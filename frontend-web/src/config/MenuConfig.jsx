@@ -26,6 +26,9 @@ import {
   Settings,
   Sparkles,
   LogOut,
+  ShoppingBag,
+  Newspaper,
+  Heart,
 } from 'lucide-react';
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
@@ -204,7 +207,7 @@ export const OWNER_MENU_CONFIG = [
       {
         id: 'sales',
         name: '매출/정산',
-        path: '/9',
+        path: '/settlement',
         icon: <TrendingUp {...iconProps} />,
         subtitle: '이번 달 정산 예정 금액과 매출을 확인하세요',
       },
@@ -260,6 +263,54 @@ export const ADMIN_MENU_CONFIG = [
         name: '회원 관리',
         path: '/admin/members',
         icon: <Users {...iconProps} />,
+      },
+      {
+        id: 'admin-settlements',
+        name: '정산 관리',
+        path: '/admin/settlements',
+        icon: <CreditCard {...iconProps} />,
+      },
+      {
+        id: 'admin-stores',
+        name: '상점 관리',
+        path: '/admin/stores',
+        icon: <Store {...iconProps} />,
+      },
+      {
+        id: 'admin-used',
+        name: '중고거래 관리',
+        path: '/admin/used',
+        icon: <ShoppingBag {...iconProps} />,
+      },
+      {
+        id: 'admin-community',
+        name: '커뮤니티 관리',
+        path: '/admin/community/posts',
+        icon: <Newspaper {...iconProps} />,
+      },
+      {
+        id: 'admin-chat',
+        name: '채팅 관리',
+        path: '/admin/chat/rooms',
+        icon: <MessageSquare {...iconProps} />,
+      },
+      {
+        id: 'admin-notifications',
+        name: '알림 발송',
+        path: '/admin/notifications/send',
+        icon: <Bell {...iconProps} />,
+      },
+      {
+        id: 'admin-operations',
+        name: '운영 모니터링',
+        path: '/admin/operations',
+        icon: <Activity {...iconProps} />,
+      },
+      {
+        id: 'admin-favorites',
+        name: '찜 통계',
+        path: '/admin/favorites',
+        icon: <Heart {...iconProps} />,
       },
       {
         id: 'admin-approval',

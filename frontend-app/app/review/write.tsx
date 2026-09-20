@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { reviewApi } from '../../api/review';
 import { uploadImageAssets } from '../../utils/imageUpload';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 export default function ReviewWriteScreen() {
   const router = useRouter();
@@ -107,7 +108,13 @@ export default function ReviewWriteScreen() {
 
     } catch (error) {
       console.error(error);
-      Alert.alert('오류', isEditMode ? '리뷰 수정에 실패했습니다.' : '리뷰 등록에 실패했습니다.');
+      // 서버가 준 사유를 그대로 보여준다 — "이미 리뷰를 작성했습니다",
+      // "구매 완료 후 리뷰를 작성할 수 있습니다" 처럼 사용자가 바로 이해할 수 있는 문구다.
+      // 뭉뚱그린 실패 문구만 띄우면 무엇을 고쳐야 하는지 알 수 없다.
+      Alert.alert(
+        isEditMode ? '리뷰 수정 실패' : '리뷰 등록 실패',
+        getApiErrorMessage(error, isEditMode ? '리뷰 수정에 실패했습니다.' : '리뷰 등록에 실패했습니다.')
+      );
     } finally {
       setIsSubmitting(false);
     }

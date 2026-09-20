@@ -17,4 +17,20 @@ export const inquiryApi = {
       content: content,
     });
   },
+
+  // 문의 답변 수정
+  updateAnswer: (inquiryId, answerId, content) => {
+    return apiClient.patch(
+      `/admin/inquiries/${inquiryId}/answers/${answerId}`,
+      { content },
+    );
+  },
+
+  // 문의 강제 종료 / 재오픈
+  closeInquiry: (inquiryId) => {
+    return apiClient.patch(`/admin/inquiries/${inquiryId}/close`);
+  },
+  reopenInquiry: (inquiryId) => {
+    return apiClient.patch(`/admin/inquiries/${inquiryId}/reopen`);
+  },
 };

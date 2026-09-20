@@ -47,6 +47,7 @@ public class SecurityConfig {
             "/event-products/**",
             "/ai-exposures/stores",
             "/categories",
+            "/banks",
             "/searches/popular-keywords"
     };
 

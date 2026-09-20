@@ -7,6 +7,7 @@ import com.eeum.eeum.domain.inquiry.enums.InquiryStatus;
 import com.eeum.eeum.domain.inquiry.enums.InquiryTargetType;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.ComparableExpressionBase;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -121,5 +122,21 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
         }
         String trimmed = keyword.trim();
         return INQUIRY.title.contains(trimmed).or(INQUIRY.content.contains(trimmed));
+    }
+
+    @Override
+    public List<InquiryCategoryCount> countByCategoryForTargetTypeAndStatus(
+            InquiryTargetType targetType,
+            InquiryStatus status
+    ) {
+        return queryFactory
+                .select(Projections.constructor(InquiryCategoryCount.class, INQUIRY.category, INQUIRY.count()))
+                .from(INQUIRY)
+                .where(
+                        INQUIRY.targetType.eq(targetType),
+                        INQUIRY.status.eq(status)
+                )
+                .groupBy(INQUIRY.category)
+                .fetch();
     }
 }

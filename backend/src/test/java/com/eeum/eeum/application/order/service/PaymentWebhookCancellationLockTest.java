@@ -7,7 +7,11 @@ import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RateLimitService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.config.PortOneProperties;
+import com.eeum.eeum.domain.order.entity.Order;
+import com.eeum.eeum.domain.order.entity.Payment;
+import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.PaymentCancellationTrigger;
+import com.eeum.eeum.domain.order.enums.PaymentStatus;
 import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -40,6 +44,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -109,9 +115,6 @@ class PaymentWebhookCancellationLockTest {
 
         when(paymentRepository.findOrderIdByPortonePaymentId(PAYMENT_ID))
                 .thenReturn(Optional.of(ORDER_ID));
-        // 같은 webhook-id 재전송 차단을 통과시킨다. mock 기본값(false)이면 모든 Webhook이
-        // 중복으로 무시돼 아래 검증이 전부 무의미해진다.
-        when(rateLimitService.tryAcquireCooldown(anyString(), any(Duration.class))).thenReturn(true);
     }
 
     @Test
@@ -125,14 +128,14 @@ class PaymentWebhookCancellationLockTest {
                 LockKeys.order(ORDER_ID), Duration.ofSeconds(30), ErrorCode.LOCK_ORDER_FAILED,
                 (Supplier<Void>) () -> null))
                 .when(paymentCancellationService)
-                .cancel(eq(ORDER_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK), anyString(), eq(true));
+                .cancel(eq(ORDER_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK), anyString(), eq(true), any());
 
         // when & then
         assertThatCode(() -> paymentService.handleWebhook(RAW_BODY, signedHeaders()))
                 .doesNotThrowAnyException();
 
         verify(paymentCancellationService).cancel(
-                eq(ORDER_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK), anyString(), eq(true));
+                eq(ORDER_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK), anyString(), eq(true), any());
         // 락이 제대로 반납됐는지까지 본다 — 남아 있으면 다음 Webhook이 막힌다.
         assertThat(lockStub.heldKeys()).isEmpty();
     }
@@ -166,27 +169,80 @@ class PaymentWebhookCancellationLockTest {
     }
 
     @Test
-    void Webhook_처리가_실패하면_재전송을_위해_replay_키를_반납한다() {
+    void 외부_취소_Webhook은_PortOne_누적_취소액을_취소_확정_검증에_넘긴다() {
+        // given
+        givenExternalStatus("CANCELLED", java.math.BigDecimal.valueOf(10000));
+
+        // when
+        paymentService.handleWebhook(RAW_BODY, signedHeaders());
+
+        // then
+        verify(paymentCancellationService).cancel(eq(ORDER_ID), eq(PaymentCancellationTrigger.PORTONE_WEBHOOK),
+                anyString(), eq(true), eq(java.math.BigDecimal.valueOf(10000)));
+    }
+
+    @Test
+    void 결제완료_Webhook이_만료된_주문에_오면_늦은_결제_취소로_보낸다() {
+        // given
+        givenExternalStatus("PAID");
+        givenOrderAndPayment(OrderStatus.EXPIRED, PaymentStatus.CANCELLED);
+
+        // when
+        paymentService.handleWebhook(RAW_BODY, signedHeaders());
+
+        // then
+        verify(paymentCancellationService).cancelLatePaidOrder(ORDER_ID, "TEST");
+        verify(paymentWebhookProcessor, never()).applyPaidWebhook(any(), any(), any());
+    }
+
+    @Test
+    void 늦은_결제_취소가_PG_실패로_결제만_되살아난_상태여도_재전송_Webhook이_취소를_재시도한다() {
+        // given — 앞선 시도가 결제를 PAID로 되살린 뒤 PG 취소 호출에서 실패했다
+        givenExternalStatus("PAID");
+        givenOrderAndPayment(OrderStatus.EXPIRED, PaymentStatus.PAID);
+
+        // when
+        paymentService.handleWebhook(RAW_BODY, signedHeaders());
+
+        // then — 결제 반영 경로(수동 검토 예외)로 빠지지 않고 늦은 결제 취소를 다시 시도한다
+        verify(paymentCancellationService).cancelLatePaidOrder(ORDER_ID, "TEST");
+        verify(paymentWebhookProcessor, never()).applyPaidWebhook(any(), any(), any());
+    }
+
+    @Test
+    void Webhook_처리가_실패하면_예외를_전파해_PortOne_재전송을_받는다() {
         // given
         when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenThrow(new RuntimeException("temporary failure"));
 
         // when / then
         assertThatThrownBy(() -> paymentService.handleWebhook(RAW_BODY, signedHeaders()))
                 .isInstanceOf(RuntimeException.class);
-
-        verify(rateLimitService).releaseCooldown(org.mockito.ArgumentMatchers.startsWith("webhook:portone:received:"));
     }
 
     // ─────────────────── 헬퍼 ───────────────────
 
     private void givenExternalStatus(String status) {
+        givenExternalStatus(status, null);
+    }
+
+    private void givenExternalStatus(String status, java.math.BigDecimal cancelledAmount) {
         when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(
                 PortOnePaymentInfo.builder()
                         .paymentId(PAYMENT_ID)
                         .status(status)
                         .amount(java.math.BigDecimal.valueOf(10000))
+                        .cancelledAmount(cancelledAmount)
                         .pgProvider("TEST")
                         .build());
+    }
+
+    private void givenOrderAndPayment(OrderStatus orderStatus, PaymentStatus paymentStatus) {
+        Order order = mock(Order.class);
+        when(order.getStatus()).thenReturn(orderStatus);
+        Payment payment = mock(Payment.class);
+        when(payment.getStatus()).thenReturn(paymentStatus);
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(paymentRepository.findByOrder_OrderId(ORDER_ID)).thenReturn(Optional.of(payment));
     }
 
     private HttpHeaders signedHeaders() {

@@ -35,12 +35,8 @@ public class WeeklySettlementClosingScheduler {
         for (Long ownerRevenueId : lateIds) {
             try {
                 // 기간 밖 원장은 현재 주차에 섞지 않는다. 지급 누락을 숨기지도 않고 운영
-                // 수습 대기열에 남겨 별도 재마감 또는 수동 지급 절차를 선택하게 한다.
-                if (weeklySettlementClosingService.markLateRevenueReported(ownerRevenueId, periodStartAt)) {
-                    recordFailure(ownerRevenueId, "SETTLEMENT_OUTSIDE_PERIOD",
-                            "지난 정산 기간에 포함되지 않은 원장입니다. 별도 정산 수습이 필요합니다.",
-                            periodStartAt, periodEndAt);
-                }
+                // 수습 대기열과 실패 이력을 같은 트랜잭션으로 남겨 별도 비동기 기록 유실을 없앤다.
+                weeklySettlementClosingService.markLateRevenueReported(ownerRevenueId, periodStartAt, periodEndAt);
             } catch (RuntimeException e) {
                 log.warn("누락 정산 원장 수습 표시 실패: ownerRevenueId={}", ownerRevenueId, e);
                 operationFailureRecorder.record(
@@ -73,15 +69,4 @@ public class WeeklySettlementClosingScheduler {
         return "periodStartAt=" + periodStartAt + ", periodEndAt=" + periodEndAt;
     }
 
-    private void recordFailure(
-            Long ownerRevenueId, String code, String message,
-            LocalDateTime periodStartAt, LocalDateTime periodEndAt
-    ) {
-        log.warn("{} — ownerRevenueId={}, period={}~{}", message, ownerRevenueId, periodStartAt, periodEndAt);
-        operationFailureRecorder.record(
-                OperationFailureCategory.SCHEDULER,
-                "WeeklySettlementClosingScheduler.closeWeeklySettlements",
-                "ownerRevenue", String.valueOf(ownerRevenueId),
-                code, message, payload(periodStartAt, periodEndAt));
-    }
 }

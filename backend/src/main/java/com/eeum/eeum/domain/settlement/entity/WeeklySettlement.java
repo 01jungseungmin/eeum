@@ -156,12 +156,12 @@ public class WeeklySettlement extends BaseEntity {
         if (now == null) {
             throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
         }
+        // 진행 중(PAYOUT_IN_PROGRESS)은 임대가 끝나도 다시 claim 할 수 없다. 이전 관리자가 이미
+        // 은행 송금을 마쳤는데 응답만 못 받았을 수 있어, 자동으로 풀면 이중 송금이 된다.
+        // 송금 여부를 확인한 뒤 completeHandover/releaseStalledClaim으로만 정리한다.
         boolean canClaim = status == WeeklySettlementStatus.PAYOUT_PENDING
                 || status == WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED
                 || (status == WeeklySettlementStatus.FAILED
-                && this.claimExpiresAt != null
-                && !this.claimExpiresAt.isAfter(now))
-                || (status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
                 && this.claimExpiresAt != null
                 && !this.claimExpiresAt.isAfter(now));
         if (!canClaim || claimedBy == null || !StringUtils.hasText(claimToken) || claimExpiresAt == null
@@ -173,6 +173,46 @@ public class WeeklySettlement extends BaseEntity {
         this.claimExpiresAt = claimExpiresAt;
         this.claimedBy = claimedBy;
         this.payoutRequestedAt = requestedAt;
+    }
+
+    /** 임대가 끝난 지급 작업인지 — 인계 판단의 전제. */
+    public boolean isStalledClaim(LocalDateTime now) {
+        return status == WeeklySettlementStatus.PAYOUT_IN_PROGRESS
+                && claimExpiresAt != null
+                && !claimExpiresAt.isAfter(now);
+    }
+
+    /**
+     * 이전 관리자가 실제로 송금했음을 확인하고 인계받아 완료 처리한다.
+     * 송금 증빙을 반드시 남긴다 — 이 기록이 없으면 이중 송금 여부를 나중에 가릴 수 없다.
+     */
+    public void completeHandover(Account handoverBy, String payoutReference, LocalDateTime completedAt) {
+        if (handoverBy == null || !StringUtils.hasText(payoutReference) || completedAt == null
+                || !isStalledClaim(completedAt)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.status = WeeklySettlementStatus.COMPLETED;
+        this.payoutGateway = PayoutGatewayType.MANUAL;
+        this.manualCompletedBy = handoverBy;
+        this.manualPayoutReference = payoutReference;
+        this.payoutResultStatus = "COMPLETED_BY_HANDOVER";
+        this.payoutCompletedAt = completedAt;
+        this.claimToken = null;
+        this.claimExpiresAt = null;
+        this.claimedBy = null;
+    }
+
+    /** 송금이 없었음을 확인한 뒤 다시 지급할 수 있도록 되돌린다. 확인 사유를 남긴다. */
+    public void releaseStalledClaim(Account releasedBy, String reason, LocalDateTime now) {
+        if (releasedBy == null || !StringUtils.hasText(reason) || now == null || !isStalledClaim(now)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        this.status = WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED;
+        this.failureCode = "PAYOUT_CLAIM_RELEASED";
+        this.failureReason = "미송금 확인 후 인계 (adminId=" + releasedBy.getAccountId() + "): " + reason;
+        this.claimToken = null;
+        this.claimExpiresAt = null;
+        this.claimedBy = null;
     }
 
     public void requireManualReview(

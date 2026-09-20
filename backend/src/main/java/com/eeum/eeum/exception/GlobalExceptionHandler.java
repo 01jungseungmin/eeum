@@ -25,6 +25,16 @@ public class GlobalExceptionHandler {
 
     // ===================== 비즈니스 예외 =====================
 
+    // PortOne 예외 메시지에는 paymentId 등 내부 정보가 담겨 있어 로그에만 남기고, 응답은 ErrorCode 기본 문구로 내린다
+    @ExceptionHandler(PortOnePaymentException.class)
+    public ResponseEntity<ApiResponse<?>> handlePortOnePaymentException(PortOnePaymentException e) {
+        log.warn("[PortOnePaymentException] code={}, message={}", e.getErrorCode().getCode(), e.getMessage());
+
+        return ResponseEntity
+                .status(e.getErrorCode().getHttpStatus())
+                .body(ApiResponse.fail(e.getErrorCode().getCode(), e.getErrorCode().getMessage()));
+    }
+
     @ExceptionHandler(BusinessException.class) //Spring은 예외 발생 시 가장 구체적인 타입부터 찾고 없으면 부모 타입으로 올라감
     public ResponseEntity<ApiResponse<?>> handleBusinessException(BusinessException e) {
         log.warn("[BusinessException] code={}, message={}", e.getErrorCode().getCode(), e.getMessage());

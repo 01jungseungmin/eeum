@@ -27,9 +27,11 @@ import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationTimeSlotRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
+import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
+import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -58,6 +60,7 @@ public class VisitReservationService {
     private final VisitReservationRepository visitReservationRepository;
     private final StoreReviewRepository storeReviewRepository;
     private final StoreRepository storeRepository;
+    private final StoreImageRepository storeImageRepository;
     private final AccountRepository accountRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
     private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
@@ -100,8 +103,25 @@ public class VisitReservationService {
                 ? Set.of()
                 : storeReviewRepository.findVisitReservationIdsWithReview(reservationIds);
 
+        // 썸네일은 예약 건마다 조회하면 N+1이 된다. 상점 찜 목록과 같은 방식으로
+        // 이 페이지에 등장하는 상점들의 썸네일을 IN절 한 번에 가져온다.
+        List<Long> storeIds = reservations.getContent().stream()
+                .map(reservation -> reservation.getStore().getStoreId())
+                .distinct()
+                .toList();
+        Map<Long, String> thumbnailUrlByStoreId = storeIds.isEmpty()
+                ? Map.of()
+                : storeImageRepository.findByStore_StoreIdInAndIsThumbnailTrue(storeIds).stream()
+                        .collect(Collectors.toMap(
+                                image -> image.getStore().getStoreId(),
+                                StoreImage::getImageUrl,
+                                // 썸네일이 여러 장인 상점이 있어도 터지지 않게 첫 장을 쓴다.
+                                (first, second) -> first));
+
         return reservations.map(reservation -> visitReservationMapper.toVisitReservationResponseDto(
-                reservation, reviewedReservationIds.contains(reservation.getVisitReservationId())));
+                reservation,
+                reviewedReservationIds.contains(reservation.getVisitReservationId()),
+                thumbnailUrlByStoreId.get(reservation.getStore().getStoreId())));
     }
 
     @Transactional(readOnly = true)
@@ -111,7 +131,11 @@ public class VisitReservationService {
             throw new BusinessException(ErrorCode.RESERVATION_ACCESS_DENIED);
         }
         boolean hasReview = storeReviewRepository.existsByVisitReservation_VisitReservationId(reservationId);
-        return visitReservationMapper.toVisitReservationResponseDto(reservation, hasReview);
+        String thumbnailUrl = storeImageRepository
+                .findByStore_StoreIdAndIsThumbnailTrue(reservation.getStore().getStoreId())
+                .map(StoreImage::getImageUrl)
+                .orElse(null);
+        return visitReservationMapper.toVisitReservationResponseDto(reservation, hasReview, thumbnailUrl);
     }
 
     @Transactional

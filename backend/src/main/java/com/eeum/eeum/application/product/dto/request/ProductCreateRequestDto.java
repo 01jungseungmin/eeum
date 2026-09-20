@@ -24,6 +24,7 @@ public class ProductCreateRequestDto {
     private Long categoryId;
 
     @Schema(description = "기본 가격", example = "8000")
+    @NotNull(message = "기본 가격은 필수입니다.")
     @PositiveOrZero(message = "가격은 0원 이상이어야 합니다.")
     private Integer basePrice;
 

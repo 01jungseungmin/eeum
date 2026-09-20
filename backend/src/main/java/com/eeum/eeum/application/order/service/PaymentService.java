@@ -79,7 +79,6 @@ public class PaymentService {
     // PortOne은 실패한 Webhook을 최대 256분까지 재전송한다. 재전송에서도 최초 event
     // timestamp가 유지되므로, 그 범위를 넘는 작은 허용값을 쓰면 정상 이벤트를 버리게 된다.
     private static final Duration WEBHOOK_TIMESTAMP_TOLERANCE = Duration.ofHours(5);
-    private static final Duration WEBHOOK_REPLAY_WINDOW = Duration.ofHours(6);
 
     public void verifyPayment(Long accountId, PaymentCompleteRequestDto request) {
         // 식별자 해소는 상태를 바꾸지 않는 짧은 조회다. 이후부터 외부 조회까지 같은 주문 락을
@@ -125,11 +124,6 @@ public class PaymentService {
          * 5. 실패 로그 기록 및 401/400 계열 예외 처리
          */
         String webhookId = validateWebhookSignature(rawBody, headers);
-        String replayKey = RateLimitKeys.webhookReplay(webhookId);
-        if (!rateLimitService.tryAcquireCooldown(replayKey, WEBHOOK_REPLAY_WINDOW)) {
-            log.info("중복 PortOne Webhook 무시: webhookId={}", webhookId);
-            return;
-        }
         try {
             PaymentWebhookRequestDto request = parseWebhookBody(rawBody);
 
@@ -156,9 +150,6 @@ public class PaymentService {
             }
             handleWebhookByExternalStatus(orderId, paymentId);
         } catch (RuntimeException e) {
-            // 처리 실패는 PortOne 재전송으로 복구해야 한다. 성공 여부와 무관하게 event id를
-            // 완료 처리하면 일시적인 PG 조회·DB·락 실패가 영구 유실된다.
-            rateLimitService.releaseCooldown(replayKey);
             throw e;
         }
     }
@@ -219,7 +210,8 @@ public class PaymentService {
                 .findByOrder_Account_AccountIdAndPaymentId(accountId, paymentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        if (payment.getStatus() != PaymentStatus.PAID) {
+        if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new BadRequestException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
         if (payment.getRefundStatus() == RefundStatus.REQUESTED) {
@@ -251,14 +243,14 @@ public class PaymentService {
             // PG가 이미 취소됐으므로 재호출하지 않는다. Payment·Order·재고·정산은 공통 취소
             // 작업이 짧은 독립 트랜잭션으로 함께 반영한다. 주문 락은 cancel()이 잡는다.
             paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
-                    "PortOne 외부 취소 Webhook", true);
+                    "PortOne 외부 취소 Webhook", true, externalPayment.getCancelledAmount());
             return;
         }
         if ("PARTIAL_CANCELLED".equalsIgnoreCase(externalPayment.getStatus())) {
             if (externalPayment.getCancelledAmount() != null
                     && externalPayment.getCancelledAmount().compareTo(externalPayment.getAmount()) == 0) {
                 paymentCancellationService.cancel(orderId, PaymentCancellationTrigger.PORTONE_WEBHOOK,
-                        "PortOne 외부 전액 취소 Webhook", true);
+                        "PortOne 외부 전액 취소 Webhook", true, externalPayment.getCancelledAmount());
                 return;
             }
             paymentCancellationService.reconcileExternalPartialCancellation(
@@ -266,10 +258,27 @@ public class PaymentService {
             return;
         }
 
-        // 결제 완료 반영만 주문 락이 필요하다 — verify 경로와 같은 키를 쓴다.
-        redisLockService.executeWithLock(
-                LockKeys.order(orderId), PAYMENT_LOCK_LEASE_TIME, ErrorCode.LOCK_PAYMENT_FAILED,
-                () -> paymentWebhookProcessor.applyPaidWebhook(orderId, paymentId, externalPayment));
+        if ("PAID".equalsIgnoreCase(externalPayment.getStatus())) {
+            Payment currentPayment = paymentRepository.findByOrder_OrderId(orderId).orElse(null);
+            Order currentOrder = orderRepository.findById(orderId).orElse(null);
+            // 주문이 이미 끝났으면 결제 상태와 무관하게 늦은 결제 취소로 보낸다. 앞선 시도가 결제를
+            // 되살린 뒤 PG 취소에 실패했어도 재전송된 Webhook이 같은 경로로 재시도하게 한다.
+            boolean orderClosed = currentOrder != null
+                    && (currentOrder.getStatus() == OrderStatus.EXPIRED
+                    || currentOrder.getStatus() == OrderStatus.CANCELLED);
+            if (orderClosed
+                    || (currentPayment != null && currentPayment.getStatus() == PaymentStatus.CANCELLED)) {
+                paymentCancellationService.cancelLatePaidOrder(orderId, externalPayment.getPgProvider());
+                return;
+            }
+            redisLockService.executeWithLock(
+                    LockKeys.order(orderId), PAYMENT_LOCK_LEASE_TIME, ErrorCode.LOCK_PAYMENT_FAILED,
+                    () -> paymentWebhookProcessor.applyPaidWebhook(orderId, paymentId, externalPayment));
+            return;
+        }
+
+        log.info("결제 상태 변경과 무관한 PortOne Webhook 무시: paymentId={}, status={}",
+                paymentId, externalPayment.getStatus());
     }
 
     private String validateWebhookSignature(String rawBody, HttpHeaders headers) {

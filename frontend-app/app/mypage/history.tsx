@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { 
-  StyleSheet, View, FlatList, Image, 
-  TouchableOpacity, ActivityIndicator 
+import {
+  StyleSheet, View, FlatList,
+  TouchableOpacity, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { orderApi } from '@/api/order';
+import { getReviewAvailability } from '../../utils/reviewAvailability';
+import { StoreThumbnail } from '../../components/StoreThumbnail';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -40,23 +42,47 @@ export default function HistoryScreen() {
     }
   };
 
+  // 백엔드 OrderStatus 7개를 그대로 받는다.
+  // 예전에는 COMPLETED 하나만 초록으로 두고 나머지를 전부 "취소/환불"로 칠해서,
+  // 방금 결제를 마친 주문(PAID)이나 접수된 현장결제 주문(PENDING)까지
+  // 빨간 취소로 보였다.
   const getStatusStyle = (status: string) => {
-    if (status === 'COMPLETED') {
-      return { text: '이용 완료', color: '#00A859', bgColor: '#E8F5E9' };
+    switch (status) {
+      case 'PENDING':
+        // 현장결제는 여기서 멈춘다 — 매장에서 받을 때 결제하므로 정상 상태다.
+        return { text: '주문 접수', color: '#F59E0B', bgColor: '#FFF7E6' };
+      case 'PAID':
+        return { text: '결제 완료', color: '#00A859', bgColor: '#E8F5E9' };
+      case 'CONFIRMED':
+        return { text: '사장님 확인', color: '#2563EB', bgColor: '#E8F0FE' };
+      case 'READY':
+        return { text: '준비 완료', color: '#2563EB', bgColor: '#E8F0FE' };
+      case 'COMPLETED':
+        return { text: '이용 완료', color: '#00A859', bgColor: '#E8F5E9' };
+      case 'EXPIRED':
+        return { text: '기한 만료', color: '#888', bgColor: '#F0F0F0' };
+      case 'CANCELLED':
+        return { text: '취소/환불', color: '#FF5252', bgColor: '#FFEBEE' };
+      default:
+        // 상태가 늘어나도 빨간 취소로 오인되지 않게 중립색으로 떨어뜨린다.
+        return { text: status || '주문', color: '#888', bgColor: '#F0F0F0' };
     }
-    return { text: '취소/환불', color: '#FF5252', bgColor: '#FFEBEE' };
   };
 
   const renderHistoryItem = ({ item }: { item: any }) => {
     const statusStyle = getStatusStyle(item.status);
 
-    const formattedDate = item.paidAt 
-      ? item.paidAt.replace('T', ' ').substring(0, 16) 
-      : '결제일시 없음';
-      
-    const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://placehold.co/150.png';
+    // 현장결제는 paidAt이 없다(매장에서 결제한다). 주문한 시각이라도 보여준다 —
+    // 방금 넣은 주문이 "결제일시 없음"으로 뜨면 실패한 것처럼 보인다.
+    const timestamp = item.paidAt || item.createdAt;
+    const formattedDate = timestamp
+      ? timestamp.replace('T', ' ').substring(0, 16)
+      : '주문일시 없음';
 
-    const isReviewCompleted = item.hasReview === true;
+
+    const imageUrl = item.items?.[0]?.thumbnailUrl;
+
+    const review = getReviewAvailability(item.status, item.hasReview === true);
 
     return (
       <TouchableOpacity 
@@ -73,10 +99,7 @@ export default function HistoryScreen() {
         </View>
 
         <View style={styles.cardBody}>
-          <Image 
-            source={{ uri: imageUrl }} 
-            style={styles.cardImage} 
-          />
+          <StoreThumbnail uri={imageUrl} style={styles.cardImage} />
           <View style={styles.cardInfo}>
             <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>
               {item.storeName}
@@ -87,22 +110,34 @@ export default function HistoryScreen() {
           </View>
         </View>
 
-        {item.status === 'COMPLETED' && (
-          isReviewCompleted ? (
-            <View style={[styles.reviewButton, { backgroundColor: '#F5F5F5', borderColor: '#EEE' }]}>
-              <Text fontWeight="bold" style={[styles.reviewButtonText, { color: '#999' }]}>리뷰 작성 완료</Text>
-            </View>
-          ) : (
-            <TouchableOpacity 
-              style={styles.reviewButton}
-              onPress={(e) => {
-                e.stopPropagation(); 
-                router.push(`/review/write?storeId=${item.storeId}&orderId=${item.orderId}`);
-              }}
-            >
-              <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
-            </TouchableOpacity>
-          )
+        {review.state === 'available' && (
+          <TouchableOpacity
+            style={styles.reviewButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/review/write?storeId=${item.storeId}&orderId=${item.orderId}`);
+            }}
+          >
+            <Text fontWeight="bold" style={styles.reviewButtonText}>리뷰 작성하기</Text>
+          </TouchableOpacity>
+        )}
+
+        {review.state === 'done' && (
+          <View style={[styles.reviewButton, styles.reviewButtonMuted]}>
+            <Text fontWeight="bold" style={[styles.reviewButtonText, styles.reviewButtonTextMuted]}>
+              {review.message}
+            </Text>
+          </View>
+        )}
+
+        {/* 아직 못 쓰는 동안에도 왜 못 쓰는지 알려준다 — 안 띄우면 기능이 없는 줄 안다 */}
+        {review.state === 'pending' && (
+          <View style={[styles.reviewButton, styles.reviewButtonMuted]}>
+            <Ionicons name="time-outline" size={15} color="#999" style={{ marginRight: 6 }} />
+            <Text style={[styles.reviewButtonText, styles.reviewButtonTextMuted]}>
+              {review.message}
+            </Text>
+          </View>
         )}
       </TouchableOpacity>
     );
@@ -165,9 +200,13 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, justifyContent: 'center' },
   shopName: { fontSize: 16, color: '#333', marginBottom: 6 },
   amountText: { fontSize: 14, color: '#555', fontWeight: '600' },
-  reviewButton: { 
-    marginTop: 12, backgroundColor: '#F0F9F4', paddingVertical: 12, 
-    borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00A859' 
+  reviewButton: {
+    marginTop: 12, backgroundColor: '#F0F9F4', paddingVertical: 12,
+    borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#00A859'
   },
-  reviewButtonText: { color: '#00A859', fontSize: 14 }
+  reviewButtonText: { color: '#00A859', fontSize: 14 },
+  // 작성 완료·대기 상태는 눌리지 않는다는 걸 색으로 먼저 알린다.
+  reviewButtonMuted: { backgroundColor: '#F5F5F5', borderColor: '#EEE' },
+  reviewButtonTextMuted: { color: '#999' }
 });

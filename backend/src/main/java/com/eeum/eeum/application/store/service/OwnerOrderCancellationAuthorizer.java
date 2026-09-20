@@ -37,7 +37,8 @@ public class OwnerOrderCancellationAuthorizer {
         if (payment.getRefundStatus() != RefundStatus.REQUESTED) {
             throw new BusinessException(ErrorCode.PAYMENT_REFUND_NOT_REQUESTED);
         }
-        if (payment.getStatus() != PaymentStatus.PAID) {
+        if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
         return payment.getRefundReason();
@@ -64,7 +65,8 @@ public class OwnerOrderCancellationAuthorizer {
         }
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-        if (payment.getStatus() == PaymentStatus.PAID) {
+        if (payment.getStatus() == PaymentStatus.PAID
+                || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED) {
             throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
         }
         orderService.restoreStockForOrder(orderId);

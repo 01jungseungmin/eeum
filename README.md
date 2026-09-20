@@ -13,6 +13,9 @@
 [![React](https://img.shields.io/badge/React-Vite-61DAFB?style=flat-square&logo=react&logoColor=black)](https://vitejs.dev/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/ko/docs/Web/JavaScript)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 </div>
 
@@ -52,14 +55,16 @@
 
 ## 📱 모바일 앱 (소비자용)
 
-<!-- (앱 스크린샷 필요 — 홈, 지도, 주문, 채팅, 마이페이지 화면 각 1장씩) -->
+<!-- 앱 스크린샷: 홈, 지도, 주문, 채팅, 마이페이지 화면을 각 1장씩 추가 -->
 <div align="center">
-  <img src="" alt="홈" width="160" />
-  <img src="" alt="지도" width="160" />
-  <img src="" alt="주문" width="160" />
-  <img src="" alt="채팅" width="160" />
-  <img src="" alt="마이페이지" width="160" />
+  <!-- docs/assets/mobile-home.png -->
+  <!-- docs/assets/mobile-map.png -->
+  <!-- docs/assets/mobile-order.png -->
+  <!-- docs/assets/mobile-chat.png -->
+  <!-- docs/assets/mobile-mypage.png -->
 </div>
+
+> 스크린샷 추가 예정 — 홈 · 지도 · 주문 · 채팅 · 마이페이지
 
 ### 주요 화면
 
@@ -74,6 +79,15 @@
 | 📅 **방문 예약**  | 시간 슬롯 선택 및 예약 확인            |
 | 🔔 **알림**       | FCM 푸시 알림 수신                     |
 | 🔍 **검색**       | 스토어·상품 통합 검색                  |
+
+#### 선택 화면 이미지
+
+주요 탭 화면만으로도 충분하지만, 주문과 중고거래 기능을 강조하려면 아래 화면을 추가할 수 있습니다.
+
+| 화면 | 예정 파일 경로 |
+| ---- | -------------- |
+| 상품 상세·장바구니·결제 | `docs/assets/mobile-product-order.png` |
+| 중고거래 상품 상세 | `docs/assets/mobile-used-product.png` |
 
 ### 기술 스택
 
@@ -92,10 +106,12 @@
 
 ## 🖥️ 사장 웹 (사장 고객용)
 
-<!-- (웹 스크린샷 필요 — 대시보드 화면 1장) -->
+<!-- 사장 웹 대시보드 스크린샷: docs/assets/web-dashboard.png -->
 <div align="center">
-  <img src="docs/assets/web-dashboard.png" alt="대시보드" width="700" />
+  <!-- <img src="docs/assets/web-dashboard.png" alt="대시보드" width="700" /> -->
 </div>
+
+> 대시보드 스크린샷 추가 예정
 
 ### 주요 화면
 
@@ -111,12 +127,19 @@
 | 👥 **고객 관리**   | 고객별 주문내역·통계 조회                            |
 | ✅ **승인 현황**   | 사업자 등록 및 입점 승인 진행 상태 확인              |
 
+#### 선택 화면 이미지
+
+| 화면 | 예정 파일 경로 |
+| ---- | -------------- |
+| 주문 관리 | `docs/assets/web-order-management.png` |
+| 스토어·상품 관리 | `docs/assets/web-store-management.png` |
+
 ### 기술 스택
 
 | 분류      | 기술              |
 | --------- | ----------------- |
-| Framework | React 18 + Vite   |
-| Routing   | React Router DOM  |
+| Framework | React 19 + Vite   |
+| Routing   | React Router DOM 7 |
 | 스타일    | Styled Components |
 | 차트      | Recharts          |
 | 아이콘    | Lucide React      |
@@ -167,12 +190,12 @@ eeum/
 
 - Java 17+
 - Docker & Docker Compose
-- Node.js 18+
+- Node.js 20.19+ (또는 22.12+)
 
 ### 1. 저장소 클론
 
 ```bash
-git clone https://github.com/your-org/eeum.git
+git clone https://github.com/01jungseungmin/eeum.git
 cd eeum
 ```
 
@@ -203,8 +226,15 @@ cp .env.example .env
 ### 3. 로컬 인프라 실행 (MySQL + Redis)
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
+
+| 서비스 | 주소 / 포트 |
+| ------ | ----------- |
+| Backend API · Swagger UI | `http://localhost:8080` |
+| 사장·관리자 웹 | `http://localhost:5173` |
+| MySQL | `localhost:3306` |
+| Redis | `localhost:6379` |
 
 ### 4. 백엔드 실행
 
@@ -213,13 +243,14 @@ cd backend
 ./gradlew bootRun
 ```
 
+Flyway 마이그레이션은 서버 기동 시 자동으로 수행됩니다.  
 Swagger UI → `http://localhost:8080/swagger-ui/index.html`
 
 ### 5. 모바일 앱 실행
 
 ```bash
 cd frontend-app
-npm install
+npm ci
 npx expo start
 ```
 
@@ -229,7 +260,7 @@ iOS 시뮬레이터 또는 Expo Go 앱으로 실행합니다.
 
 ```bash
 cd frontend-web
-npm install
+npm ci
 npm run dev
 ```
 
@@ -248,18 +279,24 @@ npm run dev
 
 ## 📡 API 명세
 
-서버 실행 후 Swagger UI에서 전체 API를 확인할 수 있습니다.
+서버 실행 후 [Swagger UI](http://localhost:8080/swagger-ui/index.html)에서 전체 API를 확인할 수 있습니다. 아래 표는 대표 API입니다.
 
 | 태그         | 경로                    | 주요 클라이언트 |
 | ------------ | ----------------------- | --------------- |
 | Auth         | `/auth/**`              | 앱·웹 공통      |
 | Store        | `/stores/**`            | 앱              |
+| Product      | `/products/**`          | 앱              |
 | Order        | `/orders/**`            | 앱              |
 | Reservation  | `/reservations/**`      | 앱              |
 | Chat         | `/chat-rooms/**`, `/ws` | 앱              |
 | Community    | `/community/**`         | 앱              |
+| Used         | `/used/**`              | 앱              |
+| Region       | `/regions/**`           | 앱              |
 | Notification | `/notifications/**`     | 앱              |
+| Inquiry      | `/inquiries/**`         | 앱              |
 | Report       | `/reports/**`           | 앱              |
+| Category     | `/categories/**`        | 앱              |
+| AI Exposure  | `/ai-exposures/**`      | 앱              |
 | Owner        | `/owner/**`             | 사장 웹         |
 | Admin        | `/admin/**`             | 관리자 웹       |
 
@@ -292,6 +329,8 @@ eventPublisher.publishEvent(new OrderPaidEvent(order));
 ---
 
 ## 🧪 테스트
+
+통합 테스트는 Testcontainers를 사용하므로 Docker 데몬이 실행 중이어야 합니다.
 
 ```bash
 cd backend

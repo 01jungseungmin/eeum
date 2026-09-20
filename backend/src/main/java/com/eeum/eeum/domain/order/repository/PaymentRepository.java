@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
-public interface PaymentRepository extends JpaRepository<Payment, Long> {
+public interface PaymentRepository extends JpaRepository<Payment, Long>, PaymentRepositoryCustom {
 
     Optional<Payment> findByOrder_OrderId(Long orderId);
 

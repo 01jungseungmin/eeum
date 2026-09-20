@@ -9,10 +9,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class VisitReservationMapper {
     public VisitReservationResponseDto toVisitReservationResponseDto(VisitReservation reservation) {
-        return toVisitReservationResponseDto(reservation, false);
+        return toVisitReservationResponseDto(reservation, false, null);
     }
 
     public VisitReservationResponseDto toVisitReservationResponseDto(VisitReservation reservation, boolean hasReview) {
+        return toVisitReservationResponseDto(reservation, hasReview, null);
+    }
+
+    public VisitReservationResponseDto toVisitReservationResponseDto(
+            VisitReservation reservation, boolean hasReview, String storeThumbnailUrl) {
         Store store = reservation.getStore();
         Account account = reservation.getAccount();
 
@@ -22,6 +27,7 @@ public class VisitReservationMapper {
                 .storeName(store.getName())
                 .storeAddress(store.getAddress())
                 .storePhone(store.getPhone())
+                .storeThumbnailUrl(storeThumbnailUrl)
                 .accountId(account.getAccountId())
                 .customerName(account.getName())
                 .customerPhone(account.getPhone())

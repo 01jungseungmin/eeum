@@ -42,6 +42,9 @@ public class PaymentVerificationProcessor {
         Order order = lockedOrder(request.getOrderNumber());
         Payment payment = lockedPayment(order.getOrderId());
         validateBeforePortOne(accountId, request, order, payment);
+        if (payment.getStatus() == PaymentStatus.PAID && order.getStatus() == OrderStatus.PAID) {
+            return;
+        }
         if (paymentInfo == null || paymentInfo.getAmount() == null
                 || paymentInfo.getAmount().compareTo(order.getTotalPrice()) != 0) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
@@ -68,10 +71,11 @@ public class PaymentVerificationProcessor {
     }
     private void validateBeforePortOne(Long accountId, PaymentCompleteRequestDto request, Order order, Payment payment) {
         if (!order.getAccount().getAccountId().equals(accountId)) throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-        if (payment.getStatus() == PaymentStatus.PAID) throw new BusinessException(ErrorCode.PAYMENT_DUPLICATE);
-        if (order.getStatus() != OrderStatus.PENDING) throw new BusinessException(ErrorCode.ORDER_EXPIRED);
-        if (payment.getStatus() != PaymentStatus.PENDING || !request.getPaymentId().equals(payment.getPortonePaymentId())) {
+        if (!request.getPaymentId().equals(payment.getPortonePaymentId())) {
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
+        if (payment.getStatus() == PaymentStatus.PAID && order.getStatus() == OrderStatus.PAID) return;
+        if (order.getStatus() != OrderStatus.PENDING) throw new BusinessException(ErrorCode.ORDER_EXPIRED);
+        if (payment.getStatus() != PaymentStatus.PENDING) throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
     }
 }

@@ -6,12 +6,15 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { communityApi } from '../../api/community';
 import { useDebounce } from '../../hooks/useDebounce';
-
-const CATEGORIES = ['전체', '자유게시판', '동네소식', '분실물', '도움요청', '공동배달'];
+import { useCategories } from '../../hooks/useCategories';
 
 export default function CommunityListScreen() {
   const router = useRouter();
-  
+
+  // 탭은 서버 카테고리를 그대로 쓴다. 예전에는 6개를 코드에 박아둬서
+  // 맛집·동네행사·취미/모임·운동 게시판은 탭 자체가 없었다.
+  const { categories } = useCategories('COMMUNITY', { includeAll: true });
+
   const [activeCategory, setActiveCategory] = useState('전체');
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,13 +155,13 @@ export default function CommunityListScreen() {
       {/* 카테고리 가로 스크롤 탭 */}
       <View style={styles.categoryContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-          {CATEGORIES.map((cat) => (
-            <TouchableOpacity 
-              key={cat} 
-              style={[styles.categoryChip, activeCategory === cat && styles.activeCategoryChip]}
-              onPress={() => setActiveCategory(cat)}
+          {categories.map((cat) => (
+            <TouchableOpacity
+              key={cat.id}
+              style={[styles.categoryChip, activeCategory === cat.name && styles.activeCategoryChip]}
+              onPress={() => setActiveCategory(cat.name)}
             >
-              <Text style={[styles.categoryText, activeCategory === cat && styles.activeCategoryText]}>{cat}</Text>
+              <Text style={[styles.categoryText, activeCategory === cat.name && styles.activeCategoryText]}>{cat.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>

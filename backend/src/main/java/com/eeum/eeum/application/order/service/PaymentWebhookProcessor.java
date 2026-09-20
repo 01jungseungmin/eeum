@@ -34,7 +34,10 @@ class PaymentWebhookProcessor {
         Payment payment = paymentRepository.findByOrderIdWithPessimisticLock(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
         if (payment.getStatus() == PaymentStatus.PAID) return;
-        if (order.getStatus() != OrderStatus.PENDING || payment.getStatus() != PaymentStatus.PENDING) return;
+        if (order.getStatus() != OrderStatus.PENDING || payment.getStatus() != PaymentStatus.PENDING) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW,
+                    "종료된 주문에 대한 늦은 결제는 자동 반영할 수 없습니다.");
+        }
         if (paymentInfo.getAmount() == null || paymentInfo.getAmount().compareTo(order.getTotalPrice()) != 0) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }

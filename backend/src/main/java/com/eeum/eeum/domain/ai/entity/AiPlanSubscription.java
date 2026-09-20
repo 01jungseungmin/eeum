@@ -26,6 +26,10 @@ public class AiPlanSubscription extends BaseEntity {
     @JoinColumn(name = "store_id", nullable = false)
     private Store store;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ai_plan_payment_id", unique = true)
+    private AiPlanPayment payment;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "plan_type", nullable = false, length = 20)
     private AiPlanType planType;
@@ -51,9 +55,32 @@ public class AiPlanSubscription extends BaseEntity {
     // 결제 기반 구독 — 결제 기간 종료일(expiredAt)을 함께 저장, 만료 스케줄러가 비활성화 처리
     public static AiPlanSubscription createWithPeriod(
             Store store, AiPlanType planType, LocalDateTime startedAt, LocalDateTime expiredAt) {
+        return createWithPeriod(store, null, planType, startedAt, expiredAt);
+    }
+
+    public static AiPlanSubscription createWithPeriod(
+            Store store, AiPlanPayment payment, AiPlanType planType,
+            LocalDateTime startedAt, LocalDateTime expiredAt) {
         AiPlanSubscription subscription = create(store, planType, startedAt);
+        subscription.payment = payment;
         subscription.expiredAt = expiredAt;
         return subscription;
+    }
+
+    /**
+     * 하위 플랜으로 바꾼 결제 — 남은 상위 플랜 기간을 깎지 않도록 현재 구독이 끝난 뒤부터 시작하는
+     * 예약 구독으로 만든다. 만료 스케줄러가 시작 시각이 지나면 활성화한다.
+     */
+    public static AiPlanSubscription createReserved(
+            Store store, AiPlanPayment payment, AiPlanType planType,
+            LocalDateTime startedAt, LocalDateTime expiredAt) {
+        AiPlanSubscription subscription = createWithPeriod(store, payment, planType, startedAt, expiredAt);
+        subscription.active = false;
+        return subscription;
+    }
+
+    public void activate() {
+        this.active = true;
     }
 
     public void deactivate(LocalDateTime expiredAt) {

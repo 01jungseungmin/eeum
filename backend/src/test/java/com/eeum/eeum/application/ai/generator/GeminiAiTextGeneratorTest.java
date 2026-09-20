@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -108,5 +110,54 @@ class GeminiAiTextGeneratorTest {
         // then
         assertThat(result.title()).contains("테스트 상점");
         assertThat(result.content()).isEqualTo("그냥 일반 텍스트로 온 홍보 문구입니다.");
+    }
+
+    @Test
+    void 공지_생성_시_키워드에_없는_날짜를_만들면_재시도_후_템플릿으로_대체한다() {
+        // given
+        GeminiAiTextGenerator generator = createGenerator();
+        when(router.generate(eq(AiTaskType.STORE_NOTICE_DRAFT), anyString(), anyString()))
+                .thenReturn(response("""
+                        {"title":"추석 휴무 안내","content":"9월 28일(목)부터 9월 30일(토)까지 추석 연휴로 쉽니다."}"""));
+
+        // when
+        AiText result = generator.noticeCopy("테스트 상점", AiNoticeType.TEMP_CLOSED, AiTone.POLITE, "추석 휴무");
+
+        // then
+        verify(router, times(2)).generate(eq(AiTaskType.STORE_NOTICE_DRAFT), anyString(), anyString());
+        assertThat(result.content()).doesNotContain("9월 28일");
+    }
+
+    @Test
+    void 공지_생성_시_키워드에_날짜가_있으면_날짜_표현을_허용한다() {
+        // given
+        GeminiAiTextGenerator generator = createGenerator();
+        when(router.generate(eq(AiTaskType.STORE_NOTICE_DRAFT), anyString(), anyString()))
+                .thenReturn(response("""
+                        {"title":"추석 휴무 안내","content":"9월 24일(목)부터 9월 26일(토)까지 추석 연휴로 쉽니다."}"""));
+
+        // when
+        AiText result = generator.noticeCopy("테스트 상점", AiNoticeType.TEMP_CLOSED, AiTone.POLITE, "9월 24일~26일 추석 휴무");
+
+        // then
+        verify(router, times(1)).generate(eq(AiTaskType.STORE_NOTICE_DRAFT), anyString(), anyString());
+        assertThat(result.content()).contains("9월 24일");
+    }
+
+    @Test
+    void 홍보_문구_생성_시_날짜를_지어낸_첫_응답은_재시도_응답으로_교체된다() {
+        // given
+        GeminiAiTextGenerator generator = createGenerator();
+        when(router.generate(eq(AiTaskType.EVENT_MARKETING_COPY), anyString(), anyString()))
+                .thenReturn(response("""
+                        {"title":"점심 이벤트","content":"10/3까지 점심 메뉴를 준비했어요."}"""))
+                .thenReturn(response("""
+                        {"title":"점심 이벤트","content":"점심 메뉴를 새로 준비했어요."}"""));
+
+        // when
+        AiText result = generator.marketingCopy("테스트 상점", AiNoticeType.EVENT, AiTone.FRIENDLY, "점심");
+
+        // then
+        assertThat(result.content()).isEqualTo("점심 메뉴를 새로 준비했어요.");
     }
 }

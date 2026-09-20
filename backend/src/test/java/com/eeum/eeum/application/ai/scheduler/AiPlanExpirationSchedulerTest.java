@@ -42,6 +42,8 @@ class AiPlanExpirationSchedulerTest {
         AiPlanSubscription second = expiredSubscription();
         when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(any()))
                 .thenReturn(List.of(first, second));
+        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(), any()))
+                .thenReturn(List.of());
 
         // when
         scheduler.expireSubscriptions();
@@ -50,6 +52,8 @@ class AiPlanExpirationSchedulerTest {
         assertThat(first.isActive()).isFalse();
         assertThat(second.isActive()).isFalse();
         verify(aiPlanSubscriptionRepository).findByActiveTrueAndExpiredAtBefore(any(LocalDateTime.class));
+        verify(aiPlanSubscriptionRepository)
+                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(LocalDateTime.class), any(LocalDateTime.class));
         verifyNoMoreInteractions(aiPlanSubscriptionRepository);
     }
 
@@ -58,12 +62,34 @@ class AiPlanExpirationSchedulerTest {
         // given
         when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(any()))
                 .thenReturn(List.of());
+        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(), any()))
+                .thenReturn(List.of());
 
         // when
         scheduler.expireSubscriptions();
 
         // then
         verify(aiPlanSubscriptionRepository).findByActiveTrueAndExpiredAtBefore(any(LocalDateTime.class));
+        verify(aiPlanSubscriptionRepository)
+                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(LocalDateTime.class), any(LocalDateTime.class));
         verifyNoMoreInteractions(aiPlanSubscriptionRepository);
+    }
+
+    @Test
+    void 시작_시각이_지난_예약_구독은_활성화된다() {
+        // given — 상위 플랜 기간이 끝나 활성화를 기다리는 하위 플랜 예약 구독
+        AiPlanSubscription reserved = AiPlanSubscription.createReserved(
+                mock(Store.class), null, AiPlanType.BASIC,
+                LocalDateTime.now().minusMinutes(1), LocalDateTime.now().plusMonths(1));
+        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(any()))
+                .thenReturn(List.of());
+        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(), any()))
+                .thenReturn(List.of(reserved));
+
+        // when
+        scheduler.expireSubscriptions();
+
+        // then
+        assertThat(reserved.isActive()).isTrue();
     }
 }

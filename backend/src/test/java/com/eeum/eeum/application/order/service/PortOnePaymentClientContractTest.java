@@ -10,6 +10,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -58,7 +59,7 @@ class PortOnePaymentClientContractTest {
 
         PortOneProperties properties = new PortOneProperties(
                 API_SECRET, "http://127.0.0.1:" + server.getAddress().getPort(), "whsec");
-        client = new PortOnePaymentClientImpl(properties);
+        client = new PortOnePaymentClientImpl(properties, RestClient.create());
     }
 
     @AfterEach

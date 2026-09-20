@@ -9,6 +9,24 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { shopApi } from '../../api/shop';
 import { reservationApi } from '../../api/reservation';
+import { getApiError, getApiErrorMessage } from '../../utils/apiError';
+import {
+  isStoreLevelReservationBlock,
+  getStoreLevelReservationHint
+} from '../../utils/reservationAvailability';
+
+/**
+ * 화면에 보이는 그 날짜를 그대로 YYYY-MM-DD 로 만든다.
+ *
+ * toISOString()을 쓰면 안 된다 — UTC 기준이라 한국(UTC+9)에서는 오전 9시 이전에
+ * 날짜가 하루 뒤로 밀린다. 버튼 라벨은 getDate()(로컬)로 그리는데 전송값만 밀려서,
+ * 아침에 들어온 사용자는 "오늘" 버튼을 눌렀는데 어제가 전송돼 예약이 통째로 막혔다.
+ */
+const toLocalDateString = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+};
 
 export default function ReservationInputScreen() {
   const router = useRouter();
@@ -23,13 +41,19 @@ export default function ReservationInputScreen() {
   // 동적 시간대 로딩을 위한 State 추가
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  // 시간대를 못 불러온 사유. 서버가 알려준 문구를 그대로 담는다.
+  const [slotError, setSlotError] = useState<string | null>(null);
+
+  // 이 상점이 예약 자체를 받지 않는 경우. 날짜·인원과 무관하므로 들어오자마자 확인한다.
+  const [storeBlock, setStoreBlock] = useState<{ reason: string; hint: string } | null>(null);
+  const [isCheckingStore, setIsCheckingStore] = useState(true);
 
   // 오늘부터 7일간의 날짜를 동적으로 생성
   const generateDates = () => {
     const dates = [];
     const today = new Date();
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    
+
     for (let i = 0; i < 7; i++) {
       const nextDate = new Date(today);
       nextDate.setDate(today.getDate() + i);
@@ -38,7 +62,7 @@ export default function ReservationInputScreen() {
         date: nextDate.getDate(),
         month: nextDate.getMonth() + 1,
         // API 요청용 포맷 (YYYY-MM-DD)
-        fullDate: nextDate.toISOString().split('T')[0] 
+        fullDate: toLocalDateString(nextDate)
       });
     }
     return dates;
@@ -60,18 +84,54 @@ export default function ReservationInputScreen() {
     if (storeId) fetchShop();
   }, [storeId]);
 
+  // 1-2. 이 상점이 예약을 받기는 하는지 미리 확인한다.
+  //
+  // 상점 상세에는 예약 가능 여부 필드가 없어서(StoreDetailResponseDto) 시간대 API로
+  // 두드려 본다. 내일 날짜로 물어보는 이유는 '당일예약 불가' 설정에 걸려 상점이
+  // 막힌 것처럼 오해하지 않기 위해서다.
+  useEffect(() => {
+    if (!storeId) return;
+
+    let isActive = true;
+    const probe = async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      try {
+        await reservationApi.getAvailableTimeSlots(Number(storeId), {
+          date: toLocalDateString(tomorrow)
+        });
+        if (isActive) setStoreBlock(null);
+      } catch (error) {
+        const { code, message } = getApiError(error, '예약 정보를 확인하지 못했어요.');
+        // 날짜 단위 실패(휴무일 등)는 여기서 판단하지 않는다. 다른 날짜를 고르면 되므로
+        // 폼을 그대로 열어두고, 사유는 날짜를 고른 뒤 시간대 영역에서 보여준다.
+        if (isActive && isStoreLevelReservationBlock(code)) {
+          setStoreBlock({ reason: message, hint: getStoreLevelReservationHint(code) });
+        }
+      } finally {
+        if (isActive) setIsCheckingStore(false);
+      }
+    };
+
+    probe();
+    return () => { isActive = false; };
+  }, [storeId]);
+
   // 2. 날짜나 인원이 변경되면 백엔드에서 예약 가능 시간대를 불러오는 로직 (디바운스 적용)
   useEffect(() => {
     // 날짜와 인원이 모두 입력되어야만 정확한 빈 테이블 조회가 가능합니다.
     if (!storeId || !selectedDate || !peopleCount.trim()) {
       setTimeSlots([]);
       setSelectedTime(null);
+      setSlotError(null);
       return;
     }
 
     const fetchTimeSlots = async () => {
       try {
         setIsLoadingSlots(true);
+        setSlotError(null);
         const data = await reservationApi.getAvailableTimeSlots(Number(storeId), {
           date: selectedDate.fullDate,
           partySize: Number(peopleCount)
@@ -81,6 +141,10 @@ export default function ReservationInputScreen() {
       } catch (error) {
         console.error('시간대 로딩 실패', error);
         setTimeSlots([]);
+        // 서버는 사유를 정확히 알려준다 — 예약 설정 없음, 휴무일, 당일예약 불가 등.
+        // 이걸 삼키면 화면이 "날짜와 인원을 입력하세요"라고만 말해서, 이미 입력한
+        // 사용자에게는 거짓말이 된다.
+        setSlotError(getApiErrorMessage(error, '예약 가능한 시간을 불러오지 못했어요.'));
       } finally {
         setIsLoadingSlots(false);
       }
@@ -101,10 +165,13 @@ export default function ReservationInputScreen() {
     
     router.push({
       pathname: '/restaurant/reservation-confirm' as any,
-      params: { 
-        storeId, 
-        month: selectedDate.month, 
-        date: selectedDate.date, 
+      params: {
+        storeId,
+        // 확정 화면이 연도를 다시 만들지 않도록 여기서 만든 날짜를 그대로 넘긴다.
+        // month/date만 넘기면 12월에 다음 해 1월을 고를 때 올해 1월로 예약된다.
+        fullDate: selectedDate.fullDate,
+        month: selectedDate.month,
+        date: selectedDate.date,
         time: selectedTime, 
         people: peopleCount, 
         request: requestText 
@@ -112,7 +179,9 @@ export default function ReservationInputScreen() {
     });
   };
 
-  if (!shopInfo) {
+  // 예약 가능 여부 확인이 끝나기 전에 폼을 그리면, 예약을 안 받는 상점에서
+  // 날짜·인원 입력칸이 잠깐 떴다가 접힌다. 둘 다 끝난 뒤에 그린다.
+  if (!shopInfo || isCheckingStore) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#00A859" /></View>;
   }
 
@@ -132,6 +201,22 @@ export default function ReservationInputScreen() {
           <Text style={styles.shopAddress}>{shopInfo.address}</Text>
         </View>
 
+        {/* 이 상점이 예약을 받지 않으면 날짜·인원을 고르게 할 이유가 없다.
+            폼을 접고 사유만 보여준다. */}
+        {storeBlock && (
+          <View style={styles.blockedBox}>
+            <Ionicons name="calendar-outline" size={36} color="#BBB" style={{ marginBottom: 12 }} />
+            <Text fontWeight="bold" style={styles.blockedTitle}>예약을 받지 않는 상점이에요</Text>
+            <Text style={styles.blockedReason}>{storeBlock.reason}</Text>
+            <Text style={styles.blockedHint}>{storeBlock.hint}</Text>
+            <TouchableOpacity style={styles.blockedBtn} onPress={() => router.back()}>
+              <Text fontWeight="bold" style={styles.blockedBtnText}>상점으로 돌아가기</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!storeBlock && (
+        <>
         {/* 1. 방문 날짜 선택 */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -182,11 +267,35 @@ export default function ReservationInputScreen() {
               <ActivityIndicator size="small" color="#00A859" />
               <Text style={styles.emptySlotText}>예약 가능한 시간을 찾고 있어요...</Text>
             </View>
-          ) : timeSlots.length === 0 ? (
+          ) : slotError ? (
+            // 서버가 막은 경우 (예약 설정 없음, 휴무일, 당일예약 불가 등)
+            <View style={styles.emptySlotBox}>
+              <Ionicons name="alert-circle-outline" size={24} color="#FF8A65" style={{ marginBottom: 8 }} />
+              <Text style={styles.emptySlotText}>{slotError}</Text>
+            </View>
+          ) : !selectedDate || !peopleCount.trim() ? (
+            // 아직 입력이 덜 된 경우 — 원래 이 안내는 여기서만 맞다
             <View style={styles.emptySlotBox}>
               <Ionicons name="information-circle-outline" size={24} color="#999" style={{ marginBottom: 8 }} />
               <Text style={styles.emptySlotText}>
                 방문 날짜와 인원을 먼저 입력하시면{'\n'}예약 가능한 시간대가 표시됩니다.
+              </Text>
+            </View>
+          ) : timeSlots.length === 0 ? (
+            // 입력은 끝났는데 슬롯이 0개 — 그날 운영 시간대가 없다는 뜻이다
+            <View style={styles.emptySlotBox}>
+              <Ionicons name="information-circle-outline" size={24} color="#999" style={{ marginBottom: 8 }} />
+              <Text style={styles.emptySlotText}>
+                이 날짜에는 예약할 수 있는 시간대가 없어요.{'\n'}다른 날짜를 선택해 주세요.
+              </Text>
+            </View>
+          ) : timeSlots.every((slot) => !slot.available) ? (
+            // 시간대는 있는데 전부 불가 — 대개 인원수에 맞는 테이블이 없는 경우다.
+            // 시간 칸을 전부 회색으로만 보여주면 왜 안 되는지 알 수 없다.
+            <View style={styles.emptySlotBox}>
+              <Ionicons name="people-outline" size={24} color="#999" style={{ marginBottom: 8 }} />
+              <Text style={styles.emptySlotText}>
+                {peopleCount}명이 앉을 수 있는 자리가 없어요.{'\n'}인원을 줄이거나 다른 날짜를 선택해 주세요.
               </Text>
             </View>
           ) : (
@@ -237,17 +346,21 @@ export default function ReservationInputScreen() {
             onChangeText={setRequestText}
           />
         </View>
+        </>
+        )}
       </ScrollView>
 
-      <View style={styles.bottomBar}>
-        <TouchableOpacity 
-          style={[styles.submitBtn, isFormValid && styles.submitBtnActive]} 
-          disabled={!isFormValid}
-          onPress={handleNext}
-        >
-          <Text fontWeight="bold" style={styles.submitBtnText}>예약 계속하기</Text>
-        </TouchableOpacity>
-      </View>
+      {!storeBlock && (
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[styles.submitBtn, isFormValid && styles.submitBtnActive]}
+            disabled={!isFormValid}
+            onPress={handleNext}
+          >
+            <Text fontWeight="bold" style={styles.submitBtnText}>예약 계속하기</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -259,6 +372,13 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, color: '#333' },
   scrollContent: { padding: 20, paddingBottom: 100 },
   infoBox: { backgroundColor: '#F4F5F7', padding: 20, borderRadius: 8, marginBottom: 25 },
+  // 예약을 받지 않는 상점 안내. 폼 대신 이것만 보여준다.
+  blockedBox: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+  blockedTitle: { fontSize: 17, color: '#333', marginBottom: 10 },
+  blockedReason: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 6 },
+  blockedHint: { fontSize: 13, color: '#999', textAlign: 'center', lineHeight: 20 },
+  blockedBtn: { marginTop: 24, paddingVertical: 13, paddingHorizontal: 28, borderRadius: 8, borderWidth: 1, borderColor: '#00A859' },
+  blockedBtnText: { color: '#00A859', fontSize: 14 },
   shopName: { fontSize: 18, color: '#333', marginBottom: 6 },
   shopAddress: { fontSize: 13, color: '#666' },
   section: { marginBottom: 30 },

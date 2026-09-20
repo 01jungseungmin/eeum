@@ -5,7 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import * as ImagePicker from 'expo-image-picker';
-import { usedApi, UsedProductPriceType } from '../../api/used';
+import { usedApi, UsedProductImage, UsedProductPriceType } from '../../api/used';
+import { getApiErrorMessage } from '../../utils/apiError';
 import { USED_CATEGORIES } from '../../constants/usedCategories';
 import { categoryApi } from '../../api/category';
 import { uploadImageAssets } from '../../utils/imageUpload';
@@ -16,6 +17,9 @@ export default function UsedTradeWriteScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const currentRegionId = params.regionId ? Number(params.regionId) : null;
+  // editId가 있으면 수정 모드다. 거래 희망 지역은 서버가 변경을 막으므로 화면에서도 건드리지 않는다.
+  const editId = params.editId ? Number(params.editId) : null;
+  const isEditMode = editId !== null && !Number.isNaN(editId);
 
   const [isLoading, setIsLoading] = useState(false);
   const [images, setImages] = useState<string[]>([]);
@@ -33,6 +37,10 @@ export default function UsedTradeWriteScreen() {
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
+  // 서버에 이미 올라가 있는 사진. 새로 고른 사진(images)과 달리 imageId로 개별 삭제·대표 지정을 한다.
+  const [existingImages, setExistingImages] = useState<UsedProductImage[]>([]);
+  const [isPrefilling, setIsPrefilling] = useState(isEditMode);
+
   // 지도 초기 중심 — 내 대표 지역 좌표. 실패하거나 좌표 미등록 지역이면 모달 쪽 기본 좌표를 쓴다.
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +56,40 @@ export default function UsedTradeWriteScreen() {
       .catch(err => console.warn('대표 지역 조회 실패:', err));
     return () => { cancelled = true; };
   }, []);
+
+  // 수정 모드면 기존 값을 채워 넣는다.
+  useEffect(() => {
+    if (!isEditMode || editId === null) return;
+
+    let cancelled = false;
+    usedApi.getUsedProduct(editId)
+      .then(detail => {
+        if (cancelled) return;
+        setTitle(detail.title);
+        setCategoryId(detail.categoryId);
+        setDescription(detail.content);
+        setIsFree(detail.priceType === 'FREE');
+        setPrice(detail.priceType === 'FIXED' ? String(detail.price ?? '') : '');
+        setExistingImages(detail.images ?? []);
+        if (detail.tradeLocationName && detail.tradeLatitude != null && detail.tradeLongitude != null) {
+          setTradeLocation({
+            name: detail.tradeLocationName,
+            latitude: detail.tradeLatitude,
+            longitude: detail.tradeLongitude,
+            placeId: detail.tradePlaceId,
+          });
+        }
+      })
+      .catch(error => {
+        console.error('수정할 글 조회 실패:', error);
+        Alert.alert('오류', '글을 불러오지 못했습니다.', [
+          { text: '확인', onPress: () => router.back() },
+        ]);
+      })
+      .finally(() => { if (!cancelled) setIsPrefilling(false); });
+
+    return () => { cancelled = true; };
+  }, [isEditMode, editId]);
 
   // price는 숫자만 담고, 화면에는 콤마를 찍어서 보여준다. 전송할 때 되돌릴 필요가 없다.
   const handlePriceChange = (text: string) => {
@@ -76,7 +118,8 @@ export default function UsedTradeWriteScreen() {
   const selectedCategoryName = selectableCategories.find(c => c.id === categoryId)?.name || '카테고리를 선택해주세요';
 
   const pickImages = async () => {
-    if (images.length >= 10) {
+    const total = existingImages.length + images.length;
+    if (total >= 10) {
       Alert.alert('알림', '사진은 최대 10장까지 등록 가능합니다.');
       return;
     }
@@ -84,13 +127,14 @@ export default function UsedTradeWriteScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      selectionLimit: 10 - images.length,
+      selectionLimit: 10 - total,
       quality: 0.8,
     });
 
     if (!result.canceled) {
       const newUris = result.assets.map(asset => asset.uri);
-      setImages(prev => [...prev, ...newUris].slice(0, 10)); 
+      // 서버가 게시글당 10장으로 막는다. 기존 사진 몫을 빼고 남은 만큼만 담는다.
+      setImages(prev => [...prev, ...newUris].slice(0, 10 - existingImages.length));
     }
   };
 
@@ -98,8 +142,44 @@ export default function UsedTradeWriteScreen() {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // ===================== 기존 사진 관리 (수정 모드) =====================
+
+  const handleDeleteExistingImage = (image: UsedProductImage) => {
+    if (editId === null) return;
+    Alert.alert('사진 삭제', '이 사진을 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await usedApi.deleteImage(editId, image.imageId);
+            // 대표 사진을 지우면 서버가 남은 첫 장을 대표로 올린다. 그 결과를 다시 받아 맞춘다.
+            const detail = await usedApi.getUsedProduct(editId);
+            setExistingImages(detail.images ?? []);
+          } catch (error) {
+            Alert.alert('삭제 실패', getApiErrorMessage(error, '잠시 후 다시 시도해 주세요.'));
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSetThumbnail = async (image: UsedProductImage) => {
+    if (editId === null || image.thumbnail) return;
+    try {
+      await usedApi.setThumbnail(editId, image.imageId);
+      setExistingImages(prev =>
+        prev.map(img => ({ ...img, thumbnail: img.imageId === image.imageId }))
+      );
+    } catch (error) {
+      Alert.alert('대표 사진 변경 실패', getApiErrorMessage(error, '잠시 후 다시 시도해 주세요.'));
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!currentRegionId) {
+    // 수정 모드는 지역을 바꾸지 않으므로 지역 정보가 없어도 된다.
+    if (!isEditMode && !currentRegionId) {
       Alert.alert('알림', '동네 정보를 찾을 수 없습니다.');
       return;
     }
@@ -111,12 +191,11 @@ export default function UsedTradeWriteScreen() {
 
     setIsLoading(true);
     try {
-      const payload = {
+      const common = {
         categoryId: categoryId,
-        regionId: currentRegionId,
         title: title,
-        content: description, 
-        priceType: isFree ? 'FREE' : 'FIXED' as UsedProductPriceType,
+        content: description,
+        priceType: (isFree ? 'FREE' : 'FIXED') as UsedProductPriceType,
         price: isFree ? 0 : Number(price),
         tradeLocationName: tradeLocation?.name ?? null,
         tradeLatitude: tradeLocation?.latitude ?? null,
@@ -124,33 +203,38 @@ export default function UsedTradeWriteScreen() {
         tradePlaceId: tradeLocation?.placeId ?? null,
       };
 
-      const res = await usedApi.createUsedProduct(payload);
-      const newProductId = res.data?.data?.usedProductId || res.data?.usedProductId; 
-
-      if (images.length > 0 && newProductId) {
-        const objectKeys = await uploadImageAssets(images, 'USED');
-        const imagePayload = {
-          images: objectKeys.map(objectKey => ({ imageUrl: objectKey }))
-        };
-
-        await usedApi.uploadImages(newProductId, imagePayload);
+      let targetId: number | null;
+      if (isEditMode && editId !== null) {
+        // 수정에서는 regionId를 보내지 않는다 — 서버가 변경을 막는 값이다.
+        targetId = (await usedApi.updateUsedProduct(editId, common)).usedProductId;
+      } else {
+        const res = await usedApi.createUsedProduct({ ...common, regionId: currentRegionId! });
+        targetId = res.data?.data?.usedProductId ?? res.data?.usedProductId ?? null;
       }
 
-      Alert.alert('성공', '게시글이 등록되었습니다.', [
-        { 
-          text: '확인', 
+      // 새로 고른 사진만 올린다. 기존 사진은 위에서 개별로 관리한다.
+      if (images.length > 0 && targetId) {
+        const objectKeys = await uploadImageAssets(images, 'USED');
+        await usedApi.uploadImages(targetId, {
+          images: objectKeys.map(objectKey => ({ imageUrl: objectKey })),
+        });
+      }
+
+      Alert.alert('성공', isEditMode ? '게시글이 수정되었습니다.' : '게시글이 등록되었습니다.', [
+        {
+          text: '확인',
           onPress: () => {
             if (router.canGoBack()) {
-              router.back(); 
+              router.back();
             } else {
-              router.replace('/'); 
+              router.replace('/');
             }
-          } 
+          }
         }
       ]);
     } catch (error) {
-      console.error('글 작성 실패:', error);
-      Alert.alert('오류', '게시글 등록에 실패했습니다.');
+      console.error(isEditMode ? '글 수정 실패:' : '글 작성 실패:', error);
+      Alert.alert('오류', getApiErrorMessage(error, isEditMode ? '게시글 수정에 실패했습니다.' : '게시글 등록에 실패했습니다.'));
     } finally {
       setIsLoading(false);
     }
@@ -164,25 +248,52 @@ export default function UsedTradeWriteScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
           <Ionicons name="chevron-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>판매글 작성</Text>
-        <TouchableOpacity onPress={handleSubmit} disabled={isLoading} style={styles.headerSubmit}>
-          {isLoading ? <ActivityIndicator size="small" color="#00A859" /> : <Text style={styles.headerSubmitText}>완료</Text>}
+        <Text style={styles.headerTitle}>{isEditMode ? '판매글 수정' : '판매글 작성'}</Text>
+        {/* 기존 값을 채우는 중에 완료를 누르면 빈 값으로 덮어쓴다 */}
+        <TouchableOpacity onPress={handleSubmit} disabled={isLoading || isPrefilling} style={styles.headerSubmit}>
+          {isLoading || isPrefilling
+            ? <ActivityIndicator size="small" color="#00A859" />
+            : <Text style={styles.headerSubmitText}>완료</Text>}
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
-          <Text style={styles.label}>사진 <Text style={styles.labelSub}>{images.length}/10</Text></Text>
-          
+          <Text style={styles.label}>
+            사진 <Text style={styles.labelSub}>{existingImages.length + images.length}/10</Text>
+          </Text>
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
             <TouchableOpacity style={styles.photoButton} onPress={pickImages}>
               <Ionicons name="add" size={32} color="#999" />
             </TouchableOpacity>
 
+            {/* 이미 올라가 있는 사진 — 누르면 대표로 지정, X로 즉시 삭제된다 */}
+            {existingImages.map((image) => (
+              <TouchableOpacity
+                key={image.imageId}
+                style={styles.previewContainer}
+                onPress={() => handleSetThumbnail(image)}
+              >
+                <Image source={{ uri: image.imageUrl }} style={styles.previewImage} />
+                {image.thumbnail && (
+                  <View style={styles.representativeBadge}>
+                    <Text style={styles.representativeText}>대표</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => handleDeleteExistingImage(image)}
+                >
+                  <Ionicons name="close" size={14} color="#FFF" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+
             {images.map((uri, index) => (
-              <View key={index} style={styles.previewContainer}>
+              <View key={`new-${index}`} style={styles.previewContainer}>
                 <Image source={{ uri }} style={styles.previewImage} />
-                {index === 0 && (
+                {existingImages.length === 0 && index === 0 && (
                   <View style={styles.representativeBadge}>
                     <Text style={styles.representativeText}>대표</Text>
                   </View>
@@ -194,7 +305,11 @@ export default function UsedTradeWriteScreen() {
             ))}
           </ScrollView>
 
-          <Text style={styles.helperText}>첫번째 사진이 대표사진이 됩니다.</Text>
+          <Text style={styles.helperText}>
+            {existingImages.length > 0
+              ? '사진을 누르면 대표사진으로 바뀝니다. 삭제는 즉시 반영됩니다.'
+              : '첫번째 사진이 대표사진이 됩니다.'}
+          </Text>
         </View>
 
         <View style={styles.divider} />

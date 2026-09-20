@@ -5,11 +5,14 @@ import com.eeum.eeum.domain.ai.enums.AiChannel;
 import com.eeum.eeum.domain.ai.enums.AiMessageStatus;
 import com.eeum.eeum.domain.ai.enums.AiMessageType;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 class AiGeneratedMessageTest {
@@ -62,5 +65,30 @@ class AiGeneratedMessageTest {
 
         // then
         assertThat(message.getStatus()).isEqualTo(AiMessageStatus.CANCELLED);
+    }
+
+    @Test
+    void 수정하지_않은_DRAFT_메시지도_취소할_수_있다() {
+        // given
+        AiGeneratedMessage message = draftMessage();
+
+        // when
+        message.cancel();
+
+        // then
+        assertThat(message.getStatus()).isEqualTo(AiMessageStatus.CANCELLED);
+    }
+
+    @Test
+    void 이미_취소된_메시지를_다시_취소하면_예외가_발생한다() {
+        // given
+        AiGeneratedMessage message = draftMessage();
+        message.cancel();
+
+        // when & then
+        assertThatThrownBy(message::cancel)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_INVALID_STATUS);
     }
 }

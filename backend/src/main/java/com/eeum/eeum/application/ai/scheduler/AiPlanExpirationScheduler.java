@@ -24,12 +24,20 @@ public class AiPlanExpirationScheduler {
     @Scheduled(cron = "0 30 3 * * *")
     @SchedulerLock(name = "expireSubscriptions", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void expireSubscriptions() {
-        List<AiPlanSubscription> expired =
-                aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(LocalDateTime.now());
-        if (expired.isEmpty()) {
-            return;
-        }
+        LocalDateTime now = LocalDateTime.now();
+
+        List<AiPlanSubscription> expired = aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(now);
         expired.forEach(AiPlanSubscription::expire);
-        log.info("[AI-PLAN] 만료 구독 {}건 비활성화", expired.size());
+        if (!expired.isEmpty()) {
+            log.info("[AI-PLAN] 만료 구독 {}건 비활성화", expired.size());
+        }
+
+        // 하위 플랜으로 바꾼 결제는 상위 기간이 끝난 뒤부터 시작하도록 예약돼 있다.
+        List<AiPlanSubscription> reserved = aiPlanSubscriptionRepository
+                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(now, now);
+        reserved.forEach(AiPlanSubscription::activate);
+        if (!reserved.isEmpty()) {
+            log.info("[AI-PLAN] 예약 구독 {}건 활성화", reserved.size());
+        }
     }
 }

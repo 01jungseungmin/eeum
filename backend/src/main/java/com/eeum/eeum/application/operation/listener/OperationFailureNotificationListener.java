@@ -10,8 +10,9 @@ import com.eeum.eeum.domain.notification.enums.NotificationType;
 import com.eeum.eeum.domain.operation.event.OperationFailureRecordedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Duration;
 import java.util.List;
@@ -29,15 +30,8 @@ public class OperationFailureNotificationListener {
     private final AccountRepository accountRepository;
     private final RateLimitService rateLimitService;
 
-    /**
-     * 트랜잭션 리스너가 아니라 @EventListener인 이유: 이 이벤트는 OperationFailureLogWriter의
-     * 트랜잭션이 커밋된 뒤, 트랜잭션 밖에서 발행된다. 트랜잭션 리스너로 두면
-     * 활성 트랜잭션이 없어 아예 실행되지 않는다.
-     *
-     * 여기에 @Async를 붙이지 않는다 — 발행 지점이 이미 비동기 스레드라 한 번 더
-     * 넘길 이유가 없고, 풀이 포화될 때 불필요한 압력만 더한다.
-     */
-    @EventListener
+    /** 원장 저장 트랜잭션이 커밋된 뒤에만 알림을 만들고, 커밋 뒤 발행된 기존 이벤트도 받는다. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onOperationFailureRecorded(OperationFailureRecordedEvent event) {
         // 분류는 DB에서 not null이라 실제로는 항상 존재한다. null 분기는 링크가 깨지지 않게 하는 방어다.
         String category = event.category() == null ? null : event.category().name();

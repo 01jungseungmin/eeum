@@ -5,6 +5,7 @@ import com.eeum.eeum.domain.order.entity.QOrderItem;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.product.entity.QEventProduct;
 import com.eeum.eeum.domain.product.entity.QProduct;
+import com.eeum.eeum.domain.product.entity.QProductCategory;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -13,6 +14,7 @@ import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -26,6 +28,7 @@ public class OrderItemRepositoryImpl implements OrderItemRepositoryCustom {
     private final QOrder order = QOrder.order;
     private final QEventProduct eventProduct = QEventProduct.eventProduct;
     private final QProduct product = QProduct.product;
+    private final QProductCategory productCategory = QProductCategory.productCategory;
 
     @Override
     public List<ProductSalesQuantity> aggregateSoldQuantityByProduct(
@@ -54,6 +57,38 @@ public class OrderItemRepositoryImpl implements OrderItemRepositoryCustom {
                 )
                 .groupBy(product.productId, product.name, product.productType)
                 .orderBy(soldQuantity.desc(), product.productId.asc())
+                .fetch();
+    }
+
+    @Override
+    public List<CategorySalesStat> aggregateSalesByCategory(
+            Long storeId,
+            Collection<OrderStatus> statuses,
+            LocalDateTime from,
+            LocalDateTime to
+    ) {
+        NumberExpression<Long> soldQuantity =
+                Expressions.numberTemplate(Long.class, "sum({0})", orderItem.quantity);
+        NumberExpression<BigDecimal> salesAmount = orderItem.lineTotalPrice.sum();
+
+        return queryFactory
+                .select(Projections.constructor(CategorySalesStat.class,
+                        productCategory.productCategoryId, productCategory.name, soldQuantity, salesAmount))
+                .from(orderItem)
+                .join(order).on(order.orderId.eq(orderItem.order.orderId))
+                .leftJoin(eventProduct).on(eventProduct.eventProductId.eq(orderItem.eventProductId))
+                .join(product).on(product.productId.eq(resolvedProductId()))
+                .join(productCategory).on(productCategory.productCategoryId.eq(product.productCategory.productCategoryId))
+                .where(
+                        order.store.storeId.eq(storeId),
+                        order.status.in(statuses),
+                        createdAtGoe(from),
+                        createdAtLoe(to),
+                        // 상품별 집계와 같은 기준을 써야 두 통계의 합이 맞는다
+                        product.status.ne(ProductStatus.INACTIVE)
+                )
+                .groupBy(productCategory.productCategoryId, productCategory.name)
+                .orderBy(soldQuantity.desc(), productCategory.productCategoryId.asc())
                 .fetch();
     }
 

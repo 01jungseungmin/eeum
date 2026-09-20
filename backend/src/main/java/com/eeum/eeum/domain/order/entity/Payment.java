@@ -108,6 +108,18 @@ public class Payment extends BaseEntity {
         this.paidAt = LocalDateTime.now();
     }
 
+    /** 주문 만료 뒤 확인된 PG 결제를 안전하게 취소 작업으로 넘기기 위한 임시 전이. */
+    public void reopenForLateExternalPayment(String pgProvider) {
+        if (status != PaymentStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+        }
+        this.status = PaymentStatus.PAID;
+        this.pgProvider = pgProvider;
+        this.paidAt = LocalDateTime.now();
+        this.cancelledAmount = BigDecimal.ZERO;
+        this.cancelledAt = null;
+    }
+
     public void cancel() {
         this.status = PaymentStatus.CANCELLED;
         this.cancelledAmount = this.amount;

@@ -38,11 +38,24 @@ import AiPowerUsageReportPage from './pages/owner/main/AiPowerUsageReportPage';
 import AdminReportManagementPage from './pages/admin/main/ReportManagementPage';
 import AdminReportDetailPage from './pages/admin/main/ReportDetailPage';
 import NotificationPage from './pages/owner/main/NotificationPage';
+import SalesSettlementPage from './pages/owner/main/SalesSettlementPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
 import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
 import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
+import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
+import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
+import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
+import AdminCommunityPostManagementPage from './pages/admin/main/CommunityPostManagementPage';
+import AdminCommunityPostDetailPage from './pages/admin/main/CommunityPostDetailPage';
+import AdminUsedProductManagementPage from './pages/admin/main/UsedProductManagementPage';
+import AdminUsedProductDetailPage from './pages/admin/main/UsedProductDetailPage';
+import AdminChatRoomManagementPage from './pages/admin/main/ChatRoomManagementPage';
+import AdminChatRoomDetailPage from './pages/admin/main/ChatRoomDetailPage';
+import AdminNotificationSendPage from './pages/admin/main/NotificationSendPage';
+import AdminOperationMonitoringPage from './pages/admin/main/OperationMonitoringPage';
+import AdminFavoriteStatsPage from './pages/admin/main/FavoriteStatsPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -133,6 +146,54 @@ function App() {
           element={<MemberPage />}
         />
         <Route
+          path="/admin/settlements"
+          element={<AdminSettlementManagementPage />}
+        />
+        <Route
+          path="/admin/stores"
+          element={<AdminStoreManagementPage />}
+        />
+        <Route
+          path="/admin/stores/:storeId"
+          element={<AdminStoreDetailPage />}
+        />
+        <Route
+          path="/admin/community/posts"
+          element={<AdminCommunityPostManagementPage />}
+        />
+        <Route
+          path="/admin/community/posts/:postId"
+          element={<AdminCommunityPostDetailPage />}
+        />
+        <Route
+          path="/admin/used"
+          element={<AdminUsedProductManagementPage />}
+        />
+        <Route
+          path="/admin/used/:usedProductId"
+          element={<AdminUsedProductDetailPage />}
+        />
+        <Route
+          path="/admin/chat/rooms"
+          element={<AdminChatRoomManagementPage />}
+        />
+        <Route
+          path="/admin/chat/rooms/:roomId"
+          element={<AdminChatRoomDetailPage />}
+        />
+        <Route
+          path="/admin/notifications/send"
+          element={<AdminNotificationSendPage />}
+        />
+        <Route
+          path="/admin/operations"
+          element={<AdminOperationMonitoringPage />}
+        />
+        <Route
+          path="/admin/favorites"
+          element={<AdminFavoriteStatsPage />}
+        />
+        <Route
           path="/admin/reports"
           element={<AdminReportManagementPage />}
         />
@@ -220,6 +281,10 @@ function App() {
           <Route
             path="/notifications"
             element={<NotificationPage />}
+          />
+          <Route
+            path="/settlement"
+            element={<SalesSettlementPage />}
           />
           <Route
             path="/ai-manager"

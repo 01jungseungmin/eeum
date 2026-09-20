@@ -156,7 +156,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    void 이미_결제된_주문에_결제_완료_재요청_시_PAYMENT_DUPLICATE() {
+    void 이미_결제된_주문의_동일_결제_재요청은_멱등_성공한다() {
         // given
         Long accountId = 100L;
         String orderNumber = "ORD-20260616-TEST002";
@@ -196,10 +196,7 @@ class PaymentServiceTest {
                 .thenReturn(Optional.of(payment));
 
         // when & then
-        assertThatThrownBy(() -> paymentService.verifyPayment(accountId, request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.PAYMENT_DUPLICATE);
+        paymentService.verifyPayment(accountId, request);
     }
 
     @Test

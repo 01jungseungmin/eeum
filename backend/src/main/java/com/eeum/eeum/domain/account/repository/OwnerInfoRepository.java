@@ -51,4 +51,14 @@ public interface OwnerInfoRepository extends JpaRepository<OwnerInfo, Long>,Owne
     Optional<OwnerInfo> findByAccount(Account account);
 
     void deleteByAccount_AccountId(Long accountId);
+
+    // 관리자 대시보드 요약 — 심사 요청된 승인 대기 건수. 목록(searchOwnerApplications)과 같은 기준이다
+    long countByApprovalStatusAndReviewRequestedAtIsNotNull(ApprovalStatus approvalStatus);
+
+    // 관리자 대시보드 처리 대기 — 심사 요청 시각 기준 가장 오래된 / 가장 최근 승인 대기
+    Optional<OwnerInfo> findFirstByApprovalStatusAndReviewRequestedAtIsNotNullOrderByReviewRequestedAtAsc(
+            ApprovalStatus approvalStatus);
+
+    Optional<OwnerInfo> findFirstByApprovalStatusAndReviewRequestedAtIsNotNullOrderByReviewRequestedAtDesc(
+            ApprovalStatus approvalStatus);
 }

@@ -3,21 +3,26 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicato
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 
-import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { useCategories } from '../../hooks/useCategories';
 import { shopApi } from '../../api/shop';
 import EventBannerCarousel from './EventBannerCarousel';
+import AiExposedStores from './AiExposedStores';
 
 interface ShopViewProps {
   router: any;
   regionId?: number | null;
+  /** AI 노출 조회용 지역 키워드(구 이름) */
+  regionKeyword?: string | null;
 }
 
-export default function ShopView({ router, regionId }: ShopViewProps) {
+export default function ShopView({ router, regionId, regionKeyword }: ShopViewProps) {
   const [shopList, setShopList] = useState<any[]>([]);
   // 이벤트 상품 상태
   const [eventProducts, setEventProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasNoRegion, setHasNoRegion] = useState(false);
+
+  const { getCategoryName } = useCategories('STORE');
 
   useEffect(() => {
     const fetchHomeData = async () => {
@@ -73,13 +78,12 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
     fetchHomeData();
   }, [regionId]);
 
-  const getCategoryName = (id: number) => {
-    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
-  };
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
       <EventBannerCarousel router={router} />
+
+      <AiExposedStores router={router} regionKeyword={regionKeyword} />
 
       {/* 1. 우리 동네 상점 영역 */}
       <View style={styles.sectionContainer}>

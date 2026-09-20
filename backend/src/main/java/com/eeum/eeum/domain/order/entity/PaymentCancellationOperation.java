@@ -189,6 +189,25 @@ public class PaymentCancellationOperation extends BaseEntity {
         this.pgCancelledAt = now;
     }
 
+    /** 최종 CANCELLED Webhook이 도착하면 REQUESTED/격리 상태도 확정 취소 단계로 수렴한다. */
+    public void confirmExternalCancellation(BigDecimal cancelledAmount, LocalDateTime now) {
+        if (status != PaymentCancellationStatus.PG_CANCEL_REQUESTED
+                && status != PaymentCancellationStatus.MANUAL_REVIEW_REQUIRED
+                && status != PaymentCancellationStatus.PG_CANCELLED) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);
+        }
+        if (cancelledAmount == null || requestedAmount.compareTo(cancelledAmount) != 0) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+        }
+        this.status = PaymentCancellationStatus.PG_CANCELLED;
+        this.pgStatus = "SUCCEEDED";
+        this.pgCancelledAmount = cancelledAmount;
+        this.fullCancellationConfirmed = true;
+        this.pgCancelledAt = now;
+        this.failureCode = null;
+        this.failureReason = null;
+    }
+
     public void markCompleted(LocalDateTime now) {
         if (status != PaymentCancellationStatus.PG_CANCELLED) {
             throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS);

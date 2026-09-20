@@ -20,7 +20,9 @@ export default function HomeScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   
   const [regions, setRegions] = useState<any[]>([]);
-  const [viewingRegion, setViewingRegion] = useState<{id: number, name: string} | null>(null);
+  // gunGu는 AI 노출 조회에 쓴다. 서버가 가게 주소 문자열로 거르기 때문에
+  // 동 이름("연남동")이 아니라 구 이름("마포구")이어야 걸린다.
+  const [viewingRegion, setViewingRegion] = useState<{id: number, name: string, gunGu?: string} | null>(null);
   
   const [isRegionLoading, setIsRegionLoading] = useState(false);
 
@@ -42,6 +44,7 @@ export default function HomeScreen() {
           accountRegionId: actualAccountRegionId, 
           id: actualAccountRegionId,
           dong: item.dong || item.region?.dong || item.name || '동네 정보 없음',
+          gunGu: item.gunGu || item.region?.gunGu || '',
           fullName: item.fullName || item.region?.fullName || ''
         };
       });
@@ -51,7 +54,7 @@ export default function HomeScreen() {
       const primary = normalizedData.find((r: any) => r.isPrimary);
     
       if (primary && !viewingRegion) {
-        setViewingRegion({ id: primary.regionId || primary.id, name: primary.dong || primary.fullName });
+        setViewingRegion({ id: primary.regionId || primary.id, name: primary.dong || primary.fullName, gunGu: primary.gunGu });
       } else if (normalizedData.length === 0) {
         setViewingRegion(null);
       }
@@ -63,7 +66,7 @@ export default function HomeScreen() {
   };
 
   const handleSelectViewRegion = (region: any) => {
-    setViewingRegion({ id: region.regionId || region.id, name: region.dong || region.fullName });
+    setViewingRegion({ id: region.regionId || region.id, name: region.dong || region.fullName, gunGu: region.gunGu });
     setModalVisible(false);
   };
 
@@ -154,11 +157,19 @@ export default function HomeScreen() {
         onOpenModal={() => setModalVisible(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onSearch={() => router.push({ pathname: '/search' })}
+        // 보고 있던 탭과 동네를 그대로 들고 간다 — 중고거래 탭에서 누른 검색이
+        // 상점을 찾아주면 안 된다.
+        onSearch={() => router.push({
+          pathname: '/search',
+          params: {
+            scope: activeTab === 'used' ? 'USED' : 'STORE',
+            ...(viewingRegion?.id ? { regionId: String(viewingRegion.id) } : {}),
+          },
+        })}
       />
       
       {activeTab === 'shop' 
-        ? <ShopView router={router} regionId={viewingRegion?.id} /> 
+        ? <ShopView router={router} regionId={viewingRegion?.id} regionKeyword={viewingRegion?.gunGu} /> 
         : <UsedTradeView router={router} regionId={viewingRegion?.id} />
       }
 

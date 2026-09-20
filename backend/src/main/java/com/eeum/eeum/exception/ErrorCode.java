@@ -103,6 +103,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     STORE_CLOSED("STORE_005", "영업 중인 상점이 아닙니다", HttpStatus.BAD_REQUEST),
     STORE_CATEGORY_REQUIRED( "STORE_006", "상점 업종을 선택해야 합니다.",HttpStatus.BAD_REQUEST),
     STORE_NOTICE_NOT_FOUND("STORE_007", "공지를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+    STORE_BANK_NOT_SUPPORTED("STORE_008", "지원하지 않는 은행입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 상품 (PRODUCT) =====================
     PRODUCT_NOT_FOUND("PRODUCT_001", "존재하지 않는 상품입니다", HttpStatus.NOT_FOUND),
@@ -144,6 +145,13 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     // 환불 계좌 입력 계약이 없어 취소를 끝까지 처리할 수 없는 결제수단(가상계좌)을 막는다.
     ORDER_PAYMENT_METHOD_NOT_SUPPORTED("ORDER_009",
             "현재 지원하지 않는 결제수단입니다", HttpStatus.BAD_REQUEST),
+
+    // 장바구니에 담을 때 고정한 금액과 주문 시점의 판매가가 다르면 주문을 만들지 않는다.
+    // 옛 금액으로 결제되면 영수증·정산 금액과 어긋나고, 조용히 새 금액을 청구하면 동의 없는 결제가 된다.
+    ORDER_PRICE_CHANGED("ORDER_010",
+            "상품 가격이 변경되었습니다. 장바구니를 확인한 뒤 다시 주문해 주세요", HttpStatus.CONFLICT),
+    ORDER_OPTION_UNAVAILABLE("ORDER_011",
+            "선택한 옵션을 더 이상 주문할 수 없습니다. 장바구니를 확인해 주세요", HttpStatus.CONFLICT),
 
     // ===================== 정산 (SETTLEMENT) =====================
     SETTLEMENT_INVALID_AMOUNT("SETTLEMENT_001", "정산 금액 구성이 올바르지 않습니다", HttpStatus.BAD_REQUEST),

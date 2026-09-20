@@ -14,9 +14,15 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { getNotificationRoute } from '../utils/notificationRoute';
 import { applyWebAlertPatch } from '../utils/webAlertPatch';
+import { applyMobileFrame } from '../utils/mobileFrame';
 
 // 화면이 그려지기 전에 갈아끼워야 한다. 첫 Alert.alert 호출보다 늦으면 그 건은 그냥 사라진다.
 applyWebAlertPatch();
+
+// PC 브라우저에서 폰 너비 틀로 가둔다. Dimensions를 함께 보정하므로 첫 렌더보다
+// 먼저 돌아야 한다 — 늦으면 화면들이 보정 전 너비로 이미지 크기를 잡아버린다.
+// 네이티브는 빈 구현이라 아무 일도 하지 않는다.
+applyMobileFrame();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -99,7 +105,10 @@ export default function RootLayout() {
         <Stack.Screen name="product/[id]" />
         <Stack.Screen name="shop/[id]" />
         <Stack.Screen name="search/index" />
-        <Stack.Screen name="notification-settings" options={{ animation: 'slide_from_right' }} />
+        {/* 파일은 app/mypage/notification-setting.tsx 다 (단수, mypage 아래).
+            이름이 어긋나 있던 동안 expo-router가 "No route named ..." 경고를 내고
+            이 화면만 전환 애니메이션이 빠졌다. */}
+        <Stack.Screen name="mypage/notification-setting" options={{ animation: 'slide_from_right' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
