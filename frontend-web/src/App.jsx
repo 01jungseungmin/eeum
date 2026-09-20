@@ -42,8 +42,6 @@ import SalesSettlementPage from './pages/owner/main/SalesSettlementPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
-import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
-import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
 import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
 import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
@@ -212,14 +210,6 @@ function App() {
         <Route
           path="/admin/categories"
           element={<AdminCategoryManagementPage />}
-        />
-        <Route
-          path="/admin/posts"
-          element={<AdminPostManagementPage />}
-        />
-        <Route
-          path="/admin/posts/:id"
-          element={<AdminPostDetailPage />}
         />
 
         {/* 심사 중에도 접근 허용을 위해 보호막 외부에 배치 */}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { Package, Tag, Clock, CheckCircle2 } from 'lucide-react';
 import UsedProductTable from '../../../components/admin/used/UsedProductTable';
@@ -101,6 +101,10 @@ function UsedProductManagementPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
+  // 목록 API가 썸네일을 내려주지 않아(서버가 thumbnailUrl에 null 고정) 상세 응답의 이미지로 채운다
+  const [thumbnails, setThumbnails] = useState({});
+  const requestedThumbnailIds = useRef(new Set());
+  const isMountedRef = useRef(true);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -124,6 +128,50 @@ function UsedProductManagementPage() {
   useEffect(() => {
     queueMicrotask(() => fetchProducts());
   }, [fetchProducts]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // 썸네일이 없는 게시글은 상세 조회로 대표 이미지를 가져온다.
+  // 이미 요청한 게시글은 다시 요청하지 않아서 페이지를 오가도 중복 호출이 없다.
+  useEffect(() => {
+    const targets = products.filter(
+      (p) =>
+        !p.thumbnailUrl && !requestedThumbnailIds.current.has(p.usedProductId),
+    );
+
+    targets.forEach(async (product) => {
+      const id = product.usedProductId;
+      requestedThumbnailIds.current.add(id);
+
+      try {
+        const res = await usedProductApi.getUsedProductDetail(id);
+        const images = res.data?.data?.images || [];
+        const url = (images.find((img) => img.thumbnail) || images[0])
+          ?.imageUrl;
+
+        if (url && isMountedRef.current) {
+          setThumbnails((prev) => ({ ...prev, [id]: url }));
+        }
+      } catch (error) {
+        // 이미지 하나 못 가져와도 목록은 그대로 보여준다 (아이콘으로 대체)
+        console.error(`중고거래 썸네일 조회 실패 (${id}):`, error);
+      }
+    });
+  }, [products]);
+
+  const productsWithThumbnail = useMemo(
+    () =>
+      products.map((p) => ({
+        ...p,
+        thumbnailUrl: p.thumbnailUrl || thumbnails[p.usedProductId] || null,
+      })),
+    [products, thumbnails],
+  );
 
   // 상태별 집계 API가 따로 없어 "이 페이지" 범위로만 계산한다.
   const pageStats = useMemo(() => {
@@ -192,7 +240,7 @@ function UsedProductManagementPage() {
       </SummaryGrid>
 
       <UsedProductTable
-        products={products}
+        products={productsWithThumbnail}
         loading={loading}
         totalElements={totalElements}
       />

@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Bell,
   ShieldCheck,
-  FileText,
   FolderTree,
   UserCheck,
   Settings,
@@ -320,12 +319,6 @@ export const ADMIN_MENU_CONFIG = [
         countKey: 'adminApproval',
       },
       {
-        id: 'admin-posts',
-        name: '게시글',
-        path: '/admin/posts',
-        icon: <FileText {...iconProps} />,
-      },
-      {
         id: 'admin-reports',
         name: '신고',
         path: '/admin/reports',
@@ -344,12 +337,6 @@ export const ADMIN_MENU_CONFIG = [
         path: '/admin/categories',
         subtitle: '가게, 게시판, 중고거래, 신고사유 카테고리를 관리합니다.',
         icon: <FolderTree {...iconProps} />,
-      },
-      {
-        id: 'admin-logs',
-        name: '관리자 로그',
-        path: '/admin/logs',
-        icon: <ClipboardList {...iconProps} />,
       },
     ],
   },
