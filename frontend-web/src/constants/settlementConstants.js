@@ -25,3 +25,18 @@ export const WEEKLY_SETTLEMENT_IN_PROGRESS_STATUSES = [
   'PAYOUT_IN_PROGRESS',
   'MANUAL_REVIEW_REQUIRED',
 ];
+
+// 관리자 지급 화면에서 "지급 처리" 액션을 노출할 수 있는 상태
+export const WEEKLY_SETTLEMENT_CLAIMABLE_STATUSES = [
+  'PAYOUT_PENDING',
+  'MANUAL_REVIEW_REQUIRED',
+];
+
+// domain/order/enums/PaymentCancellationStatus.java (관리자 정산 지급 차단 사유 조회용)
+export const PAYMENT_CANCELLATION_STATUS_LABEL = {
+  PENDING: '취소 대기',
+  PG_CANCEL_REQUESTED: 'PG 취소 요청됨',
+  PG_CANCELLED: 'PG 취소 확정 (내부 반영 대기)',
+  COMPLETED: '취소 완료',
+  MANUAL_REVIEW_REQUIRED: '수동 확인 필요',
+};
