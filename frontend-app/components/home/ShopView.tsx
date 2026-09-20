@@ -6,13 +6,16 @@ import { Text } from '../CustomText';
 import { useCategories } from '../../hooks/useCategories';
 import { shopApi } from '../../api/shop';
 import EventBannerCarousel from './EventBannerCarousel';
+import AiExposedStores from './AiExposedStores';
 
 interface ShopViewProps {
   router: any;
   regionId?: number | null;
+  /** AI 노출 조회용 지역 키워드(구 이름) */
+  regionKeyword?: string | null;
 }
 
-export default function ShopView({ router, regionId }: ShopViewProps) {
+export default function ShopView({ router, regionId, regionKeyword }: ShopViewProps) {
   const [shopList, setShopList] = useState<any[]>([]);
   // 이벤트 상품 상태
   const [eventProducts, setEventProducts] = useState<any[]>([]);
@@ -79,6 +82,8 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
       <EventBannerCarousel router={router} />
+
+      <AiExposedStores router={router} regionKeyword={regionKeyword} />
 
       {/* 1. 우리 동네 상점 영역 */}
       <View style={styles.sectionContainer}>
