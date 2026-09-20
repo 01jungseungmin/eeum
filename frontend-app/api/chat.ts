@@ -21,13 +21,16 @@ export const chatApi = {
   getRooms: async (
     cursorValue: string | null = null,
     cursorRoomId: number | null = null,
-    size: number = 20
+    size: number = 20,
+    includeClosed: boolean = false
   ): Promise<CursorSlice<any>> => {
     try {
-      const params: any = { size };
-      if (cursorValue != null && cursorRoomId != null) {
-        params.cursorValue = cursorValue;
+      const params: any = { size, includeClosed };
+      // 대화가 없는 방 구간에서는 서버가 nextCursorValue를 null로 준다. 그때는 ID만으로
+      // 이어 읽어야 한다 — 값만 단독으로 보내면 400이지만 ID 단독은 유효하다.
+      if (cursorRoomId != null) {
         params.cursorRoomId = cursorRoomId;
+        if (cursorValue != null) params.cursorValue = cursorValue;
       }
       const response = await client.get('/chat/rooms', { params });
       return toCursorSlice(response.data?.data);

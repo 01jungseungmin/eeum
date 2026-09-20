@@ -10,6 +10,7 @@ import { userApi } from '../../api/user';
 import { chatApi as usedChatApi } from '../../api/chat';
 import { usedReviewApi, UsedReviewSummary } from '../../api/usedReview';
 import { getApiErrorMessage } from '../../utils/apiError';
+import TradePartnerPickerModal, { TradePartner } from '../../components/used/TradePartnerPickerModal';
 
 const STATUS_LABEL: Record<string, string> = {
   RESERVED: '예약중',
@@ -59,6 +60,7 @@ export default function UsedTradeDetailScreen() {
   const [isChatting, setIsChatting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [sellerSummary, setSellerSummary] = useState<UsedReviewSummary | null>(null);
+  const [isPartnerPickerOpen, setIsPartnerPickerOpen] = useState(false);
 
   // 목록에서 찜을 바꾸고 돌아올 수 있어 포커스마다 다시 맞춘다.
   useFocusEffect(
@@ -238,19 +240,13 @@ export default function UsedTradeDetailScreen() {
     }
   };
 
-  const handleMarkSold = () => {
-    Alert.alert(
-      '판매완료',
-      '거래를 완료로 바꿀까요?\n거래 상대를 지정해야 상대가 후기를 남길 수 있어요.',
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          // 예약 때 지정한 상대가 있으면 buyerId를 생략해도 그대로 유지된다.
-          text: '판매완료',
-          onPress: () => runStatusChange(() => usedApi.markSold(usedProductId)),
-        },
-      ]
-    );
+  // 거래 상대를 고르는 시트를 띄운다. 여기서 확정된 상대만 후기를 쓸 수 있다.
+  const handleMarkSold = () => setIsPartnerPickerOpen(true);
+
+  const handleConfirmPartner = (partner: TradePartner | null) => {
+    setIsPartnerPickerOpen(false);
+    // 상대를 안 고르면 buyerId를 생략한다 — 예약 때 지정한 상대가 있으면 그대로 유지된다.
+    runStatusChange(() => usedApi.markSold(usedProductId, partner?.accountId));
   };
 
   if (isLoading && !product) {
@@ -470,6 +466,14 @@ export default function UsedTradeDetailScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      <TradePartnerPickerModal
+        visible={isPartnerPickerOpen}
+        usedProductId={usedProductId}
+        myAccountId={myAccountId}
+        onClose={() => setIsPartnerPickerOpen(false)}
+        onConfirm={handleConfirmPartner}
+      />
     </SafeAreaView>
   );
 }
