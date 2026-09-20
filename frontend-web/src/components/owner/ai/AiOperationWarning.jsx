@@ -410,7 +410,9 @@ export default function AiOperationWarning() {
               </div>
             </HeaderLeft>
           </Header>
-          <LockedMessage>베이직 플랜부터 이용할 수 있는 기능이에요.</LockedMessage>
+          <LockedMessage>
+            베이직 플랜부터 이용할 수 있는 기능이에요.
+          </LockedMessage>
           <UpgradeButton onClick={() => setIsUpgradeModalOpen(true)}>
             <Crown size={16} /> 플랜 업그레이드
           </UpgradeButton>
@@ -446,7 +448,7 @@ export default function AiOperationWarning() {
           </IconBox>
           <div>
             <TitleArea>
-              <h3>산업부 데이터 기반 운영 위험 조기경보</h3>
+              <h3>운영 위험 조기경보</h3>
               <BadgePro>
                 <Crown size={12} /> Pro
               </BadgePro>

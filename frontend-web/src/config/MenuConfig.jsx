@@ -288,6 +288,18 @@ export const ADMIN_MENU_CONFIG = [
         icon: <Newspaper {...iconProps} />,
       },
       {
+        id: 'admin-chat',
+        name: '채팅 관리',
+        path: '/admin/chat/rooms',
+        icon: <MessageSquare {...iconProps} />,
+      },
+      {
+        id: 'admin-notifications',
+        name: '알림 발송',
+        path: '/admin/notifications/send',
+        icon: <Bell {...iconProps} />,
+      },
+      {
         id: 'admin-approval',
         name: '사장 승인',
         path: '/admin/approval',
