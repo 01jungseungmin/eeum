@@ -147,6 +147,13 @@ public class AiPlanPaymentCommandExecutor {
             return new AiPlanPaymentCancellationPlan(paymentId, operation.getRequestedAmount(),
                     operation.getIdempotencyKey(), false);
         }
+        // PENDING은 PortOne 호출 전 중단되었거나 응답을 받기 전 종료된 상태다. 같은
+        // idempotency key로 재호출해 PG가 이미 받은 요청이면 그 결과를 돌려받고, 아직
+        // 받지 못했으면 안전하게 최초 요청을 수행한다.
+        if (operation.getStatus() == AiPlanPaymentCancellationStatus.PENDING) {
+            return new AiPlanPaymentCancellationPlan(paymentId, operation.getRequestedAmount(),
+                    operation.getIdempotencyKey(), true);
+        }
         operation.retry();
         return new AiPlanPaymentCancellationPlan(paymentId, operation.getRequestedAmount(),
                 operation.getIdempotencyKey(), true);

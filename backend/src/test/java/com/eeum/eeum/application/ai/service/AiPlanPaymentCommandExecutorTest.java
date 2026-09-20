@@ -1,10 +1,14 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.ai.dto.response.AiPlanPaymentCancellationPlan;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
+import com.eeum.eeum.domain.ai.entity.AiPlanPaymentCancellationOperation;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
+import com.eeum.eeum.domain.ai.enums.AiPlanPaymentCancellationStatus;
 import com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
+import com.eeum.eeum.domain.ai.repository.AiPlanPaymentCancellationOperationRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanPaymentRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -39,6 +43,7 @@ class AiPlanPaymentCommandExecutorTest {
     private AiPlanPaymentCommandExecutor executor;
 
     @Mock private AiPlanPaymentRepository aiPlanPaymentRepository;
+    @Mock private AiPlanPaymentCancellationOperationRepository cancellationOperationRepository;
     @Mock private AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     @Mock private AiPlanPaymentFailureRecorder failureRecorder;
     @Mock private StoreRepository storeRepository;
@@ -215,5 +220,74 @@ class AiPlanPaymentCommandExecutorTest {
 
         // then — 이미 검증된 결제를 기준으로 누락된 구독을 복구 생성한다
         verify(aiPlanSubscriptionRepository).save(any(AiPlanSubscription.class));
+    }
+
+    // ──────────────────── prepareMismatchedPaymentCancellation ────────────────────
+
+    @Test
+    void 금액_불일치_환불_작업은_PortOne_호출_전에_PENDING으로_저장한다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByPaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.empty());
+        when(cancellationOperationRepository.save(any(AiPlanPaymentCancellationOperation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        AiPlanPaymentCancellationPlan plan = executor.prepareMismatchedPaymentCancellation(
+                PAYMENT_ID, new BigDecimal("9900"));
+
+        // then
+        assertThat(plan.shouldCallPortOne()).isTrue();
+        org.mockito.ArgumentCaptor<AiPlanPaymentCancellationOperation> captor =
+                org.mockito.ArgumentCaptor.forClass(AiPlanPaymentCancellationOperation.class);
+        verify(cancellationOperationRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(AiPlanPaymentCancellationStatus.PENDING);
+    }
+
+    @Test
+    void PortOne_호출_전에_중단된_PENDING_환불은_같은_멱등키로_재시도한다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        AiPlanPaymentCancellationOperation operation =
+                AiPlanPaymentCancellationOperation.request(payment, new BigDecimal("9900"));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByPaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(operation));
+
+        // when
+        AiPlanPaymentCancellationPlan plan = executor.prepareMismatchedPaymentCancellation(
+                PAYMENT_ID, new BigDecimal("9900"));
+
+        // then
+        assertThat(plan.shouldCallPortOne()).isTrue();
+        assertThat(plan.idempotencyKey()).isEqualTo(operation.getIdempotencyKey());
+        assertThat(operation.getStatus()).isEqualTo(AiPlanPaymentCancellationStatus.PENDING);
+    }
+
+    @Test
+    void PortOne이_접수한_REQUESTED_환불은_중복_호출하지_않는다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        AiPlanPaymentCancellationOperation operation =
+                AiPlanPaymentCancellationOperation.request(payment, new BigDecimal("9900"));
+        operation.recordRequested("cancel-1");
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByPaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(operation));
+
+        // when
+        AiPlanPaymentCancellationPlan plan = executor.prepareMismatchedPaymentCancellation(
+                PAYMENT_ID, new BigDecimal("9900"));
+
+        // then
+        assertThat(plan.shouldCallPortOne()).isFalse();
     }
 }

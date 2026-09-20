@@ -53,13 +53,15 @@ public class AiPlanPaymentCancellationOperation extends BaseEntity {
         operation.payment = payment;
         operation.requestedAmount = amount;
         operation.idempotencyKey = "ai-plan-refund-" + payment.getAiPlanPaymentId();
-        operation.status = AiPlanPaymentCancellationStatus.REQUESTED;
+        // 외부 호출 전에는 PENDING으로 남긴다. 이 커밋 직후 프로세스가 죽어도 같은
+        // 멱등키로 PortOne 호출을 재시도해야 하므로 REQUESTED를 쓰면 안 된다.
+        operation.status = AiPlanPaymentCancellationStatus.PENDING;
         return operation;
     }
 
     public void retry() {
         if (status == AiPlanPaymentCancellationStatus.FAILED) {
-            status = AiPlanPaymentCancellationStatus.REQUESTED;
+            status = AiPlanPaymentCancellationStatus.PENDING;
             pgCancellationId = null;
             pgCancelledAmount = null;
             resolvedAt = null;
