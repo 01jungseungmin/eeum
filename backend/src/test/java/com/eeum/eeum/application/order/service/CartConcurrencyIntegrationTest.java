@@ -59,6 +59,7 @@ class CartConcurrencyIntegrationTest extends IntegrationTestSupport {
     private Product bread;
     private Product milk;
     private Product jam;
+    private Product otherStoreTea;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +76,13 @@ class CartConcurrencyIntegrationTest extends IntegrationTestSupport {
                 store, category, "우유", null, new BigDecimal("2000"), 100, ProductType.SALE));
         jam = productRepository.save(Product.create(
                 store, category, "잼", null, new BigDecimal("3000"), 100, ProductType.SALE));
+        Account otherOwner = accountRepository.save(Account.createOwner(
+                "cart-race-other-owner@test.com", "encoded_pw", "다른 카트 사장", "010-7200-0003"));
+        Store otherStore = storeRepository.save(Store.createForOwnerSignup(
+                otherOwner, "다른 카트 경쟁 상점", "서울시 성동구", "02-7200-0002"));
+        ProductCategory otherCategory = productCategoryRepository.save(ProductCategory.create(otherStore, "음료", 1));
+        otherStoreTea = productRepository.save(Product.create(
+                otherStore, otherCategory, "차", null, new BigDecimal("4000"), 100, ProductType.SALE));
     }
 
     @AfterEach
@@ -143,6 +151,20 @@ class CartConcurrencyIntegrationTest extends IntegrationTestSupport {
                     .as("round %d", round)
                     .hasSize(products.size());
         }
+    }
+
+    @Test
+    void 서로_다른_상점_상품을_동시에_담아도_카트에는_한_상점_상품만_남는다() throws Exception {
+        // 원래 C7의 경쟁: 두 요청 모두 빈 카트를 읽더라도, 행 잠금 뒤의 요청은 앞선 상점 항목을
+        // 삭제하고 자기 상점만 남긴다. 어느 요청이 마지막인지는 보장하지 않는다.
+        List<Throwable> failures = addConcurrently(List.of(bread, otherStoreTea));
+
+        assertThat(failures).isEmpty();
+        Cart cart = cartRepository.findByAccount_AccountId(buyer.getAccountId()).orElseThrow();
+        List<Long> itemStoreIds = cartItemRepository.findByCart_CartId(cart.getCartId()).stream()
+                .map(item -> item.getProduct().getStore().getStoreId())
+                .toList();
+        assertThat(itemStoreIds).hasSize(1).containsOnly(cart.getStore().getStoreId());
     }
 
     private List<Throwable> addConcurrently(List<Product> products) throws Exception {

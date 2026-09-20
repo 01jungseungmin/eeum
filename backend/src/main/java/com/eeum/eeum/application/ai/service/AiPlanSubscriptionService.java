@@ -7,6 +7,8 @@ import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.order.dto.response.PortOneCancelResult;
+import com.eeum.eeum.application.ai.dto.response.AiPlanPaymentCancellationPlan;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
@@ -94,6 +96,7 @@ public class AiPlanSubscriptionService {
         }
         PortOnePaymentInfo paymentInfo = portOnePaymentClient.getPayment(paymentId);
         if ("CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
+            paymentCommandExecutor.confirmMismatchedPaymentCancellation(paymentId);
             redisLockService.executeWithLock(
                     LockKeys.aiPlanPayment(paymentId), PAYMENT_LOCK_LEASE,
                     () -> paymentCommandExecutor.cancelPaidSubscriptionInTx(paymentId));
@@ -143,10 +146,26 @@ public class AiPlanSubscriptionService {
     }
 
     private void cancelMismatchedPayment(String paymentId, java.math.BigDecimal amount) {
+        AiPlanPaymentCancellationPlan plan = paymentCommandExecutor
+                .prepareMismatchedPaymentCancellation(paymentId, amount);
+        if (!plan.shouldCallPortOne()) {
+            return;
+        }
         try {
-            portOnePaymentClient.cancelPayment(paymentId, amount, "AI 플랜 결제 금액 불일치 — 자동 환불");
+            PortOneCancelResult result = portOnePaymentClient.cancelPayment(
+                    paymentId, plan.amount(), "AI 플랜 결제 금액 불일치 — 자동 환불", plan.idempotencyKey());
+            paymentCommandExecutor.recordMismatchedPaymentCancellationResult(paymentId, result);
+            if (!result.isSucceeded() || result.cancelledAmount() == null
+                    || result.cancelledAmount().compareTo(plan.amount()) != 0) {
+                operationFailureRecorder.record(
+                        OperationFailureCategory.REFUND, "AiPlanSubscriptionService.autoCancel",
+                        "PAYMENT", paymentId, "AI_PLAN_REFUND_" + result.status(),
+                        "AI 플랜 금액 불일치 자동 환불이 확정되지 않았습니다.",
+                        "cancellationId=" + result.cancellationId() + ", amount=" + result.cancelledAmount());
+            }
         } catch (RuntimeException e) {
             log.error("[AI-PLAN] 금액 불일치 자동 환불 실패 — 수동 확인 필요: paymentId={}", paymentId, e);
+            paymentCommandExecutor.recordMismatchedPaymentCancellationFailure(paymentId);
             operationFailureRecorder.record(
                     OperationFailureCategory.REFUND, "AiPlanSubscriptionService.autoCancel",
                     "PAYMENT", paymentId, e, "결제 금액 불일치 자동 환불 실패, amount=" + amount);

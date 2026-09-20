@@ -6,6 +6,8 @@ import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.application.order.service.PortOnePaymentClient;
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.order.dto.response.PortOneCancelResult;
+import com.eeum.eeum.application.ai.dto.response.AiPlanPaymentCancellationPlan;
 import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
@@ -25,6 +27,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -208,6 +211,32 @@ class AiPlanSubscriptionServiceTest {
         verify(redisLockService).executeWithLock(
                 eq(LockKeys.aiPlanPayment(PAYMENT_ID)), any(Duration.class), any(Runnable.class));
         verify(paymentCommandExecutor).applyPaidSubscriptionInTx(eq(PAYMENT_ID), any(PortOnePaymentInfo.class));
+    }
+
+    @Test
+    void AI_금액_불일치_환불의_REQUESTED_응답을_영속_작업과_운영_이력에_남긴다() {
+        Store store = stubStore();
+        stubRunnableLockPassThrough();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PAID").amount(new BigDecimal("100")).build());
+        AiPlanPaymentCancellationPlan plan = new AiPlanPaymentCancellationPlan(
+                PAYMENT_ID, new BigDecimal("100"), "ai-plan-refund-1", true);
+        when(paymentCommandExecutor.prepareMismatchedPaymentCancellation(PAYMENT_ID, new BigDecimal("100")))
+                .thenReturn(plan);
+        when(portOnePaymentClient.cancelPayment(PAYMENT_ID, new BigDecimal("100"),
+                "AI 플랜 결제 금액 불일치 — 자동 환불", "ai-plan-refund-1"))
+                .thenReturn(new PortOneCancelResult(PortOneCancelResult.REQUESTED, "cancel-1", null));
+
+        subscriptionService.handleWebhook(PAYMENT_ID);
+
+        verify(paymentCommandExecutor).recordMismatchedPaymentCancellationResult(
+                eq(PAYMENT_ID), any(PortOneCancelResult.class));
+        verify(operationFailureRecorder).record(
+                eq(com.eeum.eeum.domain.operation.enums.OperationFailureCategory.REFUND),
+                eq("AiPlanSubscriptionService.autoCancel"), eq("PAYMENT"), eq(PAYMENT_ID),
+                eq("AI_PLAN_REFUND_REQUESTED"), anyString(), anyString());
     }
 
     @Test

@@ -1,10 +1,15 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
+import com.eeum.eeum.application.order.dto.response.PortOneCancelResult;
+import com.eeum.eeum.application.ai.dto.response.AiPlanPaymentCancellationPlan;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
+import com.eeum.eeum.domain.ai.entity.AiPlanPaymentCancellationOperation;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
+import com.eeum.eeum.domain.ai.enums.AiPlanPaymentCancellationStatus;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
 import com.eeum.eeum.domain.ai.repository.AiPlanPaymentRepository;
+import com.eeum.eeum.domain.ai.repository.AiPlanPaymentCancellationOperationRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
@@ -32,6 +37,7 @@ public class AiPlanPaymentCommandExecutor {
     private static final int SUBSCRIPTION_PERIOD_MONTHS = 1;
 
     private final AiPlanPaymentRepository aiPlanPaymentRepository;
+    private final AiPlanPaymentCancellationOperationRepository cancellationOperationRepository;
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     private final AiPlanPaymentFailureRecorder failureRecorder;
     private final StoreRepository storeRepository;
@@ -121,6 +127,61 @@ public class AiPlanPaymentCommandExecutor {
     private Store lockStore(Long storeId) {
         return storeRepository.findByIdWithPessimisticLock(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+    }
+
+    /** 외부 PortOne 호출 전에 환불 작업과 멱등키를 먼저 커밋한다. */
+    @Transactional
+    public AiPlanPaymentCancellationPlan prepareMismatchedPaymentCancellation(String paymentId, java.math.BigDecimal amount) {
+        AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        AiPlanPaymentCancellationOperation operation = cancellationOperationRepository
+                .findByPaymentIdWithPessimisticLock(paymentId).orElse(null);
+        if (operation == null) {
+            operation = cancellationOperationRepository.save(
+                    AiPlanPaymentCancellationOperation.request(payment, amount));
+            return new AiPlanPaymentCancellationPlan(paymentId, operation.getRequestedAmount(),
+                    operation.getIdempotencyKey(), true);
+        }
+        if (operation.getStatus() == AiPlanPaymentCancellationStatus.SUCCEEDED
+                || operation.getStatus() == AiPlanPaymentCancellationStatus.REQUESTED) {
+            return new AiPlanPaymentCancellationPlan(paymentId, operation.getRequestedAmount(),
+                    operation.getIdempotencyKey(), false);
+        }
+        operation.retry();
+        return new AiPlanPaymentCancellationPlan(paymentId, operation.getRequestedAmount(),
+                operation.getIdempotencyKey(), true);
+    }
+
+    @Transactional
+    public void recordMismatchedPaymentCancellationResult(String paymentId, PortOneCancelResult result) {
+        AiPlanPaymentCancellationOperation operation = cancellationOperationRepository
+                .findByPaymentIdWithPessimisticLock(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS));
+        boolean succeeded = result.isSucceeded()
+                && result.cancelledAmount() != null
+                && operation.getRequestedAmount().compareTo(result.cancelledAmount()) == 0;
+        if (succeeded) {
+            operation.recordSucceeded(result.cancellationId(), result.cancelledAmount());
+        } else if (result.isPending()) {
+            operation.recordRequested(result.cancellationId());
+        } else {
+            operation.recordFailed(result.cancellationId(), result.cancelledAmount());
+        }
+    }
+
+    @Transactional
+    public void recordMismatchedPaymentCancellationFailure(String paymentId) {
+        cancellationOperationRepository.findByPaymentIdWithPessimisticLock(paymentId)
+                .ifPresent(operation -> operation.recordFailed(null, null));
+    }
+
+    /** REQUESTED 보상 환불의 최종 CANCELLED Webhook을 영속 작업에도 반영한다. */
+    @Transactional
+    public void confirmMismatchedPaymentCancellation(String paymentId) {
+        cancellationOperationRepository.findByPaymentIdWithPessimisticLock(paymentId)
+                .filter(operation -> operation.getStatus() == AiPlanPaymentCancellationStatus.REQUESTED)
+                .ifPresent(operation -> operation.recordSucceeded(
+                        operation.getPgCancellationId(), operation.getRequestedAmount()));
     }
 
     /** PG가 외부에서 전액 취소한 AI 결제를 내부 권한과 맞춘다. */
