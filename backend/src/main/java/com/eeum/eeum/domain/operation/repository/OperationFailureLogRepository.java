@@ -11,6 +11,9 @@ import java.time.LocalDateTime;
 public interface OperationFailureLogRepository
         extends JpaRepository<OperationFailureLog, Long>, OperationFailureLogRepositoryCustom {
 
+    boolean existsByOperationAndRefTypeAndRefIdAndErrorCode(
+            String operation, String refType, String refId, String errorCode);
+
     // 보존 기간 경과분 물리 삭제 — Soft Delete 대상이 아니다.
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from OperationFailureLog l where l.createdAt < :threshold")

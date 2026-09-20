@@ -11,6 +11,7 @@ import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
 import com.eeum.eeum.domain.settlement.repository.OwnerRevenueRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementItemRepository;
 import com.eeum.eeum.domain.settlement.repository.WeeklySettlementRepository;
+import com.eeum.eeum.domain.operation.repository.OperationFailureLogRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
@@ -51,6 +52,7 @@ class WeeklySettlementClosingServiceTest {
     @Mock private OwnerRevenueRepository ownerRevenueRepository;
     @Mock private WeeklySettlementRepository weeklySettlementRepository;
     @Mock private WeeklySettlementItemRepository weeklySettlementItemRepository;
+    @Mock private OperationFailureLogRepository operationFailureLogRepository;
 
     @InjectMocks private WeeklySettlementClosingService service;
 
@@ -151,6 +153,22 @@ class WeeklySettlementClosingServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
+    }
+
+    @Test
+    void 기간_밖_원장_표시와_운영_실패_이력을_같은_트랜잭션에서_남긴다() {
+        // given
+        OwnerRevenue revenue = revenue(PERIOD_START.minusDays(1));
+        when(ownerRevenueRepository.findByIdWithPessimisticLock(REVENUE_ID)).thenReturn(Optional.of(revenue));
+        when(operationFailureLogRepository.existsByOperationAndRefTypeAndRefIdAndErrorCode(
+                anyString(), anyString(), anyString(), anyString())).thenReturn(false);
+
+        // when
+        boolean recorded = service.markLateRevenueReported(REVENUE_ID, PERIOD_START, PERIOD_END);
+
+        // then
+        assertThat(recorded).isTrue();
+        verify(operationFailureLogRepository).save(any());
     }
 
     // ─────────────────── 헬퍼 ───────────────────

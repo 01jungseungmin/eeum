@@ -204,4 +204,22 @@ public class AiPlanPaymentCommandExecutor {
                 .ifPresent(subscription -> subscription.deactivate(LocalDateTime.now()));
         payment.cancel();
     }
+
+    /**
+     * 부분 환불은 사용량·잔여 기간을 정확히 계산할 정책이 없으므로 즉시 권한을 중지한다.
+     * 결제 상태는 전액 취소와 구분해 운영 대사와 고객 지원에서 환불 범위를 확인할 수 있게 한다.
+     */
+    @Transactional
+    public void partiallyCancelPaidSubscriptionInTx(String paymentId) {
+        AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if (payment.getStatus() == com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus.PARTIALLY_CANCELLED
+                || payment.getStatus() == com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus.CANCELLED) {
+            return;
+        }
+        aiPlanSubscriptionRepository.findByPayment_AiPlanPaymentId(payment.getAiPlanPaymentId())
+                .filter(AiPlanSubscription::isActive)
+                .ifPresent(subscription -> subscription.deactivate(LocalDateTime.now()));
+        payment.partiallyCancel();
+    }
 }

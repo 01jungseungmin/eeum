@@ -1,6 +1,9 @@
 package com.eeum.eeum.application.settlement.service;
 
 import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
+import com.eeum.eeum.domain.operation.entity.OperationFailureLog;
+import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
+import com.eeum.eeum.domain.operation.repository.OperationFailureLogRepository;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlement;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlementItem;
 import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
@@ -22,6 +25,10 @@ public class WeeklySettlementClosingService {
     private final OwnerRevenueRepository ownerRevenueRepository;
     private final WeeklySettlementRepository weeklySettlementRepository;
     private final WeeklySettlementItemRepository weeklySettlementItemRepository;
+    private final OperationFailureLogRepository operationFailureLogRepository;
+
+    private static final String LATE_REVENUE_OPERATION = "WeeklySettlementClosingScheduler.closeWeeklySettlements";
+    private static final String LATE_REVENUE_ERROR_CODE = "SETTLEMENT_OUTSIDE_PERIOD";
 
     /** 단일 원장을 해당 주차 정산으로 확정한다. 스케줄러가 ID마다 별도 트랜잭션으로 호출한다. */
     @Transactional
@@ -61,12 +68,31 @@ public class WeeklySettlementClosingService {
         return true;
     }
 
-    /** 기간 밖 누락 원장을 운영 수습 대상으로 한 번만 표시한다. */
+    /**
+     * 기간 밖 누락 원장 표시와 운영 실패 이력을 하나의 트랜잭션으로 커밋한다.
+     * 과거 버전에서 표시만 남은 행도 이력을 보충해 수습 큐에서 사라지지 않게 한다.
+     */
     @Transactional
-    public boolean markLateRevenueReported(Long ownerRevenueId, LocalDateTime periodStartAt) {
+    public boolean markLateRevenueReported(
+            Long ownerRevenueId, LocalDateTime periodStartAt, LocalDateTime periodEndAt
+    ) {
         OwnerRevenue revenue = ownerRevenueRepository.findByIdWithPessimisticLock(ownerRevenueId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
-        return revenue.markLateSettlementReported(periodStartAt, LocalDateTime.now());
+        boolean newlyMarked = revenue.markLateSettlementReported(periodStartAt, LocalDateTime.now());
+        boolean alreadyLogged = operationFailureLogRepository.existsByOperationAndRefTypeAndRefIdAndErrorCode(
+                LATE_REVENUE_OPERATION, "ownerRevenue", String.valueOf(ownerRevenueId), LATE_REVENUE_ERROR_CODE);
+        if (!newlyMarked && alreadyLogged) {
+            return false;
+        }
+        operationFailureLogRepository.save(OperationFailureLog.create(
+                OperationFailureCategory.SCHEDULER,
+                LATE_REVENUE_OPERATION,
+                "ownerRevenue",
+                String.valueOf(ownerRevenueId),
+                LATE_REVENUE_ERROR_CODE,
+                "지난 정산 기간에 포함되지 않은 원장입니다. 별도 정산 수습이 필요합니다.",
+                "periodStartAt=" + periodStartAt + ", periodEndAt=" + periodEndAt));
+        return true;
     }
 
     private boolean isEligibleForPeriod(

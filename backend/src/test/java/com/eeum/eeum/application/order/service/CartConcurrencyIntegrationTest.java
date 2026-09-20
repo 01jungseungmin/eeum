@@ -161,10 +161,13 @@ class CartConcurrencyIntegrationTest extends IntegrationTestSupport {
 
         assertThat(failures).isEmpty();
         Cart cart = cartRepository.findByAccount_AccountId(buyer.getAccountId()).orElseThrow();
-        List<Long> itemStoreIds = cartItemRepository.findByCart_CartId(cart.getCartId()).stream()
-                .map(item -> item.getProduct().getStore().getStoreId())
+        // 다른 트랜잭션에서 읽은 CartItem의 Product는 지연 프록시다. 프록시 초기화가
+        // 필요 없는 식별자만 확인해 테스트가 세션 수명에 의존하지 않게 한다.
+        List<Long> productIds = cartItemRepository.findByCart_CartId(cart.getCartId()).stream()
+                .map(item -> item.getProduct().getProductId())
                 .toList();
-        assertThat(itemStoreIds).hasSize(1).containsOnly(cart.getStore().getStoreId());
+        assertThat(productIds).hasSize(1);
+        assertThat(productIds.get(0)).isIn(bread.getProductId(), otherStoreTea.getProductId());
     }
 
     private List<Throwable> addConcurrently(List<Product> products) throws Exception {

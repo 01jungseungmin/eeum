@@ -105,9 +105,13 @@ public class AiPlanSubscriptionService {
         if ("PARTIAL_CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
             operationFailureRecorder.record(
                     OperationFailureCategory.REFUND, "AiPlanSubscriptionService.handleWebhook",
-                    "PAYMENT", paymentId, "AI_PLAN_PARTIAL_CANCELLATION_MANUAL_REVIEW",
-                    "AI 플랜 부분 취소는 권한/기간 정책 확인 전까지 자동 반영하지 않습니다.", null);
-            throw new BusinessException(ErrorCode.PAYMENT_CANCELLATION_MANUAL_REVIEW);
+                    "PAYMENT", paymentId, "AI_PLAN_PARTIAL_CANCELLATION_ACCESS_SUSPENDED",
+                    "AI 플랜 부분 취소를 반영해 유료 권한을 중지했습니다. 잔여 기간·금액은 운영 대사가 필요합니다.",
+                    "cancelledAmount=" + paymentInfo.getCancelledAmount());
+            redisLockService.executeWithLock(
+                    LockKeys.aiPlanPayment(paymentId), PAYMENT_LOCK_LEASE,
+                    () -> paymentCommandExecutor.partiallyCancelPaidSubscriptionInTx(paymentId));
+            return;
         }
         if (!"PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
@@ -148,27 +152,61 @@ public class AiPlanSubscriptionService {
     private void cancelMismatchedPayment(String paymentId, java.math.BigDecimal amount) {
         AiPlanPaymentCancellationPlan plan = paymentCommandExecutor
                 .prepareMismatchedPaymentCancellation(paymentId, amount);
+        executeMismatchedPaymentCancellation(plan);
+    }
+
+    /**
+     * PENDING 환불 작업을 주기적으로 재개한다. 작업 행이 이미 있으므로 전달한 금액은
+     * 새 작업 생성에 쓰이지 않으며, executor가 원래 요청 금액과 멱등키를 반환한다.
+     */
+    public void retryPendingMismatchedPaymentCancellation(String paymentId) {
+        AiPlanPaymentCancellationPlan plan = paymentCommandExecutor
+                .prepareMismatchedPaymentCancellation(paymentId, java.math.BigDecimal.ZERO);
+        executeMismatchedPaymentCancellation(plan);
+    }
+
+    /** Webhook이 유실된 REQUESTED 환불을 PortOne 조회로 확정한다. */
+    public void reconcileRequestedMismatchedPaymentCancellation(String paymentId) {
+        try {
+            PortOnePaymentInfo paymentInfo = portOnePaymentClient.getPayment(paymentId);
+            if (!"CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
+                log.info("[AI-PLAN] 환불 확정 대기: paymentId={}, status={}", paymentId, paymentInfo.getStatus());
+                return;
+            }
+            paymentCommandExecutor.confirmMismatchedPaymentCancellation(paymentId);
+            redisLockService.executeWithLock(
+                    LockKeys.aiPlanPayment(paymentId), PAYMENT_LOCK_LEASE,
+                    () -> paymentCommandExecutor.cancelPaidSubscriptionInTx(paymentId));
+        } catch (RuntimeException e) {
+            log.warn("[AI-PLAN] 환불 확정 대사 실패: paymentId={}", paymentId, e);
+            operationFailureRecorder.record(
+                    OperationFailureCategory.REFUND, "AiPlanSubscriptionService.reconcileRequestedMismatchedPaymentCancellation",
+                    "PAYMENT", paymentId, e, null);
+        }
+    }
+
+    private void executeMismatchedPaymentCancellation(AiPlanPaymentCancellationPlan plan) {
         if (!plan.shouldCallPortOne()) {
             return;
         }
         try {
             PortOneCancelResult result = portOnePaymentClient.cancelPayment(
-                    paymentId, plan.amount(), "AI 플랜 결제 금액 불일치 — 자동 환불", plan.idempotencyKey());
-            paymentCommandExecutor.recordMismatchedPaymentCancellationResult(paymentId, result);
+                    plan.paymentId(), plan.amount(), "AI 플랜 결제 금액 불일치 — 자동 환불", plan.idempotencyKey());
+            paymentCommandExecutor.recordMismatchedPaymentCancellationResult(plan.paymentId(), result);
             if (!result.isSucceeded() || result.cancelledAmount() == null
                     || result.cancelledAmount().compareTo(plan.amount()) != 0) {
                 operationFailureRecorder.record(
                         OperationFailureCategory.REFUND, "AiPlanSubscriptionService.autoCancel",
-                        "PAYMENT", paymentId, "AI_PLAN_REFUND_" + result.status(),
+                        "PAYMENT", plan.paymentId(), "AI_PLAN_REFUND_" + result.status(),
                         "AI 플랜 금액 불일치 자동 환불이 확정되지 않았습니다.",
                         "cancellationId=" + result.cancellationId() + ", amount=" + result.cancelledAmount());
             }
         } catch (RuntimeException e) {
-            log.error("[AI-PLAN] 금액 불일치 자동 환불 실패 — 수동 확인 필요: paymentId={}", paymentId, e);
-            paymentCommandExecutor.recordMismatchedPaymentCancellationFailure(paymentId);
+            log.error("[AI-PLAN] 금액 불일치 자동 환불 실패 — 수동 확인 필요: paymentId={}", plan.paymentId(), e);
+            paymentCommandExecutor.recordMismatchedPaymentCancellationFailure(plan.paymentId());
             operationFailureRecorder.record(
                     OperationFailureCategory.REFUND, "AiPlanSubscriptionService.autoCancel",
-                    "PAYMENT", paymentId, e, "결제 금액 불일치 자동 환불 실패, amount=" + amount);
+                    "PAYMENT", plan.paymentId(), e, "결제 금액 불일치 자동 환불 실패, amount=" + plan.amount());
         }
     }
 

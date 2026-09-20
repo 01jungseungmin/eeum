@@ -214,6 +214,27 @@ class AiPlanSubscriptionServiceTest {
     }
 
     @Test
+    void AI_부분_취소_Webhook은_유료_권한을_중지하고_운영_이력에_남긴다() {
+        // given
+        Store store = stubStore();
+        stubRunnableLockPassThrough();
+        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID))
+                .thenReturn(Optional.of(pendingPayment(store, AiPlanType.BASIC)));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PARTIAL_CANCELLED").cancelledAmount(new BigDecimal("1000")).build());
+
+        // when
+        subscriptionService.handleWebhook(PAYMENT_ID);
+
+        // then
+        verify(paymentCommandExecutor).partiallyCancelPaidSubscriptionInTx(PAYMENT_ID);
+        verify(operationFailureRecorder).record(
+                eq(com.eeum.eeum.domain.operation.enums.OperationFailureCategory.REFUND),
+                eq("AiPlanSubscriptionService.handleWebhook"), eq("PAYMENT"), eq(PAYMENT_ID),
+                eq("AI_PLAN_PARTIAL_CANCELLATION_ACCESS_SUSPENDED"), anyString(), anyString());
+    }
+
+    @Test
     void AI_금액_불일치_환불의_REQUESTED_응답을_영속_작업과_운영_이력에_남긴다() {
         Store store = stubStore();
         stubRunnableLockPassThrough();
@@ -237,6 +258,21 @@ class AiPlanSubscriptionServiceTest {
                 eq(com.eeum.eeum.domain.operation.enums.OperationFailureCategory.REFUND),
                 eq("AiPlanSubscriptionService.autoCancel"), eq("PAYMENT"), eq(PAYMENT_ID),
                 eq("AI_PLAN_REFUND_REQUESTED"), anyString(), anyString());
+    }
+
+    @Test
+    void Webhook이_유실된_REQUESTED_환불은_PortOne_조회로_구독과_함께_확정한다() {
+        // given
+        stubRunnableLockPassThrough();
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("CANCELLED").build());
+
+        // when
+        subscriptionService.reconcileRequestedMismatchedPaymentCancellation(PAYMENT_ID);
+
+        // then
+        verify(paymentCommandExecutor).confirmMismatchedPaymentCancellation(PAYMENT_ID);
+        verify(paymentCommandExecutor).cancelPaidSubscriptionInTx(PAYMENT_ID);
     }
 
     @Test
