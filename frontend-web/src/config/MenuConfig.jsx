@@ -28,6 +28,7 @@ import {
   LogOut,
   ShoppingBag,
   Newspaper,
+  Heart,
 } from 'lucide-react';
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
@@ -286,6 +287,30 @@ export const ADMIN_MENU_CONFIG = [
         name: '커뮤니티 관리',
         path: '/admin/community/posts',
         icon: <Newspaper {...iconProps} />,
+      },
+      {
+        id: 'admin-chat',
+        name: '채팅 관리',
+        path: '/admin/chat/rooms',
+        icon: <MessageSquare {...iconProps} />,
+      },
+      {
+        id: 'admin-notifications',
+        name: '알림 발송',
+        path: '/admin/notifications/send',
+        icon: <Bell {...iconProps} />,
+      },
+      {
+        id: 'admin-operations',
+        name: '운영 모니터링',
+        path: '/admin/operations',
+        icon: <Activity {...iconProps} />,
+      },
+      {
+        id: 'admin-favorites',
+        name: '찜 통계',
+        path: '/admin/favorites',
+        icon: <Heart {...iconProps} />,
       },
       {
         id: 'admin-approval',

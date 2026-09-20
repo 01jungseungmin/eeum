@@ -51,6 +51,11 @@ import AdminCommunityPostManagementPage from './pages/admin/main/CommunityPostMa
 import AdminCommunityPostDetailPage from './pages/admin/main/CommunityPostDetailPage';
 import AdminUsedProductManagementPage from './pages/admin/main/UsedProductManagementPage';
 import AdminUsedProductDetailPage from './pages/admin/main/UsedProductDetailPage';
+import AdminChatRoomManagementPage from './pages/admin/main/ChatRoomManagementPage';
+import AdminChatRoomDetailPage from './pages/admin/main/ChatRoomDetailPage';
+import AdminNotificationSendPage from './pages/admin/main/NotificationSendPage';
+import AdminOperationMonitoringPage from './pages/admin/main/OperationMonitoringPage';
+import AdminFavoriteStatsPage from './pages/admin/main/FavoriteStatsPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -167,6 +172,26 @@ function App() {
         <Route
           path="/admin/used/:usedProductId"
           element={<AdminUsedProductDetailPage />}
+        />
+        <Route
+          path="/admin/chat/rooms"
+          element={<AdminChatRoomManagementPage />}
+        />
+        <Route
+          path="/admin/chat/rooms/:roomId"
+          element={<AdminChatRoomDetailPage />}
+        />
+        <Route
+          path="/admin/notifications/send"
+          element={<AdminNotificationSendPage />}
+        />
+        <Route
+          path="/admin/operations"
+          element={<AdminOperationMonitoringPage />}
+        />
+        <Route
+          path="/admin/favorites"
+          element={<AdminFavoriteStatsPage />}
         />
         <Route
           path="/admin/reports"

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldAlert } from 'lucide-react';
 import StoreProfileCard from '../../../components/admin/store/StoreProfileCard';
 import StoreDetailPanel from '../../../components/admin/store/StoreDetailPanel';
+import SanctionHistoryModal from '../../../components/admin/sanction/SanctionHistoryModal';
 import { storeApi } from '../../../api/admin/storeApi';
 
 const DetailContainer = styled.div`
@@ -16,6 +17,7 @@ const DetailContainer = styled.div`
 const DetailHeader = styled.div`
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
 
   .btn-back {
@@ -50,6 +52,31 @@ const DetailHeader = styled.div`
   }
 `;
 
+const HeaderLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+`;
+
+const SanctionHistoryButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #f9fafb;
+  }
+`;
+
 const MainGrid = styled.div`
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -63,6 +90,7 @@ function StoreDetailPage() {
 
   const [store, setStore] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSanctionHistory, setShowSanctionHistory] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -129,16 +157,23 @@ function StoreDetailPage() {
   return (
     <DetailContainer>
       <DetailHeader>
-        <div
-          className="btn-back"
-          onClick={() => navigate('/admin/stores')}
-        >
-          <ArrowLeft size={18} />
-        </div>
-        <div className="title-side">
-          <h1>{store.name}</h1>
-          <p>{store.address}</p>
-        </div>
+        <HeaderLeft>
+          <div
+            className="btn-back"
+            onClick={() => navigate('/admin/stores')}
+          >
+            <ArrowLeft size={18} />
+          </div>
+          <div className="title-side">
+            <h1>{store.name}</h1>
+            <p>{store.address}</p>
+          </div>
+        </HeaderLeft>
+
+        <SanctionHistoryButton onClick={() => setShowSanctionHistory(true)}>
+          <ShieldAlert size={14} />
+          제재 이력
+        </SanctionHistoryButton>
       </DetailHeader>
 
       <MainGrid>
@@ -149,6 +184,15 @@ function StoreDetailPage() {
         />
         <StoreDetailPanel store={store} />
       </MainGrid>
+
+      {showSanctionHistory && (
+        <SanctionHistoryModal
+          targetType="STORE"
+          targetId={storeId}
+          targetLabel={`${store.name} (상점 #${storeId})`}
+          onClose={() => setShowSanctionHistory(false)}
+        />
+      )}
     </DetailContainer>
   );
 }

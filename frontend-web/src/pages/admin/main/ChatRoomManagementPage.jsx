@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { Package, Tag, Clock, CheckCircle2 } from 'lucide-react';
-import UsedProductTable from '../../../components/admin/used/UsedProductTable';
-import { usedProductApi } from '../../../api/admin/usedProductApi';
+import { MessageSquare, CheckCircle2, XCircle, BellRing } from 'lucide-react';
+import ChatRoomFilterBar from '../../../components/admin/chat/ChatRoomFilterBar';
+import ChatRoomTable from '../../../components/admin/chat/ChatRoomTable';
+import { chatApi } from '../../../api/admin/chatApi';
 
 const Container = styled.div`
   padding: 30px;
@@ -95,44 +96,58 @@ const PageButton = styled.button`
 
 const PAGE_SIZE = 20;
 
-function UsedProductManagementPage() {
-  const [products, setProducts] = useState([]);
+function ChatRoomManagementPage() {
+  const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [type, setType] = useState('');
+  const [isActive, setIsActive] = useState('');
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
 
-  const fetchProducts = useCallback(async () => {
+  const fetchRooms = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await usedProductApi.getUsedProducts({
-        page,
-        size: PAGE_SIZE,
-      });
+      const params = { page, size: PAGE_SIZE };
+      if (type) params.type = type;
+      if (isActive) params.isActive = isActive;
+
+      const res = await chatApi.getAllRooms(params);
       if (res.data?.success) {
-        setProducts(res.data.data.content || []);
+        setRooms(res.data.data.content || []);
         setTotalPages(res.data.data.totalPages || 1);
         setTotalElements(res.data.data.totalElements || 0);
       }
     } catch (error) {
-      console.error('중고거래 목록 조회 실패:', error);
+      console.error('채팅방 목록 조회 실패:', error);
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, type, isActive]);
 
   useEffect(() => {
-    queueMicrotask(() => fetchProducts());
-  }, [fetchProducts]);
+    queueMicrotask(() => fetchRooms());
+  }, [fetchRooms]);
 
-  // 상태별 집계 API가 따로 없어 "이 페이지" 범위로만 계산한다.
+  const handleTypeChange = (next) => {
+    setType(next);
+    setPage(0);
+  };
+  const handleActiveChange = (next) => {
+    setIsActive(next);
+    setPage(0);
+  };
+
+  // 필터/집계 API가 따로 없어 "이 페이지" 범위로만 계산한다.
   const pageStats = useMemo(() => {
+    const activeCount = rooms.filter((r) => r.active).length;
+    const totalUnread = rooms.reduce((sum, r) => sum + (r.unreadCount || 0), 0);
     return {
-      selling: products.filter((p) => p.status === 'SELLING').length,
-      reserved: products.filter((p) => p.status === 'RESERVED').length,
-      sold: products.filter((p) => p.status === 'SOLD').length,
+      activeCount,
+      inactiveCount: rooms.length - activeCount,
+      totalUnread,
     };
-  }, [products]);
+  }, [rooms]);
 
   return (
     <Container>
@@ -142,12 +157,12 @@ function UsedProductManagementPage() {
           $iconColor="#2f54eb"
         >
           <div className="info">
-            <span>전체 상품</span>
+            <span>전체 채팅방</span>
             <h2>{totalElements.toLocaleString()}</h2>
             <p>전체 페이지 합계</p>
           </div>
           <div className="icon-wrapper">
-            <Package size={16} />
+            <MessageSquare size={16} />
           </div>
         </SummaryCard>
         <SummaryCard
@@ -155,25 +170,12 @@ function UsedProductManagementPage() {
           $iconColor="#2d5a43"
         >
           <div className="info">
-            <span>판매중</span>
-            <h2>{pageStats.selling}</h2>
+            <span>활성</span>
+            <h2>{pageStats.activeCount}</h2>
             <p>이 페이지 기준</p>
           </div>
           <div className="icon-wrapper">
-            <Tag size={16} />
-          </div>
-        </SummaryCard>
-        <SummaryCard
-          $iconBg="#fffbe6"
-          $iconColor="#ad6800"
-        >
-          <div className="info">
-            <span>예약중</span>
-            <h2>{pageStats.reserved}</h2>
-            <p>이 페이지 기준</p>
-          </div>
-          <div className="icon-wrapper">
-            <Clock size={16} />
+            <CheckCircle2 size={16} />
           </div>
         </SummaryCard>
         <SummaryCard
@@ -181,20 +183,39 @@ function UsedProductManagementPage() {
           $iconColor="#8c8c8c"
         >
           <div className="info">
-            <span>판매완료</span>
-            <h2>{pageStats.sold}</h2>
+            <span>비활성</span>
+            <h2>{pageStats.inactiveCount}</h2>
             <p>이 페이지 기준</p>
           </div>
           <div className="icon-wrapper">
-            <CheckCircle2 size={16} />
+            <XCircle size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#fffbe6"
+          $iconColor="#ad6800"
+        >
+          <div className="info">
+            <span>총 안읽음</span>
+            <h2>{pageStats.totalUnread.toLocaleString()}</h2>
+            <p>이 페이지 합계</p>
+          </div>
+          <div className="icon-wrapper">
+            <BellRing size={16} />
           </div>
         </SummaryCard>
       </SummaryGrid>
 
-      <UsedProductTable
-        products={products}
+      <ChatRoomFilterBar
+        type={type}
+        onTypeChange={handleTypeChange}
+        isActive={isActive}
+        onActiveChange={handleActiveChange}
+      />
+
+      <ChatRoomTable
+        rooms={rooms}
         loading={loading}
-        totalElements={totalElements}
       />
 
       {totalPages > 1 && (
@@ -226,4 +247,4 @@ function UsedProductManagementPage() {
   );
 }
 
-export default UsedProductManagementPage;
+export default ChatRoomManagementPage;

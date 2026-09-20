@@ -143,6 +143,7 @@ function MemberTable({
   onActionSuspend,
   onActionWithdraw,
   onActionRestore,
+  onShowSanctionHistory,
 }) {
   const [activeMenuId, setActiveMenuId] = useState(null);
 
@@ -240,6 +241,13 @@ function MemberTable({
                   </ActionButton>
                   {isMenuOpen && (
                     <DropdownMenu>
+                      <DropdownItem
+                        onClick={() =>
+                          onShowSanctionHistory(row.accountId, row.name)
+                        }
+                      >
+                        제재 이력
+                      </DropdownItem>
                       {row.status === 'ACTIVE' && (
                         <>
                           <DropdownItem
