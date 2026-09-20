@@ -93,7 +93,9 @@ export default function AiExposedStores({ router, regionKeyword }: Props) {
 }
 
 const styles = StyleSheet.create({
-  section: { paddingTop: 20 },
+  // 배너(marginBottom 25)와 '우리 동네 상점' 사이에 고르게 놓이도록 위아래를 맞춘다.
+  // 아래 여백이 없으면 다음 구역 제목에 붙어 그 구역의 일부처럼 보인다.
+  section: { paddingTop: 10, paddingBottom: 35 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 },
   title: { fontSize: 16, color: '#1E3932' },
   list: { paddingHorizontal: 20 },
