@@ -7,6 +7,10 @@ import { Text } from '../../components/CustomText';
 import { usedApi, UsedProductDetail } from '../../api/used';
 import { favoriteApi } from '../../api/favorite';
 import { userApi } from '../../api/user';
+import { chatApi as usedChatApi } from '../../api/chat';
+import { usedReviewApi, UsedReviewSummary } from '../../api/usedReview';
+import { getApiErrorMessage } from '../../utils/apiError';
+import TradePartnerPickerModal, { TradePartner } from '../../components/used/TradePartnerPickerModal';
 
 const STATUS_LABEL: Record<string, string> = {
   RESERVED: '예약중',
@@ -53,6 +57,10 @@ export default function UsedTradeDetailScreen() {
   const [isToggling, setIsToggling] = useState(false);
   // 비회원이면 null. 판매자 본인인지 가려서 찜·채팅 버튼을 다르게 보여준다.
   const [myAccountId, setMyAccountId] = useState<number | null>(null);
+  const [isChatting, setIsChatting] = useState(false);
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const [sellerSummary, setSellerSummary] = useState<UsedReviewSummary | null>(null);
+  const [isPartnerPickerOpen, setIsPartnerPickerOpen] = useState(false);
 
   // 목록에서 찜을 바꾸고 돌아올 수 있어 포커스마다 다시 맞춘다.
   useFocusEffect(
@@ -74,6 +82,12 @@ export default function UsedTradeDetailScreen() {
           setProduct(detail);
           setFavoriteCount(detail.favoriteCount ?? 0);
           setHasError(false);
+
+          // 판매자 평판. 비회원도 볼 수 있고, 실패해도 상세는 그대로 떠야 한다.
+          usedReviewApi
+            .getSellerReviewSummary(detail.sellerId)
+            .then((summary) => { if (isActive) setSellerSummary(summary); })
+            .catch(() => { if (isActive) setSellerSummary(null); });
         } catch (error) {
           console.error('중고거래 상세 조회 실패:', error);
           if (isActive) setHasError(true);
@@ -103,6 +117,14 @@ export default function UsedTradeDetailScreen() {
       return () => { isActive = false; };
     }, [usedProductId])
   );
+
+  // 핸들러들이 참조하므로 early return 앞에서 계산한다.
+  const isMine = myAccountId !== null && product !== null && myAccountId === product.sellerId;
+  // 판매완료 시 확정된 상대만 후기를 쓸 수 있다.
+  const canWriteReview =
+    product?.status === 'SOLD' &&
+    myAccountId !== null &&
+    product.buyerAccountId === myAccountId;
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (width <= 0) return;
@@ -145,8 +167,8 @@ export default function UsedTradeDetailScreen() {
     }
   };
 
-  const handleChat = () => {
-    if (!product) return;
+  const handleChat = async () => {
+    if (!product || isChatting) return;
     if (myAccountId === null) {
       promptLogin();
       return;
@@ -155,8 +177,76 @@ export default function UsedTradeDetailScreen() {
       Alert.alert('알림', '이미 거래가 완료된 상품입니다.');
       return;
     }
-    // 판매자와의 1:1 채팅방 생성 API가 아직 없다(현재는 그룹방 생성만 제공).
-    Alert.alert('알림', '판매자와의 채팅 기능은 준비 중입니다.');
+
+    setIsChatting(true);
+    try {
+      // 멱등이라 다시 눌러도 방이 새로 생기지 않는다.
+      const room = await usedChatApi.createUsedProductInquiry(usedProductId);
+      const roomId = room?.roomId;
+      if (!roomId) throw new Error('roomId 없음');
+      router.push(`/chat/${roomId}` as any);
+    } catch (error) {
+      // GPS 인증된 활동 지역이 없으면 서버가 막는다. 이유를 그대로 보여준다.
+      Alert.alert('채팅을 시작할 수 없어요', getApiErrorMessage(error, '잠시 후 다시 시도해 주세요.'));
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  // ===================== 내 글 관리 =====================
+
+  const handleEdit = () => {
+    router.push(`/used-trade/write?editId=${usedProductId}` as any);
+  };
+
+  const handleDelete = () => {
+    Alert.alert('게시글 삭제', '삭제한 글은 되돌릴 수 없어요. 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await usedApi.deleteUsedProduct(usedProductId);
+            router.back();
+          } catch (error) {
+            // 예약 중인 글은 예약을 먼저 취소해야 삭제된다 — 서버 문구를 그대로 보여준다.
+            Alert.alert('삭제할 수 없어요', getApiErrorMessage(error, '잠시 후 다시 시도해 주세요.'));
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleOpenMenu = () => {
+    if (!isMine) return;
+    Alert.alert('게시글 관리', undefined, [
+      { text: '수정하기', onPress: handleEdit },
+      { text: '삭제하기', style: 'destructive', onPress: handleDelete },
+      { text: '닫기', style: 'cancel' },
+    ]);
+  };
+
+  /** 상태 변경은 서버가 갱신된 상세를 돌려주므로 그걸 그대로 반영한다. */
+  const runStatusChange = async (action: () => Promise<UsedProductDetail>) => {
+    if (isChangingStatus) return;
+    setIsChangingStatus(true);
+    try {
+      setProduct(await action());
+    } catch (error) {
+      Alert.alert('상태를 바꿀 수 없어요', getApiErrorMessage(error, '잠시 후 다시 시도해 주세요.'));
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
+
+  // 거래 상대를 고르는 시트를 띄운다. 여기서 확정된 상대만 후기를 쓸 수 있다.
+  const handleMarkSold = () => setIsPartnerPickerOpen(true);
+
+  const handleConfirmPartner = (partner: TradePartner | null) => {
+    setIsPartnerPickerOpen(false);
+    // 상대를 안 고르면 buyerId를 생략한다 — 예약 때 지정한 상대가 있으면 그대로 유지된다.
+    runStatusChange(() => usedApi.markSold(usedProductId, partner?.accountId));
   };
 
   if (isLoading && !product) {
@@ -186,7 +276,6 @@ export default function UsedTradeDetailScreen() {
 
   const images = product.images ?? [];
   const statusLabel = STATUS_LABEL[product.status];
-  const isMine = myAccountId !== null && myAccountId === product.sellerId;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -198,12 +287,12 @@ export default function UsedTradeDetailScreen() {
           <Ionicons name="chevron-back" size={26} color="#333" />
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="arrow-redo-outline" size={24} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="ellipsis-vertical" size={24} color="#333" />
-          </TouchableOpacity>
+          {/* 관리 메뉴는 내 글에서만 의미가 있다 */}
+          {isMine && (
+            <TouchableOpacity style={styles.iconButton} onPress={handleOpenMenu}>
+              <Ionicons name="ellipsis-vertical" size={24} color="#333" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -247,13 +336,30 @@ export default function UsedTradeDetailScreen() {
         </View>
 
         {/* 3. 판매자 정보 영역 */}
-        <View style={styles.sellerSection}>
+        <TouchableOpacity
+          style={styles.sellerSection}
+          onPress={() => router.push(`/used-trade/seller/${product.sellerId}` as any)}
+        >
           <View style={styles.avatar} />
           <View style={styles.sellerInfo}>
             <Text style={styles.sellerName}>{product.sellerNickname || '알 수 없음'}</Text>
             <Text style={styles.sellerMeta}>{product.regionName || '동네 미설정'}</Text>
           </View>
-        </View>
+          <View style={styles.sellerRating}>
+            {sellerSummary && sellerSummary.reviewCount > 0 ? (
+              <>
+                <Ionicons name="star" size={14} color="#FFB800" />
+                <Text style={styles.sellerRatingText}>
+                  {Number(sellerSummary.averageRating ?? 0).toFixed(1)}
+                </Text>
+                <Text style={styles.sellerRatingCount}>({sellerSummary.reviewCount})</Text>
+              </>
+            ) : (
+              <Text style={styles.sellerRatingCount}>후기 없음</Text>
+            )}
+            <Ionicons name="chevron-forward" size={16} color="#CCC" />
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -314,15 +420,60 @@ export default function UsedTradeDetailScreen() {
           />
         </TouchableOpacity>
         {isMine ? (
-          <View style={[styles.chatButton, styles.chatButtonDisabled]}>
-            <Text style={styles.chatButtonText}>내가 등록한 상품입니다</Text>
-          </View>
+          // 내 글에서는 채팅 대신 거래 상태를 바꾼다.
+          product.status === 'SOLD' ? (
+            <View style={[styles.chatButton, styles.chatButtonDisabled]}>
+              <Text style={styles.chatButtonText}>거래완료된 상품입니다</Text>
+            </View>
+          ) : (
+            <View style={styles.statusActions}>
+              {product.status === 'RESERVED' ? (
+                <TouchableOpacity
+                  style={[styles.statusButton, styles.statusButtonOutline]}
+                  disabled={isChangingStatus}
+                  onPress={() => runStatusChange(() => usedApi.cancelReservation(usedProductId))}
+                >
+                  <Text style={styles.statusButtonOutlineText}>예약 취소</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.statusButton, styles.statusButtonOutline]}
+                  disabled={isChangingStatus}
+                  onPress={() => runStatusChange(() => usedApi.reserve(usedProductId))}
+                >
+                  <Text style={styles.statusButtonOutlineText}>예약중으로</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.statusButton, styles.statusButtonPrimary]}
+                disabled={isChangingStatus}
+                onPress={handleMarkSold}
+              >
+                <Text style={styles.chatButtonText}>판매완료</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        ) : canWriteReview ? (
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() => router.push(`/used-trade/review/write?usedProductId=${usedProductId}` as any)}
+          >
+            <Text style={styles.chatButtonText}>거래 후기 남기기</Text>
+          </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.chatButton} onPress={handleChat}>
-            <Text style={styles.chatButtonText}>채팅하기</Text>
+          <TouchableOpacity style={styles.chatButton} onPress={handleChat} disabled={isChatting}>
+            <Text style={styles.chatButtonText}>{isChatting ? '여는 중...' : '채팅하기'}</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      <TradePartnerPickerModal
+        visible={isPartnerPickerOpen}
+        usedProductId={usedProductId}
+        myAccountId={myAccountId}
+        onClose={() => setIsPartnerPickerOpen(false)}
+        onConfirm={handleConfirmPartner}
+      />
     </SafeAreaView>
   );
 }
@@ -353,6 +504,9 @@ const styles = StyleSheet.create({
   sellerSection: { flexDirection: 'row', alignItems: 'center', padding: 20 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#D9D9D9', marginRight: 12 },
   sellerInfo: { flex: 1 },
+  sellerRating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  sellerRatingText: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+  sellerRatingCount: { fontSize: 13, color: '#999', marginRight: 2 },
   sellerName: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 2 },
   sellerMeta: { fontSize: 13, color: '#999' },
 
@@ -380,5 +534,10 @@ const styles = StyleSheet.create({
   heartButton: { width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: '#DDD', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   chatButton: { flex: 1, height: 50, backgroundColor: '#00A859', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   chatButtonDisabled: { backgroundColor: '#BDBDBD' },
+  statusActions: { flex: 1, flexDirection: 'row', gap: 8 },
+  statusButton: { flex: 1, height: 50, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  statusButtonPrimary: { backgroundColor: '#00A859' },
+  statusButtonOutline: { borderWidth: 1, borderColor: '#00A859', backgroundColor: '#FFF' },
+  statusButtonOutlineText: { color: '#00A859', fontSize: 15, fontWeight: 'bold' },
   chatButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 });

@@ -138,10 +138,16 @@ export default function ProfileScreen() {
         <View style={styles.menuSectionContainer}>
           <SectionHeader title="나의 커뮤니티 활동" />
           {/* ✨ 통합된 커뮤니티 활동 메뉴 하나만 배치합니다 */}
-          <MenuItem 
-            title="동네생활 활동" 
-            iconName="chatbubbles-outline" 
-            onPress={() => router.push('/mypage/my-community' as any)} 
+          <MenuItem
+            title="동네생활 활동"
+            iconName="chatbubbles-outline"
+            onPress={() => router.push('/mypage/my-community' as any)}
+          />
+          {/* 상점 리뷰(작성한 리뷰)와 별개다 — 중고거래는 사람에 대한 후기다 */}
+          <MenuItem
+            title="내가 쓴 거래 후기"
+            iconName="star-outline"
+            onPress={() => router.push('/mypage/used-reviews' as any)}
           />
         </View>
         

@@ -403,7 +403,13 @@ export default function ChatRoomScreen() {
             />
 
             <View style={styles.menuFooter}>
-              <TouchableOpacity style={styles.footerButton}>
+              <TouchableOpacity
+                style={styles.footerButton}
+                onPress={() => {
+                  setIsMenuVisible(false);
+                  router.push(`/chat/images/${id}` as any);
+                }}
+              >
                 <Ionicons name="images-outline" size={22} color="#555" />
                 <Text style={styles.footerButtonText}>사진 모아보기</Text>
               </TouchableOpacity>
