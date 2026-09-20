@@ -103,6 +103,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     STORE_CLOSED("STORE_005", "영업 중인 상점이 아닙니다", HttpStatus.BAD_REQUEST),
     STORE_CATEGORY_REQUIRED( "STORE_006", "상점 업종을 선택해야 합니다.",HttpStatus.BAD_REQUEST),
     STORE_NOTICE_NOT_FOUND("STORE_007", "공지를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+    STORE_BANK_NOT_SUPPORTED("STORE_008", "지원하지 않는 은행입니다", HttpStatus.BAD_REQUEST),
 
     // ===================== 상품 (PRODUCT) =====================
     PRODUCT_NOT_FOUND("PRODUCT_001", "존재하지 않는 상품입니다", HttpStatus.NOT_FOUND),
