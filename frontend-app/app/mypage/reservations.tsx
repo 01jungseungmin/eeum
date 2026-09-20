@@ -108,8 +108,7 @@ export default function ReservationsScreen() {
         </View>
 
         <View style={styles.cardBody}>
-          {/* 예약 목록 응답에는 가게 이미지가 없어 항상 자리표시자다 */}
-          <StoreThumbnail style={styles.cardImage} />
+          <StoreThumbnail uri={item.storeThumbnailUrl} style={styles.cardImage} />
           <View style={styles.cardInfo}>
             <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{storeName}</Text>
             {item.visitorCount && (
