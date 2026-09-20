@@ -344,6 +344,7 @@ export default function AiMarketingAutomation() {
                   messageId: draft?.messageId,
                   content: draft?.content,
                   estimatedReach: draft?.estimatedReach,
+                  noticeType: TYPE_MAP[activeTab],
                 },
               },
             })
