@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 
 const SummaryGrid = styled.div`
   display: grid;
@@ -15,6 +16,7 @@ const SummaryCard = styled.div`
   border: 1px solid ${(props) => props.$borderColor};
   border-radius: 16px;
   padding: 20px;
+  ${clickableCardStyle}
 `;
 
 const CardLabel = styled.div`
@@ -37,55 +39,72 @@ const CardSubText = styled.div`
   color: ${(props) => props.$color};
 `;
 
-export default function InquirySummaryCards({ summaryData }) {
-  const data = summaryData || {
-    waiting: 6,
-    waitingNew: 2,
-    processing: 3,
-    processingAvgTime: '3.2h',
-    completedThisWeek: 47,
-    satisfaction: 4.7,
+// 카드 하나 = 백엔드 InquiryStatus 하나 (전체는 상태 필터 없음)
+const CARDS = [
+  {
+    status: 'ALL',
+    label: '전체 문의',
+    subText: '누적 접수',
+    $bg: '#EFF6FF',
+    $borderColor: '#BFDBFE',
+    $color: '#2563EB',
+  },
+  {
+    status: 'PENDING',
+    label: '처리 대기',
+    subText: '답변을 기다리는 문의',
+    $bg: '#FEFCE8',
+    $borderColor: '#FEF08A',
+    $color: '#D97706',
+  },
+  {
+    status: 'ANSWERED',
+    label: '답변 완료',
+    subText: '답변이 등록된 문의',
+    $bg: '#F0FDF4',
+    $borderColor: '#BBF7D0',
+    $color: '#16A34A',
+  },
+  {
+    status: 'CLOSED',
+    label: '종료됨',
+    subText: '종료 처리된 문의',
+    $bg: '#FAF5FF',
+    $borderColor: '#E9D5FF',
+    $color: '#9333EA',
+  },
+];
+
+// counts: { PENDING, ANSWERED, CLOSED } (아직 못 불러왔으면 null)
+export default function InquirySummaryCards({
+  counts,
+  selectedStatus,
+  onSelect,
+}) {
+  const valueOf = (status) => {
+    if (!counts) return '-';
+    if (status === 'ALL') {
+      return counts.PENDING + counts.ANSWERED + counts.CLOSED;
+    }
+    return counts[status];
   };
 
   return (
     <SummaryGrid>
-      <SummaryCard
-        $bg="#FEFCE8"
-        $borderColor="#FEF08A"
-      >
-        <CardLabel>처리 대기</CardLabel>
-        <CardValue>{data.waiting}</CardValue>
-        <CardSubText $color="#D97706">신규 {data.waitingNew}건</CardSubText>
-      </SummaryCard>
-
-      <SummaryCard
-        $bg="#EFF6FF"
-        $borderColor="#BFDBFE"
-      >
-        <CardLabel>처리 중</CardLabel>
-        <CardValue>{data.processing}</CardValue>
-        <CardSubText $color="#2563EB">
-          평균 {data.processingAvgTime}
-        </CardSubText>
-      </SummaryCard>
-
-      <SummaryCard
-        $bg="#F0FDF4"
-        $borderColor="#BBF7D0"
-      >
-        <CardLabel>이번 주 완료</CardLabel>
-        <CardValue>{data.completedThisWeek}</CardValue>
-        <CardSubText $color="#16A34A">완료됨</CardSubText>
-      </SummaryCard>
-
-      <SummaryCard
-        $bg="#FAF5FF"
-        $borderColor="#E9D5FF"
-      >
-        <CardLabel>고객 만족도</CardLabel>
-        <CardValue>{data.satisfaction}</CardValue>
-        <CardSubText $color="#9333EA">/5.0</CardSubText>
-      </SummaryCard>
+      {CARDS.map((card) => (
+        <SummaryCard
+          key={card.status}
+          $bg={card.$bg}
+          $borderColor={card.$borderColor}
+          $clickable={Boolean(onSelect)}
+          $active={selectedStatus === card.status}
+          onClick={() => onSelect?.(card.status)}
+        >
+          <CardLabel>{card.label}</CardLabel>
+          <CardValue>{valueOf(card.status)}</CardValue>
+          <CardSubText $color={card.$color}>{card.subText}</CardSubText>
+        </SummaryCard>
+      ))}
     </SummaryGrid>
   );
 }

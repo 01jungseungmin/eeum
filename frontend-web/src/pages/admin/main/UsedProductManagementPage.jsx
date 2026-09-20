@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { Package, Tag, Clock, CheckCircle2 } from 'lucide-react';
 import UsedProductTable from '../../../components/admin/used/UsedProductTable';
 import { usedProductApi } from '../../../api/admin/usedProductApi';
+import { clickableCardStyle } from '../../../components/common/cardFilterStyle';
 
 const Container = styled.div`
   padding: 30px;
@@ -31,6 +32,7 @@ const SummaryCard = styled.div`
   align-items: flex-start;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 
+  ${clickableCardStyle}
   .info {
     span {
       font-size: 12px;
@@ -101,6 +103,8 @@ function UsedProductManagementPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
+  // 상단 카드와 목록 칩이 함께 쓰는 보기 필터 (현재 불러온 페이지 안에서만 적용)
+  const [filter, setFilter] = useState('ALL');
   // 목록 API가 썸네일을 내려주지 않아(서버가 thumbnailUrl에 null 고정) 상세 응답의 이미지로 채운다
   const [thumbnails, setThumbnails] = useState({});
   const requestedThumbnailIds = useRef(new Set());
@@ -188,6 +192,9 @@ function UsedProductManagementPage() {
         <SummaryCard
           $iconBg="#f0f5ff"
           $iconColor="#2f54eb"
+          $clickable
+          $active={filter === 'ALL'}
+          onClick={() => setFilter('ALL')}
         >
           <div className="info">
             <span>전체 상품</span>
@@ -201,6 +208,9 @@ function UsedProductManagementPage() {
         <SummaryCard
           $iconBg="#edf5f1"
           $iconColor="#2d5a43"
+          $clickable
+          $active={filter === 'SELLING'}
+          onClick={() => setFilter('SELLING')}
         >
           <div className="info">
             <span>판매중</span>
@@ -214,6 +224,9 @@ function UsedProductManagementPage() {
         <SummaryCard
           $iconBg="#fffbe6"
           $iconColor="#ad6800"
+          $clickable
+          $active={filter === 'RESERVED'}
+          onClick={() => setFilter('RESERVED')}
         >
           <div className="info">
             <span>예약중</span>
@@ -227,6 +240,9 @@ function UsedProductManagementPage() {
         <SummaryCard
           $iconBg="#f5f5f5"
           $iconColor="#8c8c8c"
+          $clickable
+          $active={filter === 'SOLD'}
+          onClick={() => setFilter('SOLD')}
         >
           <div className="info">
             <span>판매완료</span>
@@ -243,6 +259,8 @@ function UsedProductManagementPage() {
         products={productsWithThumbnail}
         loading={loading}
         totalElements={totalElements}
+        filter={filter}
+        onFilterChange={setFilter}
       />
 
       {totalPages > 1 && (

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { EyeOff, ImageOff } from 'lucide-react';
@@ -173,9 +173,15 @@ const FILTERS = [
   { value: 'HIDDEN', label: '숨김' },
 ];
 
-function UsedProductTable({ products, loading, totalElements = 0 }) {
+// filter: 상단 카드와 칩이 함께 쓰는 보기 필터(ALL | SELLING | RESERVED | SOLD | HIDDEN)를 페이지가 들고 있다
+function UsedProductTable({
+  products,
+  loading,
+  totalElements = 0,
+  filter = 'ALL',
+  onFilterChange = () => {},
+}) {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState('ALL');
 
   const filtered = useMemo(() => {
     if (filter === 'ALL') return products;
@@ -195,7 +201,7 @@ function UsedProductTable({ products, loading, totalElements = 0 }) {
             <Chip
               key={f.value}
               $active={filter === f.value}
-              onClick={() => setFilter(f.value)}
+              onClick={() => onFilterChange(f.value)}
             >
               {f.label}
             </Chip>

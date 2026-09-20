@@ -4,6 +4,7 @@ import { Store, CheckCircle2, PauseCircle, Ban } from 'lucide-react';
 import StoreFilterBar from '../../../components/admin/store/StoreFilterBar';
 import StoreTable from '../../../components/admin/store/StoreTable';
 import { storeApi } from '../../../api/admin/storeApi';
+import { clickableCardStyle } from '../../../components/common/cardFilterStyle';
 
 const Container = styled.div`
   padding: 30px;
@@ -32,6 +33,7 @@ const SummaryCard = styled.div`
   align-items: flex-start;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 
+  ${clickableCardStyle}
   .info {
     span {
       font-size: 12px;
@@ -105,6 +107,8 @@ function StoreManagementPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
+  // 상단 카드로 고르는 보기 필터 (현재 불러온 페이지 안에서만 적용): ALL | OPEN | PAUSED | CLOSED
+  const [cardFilter, setCardFilter] = useState('ALL');
 
   const fetchStores = useCallback(async () => {
     setLoading(true);
@@ -141,6 +145,19 @@ function StoreManagementPage() {
     queueMicrotask(() => fetchStores());
   }, [fetchStores]);
 
+  const displayedStores = useMemo(() => {
+    if (cardFilter === 'OPEN') return stores.filter((s) => s.status === 'OPEN');
+    if (cardFilter === 'PAUSED') {
+      return stores.filter(
+        (s) => s.status === 'TEMP_CLOSED' || s.status === 'SUSPENDED',
+      );
+    }
+    if (cardFilter === 'CLOSED') {
+      return stores.filter((s) => s.status === 'CLOSED');
+    }
+    return stores;
+  }, [stores, cardFilter]);
+
   const handleSearch = (nextKeyword) => {
     setKeyword(nextKeyword);
     setPage(0);
@@ -157,6 +174,9 @@ function StoreManagementPage() {
         <SummaryCard
           $iconBg="#f0f5ff"
           $iconColor="#2f54eb"
+          $clickable
+          $active={cardFilter === 'ALL'}
+          onClick={() => setCardFilter('ALL')}
         >
           <div className="info">
             <span>전체 상점</span>
@@ -170,6 +190,9 @@ function StoreManagementPage() {
         <SummaryCard
           $iconBg="#edf5f1"
           $iconColor="#2d5a43"
+          $clickable
+          $active={cardFilter === 'OPEN'}
+          onClick={() => setCardFilter('OPEN')}
         >
           <div className="info">
             <span>영업중</span>
@@ -183,6 +206,9 @@ function StoreManagementPage() {
         <SummaryCard
           $iconBg="#fffbe6"
           $iconColor="#ad6800"
+          $clickable
+          $active={cardFilter === 'PAUSED'}
+          onClick={() => setCardFilter('PAUSED')}
         >
           <div className="info">
             <span>휴업 / 정지</span>
@@ -196,6 +222,9 @@ function StoreManagementPage() {
         <SummaryCard
           $iconBg="#fff1f0"
           $iconColor="#f5222d"
+          $clickable
+          $active={cardFilter === 'CLOSED'}
+          onClick={() => setCardFilter('CLOSED')}
         >
           <div className="info">
             <span>폐업</span>
@@ -216,7 +245,7 @@ function StoreManagementPage() {
       />
 
       <StoreTable
-        stores={stores}
+        stores={displayedStores}
         loading={loading}
       />
 

@@ -147,8 +147,8 @@ function NotificationHistoryTable({
                   </td>
                   <td>{formatDate(n.createdAt)}</td>
                   <td>
-                    <ReadPill $read={n.isRead}>
-                      {n.isRead ? '읽음' : '안읽음'}
+                    <ReadPill $read={n.read}>
+                      {n.read ? '읽음' : '안읽음'}
                     </ReadPill>
                   </td>
                 </tr>

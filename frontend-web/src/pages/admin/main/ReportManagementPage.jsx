@@ -67,7 +67,11 @@ const ReportManagementPage = () => {
   return (
     <Container>
       {/* 요약 통계 카드 */}
-      <ReportStatCards reports={reports} />
+      <ReportStatCards
+        reports={reports}
+        selectedStatus={selectedStatus}
+        onStatusChange={handleStatusChange}
+      />
 
       {/* 필터링된 데이터 전달 */}
       <ReportList

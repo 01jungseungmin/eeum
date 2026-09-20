@@ -147,7 +147,11 @@ function OperationMonitoringPage() {
         </HoursSelect>
       </SummaryHeader>
 
-      <OperationSummaryCards summary={summary} />
+      <OperationSummaryCards
+        summary={summary}
+        selectedCategory={category}
+        onCategorySelect={handleCategoryChange}
+      />
 
       <div>
         <OperationFailureFilterBar
