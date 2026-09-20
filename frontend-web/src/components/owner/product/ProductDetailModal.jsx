@@ -196,17 +196,20 @@ const OptionGroupCard = styled.div`
 `;
 
 const OptionChip = styled.span`
-  background: white;
+  background: ${(props) => (props.$soldOut ? '#f8f9fa' : 'white')};
   border: 1px solid #e9ecef;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 11px;
-  color: #495057;
+  color: ${(props) => (props.$soldOut ? '#adb5bd' : '#495057')};
   display: inline-flex;
   align-items: center;
 
+  .name {
+    text-decoration: ${(props) => (props.$soldOut ? 'line-through' : 'none')};
+  }
   .price {
-    color: #00a651;
+    color: ${(props) => (props.$soldOut ? '#adb5bd' : '#00a651')};
     margin-left: 4px;
     font-weight: 600;
   }
@@ -214,6 +217,32 @@ const OptionChip = styled.span`
     color: #8e94a0;
     margin-left: 4px;
     font-size: 10px;
+  }
+  .sold-out-tag {
+    color: #f03e3e;
+    margin-left: 4px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+`;
+
+const ToggleAvailabilityButton = styled.button`
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid ${(props) => (props.$soldOut ? '#00a651' : '#ced4da')};
+  background: white;
+  color: ${(props) => (props.$soldOut ? '#00a651' : '#868e96')};
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #f8f9fa;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 `;
 
@@ -239,6 +268,27 @@ function ProductDetailModal({ productId, onClose }) {
   const [images, setImages] = useState([]);
   const [productOptions, setProductOptions] = useState([]); // 🆕 옵션 상태값 추가
   const [loading, setLoading] = useState(true);
+  const [togglingItemId, setTogglingItemId] = useState(null);
+
+  // 서버가 토글 방식이라 화면 값을 뒤집지 않고 재조회해서 실제 상태를 반영한다
+  const handleToggleAvailability = async (itemId) => {
+    try {
+      setTogglingItemId(itemId);
+      await productApi.toggleOptionItemAvailability(productId, itemId);
+      const res = await productApi.getProductOptions(productId);
+      if (res.data?.success) {
+        setProductOptions(res.data.data || []);
+      }
+    } catch (error) {
+      console.error('옵션 품절 상태 변경 실패:', error);
+      alert(
+        error.response?.data?.error?.message ||
+          '품절 상태 변경 중 오류가 발생했습니다.',
+      );
+    } finally {
+      setTogglingItemId(null);
+    }
+  };
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -465,30 +515,50 @@ function ProductDetailModal({ productId, onClose }) {
                   상품 옵션 ({productOptions.length}개)
                 </div>
                 {productOptions.map((group, gIdx) => (
-                  <OptionGroupCard key={group.optionGroupId || gIdx}>
+                  <OptionGroupCard key={group.optionId || gIdx}>
                     <div className="group-header">
                       <div className="group-name">
                         {group.groupName || group.name}
                       </div>
-                      {group.isRequired && (
+                      {group.required && (
                         <span className="group-badge">필수</span>
                       )}
                     </div>
                     <div className="chips">
                       {group.items &&
-                        group.items.map((sub, sIdx) => (
-                          <OptionChip key={sub.optionItemId || sIdx}>
-                            {sub.itemName || sub.name}
-                            {sub.additionalPrice > 0 && (
-                              <span className="price">
-                                +{sub.additionalPrice.toLocaleString()}원
+                        group.items.map((sub, sIdx) => {
+                          const soldOut = sub.available === false;
+                          return (
+                            <OptionChip
+                              key={sub.itemId || sIdx}
+                              $soldOut={soldOut}
+                            >
+                              <span className="name">
+                                {sub.itemName || sub.name}
                               </span>
-                            )}
-                            {sub.default && (
-                              <span className="default-tag">(기본값)</span>
-                            )}
-                          </OptionChip>
-                        ))}
+                              {sub.additionalPrice > 0 && (
+                                <span className="price">
+                                  +{sub.additionalPrice.toLocaleString()}원
+                                </span>
+                              )}
+                              {sub.default && (
+                                <span className="default-tag">(기본값)</span>
+                              )}
+                              {soldOut && (
+                                <span className="sold-out-tag">품절</span>
+                              )}
+                              <ToggleAvailabilityButton
+                                $soldOut={soldOut}
+                                disabled={togglingItemId === sub.itemId}
+                                onClick={() =>
+                                  handleToggleAvailability(sub.itemId)
+                                }
+                              >
+                                {soldOut ? '판매 재개' : '품절 처리'}
+                              </ToggleAvailabilityButton>
+                            </OptionChip>
+                          );
+                        })}
                     </div>
                   </OptionGroupCard>
                 ))}
