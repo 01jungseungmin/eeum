@@ -8,8 +8,10 @@ import {
   Store,
   Package,
   Calendar,
+  Pencil,
 } from 'lucide-react';
 import { accountApi } from '../../../api/owner/accountApi';
+import BusinessNumberModal from './modals/BusinessNumberModal';
 
 const Container = styled.div`
   background: white;
@@ -80,6 +82,26 @@ const Value = styled.span`
   color: #262626;
 `;
 
+const EditButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid #d9d9d9;
+  background: white;
+  color: #595959;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #52c41a;
+    color: #389e0d;
+  }
+`;
+
 const LoadingText = styled.div`
   padding: 24px;
   text-align: center;
@@ -109,9 +131,10 @@ const formatDate = (dateTimeStr) => {
   return dateTimeStr.split('T')[0];
 };
 
-const BusinessInfoBox = () => {
+const BusinessInfoBox = ({ onUpdated }) => {
   const [ownerData, setOwnerData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isNumberModalOpen, setIsNumberModalOpen] = useState(false);
 
   const fetchOwnerBusinessInfo = async () => {
     try {
@@ -145,6 +168,18 @@ const BusinessInfoBox = () => {
   }
 
   const data = ownerData || {};
+  // 승인 완료 후에는 백엔드가 사업자번호 변경을 막는다
+  const canEditBusinessNumber = data.approvalStatus !== 'APPROVED';
+
+  // 부모가 있으면 부모가 체크리스트를 다시 불러오며 이 컴포넌트도 새로 마운트된다
+  const handleNumberUpdated = async () => {
+    setIsNumberModalOpen(false);
+    if (onUpdated) {
+      onUpdated();
+    } else {
+      await fetchOwnerBusinessInfo();
+    }
+  };
 
   const infoData = [
     {
@@ -201,11 +236,27 @@ const BusinessInfoBox = () => {
             <IconWrapper>{item.icon}</IconWrapper>
             <TextContent>
               <Label>{item.label}</Label>
-              <Value>{item.value}</Value>
+              <Value>
+                {item.value}
+                {item.id === 1 && canEditBusinessNumber && (
+                  <EditButton onClick={() => setIsNumberModalOpen(true)}>
+                    <Pencil size={11} />
+                    수정
+                  </EditButton>
+                )}
+              </Value>
             </TextContent>
           </InfoItem>
         ))}
       </InfoGrid>
+
+      {isNumberModalOpen && (
+        <BusinessNumberModal
+          currentBusinessNumber={data.businessNumber}
+          onClose={() => setIsNumberModalOpen(false)}
+          onSuccess={handleNumberUpdated}
+        />
+      )}
     </Container>
   );
 };

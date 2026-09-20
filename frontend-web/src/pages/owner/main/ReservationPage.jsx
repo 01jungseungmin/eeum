@@ -191,6 +191,7 @@ export default function ReservationPage() {
   const [selectedDate, setSelectedDate] = useState(todayFormatted);
   const [settings, setSettings] = useState(null);
   const [timeSlots, setTimeSlots] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState([]);
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('전체');
   const [isOrdersLoading, setIsOrdersLoading] = useState(false);
@@ -209,12 +210,23 @@ export default function ReservationPage() {
   };
 
   // 특정 날짜의 시간대 현황 조회
+  // (시간대 오픈/차단 설정 + 실제 잔여 테이블 현황을 함께 조회)
   const fetchTimeSlots = useCallback(async (date) => {
     try {
-      const response = await reservationApi.getDateTimeSlots(date);
-      if (response.data && response.data.success) {
+      const [slotResponse, availableResponse] = await Promise.all([
+        reservationApi.getDateTimeSlots(date),
+        reservationApi.getAvailableTimeSlots(date),
+      ]);
+      if (slotResponse.data && slotResponse.data.success) {
         setTimeSlots(
-          Array.isArray(response.data.data) ? response.data.data : [],
+          Array.isArray(slotResponse.data.data) ? slotResponse.data.data : [],
+        );
+      }
+      if (availableResponse.data && availableResponse.data.success) {
+        setAvailableSlots(
+          Array.isArray(availableResponse.data.data)
+            ? availableResponse.data.data
+            : [],
         );
       }
     } catch (error) {
@@ -375,9 +387,8 @@ export default function ReservationPage() {
           {/* 클릭 연동 코드를 완전히 삭제하여 순수 리스트 뷰어로만 쓰이도록 격리 */}
           <TimeSlotStatus
             slotsData={timeSlots}
+            availableSlots={availableSlots}
             selectedDate={selectedDate}
-            dayOrders={filteredOrders}
-            defaultSettings={settings}
           />
         </LeftSection>
 

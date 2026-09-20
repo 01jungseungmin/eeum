@@ -69,4 +69,11 @@ export const productApi = {
   deleteProductOption: (productId, optionId) => {
     return apiClient.delete(`/owner/products/${productId}/options/${optionId}`);
   },
+
+  // 옵션 선택지 품절 ↔ 판매 가능 토글 (요청 본문 없음)
+  toggleOptionItemAvailability: (productId, itemId) => {
+    return apiClient.patch(
+      `/owner/products/${productId}/options/items/${itemId}/availability`,
+    );
+  },
 };
