@@ -140,7 +140,6 @@ function MainLayout() {
   return (
     <NotificationProvider>
       <LayoutWrapper>
-<<<<<<< HEAD
         <Sidebar
           approvalStatus={approvalStatus}
           approvalBadge={
@@ -149,20 +148,13 @@ function MainLayout() {
               : null
           }
         />
-=======
-        <Sidebar approvalStatus={approvalStatus} />
->>>>>>> 8d418cceda473088579385a822c4be531cdfca35
 
         <MainContent>
           <TopNavbar />
           <PageContainer>
-<<<<<<< HEAD
             <Outlet
               context={{ approvalStatus, dashboardData, syncApproval }}
             />
-=======
-            <Outlet context={{ approvalStatus, dashboardData }} />
->>>>>>> 8d418cceda473088579385a822c4be531cdfca35
           </PageContainer>
         </MainContent>
       </LayoutWrapper>
