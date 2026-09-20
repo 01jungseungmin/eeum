@@ -20,6 +20,7 @@ import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -28,6 +29,7 @@ import java.security.MessageDigest;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -45,7 +47,7 @@ public class CartService {
     private final ProductOptionItemRepository productOptionItemRepository;
     private final ProductOptionRepository productOptionRepository;
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponseDto getCart(Long accountId) {
         Cart cart = getOrCreateCart(accountId);
         List<CartItem> items = cartItemRepository.findByCart_CartId(cart.getCartId());
@@ -63,7 +65,7 @@ public class CartService {
                 .build();
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponseDto addItem(Long accountId, CartItemAddRequestDto request) {
         validateRequest(request);
 
@@ -78,7 +80,7 @@ public class CartService {
         return getCart(accountId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponseDto updateItem(
             Long accountId,
             Long cartItemId,
@@ -100,7 +102,7 @@ public class CartService {
         return getCart(accountId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponseDto removeItem(Long accountId, Long cartItemId) {
         Cart cart = getOrCreateCartForWrite(accountId);
 
@@ -121,7 +123,7 @@ public class CartService {
         return getCart(accountId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void clearCart(Long accountId) {
         Cart cart = getOrCreateCartForWrite(accountId);
         cartItemRepository.deleteByCart_CartId(cart.getCartId());
@@ -389,8 +391,8 @@ public class CartService {
     private Cart getOrCreateCart(Long accountId) {
         return cartRepository.findByAccount_AccountId(accountId)
                 .orElseGet(() -> {
-                    // 카트 행이 아직 없을 때는 존재하지 않는 행에 대한 cart 락을 잡을 수 없다.
-                    // 계정 행을 mutex로 써서 첫 조회/생성을 직렬화하고 UNIQUE(account_id) 충돌을 막는다.
+                    // 카트 행이 아직 없을 때는 잠글 cart 행이 없다. 계정 행을 mutex로 써서 첫 생성을 직렬화한다.
+                    // 재조회가 앞선 요청이 커밋한 카트를 보려면 READ_COMMITTED여야 한다(호출 메서드에 지정).
                     Account account = accountRepository.findByIdWithLock(accountId)
                             .orElseThrow(() -> new BusinessException(
                                     ErrorCode.ACCOUNT_NOT_FOUND
@@ -401,8 +403,13 @@ public class CartService {
     }
 
     private Cart getOrCreateCartForWrite(Long accountId) {
-        return cartRepository.findByAccountIdWithPessimisticLock(accountId)
-                .orElseGet(() -> getOrCreateCart(accountId));
+        Optional<Cart> locked = cartRepository.findByAccountIdWithPessimisticLock(accountId);
+        if (locked.isPresent()) {
+            return locked.get();
+        }
+        Cart cart = getOrCreateCart(accountId);
+        // 다른 요청이 먼저 만든 카트를 받았을 수 있다 — 쓰기 전에 그 행을 잠근다.
+        return cartRepository.findByAccountIdWithPessimisticLock(accountId).orElse(cart);
     }
 
     private CartItemResponseDto toCartItemDto(CartItem item) {
