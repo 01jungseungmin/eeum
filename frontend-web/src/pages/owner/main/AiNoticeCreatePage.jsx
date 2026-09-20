@@ -5,8 +5,6 @@ import {
   ArrowLeft,
   Sparkles,
   RotateCw,
-  MessageSquare,
-  Bell,
   Store,
   Send,
   Calendar as CalendarIcon,
@@ -21,6 +19,9 @@ const NOTICE_TYPES = [
   { value: 'TEMP_CLOSED', label: '임시 휴무 안내' },
   { value: 'NEW_MENU', label: '신메뉴 소식' },
 ];
+
+// 발송 채널은 상점 공지(STORE_NOTICE)만 지원한다
+const CHANNELS = ['STORE_NOTICE'];
 
 const KEYWORD_MAX_LENGTH = 100;
 // 백엔드 AiGeneratedMessageUpdateRequestDto.content 상한
@@ -54,7 +55,7 @@ export default function AiNoticeCreatePage() {
   );
   const [noticeText, setNoticeText] = useState(
     initialNoticeData?.content ||
-      '생성할 공지 문구 조건(채널 등)을 확인 후 [문구 다시 생성] 버튼을 눌러주세요.',
+      '생성할 공지 문구 조건을 확인 후 [문구 다시 생성] 버튼을 눌러주세요.',
   );
   const [estimatedReach, setEstimatedReach] = useState(
     initialNoticeData?.estimatedReach || 0,
@@ -69,13 +70,6 @@ export default function AiNoticeCreatePage() {
   );
   const [keyword, setKeyword] = useState('');
 
-  // 채널 선택 상태
-  const [channels, setChannels] = useState({
-    KAKAO_ALERT: true,
-    APP_PUSH: false,
-    STORE_NOTICE: false,
-  });
-
   // 발송 시간 탭 상태: 'IMMEDIATE' | 'RESERVED'
   const [sendType, setSendType] = useState('IMMEDIATE');
   const [scheduledDate, setScheduledDate] = useState(getTomorrowString);
@@ -84,21 +78,11 @@ export default function AiNoticeCreatePage() {
   // [수정] 수동 호출 전용: 사용자가 '문구 다시 생성' 버튼을 누를 때만 실행
   const handleGenerateNoticeDraft = async (confirmDelete = false) => {
     setIsLoading(true);
-    const selectedChannels = Object.keys(channels).filter(
-      (key) => channels[key],
-    );
-
-    if (selectedChannels.length === 0) {
-      alert('최소 하나의 채널을 선택해야 합니다.');
-      setIsLoading(false);
-      return;
-    }
-
     const trimmedKeyword = keyword.trim();
     const requestBody = {
       noticeType,
       tone: 'FRIENDLY',
-      channels: selectedChannels,
+      channels: CHANNELS,
       // 키워드는 선택 입력 — 비어 있으면 필드 자체를 보내지 않는다
       ...(trimmedKeyword && { keyword: trimmedKeyword }),
       confirmDelete: confirmDelete,
@@ -199,10 +183,6 @@ export default function AiNoticeCreatePage() {
     }
   };
 
-  const handleToggle = (key) => {
-    setChannels((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   return (
     <PageWrapper>
       <Container>
@@ -293,53 +273,13 @@ export default function AiNoticeCreatePage() {
             <Card>
               <CardTitleGroup>
                 <h3>발송 채널</h3>
-                <p>공지를 내보낼 채널을 선택하세요</p>
+                <p>공지는 우리 가게 매장 페이지에 게시돼요</p>
               </CardTitleGroup>
 
               <ChannelList>
-                <ChannelItem $active={channels.KAKAO_ALERT}>
+                <ChannelItem $active>
                   <ChannelLeft>
-                    <ChannelIconBox $active={channels.KAKAO_ALERT}>
-                      <MessageSquare size={20} />
-                    </ChannelIconBox>
-                    <ChannelInfo>
-                      <h4>알림톡</h4>
-                      <p>카카오 알림톡으로 발송</p>
-                    </ChannelInfo>
-                  </ChannelLeft>
-                  <ToggleSwitch>
-                    <input
-                      type="checkbox"
-                      checked={channels.KAKAO_ALERT}
-                      onChange={() => handleToggle('KAKAO_ALERT')}
-                    />
-                    <span />
-                  </ToggleSwitch>
-                </ChannelItem>
-
-                <ChannelItem $active={channels.APP_PUSH}>
-                  <ChannelLeft>
-                    <ChannelIconBox $active={channels.APP_PUSH}>
-                      <Bell size={20} />
-                    </ChannelIconBox>
-                    <ChannelInfo>
-                      <h4>앱 푸시</h4>
-                      <p>이음 앱 푸시 알림</p>
-                    </ChannelInfo>
-                  </ChannelLeft>
-                  <ToggleSwitch>
-                    <input
-                      type="checkbox"
-                      checked={channels.APP_PUSH}
-                      onChange={() => handleToggle('APP_PUSH')}
-                    />
-                    <span />
-                  </ToggleSwitch>
-                </ChannelItem>
-
-                <ChannelItem $active={channels.STORE_NOTICE}>
-                  <ChannelLeft>
-                    <ChannelIconBox $active={channels.STORE_NOTICE}>
+                    <ChannelIconBox $active>
                       <Store size={20} />
                     </ChannelIconBox>
                     <ChannelInfo>
@@ -347,14 +287,6 @@ export default function AiNoticeCreatePage() {
                       <p>매장 페이지 상단 노출</p>
                     </ChannelInfo>
                   </ChannelLeft>
-                  <ToggleSwitch>
-                    <input
-                      type="checkbox"
-                      checked={channels.STORE_NOTICE}
-                      onChange={() => handleToggle('STORE_NOTICE')}
-                    />
-                    <span />
-                  </ToggleSwitch>
                 </ChannelItem>
               </ChannelList>
             </Card>
@@ -422,7 +354,7 @@ export default function AiNoticeCreatePage() {
                 {estimatedReach}
                 <span>명</span>
               </ReachCount>
-              <ReachSub>선택한 채널 기준 추정치</ReachSub>
+              <ReachSub>상점 공지 기준 추정치</ReachSub>
             </SummaryCard>
 
             <SubmitButton
@@ -674,46 +606,6 @@ const ChannelInfo = styled.div`
     font-size: 12px;
     color: #9ca3af;
     margin: 2px 0 0;
-  }
-`;
-
-const ToggleSwitch = styled.label`
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  cursor: pointer;
-  input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-  span {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #cbd5e1;
-    transition: 0.3s;
-    border-radius: 24px;
-    &:before {
-      position: absolute;
-      content: '';
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      transition: 0.3s;
-      border-radius: 50%;
-    }
-  }
-  input:checked + span {
-    background-color: #41b37d;
-  }
-  input:checked + span:before {
-    transform: translateX(20px);
   }
 `;
 

@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Lightbulb,
   Tag,
-  Heart,
   AlertCircle,
 } from 'lucide-react';
 

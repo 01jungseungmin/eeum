@@ -7,9 +7,7 @@ import {
   Sparkles,
   RefreshCw,
   Send,
-  MessageSquare,
   Store,
-  Share2,
   Loader2,
   Crown,
 } from 'lucide-react';
@@ -318,51 +316,6 @@ const ChannelInfo = styled.div`
   font-size: 14px;
 `;
 
-const ToggleSwitch = styled.label`
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-
-  input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  span {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #d1d5db;
-    transition: 0.3s;
-    border-radius: 24px;
-  }
-
-  span:before {
-    position: absolute;
-    content: '';
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: 0.3s;
-    border-radius: 50%;
-  }
-
-  input:checked + span {
-    background-color: #47a075;
-  }
-
-  input:checked + span:before {
-    transform: translateX(20px);
-  }
-`;
-
 const SummaryTable = styled.div`
   display: flex;
   flex-direction: column;
@@ -426,6 +379,9 @@ const FooterCaption = styled.p`
 `;
 
 // UI용 탭 키 ↔ API 공지 유형 코드 매핑 (백엔드 AiNoticeType: EVENT/TEMP_CLOSED/NEW_MENU)
+// 발송 채널은 상점 공지(STORE_NOTICE)만 지원한다
+const CHANNELS = ['STORE_NOTICE'];
+
 const TYPE_MAP = {
   event: 'EVENT',
   holiday: 'TEMP_CLOSED',
@@ -454,13 +410,6 @@ export default function AiMarketingPage() {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 채널 활성화 상태
-  const [channels, setChannels] = useState({
-    KAKAO_ALERT: true,
-    STORE_NOTICE: true,
-    SNS_CARD: false,
-  });
-
   // API 응답 데이터 저장 상태
   const [draftResult, setDraftResult] = useState({
     messageId: null,
@@ -474,21 +423,6 @@ export default function AiMarketingPage() {
   // auto: 페이지 진입 시 자동 생성 — 이때는 확인창(AI_015) 대신 안내 문구만 보여준다
   const fetchMarketingDraft = useCallback(
     async ({ auto = false } = {}) => {
-      const activeChannels = Object.keys(channels).filter(
-        (key) => channels[key],
-      );
-
-      if (activeChannels.length === 0) {
-        setAiText('발송할 채널을 1개 이상 선택해 주세요.');
-        setDraftResult((prev) => ({
-          ...prev,
-          messageId: null,
-          estimatedReach: 0,
-          selectedChannelCount: 0,
-        }));
-        return;
-      }
-
       setLoading(true);
       setErrorMessage('');
 
@@ -496,7 +430,7 @@ export default function AiMarketingPage() {
         aiManagerApi.createMarketingDraft({
           noticeType: TYPE_MAP[typeTab],
           tone: TONE_MAP[tone],
-          channels: activeChannels,
+          channels: CHANNELS,
           confirmDelete,
         });
 
@@ -527,7 +461,7 @@ export default function AiMarketingPage() {
             messageId: resData.messageId,
             estimatedReach: resData.estimatedReach || 0,
             selectedChannelCount:
-              resData.selectedChannelCount || activeChannels.length,
+              resData.selectedChannelCount || CHANNELS.length,
             characterCount:
               resData.characterCount ||
               (resData.content ? resData.content.length : 0),
@@ -558,7 +492,7 @@ export default function AiMarketingPage() {
         setLoading(false);
       }
     },
-    [typeTab, tone, channels],
+    [typeTab, tone],
   );
 
   // 페이지 진입 시 초기 데이터 1회만 조회
@@ -592,12 +526,6 @@ export default function AiMarketingPage() {
     }
   }, [aiPlanType]);
 
-  const handleToggleChannel = (key) => {
-    setChannels((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const activeChannelCount = Object.values(channels).filter(Boolean).length;
-
   const toneLabelMap = {
     polite: '정정한 톤',
     lively: '발랄한 톤',
@@ -628,8 +556,8 @@ export default function AiMarketingPage() {
             </Badge>
           </TitleRow>
           <HeaderSubtitle>
-            공지 유형과 톤만 고르면 AI가 홍보 문구를 만들어 여러 채널로
-            보내드려요.
+            공지 유형과 톤만 고르면 AI가 홍보 문구를 만들어 매장 공지로
+            올려드려요.
           </HeaderSubtitle>
         </HeaderTitleGroup>
       </HeaderSection>
@@ -728,8 +656,8 @@ export default function AiMarketingPage() {
             </AiMessageContainer>
 
             <CharacterCount>
-              {draftResult.characterCount || aiText.length}자 · 알림톡 1건으로
-              발송 가능
+              {draftResult.characterCount || aiText.length}자 · 매장 공지로 게시
+              가능
             </CharacterCount>
 
             {planLocked && (
@@ -754,51 +682,15 @@ export default function AiMarketingPage() {
             <CardHeader>
               <CardTitleGroup>
                 <h4>발송 채널</h4>
-                <p>공지를 내보낼 채널을 선택하세요</p>
+                <p>공지는 우리 가게 매장 페이지에 게시돼요</p>
               </CardTitleGroup>
             </CardHeader>
 
             <ChannelList>
-              <ChannelItem $active={channels.KAKAO_ALERT}>
-                <ChannelInfo $active={channels.KAKAO_ALERT}>
-                  <MessageSquare size={18} /> 알림톡
-                </ChannelInfo>
-                <ToggleSwitch>
-                  <input
-                    type="checkbox"
-                    checked={channels.KAKAO_ALERT}
-                    onChange={() => handleToggleChannel('KAKAO_ALERT')}
-                  />
-                  <span />
-                </ToggleSwitch>
-              </ChannelItem>
-
-              <ChannelItem $active={channels.STORE_NOTICE}>
-                <ChannelInfo $active={channels.STORE_NOTICE}>
+              <ChannelItem $active>
+                <ChannelInfo $active>
                   <Store size={18} /> 매장 공지
                 </ChannelInfo>
-                <ToggleSwitch>
-                  <input
-                    type="checkbox"
-                    checked={channels.STORE_NOTICE}
-                    onChange={() => handleToggleChannel('STORE_NOTICE')}
-                  />
-                  <span />
-                </ToggleSwitch>
-              </ChannelItem>
-
-              <ChannelItem $active={channels.SNS_CARD}>
-                <ChannelInfo $active={channels.SNS_CARD}>
-                  <Share2 size={18} /> SNS 카드
-                </ChannelInfo>
-                <ToggleSwitch>
-                  <input
-                    type="checkbox"
-                    checked={channels.SNS_CARD}
-                    onChange={() => handleToggleChannel('SNS_CARD')}
-                  />
-                  <span />
-                </ToggleSwitch>
               </ChannelItem>
             </ChannelList>
           </Card>
@@ -833,7 +725,7 @@ export default function AiMarketingPage() {
 
               <SummaryRow>
                 <span className="label">채널</span>
-                <span className="value">{activeChannelCount}개 선택</span>
+                <span className="value">매장 공지</span>
               </SummaryRow>
 
               <Divider />
