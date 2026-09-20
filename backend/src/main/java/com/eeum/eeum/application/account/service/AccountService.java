@@ -54,6 +54,7 @@ public class AccountService {
     private final AccountWithdrawalProcessor accountWithdrawalProcessor;
     private final AccountMapper accountMapper;
     private final OwnerApplicationMapper ownerApplicationMapper;
+    private final StoreRepository storeRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
 
@@ -185,7 +186,12 @@ public class AccountService {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
-        return ownerApplicationMapper.toOwnerApplicationResponseDto(ownerInfo);
+        // 상점이 없으면 404로 끊지 않는다 — 사장 가입 직후 상점 생성 전에도 승인 상태 화면은
+        // 열려야 한다. 관리자 조회(AdminAccountService.getOwnerApplicationDetail)가 STORE_NOT_FOUND를
+        // 던지는 것과 의도적으로 다르다.
+        Store store = storeRepository.findByAccount_AccountId(accountId).orElse(null);
+
+        return ownerApplicationMapper.toOwnerApplicationResponseDto(ownerInfo, store);
     }
 
     // ===================== 사장 정보 수정 =====================

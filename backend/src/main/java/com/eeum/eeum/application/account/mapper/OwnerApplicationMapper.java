@@ -14,14 +14,37 @@ import java.util.List;
 public class OwnerApplicationMapper {
 
     // ===================== 사장 계정 응답 변환 =====================
-    public OwnerApplicationDetailResponseDto toOwnerApplicationResponseDto(OwnerInfo ownerInfo) {
+
+    /**
+     * 사장 본인이 보는 사업자 등록 정보.
+     *
+     * 상점은 아직 없을 수 있다 — 사장 가입 직후 상점 생성 전에도 이 화면은 열려야 하므로
+     * store가 null이면 상점 항목만 비우고 나머지는 그대로 내려준다.
+     * 사업자번호는 본인 화면이어도 마스킹을 유지한다(관리자용 변환과 다른 점).
+     */
+    public OwnerApplicationDetailResponseDto toOwnerApplicationResponseDto(OwnerInfo ownerInfo, Store store) {
+        Account account = ownerInfo.getAccount();
+
         return OwnerApplicationDetailResponseDto.builder()
                 .ownerInfoId(ownerInfo.getOwnerInfoId())
-                .accountId(ownerInfo.getAccount().getAccountId())
+                .accountId(account.getAccountId())
+                .ownerName(account.getName())
                 .businessNumber(MaskingUtil.maskBusinessNumber(ownerInfo.getBusinessNumber()))
+                .openingDate(ownerInfo.getOpeningDate())
                 .approvalStatus(ownerInfo.getApprovalStatus().name())
                 .rejectionReason(ownerInfo.getRejectionReason())
+                .reviewRequestedAt(ownerInfo.getReviewRequestedAt())
                 .createdAt(ownerInfo.getCreatedAt())
+                .storeId(store != null ? store.getStoreId() : null)
+                .storeName(store != null ? store.getName() : null)
+                .storeAddress(store != null ? store.getAddress() : null)
+                .storePhone(store != null ? store.getPhone() : null)
+                .storeCategoryId(store != null && store.getCategory() != null
+                        ? store.getCategory().getCategoryId() : null)
+                .storeCategoryName(store != null && store.getCategory() != null
+                        ? store.getCategory().getName() : null)
+                .storeDescription(store != null ? store.getDescription() : null)
+                .storeStatus(store != null ? store.getStatus().name() : null)
                 .build();
     }
 
