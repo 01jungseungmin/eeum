@@ -26,6 +26,7 @@ import {
   Settings,
   Sparkles,
   LogOut,
+  ShoppingBag,
 } from 'lucide-react';
 
 const iconProps = { size: 20, strokeWidth: 1.5 };
@@ -266,6 +267,12 @@ export const ADMIN_MENU_CONFIG = [
         name: '상점 관리',
         path: '/admin/stores',
         icon: <Store {...iconProps} />,
+      },
+      {
+        id: 'admin-used',
+        name: '중고거래 관리',
+        path: '/admin/used',
+        icon: <ShoppingBag {...iconProps} />,
       },
       {
         id: 'admin-approval',

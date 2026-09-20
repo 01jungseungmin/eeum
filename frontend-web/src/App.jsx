@@ -46,6 +46,8 @@ import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
 import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
 import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
+import AdminUsedProductManagementPage from './pages/admin/main/UsedProductManagementPage';
+import AdminUsedProductDetailPage from './pages/admin/main/UsedProductDetailPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -142,6 +144,14 @@ function App() {
         <Route
           path="/admin/stores/:storeId"
           element={<AdminStoreDetailPage />}
+        />
+        <Route
+          path="/admin/used"
+          element={<AdminUsedProductManagementPage />}
+        />
+        <Route
+          path="/admin/used/:usedProductId"
+          element={<AdminUsedProductDetailPage />}
         />
         <Route
           path="/admin/reports"
