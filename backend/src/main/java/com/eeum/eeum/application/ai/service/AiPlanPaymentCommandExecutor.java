@@ -21,6 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -79,6 +81,12 @@ public class AiPlanPaymentCommandExecutor {
             return;
         }
 
+        // 만료로 종료된 결제는 되살리지 않는다. 뒤늦게 승인돼도 구독을 만들지 않고
+        // 호출부가 자동 환불로 수습한다 — 주문의 늦은 PAID 처리와 같은 규칙이다.
+        if (payment.isFailed()) {
+            throw new BusinessException(ErrorCode.AI_INVALID_STATUS, "만료된 AI 플랜 결제입니다");
+        }
+
         // PortOne 조회·취소는 트랜잭션을 시작하기 전에 호출부에서 끝낸다. 여기서는 검증된
         // 응답을 짧은 DB 트랜잭션으로 원장에 반영한다.
         if (!"PAID".equalsIgnoreCase(info.getStatus())) {
@@ -91,14 +99,53 @@ public class AiPlanPaymentCommandExecutor {
 
         LocalDateTime now = LocalDateTime.now();
         payment.markPaid(now);
+        applyPeriod(payment, now);
+    }
 
-        // 기존 활성 구독 비활성화 후 새 구독 생성 (업그레이드/다운그레이드 즉시 반영)
-        aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(payment.getStore().getStoreId())
-                .forEach(subscription -> subscription.deactivate(now));
-        aiPlanSubscriptionRepository.save(AiPlanSubscription.createWithPeriod(
-                payment.getStore(), payment, payment.getPlanType(), now, now.plusMonths(SUBSCRIPTION_PERIOD_MONTHS)));
-        log.info("[AI-PLAN] 구독 반영 완료: storeId={}, plan={}",
-                payment.getStore().getStoreId(), payment.getPlanType());
+    /**
+     * 남은 기간을 버리지 않는다. 같은 플랜·상위 플랜 결제는 즉시 적용하고 남은 기간 뒤에 한 달을
+     * 더한다. 하위 플랜 결제는 상위 권한을 미리 깎지 않도록 현재 기간이 끝난 뒤로 예약한다.
+     */
+    private void applyPeriod(AiPlanPayment payment, LocalDateTime now) {
+        Long storeId = payment.getStore().getStoreId();
+        List<AiPlanSubscription> actives = aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(storeId);
+
+        LocalDateTime remainingUntil = actives.stream()
+                .map(AiPlanSubscription::getExpiredAt)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .filter(now::isBefore)
+                .orElse(null);
+
+        if (remainingUntil == null) {
+            actives.forEach(subscription -> subscription.deactivate(now));
+            save(payment, now, now.plusMonths(SUBSCRIPTION_PERIOD_MONTHS), true);
+            return;
+        }
+
+        boolean downgrade = actives.stream()
+                .map(AiPlanSubscription::getPlanType)
+                .anyMatch(active -> active.isAtLeast(payment.getPlanType())
+                        && active != payment.getPlanType());
+        if (downgrade) {
+            save(payment, remainingUntil, remainingUntil.plusMonths(SUBSCRIPTION_PERIOD_MONTHS), false);
+            log.info("[AI-PLAN] 하위 플랜 결제 — 현재 기간 종료 후로 예약: storeId={}, plan={}, startAt={}",
+                    storeId, payment.getPlanType(), remainingUntil);
+            return;
+        }
+
+        actives.forEach(subscription -> subscription.deactivate(now));
+        save(payment, now, remainingUntil.plusMonths(SUBSCRIPTION_PERIOD_MONTHS), true);
+        log.info("[AI-PLAN] 구독 반영 완료 — 남은 기간 이어붙임: storeId={}, plan={}, expiredAt={}",
+                storeId, payment.getPlanType(), remainingUntil.plusMonths(SUBSCRIPTION_PERIOD_MONTHS));
+    }
+
+    private void save(AiPlanPayment payment, LocalDateTime startedAt, LocalDateTime expiredAt, boolean immediate) {
+        aiPlanSubscriptionRepository.save(immediate
+                ? AiPlanSubscription.createWithPeriod(
+                        payment.getStore(), payment, payment.getPlanType(), startedAt, expiredAt)
+                : AiPlanSubscription.createReserved(
+                        payment.getStore(), payment, payment.getPlanType(), startedAt, expiredAt));
     }
 
     // payment는 이미 PAID인데 그 플랜의 활성 구독이 없는 상태(장애/버그로 구독 생성이 누락된 경우)를 복구한다.

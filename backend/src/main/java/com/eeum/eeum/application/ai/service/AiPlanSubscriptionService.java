@@ -142,6 +142,10 @@ public class AiPlanSubscriptionService {
     private void applyPaidSubscription(String paymentId, PortOnePaymentInfo paymentInfo) {
         AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentId(paymentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if (payment.isFailed() && "PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
+            cancelLatePaidPayment(paymentId, payment, paymentInfo);
+            return;
+        }
         if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())
                 && paymentInfo.getAmount() != null
                 && payment.getAmount().compareTo(paymentInfo.getAmount()) != 0) {
@@ -160,6 +164,22 @@ public class AiPlanSubscriptionService {
             }
             throw e;
         }
+    }
+
+    /**
+     * 결제 대기 만료로 FAILED 처리된 뒤 뒤늦게 승인된 결제를 환불한다.
+     * 구독은 만들지 않는다 — 고객이 기대한 시점과 기간이 이미 어긋났고, 종료된 결제를
+     * 되살리면 만료·구독 상태가 서로 어긋난다.
+     */
+    private void cancelLatePaidPayment(
+            String paymentId, AiPlanPayment payment, PortOnePaymentInfo paymentInfo) {
+        java.math.BigDecimal amount = paymentInfo.getAmount() != null
+                ? paymentInfo.getAmount() : payment.getAmount();
+        operationFailureRecorder.record(
+                OperationFailureCategory.REFUND, "AiPlanSubscriptionService.cancelLatePaidPayment",
+                "PAYMENT", paymentId, "AI_PLAN_LATE_PAID_AUTO_REFUND",
+                "만료된 AI 플랜 결제가 뒤늦게 승인돼 자동 환불을 시작했습니다.", "amount=" + amount);
+        cancelMismatchedPayment(paymentId, amount);
     }
 
     private void cancelMismatchedPayment(String paymentId, java.math.BigDecimal amount) {

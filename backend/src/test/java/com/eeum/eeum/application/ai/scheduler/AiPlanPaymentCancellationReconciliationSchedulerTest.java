@@ -29,12 +29,17 @@ class AiPlanPaymentCancellationReconciliationSchedulerTest {
 
     @Test
     void 대기_환불은_재요청하고_접수된_환불은_PortOne_대사로_회수한다() {
+        // candidate()가 내부에서 when()을 호출하므로 바깥 when()의 인자 자리에서 만들면
+        // 스터빙이 겹쳐 UnfinishedStubbingException이 난다. 먼저 만들어 둔다.
+        AiPlanPaymentCancellationOperation pending = candidate("ai-plan-pending");
+        AiPlanPaymentCancellationOperation requested = candidate("ai-plan-requested");
+
         when(cancellationOperationRepository.findCandidatesByStatusModifiedBefore(
                 eq(AiPlanPaymentCancellationStatus.PENDING), any(LocalDateTime.class), any(), any(), any()))
-                .thenReturn(List.of(candidate("ai-plan-pending")), List.of());
+                .thenReturn(List.of(pending));
         when(cancellationOperationRepository.findCandidatesByStatusModifiedBefore(
                 eq(AiPlanPaymentCancellationStatus.REQUESTED), any(LocalDateTime.class), any(), any(), any()))
-                .thenReturn(List.of(candidate("ai-plan-requested")), List.of());
+                .thenReturn(List.of(requested));
 
         scheduler.reconcileCancellations();
 

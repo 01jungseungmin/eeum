@@ -72,6 +72,10 @@ public class AiPlanPayment extends BaseEntity {
         this.status = AiPlanPaymentStatus.FAILED;
     }
 
+    public boolean isFailed() {
+        return this.status == AiPlanPaymentStatus.FAILED;
+    }
+
     public boolean isPaid() {
         return this.status == AiPlanPaymentStatus.PAID;
     }
