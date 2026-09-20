@@ -60,9 +60,9 @@ class AiPlanPaymentCancellationReconciliationSchedulerTest {
         AiPlanPayment payment = org.mockito.Mockito.mock(AiPlanPayment.class);
         when(payment.getPortonePaymentId()).thenReturn(paymentId);
         AiPlanPaymentCancellationOperation operation = org.mockito.Mockito.mock(AiPlanPaymentCancellationOperation.class);
+        // 스케줄러는 커서 인자에 null을 넘겨 첫 페이지만 읽으므로 getId()/getModifiedAt()은
+        // 호출되지 않는다. 커서 페이징을 실제로 쓰게 되면 그때 스터빙을 되살린다.
         when(operation.getPayment()).thenReturn(payment);
-        when(operation.getId()).thenReturn(1L);
-        when(operation.getModifiedAt()).thenReturn(LocalDateTime.now().minusMinutes(10));
         return operation;
     }
 }
