@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 // API & Constants
 import { shopApi } from '../../api/shop'; 
 import { regionApi } from '../../api/region'; 
-import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { ALL_CATEGORY_ID, useCategories } from '../../hooks/useCategories';
 
 // 리팩토링으로 분리된 모듈 불러오기
 import { getKakaoMapHtml } from '../../constants/kakaoMapHtml';
@@ -34,7 +34,9 @@ export default function MapScreen() {
   
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchText, setSearchText] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<any[]>([]); 
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  const { categories, getCategoryName } = useCategories('STORE', { includeAll: true });
 
   // 2. 분리해둔 커스텀 훅 사용
   const debouncedSearchText = useDebounce(searchText, 300);
@@ -63,8 +65,8 @@ export default function MapScreen() {
         const searchKeyword = debouncedSearchText.trim();
 
         // 1. "카페", "식당" 등 카테고리 이름과 일치하는지 영리하게 검사
-        const matchedCategory = SHOP_CATEGORIES.find(cat => 
-          cat.id !== 0 && cat.name.includes(searchKeyword)
+        const matchedCategory = categories.find(cat =>
+          cat.id !== ALL_CATEGORY_ID && cat.name.includes(searchKeyword)
         );
 
         // 2. 일치하면 카테고리로 검색, 아니면 키워드(상점이름)로 검색
@@ -94,7 +96,9 @@ export default function MapScreen() {
     };
 
     fetchSearchResults();
-  }, [debouncedSearchText, currentCenter]);
+    // categories가 늦게 도착하면 "카페" 같은 업종 검색이 키워드 검색으로 빠진다.
+    // 목록이 채워진 뒤 한 번 더 돌게 의존성에 넣는다.
+  }, [debouncedSearchText, currentCenter, categories]);
 
   useEffect(() => {
     if (currentCenter && !isSearching) {
@@ -241,9 +245,6 @@ export default function MapScreen() {
     }
   };
 
-  const getCategoryName = (id: number) => {
-    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
-  };
 
   // 5. 렌더링
   return (
@@ -298,7 +299,7 @@ export default function MapScreen() {
       {/* 카테고리 탭 */}
       <View style={styles.categoryContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
-          {SHOP_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <TouchableOpacity 
               key={cat.id} 
               style={[styles.categoryBtn, activeCategoryId === cat.id && styles.categoryBtnActive]}

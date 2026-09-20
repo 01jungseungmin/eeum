@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicato
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 
-import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { useCategories } from '../../hooks/useCategories';
 import { shopApi } from '../../api/shop';
 import EventBannerCarousel from './EventBannerCarousel';
 
@@ -18,6 +18,8 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
   const [eventProducts, setEventProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasNoRegion, setHasNoRegion] = useState(false);
+
+  const { getCategoryName } = useCategories('STORE');
 
   useEffect(() => {
     const fetchHomeData = async () => {
@@ -73,9 +75,6 @@ export default function ShopView({ router, regionId }: ShopViewProps) {
     fetchHomeData();
   }, [regionId]);
 
-  const getCategoryName = (id: number) => {
-    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
-  };
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
