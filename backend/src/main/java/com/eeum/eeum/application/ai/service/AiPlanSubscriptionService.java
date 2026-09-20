@@ -107,11 +107,15 @@ public class AiPlanSubscriptionService {
             return;
         }
         if ("PARTIAL_CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
-            operationFailureRecorder.record(
-                    OperationFailureCategory.REFUND, "AiPlanSubscriptionService.handleWebhook",
-                    "PAYMENT", paymentId, "AI_PLAN_PARTIAL_CANCELLATION_ACCESS_SUSPENDED",
-                    "AI 플랜 부분 취소를 반영해 유료 권한을 중지했습니다. 잔여 기간·금액은 운영 대사가 필요합니다.",
-                    "cancelledAmount=" + paymentInfo.getCancelledAmount());
+            AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentId(paymentId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+            if (isMoreThanHalfCancelled(payment, paymentInfo)) {
+                operationFailureRecorder.record(
+                        OperationFailureCategory.REFUND, "AiPlanSubscriptionService.handleWebhook",
+                        "PAYMENT", paymentId, "AI_PLAN_PARTIAL_CANCELLATION_OVER_HALF",
+                        "AI 플랜 결제의 누적 부분 취소 금액이 50%를 초과했습니다. 권한은 자동 변경하지 않았습니다.",
+                        "cancelledAmount=" + paymentInfo.getCancelledAmount() + ", paymentAmount=" + payment.getAmount());
+            }
             redisLockService.executeWithLock(
                     LockKeys.aiPlanPayment(paymentId), PAYMENT_LOCK_LEASE,
                     () -> paymentCommandExecutor.partiallyCancelPaidSubscriptionInTx(paymentId));
@@ -121,6 +125,12 @@ public class AiPlanSubscriptionService {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
         }
         applyPaidSubscription(paymentId, paymentInfo);
+    }
+
+    private boolean isMoreThanHalfCancelled(AiPlanPayment payment, PortOnePaymentInfo paymentInfo) {
+        return paymentInfo.getCancelledAmount() != null
+                && payment.getAmount() != null
+                && paymentInfo.getCancelledAmount().compareTo(payment.getAmount().divide(java.math.BigDecimal.valueOf(2))) > 0;
     }
 
     // 결제 검증 + 구독 반영 — 락을 먼저 잡고, Executor의 @Transactional 메서드가 커밋을 마친 뒤에만 락을 해제한다.

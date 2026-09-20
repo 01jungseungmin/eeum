@@ -1,7 +1,6 @@
 package com.eeum.eeum.domain.settlement.entity;
 
 import com.eeum.eeum.domain.account.entity.Account;
-import com.eeum.eeum.domain.settlement.enums.WeeklySettlementStatus;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
 import com.eeum.eeum.domain.settlement.enums.WeeklySettlementStatus;
@@ -21,14 +20,17 @@ import static org.mockito.Mockito.when;
 class WeeklySettlementTest {
 
     @Test
-    void 만료된_claim은_새_작업자가_재획득할_수_있고_이전_작업자는_완료할_수_없다() {
+    void 만료된_claim은_자동_재획득되지_않고_인계_처리가_필요하다() {
         // given
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
         settlement.claim(admin(1L), "worker-a", now.plusMinutes(1), now, now);
-        settlement.claim(admin(2L), "worker-b", now.plusMinutes(10), now.plusMinutes(2), now.plusMinutes(2));
-
-        // when / then
+        // when / then — 임대 만료만으로 새 관리자가 작업을 가로채면 이중 송금이 가능하다.
+        assertThatThrownBy(() -> settlement.claim(
+                admin(2L), "worker-b", now.plusMinutes(10), now.plusMinutes(2), now.plusMinutes(2)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SETTLEMENT_INVALID_STATUS);
         assertThatThrownBy(() -> settlement.completeManually(
                 admin(1L), "worker-a", "manual-transfer-1", now.plusMinutes(3)))
                 .isInstanceOf(BusinessException.class)
@@ -36,7 +38,7 @@ class WeeklySettlementTest {
                 .isEqualTo(ErrorCode.SETTLEMENT_CLAIM_MISMATCH);
 
         assertThat(settlement.getStatus()).isEqualTo(WeeklySettlementStatus.PAYOUT_IN_PROGRESS);
-        assertThat(settlement.getClaimToken()).isEqualTo("worker-b");
+        assertThat(settlement.getClaimToken()).isEqualTo("worker-a");
     }
 
     @Test
@@ -70,19 +72,30 @@ class WeeklySettlementTest {
     }
 
     @Test
-    void 임대가_만료되면_다른_관리자가_지급을_다시_가져갈_수_있다() {
-        // given — 앞선 작업자가 지급을 잡아둔 채 사라졌다
+    void 만료된_claim은_송금_증빙으로_인계_완료할_수_있다() {
         WeeklySettlement settlement = createSettlement();
         LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
-        settlement.claim(admin(1L), "worker-a", now.plusMinutes(10), now, now);
+        settlement.claim(admin(1L), "worker-a", now.plusMinutes(30), now, now);
 
-        // when — 임대 시각이 지난 뒤 다른 관리자가 claim 한다
-        LocalDateTime afterExpiry = now.plusMinutes(11);
-        settlement.claim(admin(2L), "worker-b", afterExpiry.plusMinutes(10), afterExpiry, afterExpiry);
+        settlement.completeHandover(admin(2L), "bank-transfer-1", now.plusMinutes(31));
 
-        // then
-        assertThat(settlement.getStatus()).isEqualTo(WeeklySettlementStatus.PAYOUT_IN_PROGRESS);
-        assertThat(settlement.getClaimedBy().getAccountId()).isEqualTo(2L);
+        assertThat(settlement.getStatus()).isEqualTo(WeeklySettlementStatus.COMPLETED);
+        assertThat(settlement.getManualCompletedBy().getAccountId()).isEqualTo(2L);
+        assertThat(settlement.getManualPayoutReference()).isEqualTo("bank-transfer-1");
+    }
+
+    @Test
+    void 만료된_claim은_미송금_증빙으로_수동검토에_격리한_뒤에만_재claim할_수_있다() {
+        WeeklySettlement settlement = createSettlement();
+        LocalDateTime now = LocalDateTime.of(2026, 9, 10, 12, 0);
+        settlement.claim(admin(1L), "worker-a", now.plusMinutes(30), now, now);
+
+        settlement.releaseStalledClaim(admin(2L), "은행 이체 내역 없음", now.plusMinutes(31));
+
+        assertThat(settlement.getStatus()).isEqualTo(WeeklySettlementStatus.MANUAL_REVIEW_REQUIRED);
+        assertThat(settlement.getFailureCode()).isEqualTo("PAYOUT_CLAIM_RELEASED");
+        settlement.claim(admin(2L), "worker-b", now.plusMinutes(61), now.plusMinutes(31), now.plusMinutes(31));
+        assertThat(settlement.getClaimToken()).isEqualTo("worker-b");
     }
 
     @Test

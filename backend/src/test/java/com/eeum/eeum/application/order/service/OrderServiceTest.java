@@ -59,6 +59,7 @@ class OrderServiceTest {
     @Mock private OrderItemRepository orderItemRepository;
     @Mock private PaymentRepository paymentRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private com.eeum.eeum.domain.product.repository.ProductOptionItemRepository productOptionItemRepository;
     @Mock private EventProductRepository eventProductRepository;
     @Mock private ProductImageRepository productImageRepository;
     @Mock private StoreReviewRepository storeReviewRepository;
@@ -320,5 +321,77 @@ class OrderServiceTest {
 
         // then — 무제한 재고는 변경 없음
         assertThat(product.getStock()).isNull();
+    }
+
+    // ──────────────────── 주문 시점 가격·옵션 재검증 ────────────────────
+
+    @Test
+    void 담을_때보다_상품_가격이_오르면_주문이_생성되지_않는다() {
+        // given — 9,000원에 담았는데 사장이 10,000원으로 올린 상태
+        Long accountId = 100L;
+        Long cartId = 1L;
+        Long productId = 7L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+
+        Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
+        Product product = Product.create(store, null, "김치찌개", null,
+                BigDecimal.valueOf(10000), 50, ProductType.SALE);
+        ReflectionTestUtils.setField(product, "productId", productId);
+
+        CartItem cartItem = mock(CartItem.class);
+        when(cartItem.getProduct()).thenReturn(product);
+        when(cartItem.getQuantity()).thenReturn(1);
+        when(cartItem.getUnitPrice()).thenReturn(BigDecimal.valueOf(9000));
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
+        when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ORDER_PRICE_CHANGED);
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void 담아둔_옵션이_사라지면_주문이_생성되지_않는다() {
+        // given — 선택한 옵션 항목이 삭제된 상태
+        Long accountId = 100L;
+        Long cartId = 1L;
+        Long productId = 7L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+
+        Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
+        Product product = Product.create(store, null, "김치찌개", null,
+                BigDecimal.valueOf(10000), 50, ProductType.SALE);
+        ReflectionTestUtils.setField(product, "productId", productId);
+
+        CartItem cartItem = mock(CartItem.class);
+        when(cartItem.getProduct()).thenReturn(product);
+        when(cartItem.getQuantity()).thenReturn(1);
+        when(cartItem.getSelectedOptionItemIds()).thenReturn("11,12");
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
+        when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
+        when(productOptionItemRepository.findByProductOptionItemIdInAndProductOption_Product_ProductId(
+                List.of(11L, 12L), productId)).thenReturn(List.of());
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ORDER_OPTION_UNAVAILABLE);
+        verify(orderRepository, never()).save(any());
     }
 }

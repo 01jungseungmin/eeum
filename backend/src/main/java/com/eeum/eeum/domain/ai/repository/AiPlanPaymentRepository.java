@@ -16,6 +16,9 @@ public interface AiPlanPaymentRepository extends JpaRepository<AiPlanPayment, Lo
 
     Optional<AiPlanPayment> findByPortonePaymentId(String portonePaymentId);
 
+    Optional<AiPlanPayment> findFirstByStore_StoreIdAndPlanTypeAndStatusOrderByCreatedAtDesc(
+            Long storeId, com.eeum.eeum.domain.ai.enums.AiPlanType planType, AiPlanPaymentStatus status);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from AiPlanPayment p where p.portonePaymentId = :paymentId")
     Optional<AiPlanPayment> findByPortonePaymentIdWithPessimisticLock(@Param("paymentId") String paymentId);

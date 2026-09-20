@@ -153,6 +153,12 @@ class AiPlanSubscriptionServiceTest {
         when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
         when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
                 .paymentId(PAYMENT_ID).status("PAID").amount(payment.getAmount()).build());
+        // completePayment는 재조회한 결제가 PAID인지 확인한다. Executor를 Mock으로 두면
+        // 상태 전이가 일어나지 않으므로 반영 성공을 흉내 낸다.
+        doAnswer(invocation -> {
+            payment.markPaid(LocalDateTime.now());
+            return null;
+        }).when(paymentCommandExecutor).applyPaidSubscriptionInTx(eq(PAYMENT_ID), any(PortOnePaymentInfo.class));
 
         // when
         AiPlanSubscribeResponseDto response = subscriptionService.completePayment(OWNER_ID, PAYMENT_ID);
@@ -231,14 +237,14 @@ class AiPlanSubscriptionServiceTest {
     }
 
     @Test
-    void AI_부분_취소_Webhook은_유료_권한을_중지하고_운영_이력에_남긴다() {
+    void AI_부분_취소_Webhook은_권한을_바꾸지_않고_누적_취소가_50퍼센트를_초과하면_운영_이력에_남긴다() {
         // given
         Store store = stubStore();
         stubRunnableLockPassThrough();
         when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID))
                 .thenReturn(Optional.of(pendingPayment(store, AiPlanType.BASIC)));
         when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
-                .paymentId(PAYMENT_ID).status("PARTIAL_CANCELLED").cancelledAmount(new BigDecimal("1000")).build());
+                .paymentId(PAYMENT_ID).status("PARTIAL_CANCELLED").cancelledAmount(new BigDecimal("5000")).build());
 
         // when
         subscriptionService.handleWebhook(PAYMENT_ID);
@@ -248,7 +254,25 @@ class AiPlanSubscriptionServiceTest {
         verify(operationFailureRecorder).record(
                 eq(com.eeum.eeum.domain.operation.enums.OperationFailureCategory.REFUND),
                 eq("AiPlanSubscriptionService.handleWebhook"), eq("PAYMENT"), eq(PAYMENT_ID),
-                eq("AI_PLAN_PARTIAL_CANCELLATION_ACCESS_SUSPENDED"), anyString(), anyString());
+                eq("AI_PLAN_PARTIAL_CANCELLATION_OVER_HALF"), anyString(), anyString());
+    }
+
+    @Test
+    void AI_부분_취소가_50퍼센트_이하면_운영_알림을_만들지_않는다() {
+        Store store = stubStore();
+        stubRunnableLockPassThrough();
+        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID))
+                .thenReturn(Optional.of(pendingPayment(store, AiPlanType.BASIC)));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PARTIAL_CANCELLED").cancelledAmount(new BigDecimal("4950")).build());
+
+        subscriptionService.handleWebhook(PAYMENT_ID);
+
+        verify(paymentCommandExecutor).partiallyCancelPaidSubscriptionInTx(PAYMENT_ID);
+        verify(operationFailureRecorder, org.mockito.Mockito.never()).record(
+                eq(com.eeum.eeum.domain.operation.enums.OperationFailureCategory.REFUND),
+                eq("AiPlanSubscriptionService.handleWebhook"), eq("PAYMENT"), eq(PAYMENT_ID),
+                anyString(), anyString(), anyString());
     }
 
     @Test
@@ -306,5 +330,33 @@ class AiPlanSubscriptionServiceTest {
 
         // then — 즉시 비활성화되지 않음 (만료 스케줄러가 처리)
         assertThat(subscription.isActive()).isTrue();
+    }
+
+    @Test
+    void 만료로_실패_처리된_결제가_뒤늦게_승인되면_구독을_만들지_않고_환불한다() {
+        // given — 결제 대기 만료로 FAILED가 된 결제에 PAID Webhook이 도착
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.markFailed();
+        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PAID").amount(payment.getAmount()).build());
+        when(paymentCommandExecutor.prepareMismatchedPaymentCancellation(eq(PAYMENT_ID), any()))
+                .thenReturn(new AiPlanPaymentCancellationPlan(
+                        PAYMENT_ID, payment.getAmount(), "idem-late-paid", true));
+        when(portOnePaymentClient.cancelPayment(eq(PAYMENT_ID), any(), anyString(), eq("idem-late-paid")))
+                .thenReturn(new PortOneCancelResult(
+                        PortOneCancelResult.SUCCEEDED, "cancel-late-paid", payment.getAmount()));
+
+        // when
+        subscriptionService.handleWebhook(PAYMENT_ID);
+
+        // then — 환불만 하고 구독 반영은 시도하지 않는다
+        verify(portOnePaymentClient).cancelPayment(eq(PAYMENT_ID), any(), anyString(), eq("idem-late-paid"));
+        verify(paymentCommandExecutor, org.mockito.Mockito.never())
+                .applyPaidSubscriptionInTx(anyString(), any(PortOnePaymentInfo.class));
+        verify(operationFailureRecorder).record(
+                any(), eq("AiPlanSubscriptionService.cancelLatePaidPayment"), eq("PAYMENT"), eq(PAYMENT_ID),
+                eq("AI_PLAN_LATE_PAID_AUTO_REFUND"), anyString(), anyString());
     }
 }

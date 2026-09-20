@@ -43,20 +43,23 @@ public class AiPlanPaymentCommandExecutor {
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     private final StoreRepository storeRepository;
 
-    // 구독 결제 요청 생성 — store 단위 락 안에서 "이미 같은 플랜 활성 구독 여부" 체크와 PENDING 결제 생성을 원자적으로 수행
+    // 구독 결제 요청 생성 — store 단위 락 안에서 같은 플랜의 PENDING 결제를 재사용하거나 새로 만든다.
     @Transactional
     public AiPlanPayment requestSubscriptionInTx(Store store, AiPlanType planType) {
         Store lockedStore = lockStore(store.getStoreId());
-        aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(lockedStore.getStoreId())
-                .filter(subscription -> subscription.getPlanType() == planType)
-                .ifPresent(subscription -> {
-                    throw new BusinessException(ErrorCode.AI_PLAN_ALREADY_SUBSCRIBED);
+        // 같은 플랜의 남은 기간도 결제 후 한 달을 이어 붙이는 정책이므로, 활성 구독 자체는
+        // 결제 요청을 막는 근거가 아니다. 대신 아직 결제창을 완료하지 않은 요청을 재사용해
+        // 더블 클릭이나 새로고침이 여러 PENDING 결제를 만들지 않게 한다.
+        return aiPlanPaymentRepository
+                .findFirstByStore_StoreIdAndPlanTypeAndStatusOrderByCreatedAtDesc(
+                        lockedStore.getStoreId(), planType,
+                        com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus.PENDING)
+                .orElseGet(() -> {
+                    String paymentId = AI_PLAN_PAYMENT_PREFIX + store.getStoreId() + "-"
+                            + UUID.randomUUID().toString().substring(0, 8);
+                    return aiPlanPaymentRepository.save(
+                            AiPlanPayment.createPending(lockedStore, planType, planType.getMonthlyPrice(), paymentId));
                 });
-
-        String paymentId = AI_PLAN_PAYMENT_PREFIX + store.getStoreId() + "-"
-                + UUID.randomUUID().toString().substring(0, 8);
-        return aiPlanPaymentRepository.save(
-                AiPlanPayment.createPending(lockedStore, planType, planType.getMonthlyPrice(), paymentId));
     }
 
     // 결제 검증 + 구독 반영 — 호출부가 aiPlanPayment 락을 잡은 상태에서 호출, 이 메서드가 커밋된 뒤에만 락이 풀린다
@@ -79,12 +82,6 @@ public class AiPlanPaymentCommandExecutor {
             log.warn("[AI-PLAN] 종결된 결제의 PAID 재전송을 무시: paymentId={}, status={}",
                     paymentId, payment.getStatus());
             return;
-        }
-
-        // 만료로 종료된 결제는 되살리지 않는다. 뒤늦게 승인돼도 구독을 만들지 않고
-        // 호출부가 자동 환불로 수습한다 — 주문의 늦은 PAID 처리와 같은 규칙이다.
-        if (payment.isFailed()) {
-            throw new BusinessException(ErrorCode.AI_INVALID_STATUS, "만료된 AI 플랜 결제입니다");
         }
 
         // PortOne 조회·취소는 트랜잭션을 시작하기 전에 호출부에서 끝낸다. 여기서는 검증된
@@ -261,10 +258,7 @@ public class AiPlanPaymentCommandExecutor {
         cancelPaymentAndSubscription(payment);
     }
 
-    /**
-     * 부분 환불은 사용량·잔여 기간을 정확히 계산할 정책이 없으므로 즉시 권한을 중지한다.
-     * 결제 상태는 전액 취소와 구분해 운영 대사와 고객 지원에서 환불 범위를 확인할 수 있게 한다.
-     */
+    /** 부분 환불은 결제 상태만 기록한다. 유료 권한은 기간 종료까지 유지한다. */
     @Transactional
     public void partiallyCancelPaidSubscriptionInTx(String paymentId) {
         AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(paymentId)
@@ -273,9 +267,6 @@ public class AiPlanPaymentCommandExecutor {
                 || payment.getStatus() == com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus.CANCELLED) {
             return;
         }
-        aiPlanSubscriptionRepository.findByPayment_AiPlanPaymentId(payment.getAiPlanPaymentId())
-                .filter(AiPlanSubscription::isActive)
-                .ifPresent(subscription -> subscription.deactivate(LocalDateTime.now()));
         payment.partiallyCancel();
     }
 

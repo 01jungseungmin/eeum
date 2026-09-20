@@ -19,11 +19,13 @@ import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.*;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductOptionItem;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.product.event.ProductStockWarningEvent;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductImageRepository;
+import com.eeum.eeum.domain.product.repository.ProductOptionItemRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -41,6 +43,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -58,6 +61,7 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final PaymentRepository paymentRepository;
     private final ProductRepository productRepository;
+    private final ProductOptionItemRepository productOptionItemRepository;
     private final EventProductRepository eventProductRepository;
     private final ProductImageRepository productImageRepository;
     private final StoreReviewRepository storeReviewRepository;
@@ -306,6 +310,44 @@ public class OrderService {
         }
     }
 
+    /**
+     * 담을 때 고정한 단가가 지금도 유효한지 확인한다. 가격 보장 기간은 두지 않는다 —
+     * 옛 금액으로 결제되면 영수증·수익 원장과 어긋나고, 말없이 새 금액을 청구할 수도 없다.
+     * 삭제·품절된 옵션도 여기서 걸러 결제 전에 장바구니를 고치게 한다.
+     */
+    private void validateUnitPriceUnchanged(CartItem item, Product product) {
+        List<Long> optionItemIds = parseSelectedOptionItemIds(item.getSelectedOptionItemIds());
+
+        BigDecimal optionsTotalPrice = BigDecimal.ZERO;
+        if (!optionItemIds.isEmpty()) {
+            List<ProductOptionItem> optionItems = productOptionItemRepository
+                    .findByProductOptionItemIdInAndProductOption_Product_ProductId(
+                            optionItemIds, product.getProductId());
+            if (optionItems.size() != optionItemIds.size()
+                    || optionItems.stream().anyMatch(optionItem -> !optionItem.isAvailable())) {
+                throw new BusinessException(ErrorCode.ORDER_OPTION_UNAVAILABLE);
+            }
+            optionsTotalPrice = optionItems.stream()
+                    .map(ProductOptionItem::getAdditionalPrice)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        if (product.getPrice().add(optionsTotalPrice).compareTo(item.getUnitPrice()) != 0) {
+            throw new BusinessException(ErrorCode.ORDER_PRICE_CHANGED);
+        }
+    }
+
+    private List<Long> parseSelectedOptionItemIds(String selectedOptionItemIds) {
+        if (selectedOptionItemIds == null || selectedOptionItemIds.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(selectedOptionItemIds.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .map(Long::valueOf)
+                .toList();
+    }
+
     private void validateAndDecreaseStock(List<CartItem> cartItems) {
         for (CartItem item : cartItems) {
             if (item.getProduct() != null) {
@@ -321,6 +363,8 @@ public class OrderService {
                 if (product.getStock() != null && product.getStock() < item.getQuantity()) {
                     throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                 }
+
+                validateUnitPriceUnchanged(item, product);
 
                 if (product.getStock() != null) {
                     int stockBefore = product.getStock();
@@ -351,6 +395,10 @@ public class OrderService {
 
                 if (eventProduct.getRemainingStock() < item.getQuantity()) {
                     throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
+                }
+
+                if (eventProduct.getEventPrice().compareTo(item.getUnitPrice()) != 0) {
+                    throw new BusinessException(ErrorCode.ORDER_PRICE_CHANGED);
                 }
 
                 eventProduct.decreaseStock(item.getQuantity());

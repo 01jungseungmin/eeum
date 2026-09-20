@@ -86,9 +86,9 @@ public class AiPlanPayment extends BaseEntity {
         }
     }
 
-    /** 부분 환불도 남은 금액·기간 정책이 확정되기 전까지 유료 권한을 중지한다. */
+    /** 부분 환불은 결제 상태로만 기록한다. 구독 권한은 별도 정책이 바꾸기 전까지 유지한다. */
     public void partiallyCancel() {
-        if (this.status == AiPlanPaymentStatus.PAID) {
+        if (this.status == AiPlanPaymentStatus.PENDING || this.status == AiPlanPaymentStatus.PAID) {
             this.status = AiPlanPaymentStatus.PARTIALLY_CANCELLED;
         }
     }
