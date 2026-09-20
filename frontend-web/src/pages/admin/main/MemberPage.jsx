@@ -4,6 +4,7 @@ import MemberOverview from '../../../components/admin/member/MemberOverview';
 import MemberFilterBar from '../../../components/admin/member/MemberFilterBar';
 import MemberTabs from '../../../components/admin/member/MemberTabs';
 import MemberTable from '../../../components/admin/member/MemberTable';
+import SanctionHistoryModal from '../../../components/admin/sanction/SanctionHistoryModal';
 import { memberApi } from '../../../api/admin/memberApi';
 
 const PaginationContainer = styled.div`
@@ -48,6 +49,7 @@ function MemberPage() {
   const [originMemberList, setOriginMemberList] = useState([]);
 
   const [currentPage, setCurrentPage] = useState(0);
+  const [sanctionTarget, setSanctionTarget] = useState(null); // { accountId, name } | null
   const PAGE_SIZE = 10;
 
   const getMemberName = (member) => {
@@ -299,6 +301,9 @@ function MemberPage() {
         onActionSuspend={handleToggleSuspend}
         onActionWithdraw={handleActionWithdraw}
         onActionRestore={handleRestoreMember}
+        onShowSanctionHistory={(accountId, name) =>
+          setSanctionTarget({ accountId, name })
+        }
       />
 
       {totalPages > 1 && (
@@ -325,6 +330,15 @@ function MemberPage() {
             &gt;
           </PageButton>
         </PaginationContainer>
+      )}
+
+      {sanctionTarget && (
+        <SanctionHistoryModal
+          targetType="ACCOUNT"
+          targetId={sanctionTarget.accountId}
+          targetLabel={`${sanctionTarget.name} (회원 #${sanctionTarget.accountId})`}
+          onClose={() => setSanctionTarget(null)}
+        />
       )}
     </div>
   );
