@@ -21,6 +21,7 @@ import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.entity.ProductOption;
 import com.eeum.eeum.domain.product.entity.ProductOptionItem;
+import com.eeum.eeum.domain.product.enums.OptionSelectionType;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.product.event.ProductStockWarningEvent;
@@ -354,6 +355,15 @@ public class OrderService {
                         .noneMatch(item -> item.getProductOption().getProductOptionId()
                                 .equals(option.getProductOptionId())));
         if (missingRequiredOption) {
+            throw new BusinessException(ErrorCode.ORDER_OPTION_UNAVAILABLE);
+        }
+        boolean invalidSingleSelection = productOptions.stream()
+                .filter(option -> option.getSelectionType() == OptionSelectionType.SINGLE)
+                .anyMatch(option -> selectedOptionItems.stream()
+                        .filter(item -> item.getProductOption().getProductOptionId()
+                                .equals(option.getProductOptionId()))
+                        .count() > 1);
+        if (invalidSingleSelection) {
             throw new BusinessException(ErrorCode.ORDER_OPTION_UNAVAILABLE);
         }
     }

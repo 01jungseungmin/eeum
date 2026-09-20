@@ -234,6 +234,12 @@ public class AiPlanPaymentCommandExecutor {
                 .ifPresent(operation -> operation.recordFailed(null, null));
     }
 
+    @Transactional
+    public void markMismatchedPaymentCancellationReconciliationChecked(String paymentId) {
+        cancellationOperationRepository.findByPaymentIdWithPessimisticLock(paymentId)
+                .ifPresent(AiPlanPaymentCancellationOperation::markReconciliationChecked);
+    }
+
     /** REQUESTED 보상 환불의 최종 CANCELLED Webhook을 영속 작업에도 반영한다. */
     @Transactional
     public void confirmMismatchedPaymentCancellation(String paymentId) {

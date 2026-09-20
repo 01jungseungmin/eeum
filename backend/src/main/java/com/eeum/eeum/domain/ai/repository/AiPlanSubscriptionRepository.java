@@ -20,12 +20,13 @@ public interface AiPlanSubscriptionRepository extends JpaRepository<AiPlanSubscr
     Optional<AiPlanSubscription> findByPayment_AiPlanPaymentId(Long aiPlanPaymentId);
 
     // 만료 스케줄러 — 만료일이 지난 활성 구독 조회
-    List<AiPlanSubscription> findByActiveTrueAndExpiredAtBefore(LocalDateTime now);
+    List<AiPlanSubscription> findByActiveTrueAndExpiredAtBeforeOrderByExpiredAtAscAiPlanSubscriptionIdAsc(
+            LocalDateTime now, Pageable pageable);
 
     // 만료 스케줄러 — 시작 시각이 지난 예약 구독. 비활성 처리된 과거 구독은 expiredAt이
     // 비활성 시각으로 당겨지므로 expiredAt 조건에서 걸러진다
-    List<AiPlanSubscription> findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(
-            LocalDateTime startedAt, LocalDateTime expiredAt);
+    List<AiPlanSubscription> findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfterOrderByStartedAtAscAiPlanSubscriptionIdAsc(
+            LocalDateTime startedAt, LocalDateTime expiredAt, Pageable pageable);
 
     // 현재 시점 기준 실제 유효한 구독 — 만료일이 없거나(seed 데이터) 아직 지나지 않은 것만.
     // 만료 스케줄러가 아직 돌기 전(active=true인 채 expiredAt만 지난) 구독을 유료 플랜으로 잘못 인식하지 않기 위함.

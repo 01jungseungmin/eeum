@@ -45,7 +45,8 @@ class AiPlanPaymentExpirationSchedulerTest {
     @Test
     void 만료_대상이_없으면_아무것도_하지_않는다() {
         // given
-        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBefore(eq(AiPlanPaymentStatus.PENDING), any()))
+        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+                eq(AiPlanPaymentStatus.PENDING), any(), any()))
                 .thenReturn(List.of());
 
         // when
@@ -60,7 +61,8 @@ class AiPlanPaymentExpirationSchedulerTest {
         // given
         AiPlanPayment payment = mock(AiPlanPayment.class);
         when(payment.getPortonePaymentId()).thenReturn("ai-plan-abc123");
-        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBefore(eq(AiPlanPaymentStatus.PENDING), any()))
+        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+                eq(AiPlanPaymentStatus.PENDING), any(), any()))
                 .thenReturn(List.of(payment));
 
         // when
@@ -77,7 +79,8 @@ class AiPlanPaymentExpirationSchedulerTest {
         when(failing.getPortonePaymentId()).thenReturn("ai-plan-fail");
         AiPlanPayment succeeding = mock(AiPlanPayment.class);
         when(succeeding.getPortonePaymentId()).thenReturn("ai-plan-ok");
-        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBefore(eq(AiPlanPaymentStatus.PENDING), any()))
+        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+                eq(AiPlanPaymentStatus.PENDING), any(), any()))
                 .thenReturn(List.of(failing, succeeding));
         doThrow(new RuntimeException("redis down")).when(failureRecorder).markFailed("ai-plan-fail");
 
@@ -91,7 +94,8 @@ class AiPlanPaymentExpirationSchedulerTest {
     @Test
     void 만료_기준시각은_15분_전이다() {
         // given
-        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBefore(eq(AiPlanPaymentStatus.PENDING), any()))
+        when(aiPlanPaymentRepository.findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+                eq(AiPlanPaymentStatus.PENDING), any(), any()))
                 .thenReturn(List.of());
         LocalDateTime before = LocalDateTime.now().minusMinutes(15).minusSeconds(5);
 
@@ -100,7 +104,8 @@ class AiPlanPaymentExpirationSchedulerTest {
 
         // then — 캡처한 threshold가 "지금 - 15분" 근처인지 확인
         org.mockito.ArgumentCaptor<LocalDateTime> captor = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(aiPlanPaymentRepository).findByStatusAndCreatedAtBefore(eq(AiPlanPaymentStatus.PENDING), captor.capture());
+        verify(aiPlanPaymentRepository).findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+                eq(AiPlanPaymentStatus.PENDING), captor.capture(), any());
         org.assertj.core.api.Assertions.assertThat(captor.getValue()).isAfter(before);
     }
 }
