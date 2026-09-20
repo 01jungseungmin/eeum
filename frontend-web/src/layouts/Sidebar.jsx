@@ -299,7 +299,7 @@ function Sidebar({ approvalStatus }) {
   return (
     <SideContainer $isAdmin={isAdmin}>
       <LogoSection $isAdmin={isAdmin}>
-        <h2>{isAdmin ? '이웃' : '이음'}</h2>
+        <h2>{isAdmin ? '관리자' : '이음'}</h2>
         <p>{isAdmin ? 'Admin Dashboard' : '사장님 전용 관리 센터'}</p>
       </LogoSection>
 
