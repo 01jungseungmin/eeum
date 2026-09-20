@@ -165,10 +165,13 @@ export default function ReservationInputScreen() {
     
     router.push({
       pathname: '/restaurant/reservation-confirm' as any,
-      params: { 
-        storeId, 
-        month: selectedDate.month, 
-        date: selectedDate.date, 
+      params: {
+        storeId,
+        // 확정 화면이 연도를 다시 만들지 않도록 여기서 만든 날짜를 그대로 넘긴다.
+        // month/date만 넘기면 12월에 다음 해 1월을 고를 때 올해 1월로 예약된다.
+        fullDate: selectedDate.fullDate,
+        month: selectedDate.month,
+        date: selectedDate.date,
         time: selectedTime, 
         people: peopleCount, 
         request: requestText 

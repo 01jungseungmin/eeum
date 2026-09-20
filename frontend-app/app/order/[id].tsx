@@ -72,7 +72,8 @@ export default function OrderDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <View style={styles.orderHeader}>
-             <Text style={styles.orderId}>주문번호: {order.orderNumber || `EE-2026-${order.orderId}`}</Text>
+             {/* 연도를 박아두면 해가 바뀐 주문도 2026으로 보인다. 주문 날짜에서 뽑는다 */}
+             <Text style={styles.orderId}>주문번호: {order.orderNumber || `EE-${order.createdAt?.substring(0, 4) || ''}-${order.orderId}`}</Text>
              <Text style={styles.orderDate}>{order.createdAt?.replace('T', ' ').substring(0, 16) || ''}</Text>
           </View>
           <View style={styles.storeCard}>

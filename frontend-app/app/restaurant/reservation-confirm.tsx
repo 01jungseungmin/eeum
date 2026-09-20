@@ -14,7 +14,7 @@ export default function ReservationConfirmScreen() {
   const router = useRouter();
   
   // 동적으로 넘겨받은 파라미터 (month 포함)
-  const { storeId, month, date, time, people, request } = useLocalSearchParams();
+  const { storeId, fullDate, month, date, time, people, request } = useLocalSearchParams();
   
   const [shopInfo, setShopInfo] = useState<any>(null);
   
@@ -54,13 +54,10 @@ export default function ReservationConfirmScreen() {
 
   const handleFinalReserve = async () => {
     try {
-      // 1. 백엔드 요구사항에 맞게 YYYY-MM-DD 형식으로 날짜 포맷팅 (예: 2026-06-04)
-      const year = new Date().getFullYear();
-      const formattedMonth = String(month).padStart(2, '0');
-      const formattedDate = String(date).padStart(2, '0');
-      const fullDateString = `${year}-${formattedMonth}-${formattedDate}`;
-
-      const formattedTime = (time as string).length === 5 ? `${time}:00` : time;
+      // 날짜는 고를 때 이미 YYYY-MM-DD로 만들어져 넘어온다.
+      // 여기서 new Date().getFullYear()로 연도를 다시 붙이면, 12월에 다음 해
+      // 1월을 고른 사람이 올해 1월(지난 날짜)로 예약된다.
+      const fullDateString = fullDate as string;
 
       // 2. 예약 생성 API 호출
       const response = await reservationApi.createVisitReservation(Number(storeId), {
@@ -78,8 +75,9 @@ export default function ReservationConfirmScreen() {
         
         router.push({
           pathname: '/restaurant/reservation-success' as any,
-          params: { 
+          params: {
             reservationId: newReservationId,
+            fullDate: fullDateString,
             month: month,
             date: date,
             time: time,
