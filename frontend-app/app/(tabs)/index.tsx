@@ -154,7 +154,15 @@ export default function HomeScreen() {
         onOpenModal={() => setModalVisible(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onSearch={() => router.push({ pathname: '/search' })}
+        // 보고 있던 탭과 동네를 그대로 들고 간다 — 중고거래 탭에서 누른 검색이
+        // 상점을 찾아주면 안 된다.
+        onSearch={() => router.push({
+          pathname: '/search',
+          params: {
+            scope: activeTab === 'used' ? 'USED' : 'STORE',
+            ...(viewingRegion?.id ? { regionId: String(viewingRegion.id) } : {}),
+          },
+        })}
       />
       
       {activeTab === 'shop' 
