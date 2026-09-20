@@ -30,7 +30,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, Payment
 
     Optional<Payment> findByOrder_Account_AccountIdAndPaymentId(Long accountId, Long paymentId);
 
-    List<Payment> findByStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime threshold);
+    List<Payment> findByStatusAndCreatedAtBeforeOrderByCreatedAtAscPaymentIdAsc(
+            PaymentStatus status, LocalDateTime threshold, Pageable pageable);
 
 
     boolean existsByIdempotencyKey(String idempotencyKey);

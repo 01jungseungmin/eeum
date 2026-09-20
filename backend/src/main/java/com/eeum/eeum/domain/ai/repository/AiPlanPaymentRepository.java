@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,5 +25,6 @@ public interface AiPlanPaymentRepository extends JpaRepository<AiPlanPayment, Lo
     Optional<AiPlanPayment> findByPortonePaymentIdWithPessimisticLock(@Param("paymentId") String paymentId);
 
     // 결제 대기 만료 스케줄러 — 오래 PENDING 상태로 남은 결제 정리
-    List<AiPlanPayment> findByStatusAndCreatedAtBefore(AiPlanPaymentStatus status, LocalDateTime threshold);
+    List<AiPlanPayment> findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+            AiPlanPaymentStatus status, LocalDateTime threshold, Pageable pageable);
 }

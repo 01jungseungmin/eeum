@@ -243,7 +243,7 @@ cd backend
 ./gradlew bootRun
 ```
 
-Flyway 마이그레이션은 서버 기동 시 자동으로 수행됩니다.  
+Flyway 마이그레이션은 서버 기동 시 자동으로 수행됩니다.
 Swagger UI → `http://localhost:8080/swagger-ui/index.html`
 
 ### 5. 모바일 앱 실행
