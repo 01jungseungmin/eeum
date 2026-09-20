@@ -1,9 +1,12 @@
-// 1. 문의 상태 Enum
+// 1. 문의 상태 Enum (domain/inquiry/enums/InquiryStatus.java: PENDING / ANSWERED / CLOSED)
+// IN_PROGRESS·COMPLETED는 백엔드에 존재하지 않는 값이라 실제로는 절대 매칭되지 않지만,
+// 기존 목록 필터 탭이 참조하고 있어 그대로 남겨둔다.
 export const INQUIRY_STATUS = {
   PENDING: 'PENDING',
   IN_PROGRESS: 'IN_PROGRESS',
   ANSWERED: 'ANSWERED',
   COMPLETED: 'COMPLETED',
+  CLOSED: 'CLOSED',
 };
 
 // 2. 문의 상태별 UI 매핑 정보
@@ -12,6 +15,7 @@ export const INQUIRY_STATUS_INFO = {
   [INQUIRY_STATUS.IN_PROGRESS]: { label: '처리중', type: 'processing' },
   [INQUIRY_STATUS.ANSWERED]: { label: '답변완료', type: 'done' },
   [INQUIRY_STATUS.COMPLETED]: { label: '답변완료', type: 'done' },
+  [INQUIRY_STATUS.CLOSED]: { label: '종료됨', type: 'closed' },
 };
 
 // 3. 문의 상태 셀렉트 옵션

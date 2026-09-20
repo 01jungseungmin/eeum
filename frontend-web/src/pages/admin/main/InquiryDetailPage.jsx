@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
-import { ArrowLeft, Send, Store, User, Lock } from 'lucide-react';
+import { ArrowLeft, Send, Store, User, Lock, Pencil, XCircle, RotateCcw } from 'lucide-react';
 import { inquiryApi } from '../../../api/admin/inquiryApi';
 import {
   INQUIRY_STATUS_INFO,
@@ -29,7 +29,52 @@ const LoadingText = styled.div`
 const HeaderSection = styled.div`
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
+`;
+
+const HeaderTitleGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+const HeaderActions = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
+const ActionOutlineButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #f9fafb;
+  }
+
+  &.danger {
+    border-color: #fecaca;
+    color: #dc2626;
+
+    &:hover {
+      background: #fef2f2;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
 const BackButton = styled.button`
@@ -160,6 +205,12 @@ const StatusBadge = styled.span`
     background-color: #DBEAFE;
     color: #2563EB;
   `}
+  ${(props) =>
+    props.$type === 'closed' &&
+    `
+    background-color: #F3F4F6;
+    color: #6B7280;
+  `}
 `;
 
 const QuestionBox = styled.div`
@@ -198,6 +249,81 @@ const AnswerHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+`;
+
+const AnswerHeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const EditedTag = styled.span`
+  font-size: 11px;
+  color: #9ca3af;
+`;
+
+const EditIconButton = styled.button`
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+
+  &:hover {
+    background: #e5e7eb;
+    color: #111827;
+  }
+`;
+
+const InlineEditGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const InlineEditActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+`;
+
+const SmallCancelButton = styled.button`
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover {
+    background: #f9fafb;
+  }
+`;
+
+const SmallSaveButton = styled.button`
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: none;
+  background: #059669;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #047857;
+  }
+
+  &:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+  }
 `;
 
 const AnswerWriter = styled.div`
@@ -341,6 +467,10 @@ export default function InquiryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [editingAnswerId, setEditingAnswerId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
 
   // 날짜 포맷팅 함수 (YYYY.MM.DD HH:mm)
   const formatDate = (dateString) => {
@@ -407,6 +537,88 @@ export default function InquiryDetailPage() {
     }
   };
 
+  // 답변 수정 시작/취소
+  const handleStartEdit = (answer) => {
+    setEditingAnswerId(answer.answerId);
+    setEditingContent(answer.content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAnswerId(null);
+    setEditingContent('');
+  };
+
+  // 답변 수정 저장 (PATCH /admin/inquiries/{id}/answers/{answerId})
+  const handleSaveEdit = async (answerId) => {
+    if (!editingContent.trim()) {
+      alert('답변 내용을 입력해주세요.');
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const response = await inquiryApi.updateAnswer(
+        id,
+        answerId,
+        editingContent,
+      );
+
+      if (response.data.success) {
+        const updatedAnswer = response.data.data;
+        setInquiry((prev) => ({
+          ...prev,
+          answers: prev.answers.map((ans) =>
+            ans.answerId === answerId ? updatedAnswer : ans,
+          ),
+        }));
+        setEditingAnswerId(null);
+        setEditingContent('');
+      }
+    } catch (error) {
+      console.error('답변 수정 실패:', error);
+      alert('답변 수정 중 오류가 발생했습니다.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // 문의 강제 종료 (PATCH .../close) — 종료 후에는 답변을 달 수 없다
+  const handleCloseInquiry = async () => {
+    if (!window.confirm('이 문의를 종료할까요? 종료 후에는 답변을 달 수 없습니다.')) {
+      return;
+    }
+
+    try {
+      setStatusActionLoading(true);
+      const response = await inquiryApi.closeInquiry(id);
+      if (response.data.success) {
+        setInquiry((prev) => ({ ...prev, status: INQUIRY_STATUS.CLOSED }));
+      }
+    } catch (error) {
+      console.error('문의 종료 실패:', error);
+      alert('문의 종료 중 오류가 발생했습니다.');
+    } finally {
+      setStatusActionLoading(false);
+    }
+  };
+
+  // 종료된 문의 재오픈 (PATCH .../reopen) — 답변이 남아있으면 ANSWERED로,
+  // 없으면 PENDING으로 복원되므로(백엔드 로직) 낙관적으로 값을 정하지 않고 재조회한다
+  const handleReopenInquiry = async () => {
+    try {
+      setStatusActionLoading(true);
+      const response = await inquiryApi.reopenInquiry(id);
+      if (response.data.success) {
+        await fetchInquiryDetail();
+      }
+    } catch (error) {
+      console.error('문의 재오픈 실패:', error);
+      alert('문의 재오픈 중 오류가 발생했습니다.');
+    } finally {
+      setStatusActionLoading(false);
+    }
+  };
+
   // 💡 상수를 활용한 상태 뱃지 렌더링 함수
   const renderStatusBadge = (status) => {
     const info = INQUIRY_STATUS_INFO[status] || {
@@ -437,18 +649,42 @@ export default function InquiryDetailPage() {
     inquiry.status === INQUIRY_STATUS.ANSWERED ||
     inquiry.status === INQUIRY_STATUS.COMPLETED ||
     (inquiry.answers && inquiry.answers.length > 0);
+  const isClosed = inquiry.status === INQUIRY_STATUS.CLOSED;
 
   return (
     <Container>
       {/* 헤더 영역 */}
       <HeaderSection>
-        <BackButton onClick={() => navigate('/admin/inquiry')}>
-          <ArrowLeft size={20} />
-        </BackButton>
-        <div>
-          <Title>고객 문의 상세</Title>
-          <Subtitle>문의 #{inquiry.inquiryId || id}</Subtitle>
-        </div>
+        <HeaderTitleGroup>
+          <BackButton onClick={() => navigate('/admin/inquiry')}>
+            <ArrowLeft size={20} />
+          </BackButton>
+          <div>
+            <Title>고객 문의 상세</Title>
+            <Subtitle>문의 #{inquiry.inquiryId || id}</Subtitle>
+          </div>
+        </HeaderTitleGroup>
+
+        <HeaderActions>
+          {isClosed ? (
+            <ActionOutlineButton
+              onClick={handleReopenInquiry}
+              disabled={statusActionLoading}
+            >
+              <RotateCcw size={14} />
+              재오픈
+            </ActionOutlineButton>
+          ) : (
+            <ActionOutlineButton
+              className="danger"
+              onClick={handleCloseInquiry}
+              disabled={statusActionLoading}
+            >
+              <XCircle size={14} />
+              문의 종료
+            </ActionOutlineButton>
+          )}
+        </HeaderActions>
       </HeaderSection>
 
       <ContentGrid>
@@ -505,9 +741,46 @@ export default function InquiryDetailPage() {
                           </WriterTypeBadge>
                           <strong>{ans.writerName || '관리자'}</strong>
                         </AnswerWriter>
-                        <AnswerDate>{formatDate(ans.createdAt)}</AnswerDate>
+                        <AnswerHeaderRight>
+                          {ans.edited && <EditedTag>(수정됨)</EditedTag>}
+                          <AnswerDate>{formatDate(ans.createdAt)}</AnswerDate>
+                          {editingAnswerId !== ans.answerId && (
+                            <EditIconButton
+                              onClick={() => handleStartEdit(ans)}
+                              title="답변 수정"
+                            >
+                              <Pencil size={14} />
+                            </EditIconButton>
+                          )}
+                        </AnswerHeaderRight>
                       </AnswerHeader>
-                      <AnswerContent>{ans.content}</AnswerContent>
+
+                      {editingAnswerId === ans.answerId ? (
+                        <InlineEditGroup>
+                          <StyledTextarea
+                            value={editingContent}
+                            onChange={(e) => setEditingContent(e.target.value)}
+                            rows={4}
+                            disabled={savingEdit}
+                          />
+                          <InlineEditActions>
+                            <SmallCancelButton
+                              onClick={handleCancelEdit}
+                              disabled={savingEdit}
+                            >
+                              취소
+                            </SmallCancelButton>
+                            <SmallSaveButton
+                              onClick={() => handleSaveEdit(ans.answerId)}
+                              disabled={savingEdit}
+                            >
+                              {savingEdit ? '저장 중...' : '저장'}
+                            </SmallSaveButton>
+                          </InlineEditActions>
+                        </InlineEditGroup>
+                      ) : (
+                        <AnswerContent>{ans.content}</AnswerContent>
+                      )}
                     </AnswerItem>
                   ))}
                 </AnswerList>
@@ -515,8 +788,8 @@ export default function InquiryDetailPage() {
             </Card>
           )}
 
-          {/* 답변 작성 폼 (미답변 시에만 노출) */}
-          {!isAnswered && (
+          {/* 답변 작성 폼 (미답변 & 종료되지 않은 문의에만 노출) */}
+          {!isAnswered && !isClosed && (
             <Card>
               <CardHeader>
                 <CardTitle className="sub">답변 작성</CardTitle>
