@@ -20,9 +20,12 @@ const NOTICE_TYPES = [
   { value: 'NEW_MENU', label: '신메뉴 소식' },
 ];
 
+<<<<<<< HEAD
 // 발송 채널은 상점 공지(STORE_NOTICE)만 지원한다
 const CHANNELS = ['STORE_NOTICE'];
 
+=======
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
 const KEYWORD_MAX_LENGTH = 100;
 // 백엔드 AiGeneratedMessageUpdateRequestDto.content 상한
 const NOTICE_TEXT_MAX_LENGTH = 2000;
@@ -69,6 +72,16 @@ export default function AiNoticeCreatePage() {
       : 'EVENT',
   );
   const [keyword, setKeyword] = useState('');
+<<<<<<< HEAD
+=======
+
+  // 채널 선택 상태
+  const [channels, setChannels] = useState({
+    KAKAO_ALERT: true,
+    APP_PUSH: false,
+    STORE_NOTICE: false,
+  });
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
 
   // 발송 시간 탭 상태: 'IMMEDIATE' | 'RESERVED'
   const [sendType, setSendType] = useState('IMMEDIATE');
@@ -78,11 +91,28 @@ export default function AiNoticeCreatePage() {
   // [수정] 수동 호출 전용: 사용자가 '문구 다시 생성' 버튼을 누를 때만 실행
   const handleGenerateNoticeDraft = async (confirmDelete = false) => {
     setIsLoading(true);
+<<<<<<< HEAD
+=======
+    const selectedChannels = Object.keys(channels).filter(
+      (key) => channels[key],
+    );
+
+    if (selectedChannels.length === 0) {
+      alert('최소 하나의 채널을 선택해야 합니다.');
+      setIsLoading(false);
+      return;
+    }
+
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
     const trimmedKeyword = keyword.trim();
     const requestBody = {
       noticeType,
       tone: 'FRIENDLY',
+<<<<<<< HEAD
       channels: CHANNELS,
+=======
+      channels: selectedChannels,
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
       // 키워드는 선택 입력 — 비어 있으면 필드 자체를 보내지 않는다
       ...(trimmedKeyword && { keyword: trimmedKeyword }),
       confirmDelete: confirmDelete,

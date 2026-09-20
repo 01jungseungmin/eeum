@@ -7,6 +7,10 @@ import {
   Sparkles,
   RefreshCw,
   Send,
+<<<<<<< HEAD
+=======
+  MessageSquare,
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
   Store,
   Loader2,
   Crown,
@@ -409,6 +413,16 @@ export default function AiMarketingPage() {
   const [planLocked, setPlanLocked] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+<<<<<<< HEAD
+=======
+
+  // 채널 활성화 상태
+  const [channels, setChannels] = useState({
+    KAKAO_ALERT: true,
+    STORE_NOTICE: true,
+    SNS_CARD: false,
+  });
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
 
   // API 응답 데이터 저장 상태
   const [draftResult, setDraftResult] = useState({
@@ -423,6 +437,24 @@ export default function AiMarketingPage() {
   // auto: 페이지 진입 시 자동 생성 — 이때는 확인창(AI_015) 대신 안내 문구만 보여준다
   const fetchMarketingDraft = useCallback(
     async ({ auto = false } = {}) => {
+<<<<<<< HEAD
+=======
+      const activeChannels = Object.keys(channels).filter(
+        (key) => channels[key],
+      );
+
+      if (activeChannels.length === 0) {
+        setAiText('발송할 채널을 1개 이상 선택해 주세요.');
+        setDraftResult((prev) => ({
+          ...prev,
+          messageId: null,
+          estimatedReach: 0,
+          selectedChannelCount: 0,
+        }));
+        return;
+      }
+
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
       setLoading(true);
       setErrorMessage('');
 
@@ -430,7 +462,11 @@ export default function AiMarketingPage() {
         aiManagerApi.createMarketingDraft({
           noticeType: TYPE_MAP[typeTab],
           tone: TONE_MAP[tone],
+<<<<<<< HEAD
           channels: CHANNELS,
+=======
+          channels: activeChannels,
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
           confirmDelete,
         });
 
@@ -525,6 +561,15 @@ export default function AiMarketingPage() {
       queueMicrotask(() => setPlanLocked(true));
     }
   }, [aiPlanType]);
+<<<<<<< HEAD
+=======
+
+  const handleToggleChannel = (key) => {
+    setChannels((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const activeChannelCount = Object.values(channels).filter(Boolean).length;
+>>>>>>> 8d418cceda473088579385a822c4be531cdfca35
 
   const toneLabelMap = {
     polite: '정정한 톤',
