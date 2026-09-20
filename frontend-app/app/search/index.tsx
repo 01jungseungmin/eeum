@@ -208,7 +208,7 @@ export default function SearchScreen() {
           results.length === 0 ? (
             <View style={styles.centerBox}>
               <Ionicons name="search-outline" size={40} color="#DDD" style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyText}>'{submittedKeyword}' 검색 결과가 없어요.</Text>
+              <Text style={styles.emptyText}>‘{submittedKeyword}’ 검색 결과가 없어요.</Text>
             </View>
           ) : (
             <View style={styles.section}>
