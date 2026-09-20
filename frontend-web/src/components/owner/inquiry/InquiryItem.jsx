@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { Clock, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Clock,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+} from 'lucide-react';
 import { inquiryApi } from '../../../api/owner/inquiryApi';
 
 const ItemCard = styled.div`
@@ -273,6 +279,28 @@ const AnswerText = styled.div`
   font-size: 14px;
   color: #333333;
   line-height: 1.6;
+  white-space: pre-wrap;
+`;
+
+const EditedTag = styled.span`
+  font-size: 12px;
+  color: #adb5bd;
+`;
+
+const EditButton = styled.button`
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #868e96;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover {
+    color: #37b24d;
+  }
 `;
 
 const CATEGORY_TEXT_MAP = {
@@ -289,6 +317,8 @@ export default function InquiryItem({ item: initialItem, onRefresh }) {
   const [isReplying, setIsReplying] = useState(false);
   const [answerContent, setAnswerContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
 
   const isPending = item.status === 'PENDING';
   const categoryText = CATEGORY_TEXT_MAP[item.category] || '상품 문의';
@@ -343,6 +373,51 @@ export default function InquiryItem({ item: initialItem, onRefresh }) {
       }
     } catch {
       alert('서버 통신 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStartEdit = () => {
+    setEditContent(item.answers[0].content);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditContent('');
+  };
+
+  const handleSubmitEdit = async () => {
+    if (!editContent.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const answer = item.answers[0];
+      const res = await inquiryApi.updateAnswer(
+        item.inquiryId,
+        answer.answerId,
+        editContent,
+      );
+
+      if (res.data?.success) {
+        const updated = res.data.data;
+        setItem((prev) => ({
+          ...prev,
+          answers: prev.answers.map((a) =>
+            a.answerId === answer.answerId ? updated : a,
+          ),
+        }));
+        setIsEditing(false);
+        setEditContent('');
+      } else {
+        alert(res.data?.message || '답변 수정에 실패했습니다.');
+      }
+    } catch (error) {
+      alert(
+        error.response?.data?.error?.message ||
+          '서버 통신 중 오류가 발생했습니다.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -434,8 +509,42 @@ export default function InquiryItem({ item: initialItem, onRefresh }) {
                     <OwnerDate>
                       {item.answers[0].createdAt?.substring(0, 10)}
                     </OwnerDate>
+                    {item.answers[0].edited && <EditedTag>(수정됨)</EditedTag>}
+                    {!isEditing && (
+                      <EditButton onClick={handleStartEdit}>
+                        <Pencil size={12} />
+                        수정
+                      </EditButton>
+                    )}
                   </OwnerHeader>
-                  <AnswerText>{item.answers[0].content}</AnswerText>
+                  {isEditing ? (
+                    <AnswerFormContainer style={{ marginTop: 0 }}>
+                      <TextArea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        disabled={isLoading}
+                      />
+                      <FormFooter>
+                        <CharCounter>{editContent.length}자</CharCounter>
+                        <ButtonGroup>
+                          <CancelButton
+                            onClick={handleCancelEdit}
+                            disabled={isLoading}
+                          >
+                            취소
+                          </CancelButton>
+                          <SubmitButton
+                            onClick={handleSubmitEdit}
+                            disabled={isLoading || !editContent.trim()}
+                          >
+                            {isLoading ? '저장 중...' : '저장'}
+                          </SubmitButton>
+                        </ButtonGroup>
+                      </FormFooter>
+                    </AnswerFormContainer>
+                  ) : (
+                    <AnswerText>{item.answers[0].content}</AnswerText>
+                  )}
                 </OwnerAnswerBox>
               </>
             )
