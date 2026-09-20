@@ -2,6 +2,7 @@ package com.eeum.eeum.api.chat;
 
 import com.eeum.eeum.application.chat.dto.request.ChatRoomAdminSearchDto;
 import com.eeum.eeum.application.chat.service.AdminChatService;
+import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.domain.chat.enums.ChatRoomType;
 import com.eeum.eeum.security.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,8 @@ class AdminChatRoomSearchBindingTest {
     private final MockMvc mockMvc;
     @MockitoBean private AdminChatService adminChatService;
     @MockitoBean private JwtAuthenticationFilter jwtAuthenticationFilter;
+    // 전역 advice(ImageUrlResponseAdvice)가 슬라이스에도 등록되므로 의존성을 채워야 컨텍스트가 뜬다
+    @MockitoBean private FileStorageService fileStorageService;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
 
     @Test

@@ -76,11 +76,17 @@ public class AiPlanPaymentCancellationOperation extends BaseEntity {
     }
 
     public void recordRequested(String cancellationId) {
+        if (status == AiPlanPaymentCancellationStatus.SUCCEEDED) {
+            return;
+        }
         pgCancellationId = cancellationId;
         status = AiPlanPaymentCancellationStatus.REQUESTED;
     }
 
     public void recordFailed(String cancellationId, BigDecimal cancelledAmount) {
+        if (status == AiPlanPaymentCancellationStatus.SUCCEEDED) {
+            return;
+        }
         pgCancellationId = cancellationId;
         pgCancelledAmount = cancelledAmount;
         status = AiPlanPaymentCancellationStatus.FAILED;

@@ -45,7 +45,6 @@ class AiPlanPaymentCommandExecutorTest {
     @Mock private AiPlanPaymentRepository aiPlanPaymentRepository;
     @Mock private AiPlanPaymentCancellationOperationRepository cancellationOperationRepository;
     @Mock private AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
-    @Mock private AiPlanPaymentFailureRecorder failureRecorder;
     @Mock private StoreRepository storeRepository;
 
     private static final Long STORE_ID = 1L;
@@ -170,7 +169,7 @@ class AiPlanPaymentCommandExecutorTest {
     }
 
     @Test
-    void 결제_금액이_불일치하면_PAYMENT_AMOUNT_MISMATCH_예외가_발생하고_FAILED_기록은_REQUIRES_NEW_빈에_위임된다() {
+    void 결제_금액이_불일치하면_PAYMENT_AMOUNT_MISMATCH_예외가_발생한다() {
         // given
         Store store = stubStore();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
@@ -182,9 +181,49 @@ class AiPlanPaymentCommandExecutorTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-        // 이 메서드가 예외로 롤백돼도 FAILED 마킹이 남도록 REQUIRES_NEW 빈에 위임했는지 확인
-        verify(failureRecorder).markFailed(PAYMENT_ID);
         verify(aiPlanSubscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void 부분_취소된_결제는_늦은_PAID_재전송으로_구독을_복구하지_않는다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.markPaid(LocalDateTime.now());
+        payment.partiallyCancel();
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
+
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.PARTIALLY_CANCELLED);
+        verify(aiPlanSubscriptionRepository, never()).save(any(AiPlanSubscription.class));
+    }
+
+    @Test
+    void 성공한_환불_작업은_늦은_실패_응답으로_되돌아가지_않는다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        AiPlanPaymentCancellationOperation operation = AiPlanPaymentCancellationOperation.request(
+                payment, new BigDecimal("9900"));
+        operation.recordSucceeded("cancel-1", new BigDecimal("9900"));
+
+        operation.recordFailed("cancel-1", null);
+
+        assertThat(operation.getStatus()).isEqualTo(AiPlanPaymentCancellationStatus.SUCCEEDED);
+    }
+
+    @Test
+    void 부분_취소된_결제도_전액_취소_Webhook에서_CANCELLED로_수렴한다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.markPaid(LocalDateTime.now());
+        payment.partiallyCancel();
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+
+        executor.cancelPaidSubscriptionInTx(PAYMENT_ID);
+
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.CANCELLED);
     }
 
     @Test

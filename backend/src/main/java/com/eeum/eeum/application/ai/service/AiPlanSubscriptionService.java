@@ -47,6 +47,7 @@ public class AiPlanSubscriptionService {
     private final AiPlanPaymentRepository aiPlanPaymentRepository;
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     private final AiPlanPaymentCommandExecutor paymentCommandExecutor;
+    private final AiPlanPaymentFailureRecorder failureRecorder;
     private final RedisLockService redisLockService;
     private final PortOnePaymentClient portOnePaymentClient;
     private final OperationFailureRecorder operationFailureRecorder;
@@ -84,6 +85,9 @@ public class AiPlanSubscriptionService {
         }
         applyPaidSubscription(paymentId);
         AiPlanPayment refreshed = aiPlanPaymentRepository.findByPortonePaymentId(paymentId).orElseThrow();
+        if (!refreshed.isPaid()) {
+            throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
+        }
         return new AiPlanSubscribeResponseDto(
                 paymentId, refreshed.getPlanType(), refreshed.getAmount(), refreshed.getStatus());
     }
@@ -143,10 +147,19 @@ public class AiPlanSubscriptionService {
                 && payment.getAmount().compareTo(paymentInfo.getAmount()) != 0) {
             cancelMismatchedPayment(paymentId, paymentInfo.getAmount());
         }
-        redisLockService.executeWithLock(
-                LockKeys.aiPlanPayment(paymentId),
-                PAYMENT_LOCK_LEASE,
-                () -> paymentCommandExecutor.applyPaidSubscriptionInTx(paymentId, paymentInfo));
+        try {
+            redisLockService.executeWithLock(
+                    LockKeys.aiPlanPayment(paymentId),
+                    PAYMENT_LOCK_LEASE,
+                    () -> paymentCommandExecutor.applyPaidSubscriptionInTx(paymentId, paymentInfo));
+        } catch (BusinessException e) {
+            // Executor 트랜잭션이 끝나 잠금이 풀린 뒤 별도 트랜잭션으로 남긴다. 잠긴 결제 행을
+            // REQUIRES_NEW에서 다시 갱신하면 MySQL lock wait가 발생할 수 있다.
+            if (e.getErrorCode() == ErrorCode.PAYMENT_AMOUNT_MISMATCH) {
+                failureRecorder.markFailed(paymentId);
+            }
+            throw e;
+        }
     }
 
     private void cancelMismatchedPayment(String paymentId, java.math.BigDecimal amount) {

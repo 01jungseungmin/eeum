@@ -77,7 +77,7 @@ public class AiPlanPayment extends BaseEntity {
     }
 
     public void cancel() {
-        if (this.status == AiPlanPaymentStatus.PAID || this.status == AiPlanPaymentStatus.PENDING) {
+        if (this.status != AiPlanPaymentStatus.CANCELLED) {
             this.status = AiPlanPaymentStatus.CANCELLED;
         }
     }

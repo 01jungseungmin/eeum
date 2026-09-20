@@ -39,7 +39,6 @@ public class AiPlanPaymentCommandExecutor {
     private final AiPlanPaymentRepository aiPlanPaymentRepository;
     private final AiPlanPaymentCancellationOperationRepository cancellationOperationRepository;
     private final AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
-    private final AiPlanPaymentFailureRecorder failureRecorder;
     private final StoreRepository storeRepository;
 
     // 구독 결제 요청 생성 — store 단위 락 안에서 "이미 같은 플랜 활성 구독 여부" 체크와 PENDING 결제 생성을 원자적으로 수행
@@ -72,6 +71,14 @@ public class AiPlanPaymentCommandExecutor {
             return;
         }
 
+        // 취소·실패로 종결된 결제는 늦게 도착한 PAID 조회 결과로 되살리지 않는다.
+        // 외부 스냅샷은 Redis 락 획득 전에 읽히므로, 실제 상태 전이는 잠근 뒤의 DB 행을 기준으로 한다.
+        if (payment.getStatus() != com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus.PENDING) {
+            log.warn("[AI-PLAN] 종결된 결제의 PAID 재전송을 무시: paymentId={}, status={}",
+                    paymentId, payment.getStatus());
+            return;
+        }
+
         // PortOne 조회·취소는 트랜잭션을 시작하기 전에 호출부에서 끝낸다. 여기서는 검증된
         // 응답을 짧은 DB 트랜잭션으로 원장에 반영한다.
         if (!"PAID".equalsIgnoreCase(info.getStatus())) {
@@ -79,8 +86,6 @@ public class AiPlanPaymentCommandExecutor {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
         }
         if (info.getAmount() == null || payment.getAmount().compareTo(info.getAmount()) != 0) {
-            // 이 메서드가 예외로 롤백되어도 FAILED 기록은 남아야 하므로 REQUIRES_NEW로 먼저 커밋
-            failureRecorder.markFailed(paymentId);
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
@@ -161,6 +166,8 @@ public class AiPlanPaymentCommandExecutor {
 
     @Transactional
     public void recordMismatchedPaymentCancellationResult(String paymentId, PortOneCancelResult result) {
+        AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
         AiPlanPaymentCancellationOperation operation = cancellationOperationRepository
                 .findByPaymentIdWithPessimisticLock(paymentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_CANCELLATION_INVALID_STATUS));
@@ -169,6 +176,7 @@ public class AiPlanPaymentCommandExecutor {
                 && operation.getRequestedAmount().compareTo(result.cancelledAmount()) == 0;
         if (succeeded) {
             operation.recordSucceeded(result.cancellationId(), result.cancelledAmount());
+            cancelPaymentAndSubscription(payment);
         } else if (result.isPending()) {
             operation.recordRequested(result.cancellationId());
         } else {
@@ -185,10 +193,14 @@ public class AiPlanPaymentCommandExecutor {
     /** REQUESTED 보상 환불의 최종 CANCELLED Webhook을 영속 작업에도 반영한다. */
     @Transactional
     public void confirmMismatchedPaymentCancellation(String paymentId) {
+        AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
         cancellationOperationRepository.findByPaymentIdWithPessimisticLock(paymentId)
                 .filter(operation -> operation.getStatus() == AiPlanPaymentCancellationStatus.REQUESTED)
-                .ifPresent(operation -> operation.recordSucceeded(
-                        operation.getPgCancellationId(), operation.getRequestedAmount()));
+                .ifPresent(operation -> {
+                    operation.recordSucceeded(operation.getPgCancellationId(), operation.getRequestedAmount());
+                    cancelPaymentAndSubscription(payment);
+                });
     }
 
     /** PG가 외부에서 전액 취소한 AI 결제를 내부 권한과 맞춘다. */
@@ -199,10 +211,7 @@ public class AiPlanPaymentCommandExecutor {
         if (payment.getStatus() == com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus.CANCELLED) {
             return;
         }
-        aiPlanSubscriptionRepository.findByPayment_AiPlanPaymentId(payment.getAiPlanPaymentId())
-                .filter(AiPlanSubscription::isActive)
-                .ifPresent(subscription -> subscription.deactivate(LocalDateTime.now()));
-        payment.cancel();
+        cancelPaymentAndSubscription(payment);
     }
 
     /**
@@ -221,5 +230,12 @@ public class AiPlanPaymentCommandExecutor {
                 .filter(AiPlanSubscription::isActive)
                 .ifPresent(subscription -> subscription.deactivate(LocalDateTime.now()));
         payment.partiallyCancel();
+    }
+
+    private void cancelPaymentAndSubscription(AiPlanPayment payment) {
+        aiPlanSubscriptionRepository.findByPayment_AiPlanPaymentId(payment.getAiPlanPaymentId())
+                .filter(AiPlanSubscription::isActive)
+                .ifPresent(subscription -> subscription.deactivate(LocalDateTime.now()));
+        payment.cancel();
     }
 }

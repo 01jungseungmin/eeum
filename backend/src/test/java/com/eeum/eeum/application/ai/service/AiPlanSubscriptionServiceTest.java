@@ -58,6 +58,7 @@ class AiPlanSubscriptionServiceTest {
     @Mock private AiPlanPaymentRepository aiPlanPaymentRepository;
     @Mock private AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
     @Mock private AiPlanPaymentCommandExecutor paymentCommandExecutor;
+    @Mock private AiPlanPaymentFailureRecorder failureRecorder;
     @Mock private RedisLockService redisLockService;
     @Mock private PortOnePaymentClient portOnePaymentClient;
     @Mock private OperationFailureRecorder operationFailureRecorder;
@@ -180,6 +181,22 @@ class AiPlanSubscriptionServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AI_FORBIDDEN);
         verifyNoInteractions(paymentCommandExecutor);
+    }
+
+    @Test
+    void 자동_환불로_취소된_결제는_구독_완료_성공으로_응답하지_않는다() {
+        Store store = stubStore();
+        stubRunnableLockPassThrough();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.cancel();
+        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(PortOnePaymentInfo.builder()
+                .paymentId(PAYMENT_ID).status("PAID").amount(payment.getAmount()).build());
+
+        assertThatThrownBy(() -> subscriptionService.completePayment(OWNER_ID, PAYMENT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_NOT_COMPLETED);
     }
 
     @Test

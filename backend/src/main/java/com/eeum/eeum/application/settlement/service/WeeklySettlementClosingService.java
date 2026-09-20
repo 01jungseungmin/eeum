@@ -4,6 +4,7 @@ import com.eeum.eeum.domain.settlement.entity.OwnerRevenue;
 import com.eeum.eeum.domain.operation.entity.OperationFailureLog;
 import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
 import com.eeum.eeum.domain.operation.repository.OperationFailureLogRepository;
+import com.eeum.eeum.domain.operation.event.OperationFailureRecordedEvent;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlement;
 import com.eeum.eeum.domain.settlement.entity.WeeklySettlementItem;
 import com.eeum.eeum.domain.settlement.enums.OwnerRevenueStatus;
@@ -14,6 +15,7 @@ import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -26,6 +28,7 @@ public class WeeklySettlementClosingService {
     private final WeeklySettlementRepository weeklySettlementRepository;
     private final WeeklySettlementItemRepository weeklySettlementItemRepository;
     private final OperationFailureLogRepository operationFailureLogRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final String LATE_REVENUE_OPERATION = "WeeklySettlementClosingScheduler.closeWeeklySettlements";
     private static final String LATE_REVENUE_ERROR_CODE = "SETTLEMENT_OUTSIDE_PERIOD";
@@ -84,7 +87,7 @@ public class WeeklySettlementClosingService {
         if (!newlyMarked && alreadyLogged) {
             return false;
         }
-        operationFailureLogRepository.save(OperationFailureLog.create(
+        OperationFailureLog saved = operationFailureLogRepository.save(OperationFailureLog.create(
                 OperationFailureCategory.SCHEDULER,
                 LATE_REVENUE_OPERATION,
                 "ownerRevenue",
@@ -92,6 +95,8 @@ public class WeeklySettlementClosingService {
                 LATE_REVENUE_ERROR_CODE,
                 "지난 정산 기간에 포함되지 않은 원장입니다. 별도 정산 수습이 필요합니다.",
                 "periodStartAt=" + periodStartAt + ", periodEndAt=" + periodEndAt));
+        eventPublisher.publishEvent(new OperationFailureRecordedEvent(
+                saved.getOperationFailureLogId(), saved.getCategory(), saved.getOperation(), saved.getErrorCode()));
         return true;
     }
 

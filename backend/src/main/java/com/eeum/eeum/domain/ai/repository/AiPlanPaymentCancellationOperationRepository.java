@@ -21,14 +21,20 @@ public interface AiPlanPaymentCancellationOperationRepository
     Optional<AiPlanPaymentCancellationOperation> findByPaymentIdWithPessimisticLock(@Param("paymentId") String paymentId);
 
     @Query("""
-        select o.payment.portonePaymentId
+        select o
         from AiPlanPaymentCancellationOperation o
+        join fetch o.payment
         where o.status = :status
           and o.modifiedAt < :threshold
-        order by o.modifiedAt asc
+          and (:cursorModifiedAt is null
+               or o.modifiedAt > :cursorModifiedAt
+               or (o.modifiedAt = :cursorModifiedAt and o.id > :cursorId))
+        order by o.modifiedAt asc, o.id asc
     """)
-    List<String> findPaymentIdsByStatusModifiedBefore(
+    List<AiPlanPaymentCancellationOperation> findCandidatesByStatusModifiedBefore(
             @Param("status") AiPlanPaymentCancellationStatus status,
             @Param("threshold") LocalDateTime threshold,
+            @Param("cursorModifiedAt") LocalDateTime cursorModifiedAt,
+            @Param("cursorId") Long cursorId,
             Pageable pageable);
 }
