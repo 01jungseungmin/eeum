@@ -5,6 +5,7 @@ import NotificationSendModal from '../../../components/admin/notification/Notifi
 import NotificationHistoryTable from '../../../components/admin/notification/NotificationHistoryTable';
 import { notificationApi } from '../../../api/admin/notificationApi';
 import { NOTIFICATION_TYPE_FILTER_GROUPS } from '../../../constants/notificationConstants';
+import { clickableCardStyle } from '../../../components/common/cardFilterStyle';
 
 const Container = styled.div`
   padding: 30px;
@@ -33,6 +34,7 @@ const SummaryCard = styled.div`
   align-items: flex-start;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 
+  ${clickableCardStyle}
   .info {
     span {
       font-size: 12px;
@@ -139,6 +141,11 @@ function NotificationSendPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [sendModalType, setSendModalType] = useState(null); // 'system' | 'event' | null
+  // 상단 카드로 고르는 보기 필터 (현재 불러온 페이지 안에서만 적용)
+  // ALL | UNREAD | READ | SYSTEM_NOTICE | MARKETING_EVENT — 같은 카드를 다시 누르면 해제된다
+  const [cardFilter, setCardFilter] = useState('ALL');
+  const toggleCardFilter = (next) =>
+    setCardFilter((prev) => (prev === next ? 'ALL' : next));
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -195,8 +202,8 @@ function NotificationSendPage() {
   // "이 페이지" 범위로만 집계한다.
   const pageStats = useMemo(() => {
     return {
-      unread: notifications.filter((n) => !n.isRead).length,
-      read: notifications.filter((n) => n.isRead).length,
+      unread: notifications.filter((n) => !n.read).length,
+      read: notifications.filter((n) => n.read).length,
       systemNotice: notifications.filter((n) => n.type === 'SYSTEM_NOTICE')
         .length,
       marketingEvent: notifications.filter(
@@ -205,12 +212,29 @@ function NotificationSendPage() {
     };
   }, [notifications]);
 
+  const displayedNotifications = useMemo(() => {
+    switch (cardFilter) {
+      case 'UNREAD':
+        return notifications.filter((n) => !n.read);
+      case 'READ':
+        return notifications.filter((n) => n.read);
+      case 'SYSTEM_NOTICE':
+      case 'MARKETING_EVENT':
+        return notifications.filter((n) => n.type === cardFilter);
+      default:
+        return notifications;
+    }
+  }, [notifications, cardFilter]);
+
   return (
     <Container>
       <SummaryGrid>
         <SummaryCard
           $iconBg="#fffbe6"
           $iconColor="#ad6800"
+          $clickable
+          $active={cardFilter === 'UNREAD'}
+          onClick={() => toggleCardFilter('UNREAD')}
         >
           <div className="info">
             <span>안읽음</span>
@@ -224,6 +248,9 @@ function NotificationSendPage() {
         <SummaryCard
           $iconBg="#edf5f1"
           $iconColor="#2d5a43"
+          $clickable
+          $active={cardFilter === 'READ'}
+          onClick={() => toggleCardFilter('READ')}
         >
           <div className="info">
             <span>읽음</span>
@@ -237,6 +264,9 @@ function NotificationSendPage() {
         <SummaryCard
           $iconBg="#f0f5ff"
           $iconColor="#2f54eb"
+          $clickable
+          $active={cardFilter === 'SYSTEM_NOTICE'}
+          onClick={() => toggleCardFilter('SYSTEM_NOTICE')}
         >
           <div className="info">
             <span>시스템 공지</span>
@@ -250,6 +280,9 @@ function NotificationSendPage() {
         <SummaryCard
           $iconBg="#fff0f6"
           $iconColor="#c41d7f"
+          $clickable
+          $active={cardFilter === 'MARKETING_EVENT'}
+          onClick={() => toggleCardFilter('MARKETING_EVENT')}
         >
           <div className="info">
             <span>마케팅/이벤트</span>
@@ -277,7 +310,7 @@ function NotificationSendPage() {
       </ActionRow>
 
       <NotificationHistoryTable
-        notifications={notifications}
+        notifications={displayedNotifications}
         loading={loading}
         category={category}
         onCategoryChange={handleCategoryChange}

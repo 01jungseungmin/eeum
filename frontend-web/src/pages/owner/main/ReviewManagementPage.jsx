@@ -158,7 +158,15 @@ export default function ReviewManagementPage() {
   return (
     <Container>
       {/* 상세 조회가 보장된 데이터로 상단 통계판 자동 계산 */}
-      <ReviewStats reviews={reviews} />
+      <ReviewStats
+        reviews={reviews}
+        statusFilter={statusFilter}
+        ratingFilter={ratingFilter}
+        onSelectFilter={({ status, rating }) => {
+          setStatusFilter(status);
+          setRatingFilter(rating);
+        }}
+      />
 
       {/* 탭 및 필터 */}
       <ReviewFilterBar

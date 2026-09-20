@@ -1,9 +1,10 @@
 import { apiClient } from '../apiClient';
 
 export const approvalApi = {
-  // 사장 가입 승인 대기 목록 / 상세 조회
-  getApplications: () => {
-    return apiClient.get('/admin/accounts/owners/applications');
+  // 사장 가입 신청 목록 / 상세 조회
+  // params: approvalStatus(PENDING|APPROVED|REJECTED, 생략 시 PENDING), page, size 등
+  getApplications: (params) => {
+    return apiClient.get('/admin/accounts/owners/applications', { params });
   },
   getOwnerDetail: (ownerId) => {
     return apiClient.get(`/admin/accounts/owners/${ownerId}`);

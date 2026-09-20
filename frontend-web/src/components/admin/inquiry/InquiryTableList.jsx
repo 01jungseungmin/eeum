@@ -262,11 +262,13 @@ export default function InquiryTableList({
   onSearchChange: externalOnSearchChange,
   categoryFilter: externalCategoryFilter,
   onCategoryChange: externalOnCategoryChange,
+  // 상태 탭은 서버에서 상태별로 조회하므로 페이지가 값을 들고 있다 (ALL | PENDING | ANSWERED | CLOSED)
+  statusFilter = 'ALL',
+  onStatusChange = () => {},
 }) {
   // --- 💡 필터링용 로컬 상태 (외부 Props가 없을 때 사용) ---
   const [localSearchTerm, setLocalSearchTerm] = useState('');
   const [localCategoryFilter, setLocalCategoryFilter] = useState('ALL');
-  const [activeTab, setActiveTab] = useState('ALL'); // 상태 필터 탭 (ALL, PENDING, IN_PROGRESS, ANSWERED)
 
   // 제어 상태 및 핸들러 결정 (Props 우선, 없으면 로컬 State)
   const currentSearch =
@@ -305,19 +307,7 @@ export default function InquiryTableList({
       inquiry.title?.toLowerCase().includes(query) ||
       inquiry.writerName?.toLowerCase().includes(query);
 
-    // 3. 상태 탭 필터링 (ALL, PENDING, IN_PROGRESS, ANSWERED)
-    let matchesTab = true;
-    if (activeTab === 'PENDING') {
-      matchesTab = inquiry.status === INQUIRY_STATUS.PENDING;
-    } else if (activeTab === 'IN_PROGRESS') {
-      matchesTab = inquiry.status === INQUIRY_STATUS.IN_PROGRESS;
-    } else if (activeTab === 'ANSWERED') {
-      matchesTab =
-        inquiry.status === INQUIRY_STATUS.ANSWERED ||
-        inquiry.status === INQUIRY_STATUS.COMPLETED;
-    }
-
-    return matchesCategory && matchesSearch && matchesTab;
+    return matchesCategory && matchesSearch;
   });
 
   // 날짜 포맷팅 함수 (YYYY.MM.DD HH:mm)
@@ -372,32 +362,25 @@ export default function InquiryTableList({
         </SelectWrapper>
       </ControlRow>
 
-      {/* 💡 상태별 탭 버튼 (클릭 시 해당 상태만 필터링) */}
+      {/* 상태별 탭 버튼 (클릭 시 서버에서 해당 상태만 조회) */}
       <TabsList>
-        <TabButton
-          $active={activeTab === 'ALL'}
-          onClick={() => setActiveTab('ALL')}
-        >
-          전체 {inquiries.length}건
-        </TabButton>
-        <TabButton
-          $active={activeTab === 'PENDING'}
-          onClick={() => setActiveTab('PENDING')}
-        >
-          처리대기
-        </TabButton>
-        <TabButton
-          $active={activeTab === 'IN_PROGRESS'}
-          onClick={() => setActiveTab('IN_PROGRESS')}
-        >
-          처리중
-        </TabButton>
-        <TabButton
-          $active={activeTab === 'ANSWERED'}
-          onClick={() => setActiveTab('ANSWERED')}
-        >
-          답변완료
-        </TabButton>
+        {[
+          { value: 'ALL', label: '전체' },
+          { value: 'PENDING', label: '처리대기' },
+          { value: 'ANSWERED', label: '답변완료' },
+          { value: 'CLOSED', label: '종료됨' },
+        ].map((tab) => (
+          <TabButton
+            key={tab.value}
+            $active={statusFilter === tab.value}
+            onClick={() => onStatusChange(tab.value)}
+          >
+            {tab.label}
+            {statusFilter === tab.value && pageInfo?.totalElements !== undefined
+              ? ` ${pageInfo.totalElements}건`
+              : ''}
+          </TabButton>
+        ))}
       </TabsList>
 
       {/* 테이블 */}

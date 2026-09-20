@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 
 const StatCardsContainer = styled.div`
   display: grid;
@@ -13,6 +14,7 @@ const StatCard = styled.div`
   border: 1px solid ${(props) => props.$borderColor};
   border-radius: 12px;
   padding: 20px;
+  ${clickableCardStyle}
 `;
 
 const StatTitle = styled.div`
@@ -34,7 +36,11 @@ const StatSubtext = styled.div`
   font-weight: 500;
 `;
 
-const ReportStatCards = ({ reports = [] }) => {
+const ReportStatCards = ({
+  reports = [],
+  selectedStatus,
+  onStatusChange,
+}) => {
   // 전체 데이터 목록을 기준으로 각 상태별 건수 계산
   const stats = useMemo(() => {
     const pendingCount = reports.filter((r) => r.status === 'PENDING').length;
@@ -57,6 +63,9 @@ const ReportStatCards = ({ reports = [] }) => {
       <StatCard
         color="#FFF0F2"
         $borderColor="#FFD0D6"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'PENDING'}
+        onClick={() => onStatusChange?.('PENDING')}
       >
         <StatTitle>접수 대기</StatTitle>
         <StatValue>{stats.pendingCount}</StatValue>
@@ -66,6 +75,9 @@ const ReportStatCards = ({ reports = [] }) => {
       <StatCard
         color="#FEFCE8"
         $borderColor="#FEF08A"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'REVIEWED'}
+        onClick={() => onStatusChange?.('REVIEWED')}
       >
         <StatTitle>검토 완료</StatTitle>
         <StatValue>{stats.reviewedCount}</StatValue>
@@ -75,6 +87,9 @@ const ReportStatCards = ({ reports = [] }) => {
       <StatCard
         color="#F0FDF4"
         $borderColor="#BBF7D0"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'DISMISSED'}
+        onClick={() => onStatusChange?.('DISMISSED')}
       >
         <StatTitle>기각 처리</StatTitle>
         <StatValue>{stats.dismissedCount}</StatValue>
@@ -84,6 +99,9 @@ const ReportStatCards = ({ reports = [] }) => {
       <StatCard
         color="#EFF6FF"
         $borderColor="#BFDBFE"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'ALL'}
+        onClick={() => onStatusChange?.('ALL')}
       >
         <StatTitle>전체 신고</StatTitle>
         <StatValue>{stats.totalCount}</StatValue>

@@ -2,9 +2,10 @@ import { apiClient } from '../apiClient';
 
 export const inquiryApi = {
   // 관리자 문의 목록 / 상세 조회
-  getInquiryList: (page = 0, size = 10) => {
+  // filters: { status: PENDING|ANSWERED|CLOSED, category, keyword } (생략하면 전체)
+  getInquiryList: (page = 0, size = 10, filters = {}) => {
     return apiClient.get('/admin/inquiries', {
-      params: { page, size },
+      params: { page, size, ...filters },
     });
   },
   getInquiryDetail: (inquiryId) => {

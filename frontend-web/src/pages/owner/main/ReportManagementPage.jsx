@@ -87,7 +87,11 @@ export default function ReportManagement() {
 
   return (
     <Container>
-      <SummaryCards reports={reports} />
+      <SummaryCards
+        reports={reports}
+        selectedStatus={selectedStatus}
+        onStatusChange={setSelectedStatus}
+      />
       <NoticeBanner />
       <FilterSection
         selectedStatus={selectedStatus}

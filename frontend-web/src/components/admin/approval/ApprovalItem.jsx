@@ -183,26 +183,29 @@ function ApprovalItem({ account, isSelected, onApprove, onReject }) {
         </div>
       </div>
 
-      <div className="action-zone">
-        <button
-          className="btn-approve"
-          onClick={(e) => {
-            e.stopPropagation();
-            onApprove?.(account);
-          }}
-        >
-          승인
-        </button>
-        <button
-          className="btn-reject"
-          onClick={(e) => {
-            e.stopPropagation();
-            onReject?.(account);
-          }}
-        >
-          거부
-        </button>
-      </div>
+      {/* 이미 심사가 끝난 신청은 승인/거부 대상이 아니다 */}
+      {displayStatus === 'PENDING' && (
+        <div className="action-zone">
+          <button
+            className="btn-approve"
+            onClick={(e) => {
+              e.stopPropagation();
+              onApprove?.(account);
+            }}
+          >
+            승인
+          </button>
+          <button
+            className="btn-reject"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReject?.(account);
+            }}
+          >
+            거부
+          </button>
+        </div>
+      )}
     </ApprovalRowItem>
   );
 }

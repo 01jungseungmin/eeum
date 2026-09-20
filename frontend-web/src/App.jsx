@@ -6,7 +6,6 @@ import FindPasswordPage from './pages/owner/login/FindPasswordPage';
 import MainLayout from './layouts/MainLayout';
 import ApprovalStatus from './pages/owner/main/ApprovalStatusPage';
 import OwnerDashboardPage from './pages/owner/main/DashBoardPage';
-import AdminLoginPage from './pages/admin/login/AdminLoginPage';
 import AdminDashboardPage from './pages/admin/main/DashBoardPage';
 import ApprovalPage from './pages/admin/main/ApprovalPage';
 import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
@@ -42,8 +41,6 @@ import SalesSettlementPage from './pages/owner/main/SalesSettlementPage';
 import AdminInquiryManagementPage from './pages/admin/main/InquiryManagementPage';
 import AdminInquiryDetailPage from './pages/admin/main/InquiryDetailPage';
 import AdminCategoryManagementPage from './pages/admin/main/CategoryManagementPage';
-import AdminPostManagementPage from './pages/admin/main/PostManagementPage';
-import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
 import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
 import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
@@ -116,9 +113,15 @@ function App() {
         path="/find-password"
         element={<FindPasswordPage />}
       />
+      {/* 로그인 페이지를 하나로 통일 — 기존 관리자 로그인 주소로 들어와도 일반 로그인으로 보낸다 */}
       <Route
         path="/admin/login"
-        element={<AdminLoginPage />}
+        element={
+          <Navigate
+            to="/login"
+            replace
+          />
+        }
       />
 
       <Route element={<MainLayout />}>
@@ -212,14 +215,6 @@ function App() {
         <Route
           path="/admin/categories"
           element={<AdminCategoryManagementPage />}
-        />
-        <Route
-          path="/admin/posts"
-          element={<AdminPostManagementPage />}
-        />
-        <Route
-          path="/admin/posts/:id"
-          element={<AdminPostDetailPage />}
         />
 
         {/* 심사 중에도 접근 허용을 위해 보호막 외부에 배치 */}

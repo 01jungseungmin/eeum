@@ -17,11 +17,28 @@ const StatCard = styled.div`
   gap: 16px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.01);
   border: 1px solid #eef0f2;
+  cursor: ${(props) => (props.$clickable ? 'pointer' : 'default')};
+  transition: all 0.2s ease-in-out;
 
+  &:hover {
+    border-color: ${(props) => (props.$clickable ? '#ccc' : '#eef0f2')};
+  }
+
+  /* 선택된 카드 — 배경이 진한 초록이라 안쪽 글자·아이콘 색을 함께 바꾼다 */
   &.active {
     background: #1c5335;
     color: white;
-    * {
+
+    .icon-box {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffca28;
+    }
+
+    .info .label {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .info .count {
       color: white;
     }
   }
@@ -35,11 +52,6 @@ const StatCard = styled.div`
     justify-content: center;
     align-items: center;
     color: #4a5568;
-
-    &.active-icon {
-      background: rgba(255, 255, 255, 0.15);
-      color: #ffca28;
-    }
   }
 
   .info {
@@ -60,28 +72,36 @@ const StatCard = styled.div`
   }
 `;
 
-function EventStats({ liveCount, readyCount, totalCount }) {
+function EventStats({
+  liveCount,
+  readyCount,
+  totalCount,
+  filterStatus,
+  onFilterChange,
+}) {
+  // 선택된 필터의 카드를 진한 초록색으로 강조한다
+  const cardProps = (status) => ({
+    className: filterStatus === status ? 'active' : '',
+    $clickable: Boolean(onFilterChange),
+    onClick: () => onFilterChange?.(status),
+  });
+
   return (
     <StatsGrid>
-      <StatCard className="active">
-        <div className="icon-box active-icon">
+      <StatCard {...cardProps('LIVE')}>
+        <div className="icon-box">
           <Zap
             size={20}
             strokeWidth={2.5}
           />
         </div>
         <div className="info">
-          <div
-            className="label"
-            style={{ color: 'rgba(255,255,255,0.7)' }}
-          >
-            진행중 이벤트
-          </div>
+          <div className="label">진행중 이벤트</div>
           <div className="count">{liveCount}</div>
         </div>
       </StatCard>
 
-      <StatCard>
+      <StatCard {...cardProps('READY')}>
         <div className="icon-box">
           <Clock
             size={20}
@@ -94,7 +114,7 @@ function EventStats({ liveCount, readyCount, totalCount }) {
         </div>
       </StatCard>
 
-      <StatCard>
+      <StatCard {...cardProps('ALL')}>
         <div className="icon-box">
           <Tag
             size={20}

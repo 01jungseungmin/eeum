@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 
 const StatsGrid = styled.div`
   display: grid;
@@ -13,6 +14,7 @@ const StatCard = styled.div`
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
   border: 1px solid #eef0f2;
+  ${clickableCardStyle}
 
   .label {
     font-size: 12px;
@@ -27,14 +29,28 @@ const StatCard = styled.div`
   }
 `;
 
-function CategoryStats({ totalCount, activeCount, totalProducts }) {
+function CategoryStats({
+  totalCount,
+  activeCount,
+  totalProducts,
+  visibilityFilter,
+  onVisibilityChange,
+}) {
   return (
     <StatsGrid>
-      <StatCard>
+      <StatCard
+        $clickable={Boolean(onVisibilityChange)}
+        $active={visibilityFilter === 'ALL'}
+        onClick={() => onVisibilityChange?.('ALL')}
+      >
         <div className="label">전체 카테고리</div>
         <div className="value">{totalCount}</div>
       </StatCard>
-      <StatCard>
+      <StatCard
+        $clickable={Boolean(onVisibilityChange)}
+        $active={visibilityFilter === 'VISIBLE'}
+        onClick={() => onVisibilityChange?.('VISIBLE')}
+      >
         <div className="label">노출 중</div>
         <div className="value">{activeCount}</div>
       </StatCard>
