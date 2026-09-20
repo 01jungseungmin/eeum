@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 
 const CardsGrid = styled.div`
   display: grid;
@@ -12,6 +13,7 @@ const Card = styled.div`
   padding: 18px 20px;
   background-color: ${(props) => props.$bg || '#ffffff'};
   border: 1px solid ${(props) => props.$borderColor || '#e2e8f0'};
+  ${clickableCardStyle}
 `;
 
 const CardLabel = styled.div`
@@ -27,7 +29,11 @@ const CardValue = styled.div`
   color: ${(props) => props.$color || '#0f172a'};
 `;
 
-export default function SummaryCards({ reports = [] }) {
+export default function SummaryCards({
+  reports = [],
+  selectedStatus,
+  onStatusChange,
+}) {
   const total = reports.length;
   const pending = reports.filter((r) => r.status === 'PENDING').length;
   const reviewed = reports.filter((r) => r.status === 'REVIEWED').length;
@@ -37,6 +43,9 @@ export default function SummaryCards({ reports = [] }) {
       <Card
         $bg="#ffffff"
         $borderColor="#e2e8f0"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'ALL'}
+        onClick={() => onStatusChange?.('ALL')}
       >
         <CardLabel $color="#64748b">전체 신고</CardLabel>
         <CardValue>{total}</CardValue>
@@ -45,6 +54,9 @@ export default function SummaryCards({ reports = [] }) {
       <Card
         $bg="#fffbeb"
         $borderColor="#fde68a"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'PENDING'}
+        onClick={() => onStatusChange?.('PENDING')}
       >
         <CardLabel $color="#b45309">검토중</CardLabel>
         <CardValue $color="#b45309">{pending}</CardValue>
@@ -53,6 +65,9 @@ export default function SummaryCards({ reports = [] }) {
       <Card
         $bg="#f0fdf4"
         $borderColor="#bbf7d0"
+        $clickable={Boolean(onStatusChange)}
+        $active={selectedStatus === 'REVIEWED'}
+        onClick={() => onStatusChange?.('REVIEWED')}
       >
         <CardLabel $color="#15803d">처리완료</CardLabel>
         <CardValue $color="#15803d">{reviewed}</CardValue>

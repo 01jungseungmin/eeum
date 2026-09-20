@@ -7,6 +7,14 @@ import OrderList from '../../../components/owner/order/OrderList';
 
 import { orderApi } from '../../../api/owner/orderApi';
 
+// 카드 하나가 여러 주문 상태를 묶는다 (카운트 계산과 필터링이 같은 기준을 쓰도록 한곳에 둔다)
+const STATUS_GROUPS = {
+  WAITING: ['PENDING', 'PAID'],
+  CONFIRMED: ['CONFIRMED', 'READY'],
+  COMPLETED: ['COMPLETED'],
+  CANCELED: ['CANCELLED'],
+};
+
 const Container = styled.div`
   padding: 24px;
   background-color: #f8f9fa;
@@ -38,6 +46,8 @@ const AlertBanner = styled.div`
 function OrderManagementPage() {
   const [orders, setOrders] = useState([]);
   const [filterType, setFilterType] = useState('전체 유형');
+  // 상단 카드로 고르는 주문 상태: ALL | WAITING | CONFIRMED | COMPLETED | CANCELED
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
   // 현황판 실시간 카운트 관리 상태값
@@ -68,18 +78,16 @@ function OrderManagementPage() {
         );
         setOrders(contentList);
 
+        const countOf = (group) =>
+          contentList.filter((o) => STATUS_GROUPS[group].includes(o.orderStatus))
+            .length;
+
         setCounts({
           total: contentList.length,
-          waiting: contentList.filter(
-            (o) => o.orderStatus === 'PENDING' || o.orderStatus === 'PAID',
-          ).length,
-          confirmed: contentList.filter(
-            (o) => o.orderStatus === 'CONFIRMED' || o.orderStatus === 'READY',
-          ).length,
-          completed: contentList.filter((o) => o.orderStatus === 'COMPLETED')
-            .length,
-          canceled: contentList.filter((o) => o.orderStatus === 'CANCELLED')
-            .length,
+          waiting: countOf('WAITING'),
+          confirmed: countOf('CONFIRMED'),
+          completed: countOf('COMPLETED'),
+          canceled: countOf('CANCELED'),
         });
       }
     } catch (error) {
@@ -99,11 +107,15 @@ function OrderManagementPage() {
       (filterType === '구매 주문' && orderProductType === 'SALE') ||
       (filterType === '방문 예약' && orderProductType === 'PREORDER'); // 스펙에 맞춰 PREORDER 또는 RESERVATION 대입
 
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      STATUS_GROUPS[statusFilter].includes(order.orderStatus);
+
     const matchesSearch =
       String(order.orderId).toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.customerNickname.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesType && matchesSearch;
+    return matchesType && matchesStatus && matchesSearch;
   });
 
   return (
@@ -113,24 +125,33 @@ function OrderManagementPage() {
         <OrderSummaryCard
           title="전체"
           count={counts.total}
-          $isActive={true}
+          $isActive={statusFilter === 'ALL'}
+          onClick={() => setStatusFilter('ALL')}
         />
         <OrderSummaryCard
           title="대기중"
           count={counts.waiting}
           badge={counts.waiting > 0 ? '처리 필요' : undefined}
+          $isActive={statusFilter === 'WAITING'}
+          onClick={() => setStatusFilter('WAITING')}
         />
         <OrderSummaryCard
           title="확인됨"
           count={counts.confirmed}
+          $isActive={statusFilter === 'CONFIRMED'}
+          onClick={() => setStatusFilter('CONFIRMED')}
         />
         <OrderSummaryCard
           title="완료"
           count={counts.completed}
+          $isActive={statusFilter === 'COMPLETED'}
+          onClick={() => setStatusFilter('COMPLETED')}
         />
         <OrderSummaryCard
           title="취소됨"
           count={counts.canceled}
+          $isActive={statusFilter === 'CANCELED'}
+          onClick={() => setStatusFilter('CANCELED')}
         />
       </SummaryGrid>
 

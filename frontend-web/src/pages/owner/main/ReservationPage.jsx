@@ -296,12 +296,8 @@ export default function ReservationPage() {
   const fetchOrders = useCallback(async () => {
     setIsOrdersLoading(true);
     try {
-      let status = undefined;
-      if (filter === '확정') status = 'APPROVED';
-      if (filter === '대기') status = 'PENDING';
-      if (filter === '취소') status = 'CANCELED';
-
-      const response = await reservationApi.getVisitReservations({ status });
+      // 상태 필터는 화면(ReservationList)에서 하므로 전체 목록을 한 번만 가져온다
+      const response = await reservationApi.getVisitReservations();
       if (response.data && response.data.success) {
         setOrders(response.data.data?.content || []);
       }
@@ -311,7 +307,7 @@ export default function ReservationPage() {
     } finally {
       setIsOrdersLoading(false);
     }
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => fetchSettings());
@@ -379,16 +375,22 @@ export default function ReservationPage() {
           title="선택일 전체 예약"
           count={totalCount}
           color="#4CA771"
+          active={filter === '전체'}
+          onClick={() => setFilter('전체')}
         />
         <SummaryCard
           title="확정"
           count={confirmedCount}
           color="#1a1a1a"
+          active={filter === '확정'}
+          onClick={() => setFilter('확정')}
         />
         <SummaryCard
           title="대기"
           count={pendingCount}
           color="#fab005"
+          active={filter === '대기'}
+          onClick={() => setFilter('대기')}
         />
         <SummaryCard
           title="시간대"

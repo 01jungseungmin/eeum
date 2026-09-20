@@ -264,7 +264,11 @@ function ProductManagementPage() {
 
   return (
     <PageContainer>
-      <ProductStats products={activeProducts} />
+      <ProductStats
+        products={activeProducts}
+        typeFilter={typeFilter}
+        onTypeChange={setTypeFilter}
+      />
       <ProductFilterBar
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
