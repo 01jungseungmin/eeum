@@ -47,6 +47,8 @@ import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
 import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
 import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
+import AdminCommunityPostManagementPage from './pages/admin/main/CommunityPostManagementPage';
+import AdminCommunityPostDetailPage from './pages/admin/main/CommunityPostDetailPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -147,6 +149,14 @@ function App() {
         <Route
           path="/admin/stores/:storeId"
           element={<AdminStoreDetailPage />}
+        />
+        <Route
+          path="/admin/community/posts"
+          element={<AdminCommunityPostManagementPage />}
+        />
+        <Route
+          path="/admin/community/posts/:postId"
+          element={<AdminCommunityPostDetailPage />}
         />
         <Route
           path="/admin/reports"
