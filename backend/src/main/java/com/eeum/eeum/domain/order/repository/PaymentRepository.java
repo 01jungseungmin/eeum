@@ -23,6 +23,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, Payment
     @Query("SELECT p.order.orderId FROM Payment p WHERE p.portonePaymentId = :portonePaymentId")
     Optional<Long> findOrderIdByPortonePaymentId(@Param("portonePaymentId") String portonePaymentId);
 
+    @Query("SELECT p.order.orderId FROM Payment p WHERE p.paymentId = :paymentId")
+    Optional<Long> findOrderIdByPaymentId(@Param("paymentId") Long paymentId);
+
     Page<Payment> findByOrder_Account_AccountId(Long accountId, Pageable pageable);
 
     Optional<Payment> findByOrder_Account_AccountIdAndPaymentId(Long accountId, Long paymentId);

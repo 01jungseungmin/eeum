@@ -161,7 +161,10 @@ public class PaymentService {
                 || !StringUtils.hasText(payment.getPortonePaymentId())) {
             return;
         }
-        handleWebhookByExternalStatus(payment.getOrder().getOrderId(), payment.getPortonePaymentId());
+        Long orderId = paymentRepository.findOrderIdByPaymentId(paymentId).orElse(null);
+        if (orderId != null) {
+            handleWebhookByExternalStatus(orderId, payment.getPortonePaymentId());
+        }
     }
 
     @Transactional(readOnly = true)
