@@ -16,6 +16,7 @@ import com.eeum.eeum.domain.order.repository.OrderRepository;
 import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductOption;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductImageRepository;
@@ -59,6 +60,7 @@ class OrderServiceTest {
     @Mock private OrderItemRepository orderItemRepository;
     @Mock private PaymentRepository paymentRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private com.eeum.eeum.domain.product.repository.ProductOptionRepository productOptionRepository;
     @Mock private com.eeum.eeum.domain.product.repository.ProductOptionItemRepository productOptionItemRepository;
     @Mock private EventProductRepository eventProductRepository;
     @Mock private ProductImageRepository productImageRepository;
@@ -388,6 +390,40 @@ class OrderServiceTest {
                 List.of(11L, 12L), productId)).thenReturn(List.of());
 
         // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ORDER_OPTION_UNAVAILABLE);
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void 장바구니에_없던_필수_옵션이_추가되면_주문이_생성되지_않는다() {
+        Long accountId = 100L;
+        Long cartId = 1L;
+        Long productId = 7L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+
+        Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
+        Product product = Product.create(store, null, "김치찌개", null,
+                BigDecimal.valueOf(10000), 50, ProductType.SALE);
+        ReflectionTestUtils.setField(product, "productId", productId);
+        CartItem cartItem = mock(CartItem.class);
+        when(cartItem.getProduct()).thenReturn(product);
+        when(cartItem.getQuantity()).thenReturn(1);
+
+        // 필수 옵션 누락이 가격 비교보다 먼저 걸리므로 단가·옵션 ID 스텁은 두지 않는다
+        ProductOption newlyRequired = mock(ProductOption.class);
+        when(newlyRequired.isRequired()).thenReturn(true);
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
+        when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
+        when(productOptionRepository.findByProduct_ProductId(productId)).thenReturn(List.of(newlyRequired));
+
         assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")

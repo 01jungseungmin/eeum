@@ -19,12 +19,14 @@ import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.*;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductOption;
 import com.eeum.eeum.domain.product.entity.ProductOptionItem;
 import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.product.event.ProductStockWarningEvent;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductImageRepository;
+import com.eeum.eeum.domain.product.repository.ProductOptionRepository;
 import com.eeum.eeum.domain.product.repository.ProductOptionItemRepository;
 import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
@@ -61,6 +63,7 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final PaymentRepository paymentRepository;
     private final ProductRepository productRepository;
+    private final ProductOptionRepository productOptionRepository;
     private final ProductOptionItemRepository productOptionItemRepository;
     private final EventProductRepository eventProductRepository;
     private final ProductImageRepository productImageRepository;
@@ -317,10 +320,13 @@ public class OrderService {
      */
     private void validateUnitPriceUnchanged(CartItem item, Product product) {
         List<Long> optionItemIds = parseSelectedOptionItemIds(item.getSelectedOptionItemIds());
+        List<ProductOption> productOptions = productOptionRepository
+                .findByProduct_ProductId(product.getProductId());
 
         BigDecimal optionsTotalPrice = BigDecimal.ZERO;
+        List<ProductOptionItem> optionItems = List.of();
         if (!optionItemIds.isEmpty()) {
-            List<ProductOptionItem> optionItems = productOptionItemRepository
+            optionItems = productOptionItemRepository
                     .findByProductOptionItemIdInAndProductOption_Product_ProductId(
                             optionItemIds, product.getProductId());
             if (optionItems.size() != optionItemIds.size()
@@ -331,9 +337,24 @@ public class OrderService {
                     .map(ProductOptionItem::getAdditionalPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
+        validateRequiredOptionsSelected(productOptions, optionItems);
 
         if (product.getPrice().add(optionsTotalPrice).compareTo(item.getUnitPrice()) != 0) {
             throw new BusinessException(ErrorCode.ORDER_PRICE_CHANGED);
+        }
+    }
+
+    private void validateRequiredOptionsSelected(
+            List<ProductOption> productOptions,
+            List<ProductOptionItem> selectedOptionItems
+    ) {
+        boolean missingRequiredOption = productOptions.stream()
+                .filter(ProductOption::isRequired)
+                .anyMatch(option -> selectedOptionItems.stream()
+                        .noneMatch(item -> item.getProductOption().getProductOptionId()
+                                .equals(option.getProductOptionId())));
+        if (missingRequiredOption) {
+            throw new BusinessException(ErrorCode.ORDER_OPTION_UNAVAILABLE);
         }
     }
 
