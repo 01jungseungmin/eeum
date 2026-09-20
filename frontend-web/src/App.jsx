@@ -47,13 +47,10 @@ import AdminPostDetailPage from './pages/admin/main/PostDetailPage';
 import AdminSettlementManagementPage from './pages/admin/main/SettlementManagementPage';
 import AdminStoreManagementPage from './pages/admin/main/StoreManagementPage';
 import AdminStoreDetailPage from './pages/admin/main/StoreDetailPage';
-<<<<<<< HEAD
 import AdminCommunityPostManagementPage from './pages/admin/main/CommunityPostManagementPage';
 import AdminCommunityPostDetailPage from './pages/admin/main/CommunityPostDetailPage';
-=======
 import AdminUsedProductManagementPage from './pages/admin/main/UsedProductManagementPage';
 import AdminUsedProductDetailPage from './pages/admin/main/UsedProductDetailPage';
->>>>>>> 9550bd8353e4734f2be3b45417027b86ee2f2618
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -156,21 +153,20 @@ function App() {
           element={<AdminStoreDetailPage />}
         />
         <Route
-<<<<<<< HEAD
           path="/admin/community/posts"
           element={<AdminCommunityPostManagementPage />}
         />
         <Route
           path="/admin/community/posts/:postId"
           element={<AdminCommunityPostDetailPage />}
-=======
+        />
+        <Route
           path="/admin/used"
           element={<AdminUsedProductManagementPage />}
         />
         <Route
           path="/admin/used/:usedProductId"
           element={<AdminUsedProductDetailPage />}
->>>>>>> 9550bd8353e4734f2be3b45417027b86ee2f2618
         />
         <Route
           path="/admin/reports"
