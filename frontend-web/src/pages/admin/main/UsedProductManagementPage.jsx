@@ -1,10 +1,65 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
+import { Package, Tag, Clock, CheckCircle2 } from 'lucide-react';
 import UsedProductTable from '../../../components/admin/used/UsedProductTable';
 import { usedProductApi } from '../../../api/admin/usedProductApi';
 
 const Container = styled.div`
   padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+`;
+
+const SummaryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+`;
+
+const SummaryCard = styled.div`
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+
+  .info {
+    span {
+      font-size: 12px;
+      color: #8c8c8c;
+      font-weight: 500;
+    }
+    h2 {
+      margin: 8px 0 4px 0;
+      font-size: 26px;
+      font-weight: 700;
+      color: #262626;
+    }
+    p {
+      margin: 0;
+      font-size: 12px;
+      color: #bfbfbf;
+      font-weight: 600;
+    }
+  }
+  .icon-wrapper {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: ${(props) => props.$iconBg};
+    color: ${(props) => props.$iconColor};
+  }
 `;
 
 const PaginationContainer = styled.div`
@@ -12,7 +67,6 @@ const PaginationContainer = styled.div`
   justify-content: center;
   align-items: center;
   gap: 8px;
-  margin-top: 24px;
 `;
 
 const PageButton = styled.button`
@@ -71,8 +125,72 @@ function UsedProductManagementPage() {
     queueMicrotask(() => fetchProducts());
   }, [fetchProducts]);
 
+  // 상태별 집계 API가 따로 없어 "이 페이지" 범위로만 계산한다.
+  const pageStats = useMemo(() => {
+    return {
+      selling: products.filter((p) => p.status === 'SELLING').length,
+      reserved: products.filter((p) => p.status === 'RESERVED').length,
+      sold: products.filter((p) => p.status === 'SOLD').length,
+    };
+  }, [products]);
+
   return (
     <Container>
+      <SummaryGrid>
+        <SummaryCard
+          $iconBg="#f0f5ff"
+          $iconColor="#2f54eb"
+        >
+          <div className="info">
+            <span>전체 상품</span>
+            <h2>{totalElements.toLocaleString()}</h2>
+            <p>전체 페이지 합계</p>
+          </div>
+          <div className="icon-wrapper">
+            <Package size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#edf5f1"
+          $iconColor="#2d5a43"
+        >
+          <div className="info">
+            <span>판매중</span>
+            <h2>{pageStats.selling}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <Tag size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#fffbe6"
+          $iconColor="#ad6800"
+        >
+          <div className="info">
+            <span>예약중</span>
+            <h2>{pageStats.reserved}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <Clock size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#f5f5f5"
+          $iconColor="#8c8c8c"
+        >
+          <div className="info">
+            <span>판매완료</span>
+            <h2>{pageStats.sold}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <CheckCircle2 size={16} />
+          </div>
+        </SummaryCard>
+      </SummaryGrid>
+
       <UsedProductTable
         products={products}
         loading={loading}

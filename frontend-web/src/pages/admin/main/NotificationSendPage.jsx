@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { Megaphone, Bell } from 'lucide-react';
+import { Megaphone, Bell, BellRing, MailOpen } from 'lucide-react';
 import NotificationSendModal from '../../../components/admin/notification/NotificationSendModal';
 import NotificationHistoryTable from '../../../components/admin/notification/NotificationHistoryTable';
 import { notificationApi } from '../../../api/admin/notificationApi';
@@ -11,6 +11,57 @@ const Container = styled.div`
   display: flex;
   flex-direction: column;
   gap: 20px;
+`;
+
+const SummaryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+`;
+
+const SummaryCard = styled.div`
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+
+  .info {
+    span {
+      font-size: 12px;
+      color: #8c8c8c;
+      font-weight: 500;
+    }
+    h2 {
+      margin: 8px 0 4px 0;
+      font-size: 26px;
+      font-weight: 700;
+      color: #262626;
+    }
+    p {
+      margin: 0;
+      font-size: 12px;
+      color: #bfbfbf;
+      font-weight: 600;
+    }
+  }
+  .icon-wrapper {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: ${(props) => props.$iconBg};
+    color: ${(props) => props.$iconColor};
+  }
 `;
 
 const ActionRow = styled.div`
@@ -140,8 +191,77 @@ function NotificationSendPage() {
     setPage(0);
   };
 
+  // 카테고리 필터에 따라 조회 방식이 달라져 전체 합계를 신뢰할 수 없으므로
+  // "이 페이지" 범위로만 집계한다.
+  const pageStats = useMemo(() => {
+    return {
+      unread: notifications.filter((n) => !n.isRead).length,
+      read: notifications.filter((n) => n.isRead).length,
+      systemNotice: notifications.filter((n) => n.type === 'SYSTEM_NOTICE')
+        .length,
+      marketingEvent: notifications.filter(
+        (n) => n.type === 'MARKETING_EVENT',
+      ).length,
+    };
+  }, [notifications]);
+
   return (
     <Container>
+      <SummaryGrid>
+        <SummaryCard
+          $iconBg="#fffbe6"
+          $iconColor="#ad6800"
+        >
+          <div className="info">
+            <span>안읽음</span>
+            <h2>{pageStats.unread}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <BellRing size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#edf5f1"
+          $iconColor="#2d5a43"
+        >
+          <div className="info">
+            <span>읽음</span>
+            <h2>{pageStats.read}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <MailOpen size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#f0f5ff"
+          $iconColor="#2f54eb"
+        >
+          <div className="info">
+            <span>시스템 공지</span>
+            <h2>{pageStats.systemNotice}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <Bell size={16} />
+          </div>
+        </SummaryCard>
+        <SummaryCard
+          $iconBg="#fff0f6"
+          $iconColor="#c41d7f"
+        >
+          <div className="info">
+            <span>마케팅/이벤트</span>
+            <h2>{pageStats.marketingEvent}</h2>
+            <p>이 페이지 기준</p>
+          </div>
+          <div className="icon-wrapper">
+            <Megaphone size={16} />
+          </div>
+        </SummaryCard>
+      </SummaryGrid>
+
       <ActionRow>
         <ActionButton
           className="primary"
