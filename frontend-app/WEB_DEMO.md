@@ -23,14 +23,16 @@ npx expo export -p web --output-dir dist-web --clear
 # 2. 배포용 후처리. 건너뛰면 아이콘이 전부 깨지고 동적 경로가 404가 된다 (아래 설명)
 node scripts/prepare-web-deploy.mjs dist-web
 
-# 3. 산출물 디렉터리에서 배포
+# 3. 산출물 디렉터리에서 배포. link를 건너뛰지 말 것 (아래 설명)
 cd dist-web
+npx vercel link --yes --project eeum-web-demo --token <VERCEL_TOKEN>
 npx vercel deploy --yes --prod --token <VERCEL_TOKEN>
 ```
 
-`vercel deploy`는 처음 한 번 프로젝트를 물어본다. **반드시 `eeum-web-demo`에 연결할 것** —
-`--clear` 빌드가 `dist-web/.vercel`(프로젝트 링크)까지 지우기 때문에, 새로 물어볼 때
-엉뚱한 이름으로 만들면 심사자에게 준 URL이 아닌 새 URL로 배포된다.
+**`vercel link`를 반드시 먼저 한다.** `--clear` 빌드가 `dist-web/.vercel`(프로젝트 링크)을
+매번 지우기 때문에 `dist-web`은 항상 링크가 없는 상태다. 이때 `vercel deploy --yes`를
+그냥 돌리면 물어보지 않고 **디렉터리 이름을 딴 `dist-web`이라는 새 프로젝트**를 만들어
+거기에 올린다. 배포는 성공했다고 나오는데 심사자에게 준 URL은 옛날 빌드 그대로다.
 
 ### 2단계가 필요한 이유
 
