@@ -168,8 +168,9 @@ class AiPlanSubscriptionServiceTest {
         verify(redisLockService).executeWithLock(
                 eq(LockKeys.aiPlanPayment(PAYMENT_ID)), any(Duration.class), any(Runnable.class));
         verify(paymentCommandExecutor).applyPaidSubscriptionInTx(eq(PAYMENT_ID), any(PortOnePaymentInfo.class));
-        // 소유권 확인 1회 + 외부 검증 응답의 금액 대조 1회 + 최신 상태 재조회 1회
-        verify(aiPlanPaymentRepository, times(3)).findByPortonePaymentId(PAYMENT_ID);
+        // 소유권 확인 1회(completePayment) + 금액 대조 1회(applyPaidSubscription)
+        // + Executor 반영 뒤 늦은 결제 판정용 재조회 1회 + 완료 여부 확인 1회(completePayment)
+        verify(aiPlanPaymentRepository, times(4)).findByPortonePaymentId(PAYMENT_ID);
     }
 
     @Test

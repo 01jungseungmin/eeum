@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -26,6 +27,8 @@ public class AiPlanPaymentExpirationScheduler {
 
     private static final int PAYMENT_PENDING_EXPIRE_MINUTES = 15;
     private static final Duration PAYMENT_LOCK_LEASE = Duration.ofSeconds(5);
+    // 행별 Redis·DB 상태 전이를 수행하므로 5분 ShedLock 안에서 끝나도록 제한한다.
+    private static final int EXPIRATION_BATCH_SIZE = 20;
 
     private final AiPlanPaymentRepository aiPlanPaymentRepository;
     private final AiPlanPaymentFailureRecorder failureRecorder;
@@ -36,7 +39,8 @@ public class AiPlanPaymentExpirationScheduler {
     public void expirePendingPayments() {
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(PAYMENT_PENDING_EXPIRE_MINUTES);
         List<AiPlanPayment> pendingPayments =
-                aiPlanPaymentRepository.findByStatusAndCreatedAtBefore(AiPlanPaymentStatus.PENDING, threshold);
+                aiPlanPaymentRepository.findByStatusAndCreatedAtBeforeOrderByCreatedAtAscAiPlanPaymentIdAsc(
+                        AiPlanPaymentStatus.PENDING, threshold, PageRequest.of(0, EXPIRATION_BATCH_SIZE));
 
         if (pendingPayments.isEmpty()) {
             return;

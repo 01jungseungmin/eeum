@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.List;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long>, PaymentRepositoryCustom {
 
@@ -21,9 +23,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, Payment
     @Query("SELECT p.order.orderId FROM Payment p WHERE p.portonePaymentId = :portonePaymentId")
     Optional<Long> findOrderIdByPortonePaymentId(@Param("portonePaymentId") String portonePaymentId);
 
+    @Query("SELECT p.order.orderId FROM Payment p WHERE p.paymentId = :paymentId")
+    Optional<Long> findOrderIdByPaymentId(@Param("paymentId") Long paymentId);
+
     Page<Payment> findByOrder_Account_AccountId(Long accountId, Pageable pageable);
 
     Optional<Payment> findByOrder_Account_AccountIdAndPaymentId(Long accountId, Long paymentId);
+
+    List<Payment> findByStatusAndCreatedAtBeforeOrderByCreatedAtAscPaymentIdAsc(
+            PaymentStatus status, LocalDateTime threshold, Pageable pageable);
 
 
     boolean existsByIdempotencyKey(String idempotencyKey);

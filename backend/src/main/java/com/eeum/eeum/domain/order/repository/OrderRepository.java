@@ -167,7 +167,8 @@ public interface OrderRepository extends JpaRepository<Order, Long>, OrderReposi
     List<Order> findPaymentPendingOrdersBefore(
             @Param("orderStatus") OrderStatus orderStatus,
             @Param("paymentStatus") PaymentStatus paymentStatus,
-            @Param("threshold") LocalDateTime threshold
+            @Param("threshold") LocalDateTime threshold,
+            Pageable pageable
     );
 
     // 관리자 대시보드 요약 — 기간 내 거래 건수 [from, to)
