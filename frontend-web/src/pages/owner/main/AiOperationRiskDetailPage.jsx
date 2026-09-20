@@ -11,6 +11,7 @@ import {
 
 import RiskSidebar from '../../../components/owner/ai/operation/RiskSidebar';
 import RiskEnergySection from '../../../components/owner/ai/operation/RiskEnergySection';
+import OwnerMetricInputCard from '../../../components/owner/ai/operation/OwnerMetricInputCard';
 import RiskSeasonalSection from '../../../components/owner/ai/operation/RiskSeasonalSection';
 import RiskAnomalySection from '../../../components/owner/ai/operation/RiskAnomalySection';
 import RiskSafetySection from '../../../components/owner/ai/operation/RiskSafetySection';
@@ -164,6 +165,18 @@ export default function AiOperationRiskDetailPage() {
     }
   };
 
+  // 실측값 저장 후 화면이 깜빡이지 않도록 로딩 표시 없이 다시 불러온다
+  const refreshDetailData = async () => {
+    try {
+      const res = await aiManagerApi.getRiskEarlyInfoDetail();
+      if (res.data?.success) {
+        setData(res.data.data);
+      }
+    } catch (err) {
+      console.error('운영 위험 상세 데이터 갱신 실패:', err);
+    }
+  };
+
   useEffect(() => {
     if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.operationRiskDetail)) {
       queueMicrotask(() => {
@@ -239,6 +252,7 @@ export default function AiOperationRiskDetailPage() {
           <MainContent>
             <LeftContainer>
               <RiskEnergySection data={data} />
+              <OwnerMetricInputCard onSaved={refreshDetailData} />
               <RiskSeasonalSection data={data} />
               <RiskAnomalySection data={data} />
               <RiskSafetySection data={data} />

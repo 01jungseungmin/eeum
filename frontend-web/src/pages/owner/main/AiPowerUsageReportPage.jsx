@@ -329,6 +329,12 @@ export default function AiPowerUsageReportPage() {
   }, [aiPlanType]);
 
   const monthlyUsages = report?.monthlyUsages || [];
+  // 백엔드는 핵심 진단을 문자열 하나로 내려준다 (목록으로 오는 경우도 허용)
+  const keyDiagnoses = Array.isArray(report?.keyDiagnosis)
+    ? report.keyDiagnosis
+    : report?.keyDiagnosis
+      ? [report.keyDiagnosis]
+      : [];
   const equipmentShares = report?.equipmentShares || [];
   const eqColors = ['#2563eb', '#10b981', '#10b981', '#f59e0b'];
 
@@ -384,10 +390,11 @@ export default function AiPowerUsageReportPage() {
               <ChartContainer>
                 {monthlyUsages.map((item, idx) => {
                   const isHighlight = idx === monthlyUsages.length - 1;
-                  const heightPx = Math.min(
-                    120,
-                    Math.max(30, (item.kwh / 900) * 120),
-                  );
+                  // 입력하지 않은 달은 kwh가 null로 온다
+                  const hasKwh = item.kwh !== null && item.kwh !== undefined;
+                  const heightPx = hasKwh
+                    ? Math.min(120, Math.max(30, (item.kwh / 900) * 120))
+                    : 4;
                   const monthText = `${parseInt(item.yearMonth.split('-')[1])}월`;
 
                   return (
@@ -396,7 +403,7 @@ export default function AiPowerUsageReportPage() {
                       $height={heightPx}
                       $isHighlight={isHighlight}
                     >
-                      <span className="value">{item.kwh}</span>
+                      <span className="value">{hasKwh ? item.kwh : '-'}</span>
                       <div className="bar" />
                       <span className="month">{monthText}</span>
                     </BarColumn>
@@ -438,7 +445,7 @@ export default function AiPowerUsageReportPage() {
               </CardHeader>
 
               <DiagnosisList>
-                {report.keyDiagnosis?.map((diag, idx) => (
+                {keyDiagnoses.map((diag, idx) => (
                   <DiagnosisItem key={idx}>
                     <Check
                       size={16}
@@ -460,12 +467,16 @@ export default function AiPowerUsageReportPage() {
               </InfoRow>
               <InfoRow>
                 <span className="label">업종 비교</span>
-                <span className="value">{report.industryComparison}</span>
+                <span className="value">
+                  {report.industryComparison || '-'}
+                </span>
               </InfoRow>
               <InfoRow>
                 <span className="label">추정 절감</span>
                 <span className="value orange">
-                  월 {(report.estimatedSavingAmount / 10000).toFixed(1)}만원
+                  {report.estimatedSavingAmount != null
+                    ? `월 ${(report.estimatedSavingAmount / 10000).toFixed(1)}만원`
+                    : '-'}
                 </span>
               </InfoRow>
             </InfoCard>
