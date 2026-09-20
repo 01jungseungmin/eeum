@@ -1,4 +1,6 @@
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 import { AlertTriangle, MessageCircle, Flag, Clock } from 'lucide-react';
 import { OPERATION_FAILURE_CATEGORY_LABEL } from '../../../constants/operationConstants';
 
@@ -21,6 +23,7 @@ const Card = styled.div`
   display: flex;
   flex-direction: column;
   gap: 8px;
+  ${clickableCardStyle}
 `;
 
 const CardLabel = styled.div`
@@ -55,9 +58,14 @@ const BreakdownPill = styled.div`
   padding: 6px 12px;
   border-radius: 999px;
   background: #fafafa;
-  border: 1px solid #f0f0f0;
+  border: 1px solid ${(props) => (props.$active ? '#111' : '#f0f0f0')};
   font-size: 12px;
   color: #595959;
+  cursor: ${(props) => (props.$clickable ? 'pointer' : 'default')};
+
+  &:hover {
+    border-color: ${(props) => (props.$clickable ? '#111' : '#f0f0f0')};
+  }
 
   strong {
     color: #262626;
@@ -72,12 +80,23 @@ const SinceText = styled.div`
 const formatDate = (value) =>
   value ? new Date(value).toLocaleString('ko-KR') : '-';
 
-function OperationSummaryCards({ summary }) {
+// selectedCategory / onCategorySelect: 실패 목록의 카테고리 필터와 연결 ('' = 전체)
+function OperationSummaryCards({
+  summary,
+  selectedCategory = '',
+  onCategorySelect,
+}) {
+  const navigate = useNavigate();
+
   if (!summary) return null;
 
   return (
     <Grid>
-      <Card>
+      {/* 신고/문의는 이 화면의 목록이 아니라 각 관리 페이지에서 처리한다 */}
+      <Card
+        $clickable
+        onClick={() => navigate('/admin/reports')}
+      >
         <CardLabel>
           <Flag size={14} />
           미처리 신고
@@ -87,7 +106,10 @@ function OperationSummaryCards({ summary }) {
         </CardValue>
       </Card>
 
-      <Card>
+      <Card
+        $clickable
+        onClick={() => navigate('/admin/inquiry')}
+      >
         <CardLabel>
           <MessageCircle size={14} />
           미답변 문의
@@ -97,7 +119,11 @@ function OperationSummaryCards({ summary }) {
         </CardValue>
       </Card>
 
-      <Card>
+      <Card
+        $clickable={Boolean(onCategorySelect)}
+        $active={Boolean(onCategorySelect) && selectedCategory === ''}
+        onClick={() => onCategorySelect?.('')}
+      >
         <CardLabel>
           <AlertTriangle size={14} />
           집계 구간 내 실패
@@ -119,7 +145,12 @@ function OperationSummaryCards({ summary }) {
         <BreakdownRow>
           {Object.entries(summary.failureCountByCategory || {}).map(
             ([category, count]) => (
-              <BreakdownPill key={category}>
+              <BreakdownPill
+                key={category}
+                $clickable={Boolean(onCategorySelect)}
+                $active={selectedCategory === category}
+                onClick={() => onCategorySelect?.(category)}
+              >
                 {OPERATION_FAILURE_CATEGORY_LABEL[category] || category}
                 <strong>{count}</strong>
               </BreakdownPill>

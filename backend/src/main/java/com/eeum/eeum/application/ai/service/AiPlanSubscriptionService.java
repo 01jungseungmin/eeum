@@ -152,10 +152,6 @@ public class AiPlanSubscriptionService {
     private void applyPaidSubscription(String paymentId, PortOnePaymentInfo paymentInfo) {
         AiPlanPayment payment = aiPlanPaymentRepository.findByPortonePaymentId(paymentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-        if (payment.isFailed() && "PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
-            cancelLatePaidPayment(paymentId, payment, paymentInfo);
-            return;
-        }
         if ("PAID".equalsIgnoreCase(paymentInfo.getStatus())
                 && paymentInfo.getAmount() != null
                 && payment.getAmount().compareTo(paymentInfo.getAmount()) != 0) {
@@ -166,6 +162,10 @@ public class AiPlanSubscriptionService {
                     LockKeys.aiPlanPayment(paymentId),
                     PAYMENT_LOCK_LEASE,
                     () -> paymentCommandExecutor.applyPaidSubscriptionInTx(paymentId, paymentInfo));
+            AiPlanPayment current = aiPlanPaymentRepository.findByPortonePaymentId(paymentId).orElseThrow();
+            if (current.isFailed() && "PAID".equalsIgnoreCase(paymentInfo.getStatus())) {
+                cancelLatePaidPayment(paymentId, current, paymentInfo);
+            }
         } catch (BusinessException e) {
             // Executor 트랜잭션이 끝나 잠금이 풀린 뒤 별도 트랜잭션으로 남긴다. 잠긴 결제 행을
             // REQUIRES_NEW에서 다시 갱신하면 MySQL lock wait가 발생할 수 있다.
@@ -203,6 +203,7 @@ public class AiPlanSubscriptionService {
      * 새 작업 생성에 쓰이지 않으며, executor가 원래 요청 금액과 멱등키를 반환한다.
      */
     public void retryPendingMismatchedPaymentCancellation(String paymentId) {
+        paymentCommandExecutor.markMismatchedPaymentCancellationReconciliationChecked(paymentId);
         AiPlanPaymentCancellationPlan plan = paymentCommandExecutor
                 .prepareMismatchedPaymentCancellation(paymentId, java.math.BigDecimal.ZERO);
         executeMismatchedPaymentCancellation(plan);
@@ -211,6 +212,7 @@ public class AiPlanSubscriptionService {
     /** Webhook이 유실된 REQUESTED 환불을 PortOne 조회로 확정한다. */
     public void reconcileRequestedMismatchedPaymentCancellation(String paymentId) {
         try {
+            paymentCommandExecutor.markMismatchedPaymentCancellationReconciliationChecked(paymentId);
             PortOnePaymentInfo paymentInfo = portOnePaymentClient.getPayment(paymentId);
             if (!"CANCELLED".equalsIgnoreCase(paymentInfo.getStatus())) {
                 log.info("[AI-PLAN] 환불 확정 대기: paymentId={}, status={}", paymentId, paymentInfo.getStatus());

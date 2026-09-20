@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 
 const Card = styled.div`
   background: #fff;
@@ -8,6 +9,7 @@ const Card = styled.div`
   display: flex;
   flex-direction: column;
   gap: 12px;
+  ${clickableCardStyle}
 `;
 
 const Title = styled.span`
@@ -22,9 +24,19 @@ const Count = styled.span`
   color: ${(props) => props.color || '#1a1a1a'};
 `;
 
-export default function SummaryCard({ title, count, color }) {
+export default function SummaryCard({
+  title,
+  count,
+  color,
+  active,
+  onClick,
+}) {
   return (
-    <Card>
+    <Card
+      $active={active}
+      $clickable={Boolean(onClick)}
+      onClick={onClick}
+    >
       <Title>{title}</Title>
       <Count color={color}>{count}</Count>
     </Card>

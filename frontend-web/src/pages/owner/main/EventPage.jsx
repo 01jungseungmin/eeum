@@ -107,29 +107,26 @@ function EventPage() {
   }, []);
 
   // 대시보드 상태값 연산 핸들링
-  const liveCount = events.filter((e) => e.eventStatus === 'ONGOING').length;
-  const readyCount = events.filter((e) => e.eventStatus === 'SCHEDULED').length;
+  // 카드 숫자와 목록 필터가 같은 기준을 쓰도록 상태별 판정을 한곳에 둔다
+  const matchesEventStatus = (evt, status) => {
+    if (status === 'ALL') return true;
+
+    const isOut = (evt?.remainingStock || 0) <= 0;
+
+    if (status === 'LIVE') return evt.eventStatus === 'ONGOING' && !isOut;
+    if (status === 'READY') return evt.eventStatus === 'SCHEDULED';
+    if (status === 'DONE') return evt.eventStatus === 'ENDED' || isOut;
+    return true;
+  };
+
+  const liveCount = events.filter((e) => matchesEventStatus(e, 'LIVE')).length;
+  const readyCount = events.filter((e) =>
+    matchesEventStatus(e, 'READY'),
+  ).length;
   const totalCount = events.length;
 
-  const getFilteredEvents = () => {
-    return events.filter((evt) => {
-      if (filterStatus === 'ALL') return true;
-
-      const remainingStock = evt?.remainingStock || 0;
-      const isOut = remainingStock <= 0;
-
-      if (filterStatus === 'LIVE') {
-        return evt.eventStatus === 'ONGOING' && !isOut;
-      }
-      if (filterStatus === 'READY') {
-        return evt.eventStatus === 'SCHEDULED';
-      }
-      if (filterStatus === 'DONE') {
-        return evt.eventStatus === 'ENDED' || isOut;
-      }
-      return true;
-    });
-  };
+  const getFilteredEvents = () =>
+    events.filter((evt) => matchesEventStatus(evt, filterStatus));
 
   const filteredEvents = getFilteredEvents();
 
@@ -292,6 +289,8 @@ function EventPage() {
         liveCount={liveCount}
         readyCount={readyCount}
         totalCount={totalCount}
+        filterStatus={filterStatus}
+        onFilterChange={setFilterStatus}
       />
 
       <EventAlertBanner />

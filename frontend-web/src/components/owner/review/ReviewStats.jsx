@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 import { Star, MessageSquare, CheckCircle, Percent } from 'lucide-react';
 
 const StatsGrid = styled.div`
@@ -18,6 +19,7 @@ const StatCard = styled.div`
   display: flex;
   align-items: center;
   gap: 16px;
+  ${clickableCardStyle}
 `;
 
 const IconBox = styled.div`
@@ -49,7 +51,12 @@ const StatValue = styled.span`
   color: #111827;
 `;
 
-export default function ReviewStats({ reviews }) {
+export default function ReviewStats({
+  reviews,
+  statusFilter,
+  ratingFilter,
+  onSelectFilter,
+}) {
   const totalReviews = reviews.length;
 
   // 1. 평균 평점 실시간 수식 연동
@@ -87,8 +94,12 @@ export default function ReviewStats({ reviews }) {
         </StatInfo>
       </StatCard>
 
-      {/* 카드 2: 전체 리뷰수 */}
-      <StatCard>
+      {/* 카드 2: 전체 리뷰수 — 누르면 필터 초기화 */}
+      <StatCard
+        $clickable={Boolean(onSelectFilter)}
+        $active={statusFilter === 'ALL' && ratingFilter === 'ALL'}
+        onClick={() => onSelectFilter?.({ status: 'ALL', rating: 'ALL' })}
+      >
         <IconBox
           $bg="#edf2ff"
           $color="#4f46e5"
@@ -101,8 +112,12 @@ export default function ReviewStats({ reviews }) {
         </StatInfo>
       </StatCard>
 
-      {/* 카드 3: 만점 리뷰 비율 */}
-      <StatCard>
+      {/* 카드 3: 만점 리뷰 — 누르면 5점 리뷰만 */}
+      <StatCard
+        $clickable={Boolean(onSelectFilter)}
+        $active={statusFilter === 'ALL' && ratingFilter === '5'}
+        onClick={() => onSelectFilter?.({ status: 'ALL', rating: '5' })}
+      >
         <IconBox
           $bg="#f0fdf4"
           $color="#16a34a"
@@ -115,8 +130,12 @@ export default function ReviewStats({ reviews }) {
         </StatInfo>
       </StatCard>
 
-      {/* 카드 4: 답글 작성률 */}
-      <StatCard>
+      {/* 카드 4: 답글 작성률 — 누르면 답변 완료 리뷰만 */}
+      <StatCard
+        $clickable={Boolean(onSelectFilter)}
+        $active={statusFilter === 'ANSWERED' && ratingFilter === 'ALL'}
+        onClick={() => onSelectFilter?.({ status: 'ANSWERED', rating: 'ALL' })}
+      >
         <IconBox
           $bg="#fdf2f8"
           $color="#db2777"

@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 
 const Card = styled.div`
   flex: 1;
@@ -11,6 +11,16 @@ const Card = styled.div`
   justify-content: space-between;
   min-height: 94px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  ${(props) =>
+    props.$clickable &&
+    css`
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+
+      &:hover {
+        border-color: ${props.$isActive ? '#10b981' : '#ccc'};
+      }
+    `}
 `;
 
 const CardHeader = styled.div`
@@ -41,9 +51,13 @@ const Count = styled.span`
   margin-top: 8px;
 `;
 
-function OrderSummaryCard({ title, count, badge, $isActive }) {
+function OrderSummaryCard({ title, count, badge, $isActive, onClick }) {
   return (
-    <Card $isActive={$isActive}>
+    <Card
+      $isActive={$isActive}
+      $clickable={Boolean(onClick)}
+      onClick={onClick}
+    >
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {badge && <Badge>{badge}</Badge>}

@@ -107,12 +107,14 @@ const Badge = styled.span`
     if (props.$type === 'PENDING') return '#fff9db';
     if (props.$type === 'APPROVED' || props.$type === 'CONFIRMED')
       return '#e6f4ea';
+    if (props.$type === 'COMPLETED') return '#e7f5ff';
     return '#f8f9fa';
   }};
   color: ${(props) => {
     if (props.$type === 'PENDING') return '#fab005';
     if (props.$type === 'APPROVED' || props.$type === 'CONFIRMED')
       return '#4CA771';
+    if (props.$type === 'COMPLETED') return '#1c7ed6';
     return '#868e96';
   }};
 `;
@@ -221,6 +223,25 @@ export default function ReservationList({
     }
   };
 
+  // [방문 완료] 처리 함수 — 승인된 예약만 가능
+  const handleComplete = async (reservationId) => {
+    if (!window.confirm('고객이 방문을 완료했나요? 방문 완료로 처리합니다.'))
+      return;
+    try {
+      const response = await reservationApi.completeReservation(reservationId);
+      if (response.data && response.data.success) {
+        await refreshOrders();
+        if (refreshTimeSlots) await refreshTimeSlots(selectedDate);
+      }
+    } catch (error) {
+      console.error('방문 완료 처리 실패:', error);
+      alert(
+        error.response?.data?.error?.message ||
+          '방문 완료 처리에 실패했습니다.',
+      );
+    }
+  };
+
   // [거절] 처리 함수
   const handleReject = async (reservationId) => {
     const reason = window.prompt(
@@ -256,6 +277,7 @@ export default function ReservationList({
       if (filter === '확정')
         return order.status === 'APPROVED' || order.status === 'CONFIRMED';
       if (filter === '대기') return order.status === 'PENDING';
+      if (filter === '완료') return order.status === 'COMPLETED';
       if (filter === '취소')
         return order.status === 'CANCELED' || order.status === 'REJECTED';
       return true;
@@ -273,7 +295,7 @@ export default function ReservationList({
       <FilterHeader>
         <h3>예약 목록 ({displayOrders.length}건)</h3>
         <FilterButtons>
-          {['전체', '확정', '대기', '취소'].map((type) => (
+          {['전체', '확정', '대기', '완료', '취소'].map((type) => (
             <FilterBtn
               key={type}
               $active={filter === type}
@@ -333,7 +355,9 @@ export default function ReservationList({
                           : order.status === 'APPROVED' ||
                               order.status === 'CONFIRMED'
                             ? '확정'
-                            : '취소'}
+                            : order.status === 'COMPLETED'
+                              ? '방문 완료'
+                              : '취소'}
                       </Badge>
 
                       {/* 💡 예약 신청 시각 태그 추가 */}
@@ -390,6 +414,18 @@ export default function ReservationList({
                       onClick={() => handleReject(order.visitReservationId)}
                     >
                       거절
+                    </ActionBtn>
+                  </ActionButtons>
+                )}
+
+                {/* 승인된 예약은 방문 후 완료 처리 */}
+                {order.status === 'APPROVED' && (
+                  <ActionButtons>
+                    <ActionBtn
+                      $isPrimary
+                      onClick={() => handleComplete(order.visitReservationId)}
+                    >
+                      방문 완료
                     </ActionBtn>
                   </ActionButtons>
                 )}

@@ -72,7 +72,7 @@ public class ProductOptionService {
             ProductOptionCreateRequestDto request) {
         validateDefaultItem(request);
 
-        Product product = getProductWithOwnerCheck(accountId, productId);
+        Product product = getProductWithOwnerLockAndCheck(accountId, productId);
         validateOptionAvailableProduct(product);
 
         ProductOption option = ProductOption.create(
@@ -107,7 +107,7 @@ public class ProductOptionService {
 
         validateDefaultItemForUpdate(request);
 
-        getProductWithOwnerCheck(accountId, productId);
+        getProductWithOwnerLockAndCheck(accountId, productId);
         ProductOption option = getOptionWithCheck(optionId, productId);
 
         // 기존 항목 전체 삭제 후 재생성
@@ -134,7 +134,7 @@ public class ProductOptionService {
     // 옵션 그룹 삭제
     @Transactional
     public void deleteOption(Long accountId, Long productId, Long optionId) {
-        getProductWithOwnerCheck(accountId, productId);
+        getProductWithOwnerLockAndCheck(accountId, productId);
         ProductOption option = getOptionWithCheck(optionId, productId);
 
         productOptionItemRepository.deleteByProductOption_ProductOptionId(optionId);
@@ -146,7 +146,7 @@ public class ProductOptionService {
     // 선택지 품절 토글
     @Transactional
     public void toggleItemAvailability(Long accountId, Long productId, Long itemId) {
-        getProductWithOwnerCheck(accountId, productId);
+        getProductWithOwnerLockAndCheck(accountId, productId);
 
         ProductOptionItem item = productOptionItemRepository
                 .findByProductOptionItemIdAndProductOption_Product_ProductId(itemId, productId)
@@ -193,6 +193,18 @@ public class ProductOptionService {
     private Product getProductWithOwnerCheck(Long accountId, Long productId) {
         Store store = getStore(accountId);
         Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        if (!product.getStore().getStoreId().equals(store.getStoreId())) {
+            throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);
+        }
+        return product;
+    }
+
+    // 주문 생성도 같은 상품 행을 잠근 뒤 현재 옵션·가격을 대조한다. 옵션 쓰기가 이 락을
+    // 공유해야 검증 뒤 옵션이 바뀌는 틈으로 이전 선택·가격이 주문에 남지 않는다.
+    private Product getProductWithOwnerLockAndCheck(Long accountId, Long productId) {
+        Store store = getStore(accountId);
+        Product product = productRepository.findByIdWithPessimisticLock(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         if (!product.getStore().getStoreId().equals(store.getStoreId())) {
             throw new BusinessException(ErrorCode.STORE_ACCESS_DENIED);

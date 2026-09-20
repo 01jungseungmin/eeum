@@ -15,6 +15,32 @@ import {
 
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
 
+// 백엔드 AiNoticeType(EVENT/TEMP_CLOSED/NEW_MENU)과 동일
+const NOTICE_TYPES = [
+  { value: 'EVENT', label: '이벤트 안내' },
+  { value: 'TEMP_CLOSED', label: '임시 휴무 안내' },
+  { value: 'NEW_MENU', label: '신메뉴 소식' },
+];
+
+const KEYWORD_MAX_LENGTH = 100;
+// 백엔드 AiGeneratedMessageUpdateRequestDto.content 상한
+const NOTICE_TEXT_MAX_LENGTH = 2000;
+
+// date input은 로컬 날짜 기준이어야 하므로 toISOString(UTC) 대신 직접 포맷한다
+const toDateInputValue = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const getTodayString = () => toDateInputValue(new Date());
+
+// 예약 발송 기본 날짜는 내일 — 오늘 10:00이 이미 지났을 수 있어서 과거 시각 기본값을 피한다
+const getTomorrowString = () => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return toDateInputValue(tomorrow);
+};
+
 export default function AiNoticeCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,6 +61,14 @@ export default function AiNoticeCreatePage() {
   );
   const [isLoading, setIsLoading] = useState(false);
 
+  // 공지 유형 / 키워드 — 이전 화면(마케팅)에서 넘어온 유형이 있으면 그대로 이어받는다
+  const [noticeType, setNoticeType] = useState(
+    NOTICE_TYPES.some((type) => type.value === initialNoticeData?.noticeType)
+      ? initialNoticeData.noticeType
+      : 'EVENT',
+  );
+  const [keyword, setKeyword] = useState('');
+
   // 채널 선택 상태
   const [channels, setChannels] = useState({
     KAKAO_ALERT: true,
@@ -44,7 +78,7 @@ export default function AiNoticeCreatePage() {
 
   // 발송 시간 탭 상태: 'IMMEDIATE' | 'RESERVED'
   const [sendType, setSendType] = useState('IMMEDIATE');
-  const [scheduledDate, setScheduledDate] = useState('2026-06-01');
+  const [scheduledDate, setScheduledDate] = useState(getTomorrowString);
   const [scheduledTime, setScheduledTime] = useState('10:00');
 
   // [수정] 수동 호출 전용: 사용자가 '문구 다시 생성' 버튼을 누를 때만 실행
@@ -60,11 +94,13 @@ export default function AiNoticeCreatePage() {
       return;
     }
 
+    const trimmedKeyword = keyword.trim();
     const requestBody = {
-      noticeType: 'EVENT',
+      noticeType,
       tone: 'FRIENDLY',
       channels: selectedChannels,
-      keyword: '대기 시간',
+      // 키워드는 선택 입력 — 비어 있으면 필드 자체를 보내지 않는다
+      ...(trimmedKeyword && { keyword: trimmedKeyword }),
       confirmDelete: confirmDelete,
     };
 
@@ -80,7 +116,10 @@ export default function AiNoticeCreatePage() {
     } catch (error) {
       console.error('Draft generation error:', error);
 
-      if (error.response && error.response.status === 409) {
+      const errorBody = error.response?.data;
+
+      // AI_015: 초안 보관 개수 초과 — 확인 후 confirmDelete=true 로 재요청
+      if (errorBody?.error?.code === 'AI_015') {
         const isConfirm = window.confirm(
           '초안 보관 개수를 초과했습니다. 가장 오래된 초안을 삭제하고 새 초안을 생성하시겠습니까?',
         );
@@ -88,7 +127,9 @@ export default function AiNoticeCreatePage() {
           return handleGenerateNoticeDraft(true);
         }
       } else {
-        alert('초안 생성 중 오류가 발생했습니다.');
+        alert(
+          errorBody?.error?.message || '초안 생성 중 오류가 발생했습니다.',
+        );
       }
     } finally {
       setIsLoading(false);
@@ -102,11 +143,34 @@ export default function AiNoticeCreatePage() {
       alert('등록할 공지 초안이 없습니다. 문구를 먼저 생성해 주세요.');
       return;
     }
+    if (!noticeText.trim()) {
+      alert('공지 문구를 입력해 주세요.');
+      return;
+    }
 
     const isReserved = sendType === 'RESERVED';
     const formattedScheduledAt = `${scheduledDate}T${scheduledTime}:00`;
 
+    if (isReserved) {
+      if (!scheduledDate || !scheduledTime) {
+        alert('예약 발송 날짜와 시간을 선택해 주세요.');
+        return;
+      }
+      if (new Date(formattedScheduledAt) <= new Date()) {
+        alert('예약 발송 시간은 현재 시각 이후여야 합니다.');
+        return;
+      }
+    }
+
+    setIsLoading(true);
     try {
+      // 수정 여부와 무관하게 항상 호출해야 한다 — 백엔드는 방금 만들어진 DRAFT를
+      // 바로 발송/예약하지 못하게 막고(AI_INVALID_STATUS 409), 이 PATCH(edit)를 거쳐
+      // REVIEWED가 된 메시지만 받는다. 사용자가 고친 문구도 여기서 함께 저장된다.
+      await aiManagerApi.updateGeneratedMessage(messageId, {
+        content: noticeText,
+      });
+
       let response;
       if (isReserved) {
         response = await aiManagerApi.scheduleNotice(messageId, {
@@ -126,7 +190,12 @@ export default function AiNoticeCreatePage() {
       }
     } catch (error) {
       console.error('Publish error:', error);
-      alert('공지 등록 중 오류가 발생했습니다.');
+      alert(
+        error.response?.data?.error?.message ||
+          '공지 등록 중 오류가 발생했습니다.',
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -148,13 +217,46 @@ export default function AiNoticeCreatePage() {
           <BannerText>
             <strong>AI 추천 요약</strong>
             <br />
-            마케팅 매니저가 추천하는 <strong>이벤트 공지 문구</strong>를
-            검토하고 발송하세요.
+            마케팅 매니저가 추천하는{' '}
+            <strong>
+              {NOTICE_TYPES.find((type) => type.value === noticeType)?.label}{' '}
+              문구
+            </strong>
+            를 검토하고 발송하세요.
           </BannerText>
         </Banner>
 
         <MainGrid>
           <LeftColumn>
+            <Card>
+              <CardTitleGroup>
+                <h3>공지 유형</h3>
+                <p>만들 공지의 종류와 문구에 넣을 키워드를 정하세요</p>
+              </CardTitleGroup>
+              <TimeButtonGroup>
+                {NOTICE_TYPES.map((type) => (
+                  <TimeTabButton
+                    key={type.value}
+                    type="button"
+                    $active={noticeType === type.value}
+                    onClick={() => setNoticeType(type.value)}
+                  >
+                    {type.label}
+                  </TimeTabButton>
+                ))}
+              </TimeButtonGroup>
+              <PickerGroup>
+                <PickerLabel>키워드 (선택)</PickerLabel>
+                <StyledInput
+                  type="text"
+                  value={keyword}
+                  maxLength={KEYWORD_MAX_LENGTH}
+                  placeholder="예: 여름 냉면, 추석 연휴 휴무"
+                  onChange={(e) => setKeyword(e.target.value)}
+                />
+              </PickerGroup>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitleGroup>
@@ -180,6 +282,7 @@ export default function AiNoticeCreatePage() {
                 </AiTag>
                 <MessageTextArea
                   rows={4}
+                  maxLength={NOTICE_TEXT_MAX_LENGTH}
                   value={noticeText}
                   onChange={(e) => setNoticeText(e.target.value)}
                 />
@@ -282,6 +385,7 @@ export default function AiNoticeCreatePage() {
                     <InputWrapper>
                       <StyledInput
                         type="date"
+                        min={getTodayString()}
                         value={scheduledDate}
                         onChange={(e) => setScheduledDate(e.target.value)}
                       />

@@ -137,7 +137,11 @@ export default function CustomerManagementPage() {
 
   return (
     <Container>
-      <StatsCardGrid stats={stats} />
+      <StatsCardGrid
+        stats={stats}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+      />
 
       <MainBoard>
         <ControlBar

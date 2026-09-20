@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { FileText, EyeOff, CheckCircle2, BarChart3 } from 'lucide-react';
 import CommunityPostTable from '../../../components/admin/community/CommunityPostTable';
 import { communityPostApi } from '../../../api/admin/communityPostApi';
+import { clickableCardStyle } from '../../../components/common/cardFilterStyle';
 
 const Container = styled.div`
   padding: 30px;
@@ -31,6 +32,7 @@ const SummaryCard = styled.div`
   align-items: flex-start;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 
+  ${clickableCardStyle}
   .info {
     span {
       font-size: 12px;
@@ -102,6 +104,8 @@ function CommunityPostManagementPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
+  // 상단 카드와 목록 칩이 함께 쓰는 보기 필터 (현재 불러온 페이지 안에서만 적용): ALL | NORMAL | HIDDEN
+  const [filter, setFilter] = useState('ALL');
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -142,6 +146,9 @@ function CommunityPostManagementPage() {
         <SummaryCard
           $iconBg="#f0f5ff"
           $iconColor="#2f54eb"
+          $clickable
+          $active={filter === 'ALL'}
+          onClick={() => setFilter('ALL')}
         >
           <div className="info">
             <span>전체 게시글</span>
@@ -155,6 +162,9 @@ function CommunityPostManagementPage() {
         <SummaryCard
           $iconBg="#edf5f1"
           $iconColor="#2d5a43"
+          $clickable
+          $active={filter === 'NORMAL'}
+          onClick={() => setFilter('NORMAL')}
         >
           <div className="info">
             <span>노출중</span>
@@ -168,6 +178,9 @@ function CommunityPostManagementPage() {
         <SummaryCard
           $iconBg="#fff1f0"
           $iconColor="#cf1322"
+          $clickable
+          $active={filter === 'HIDDEN'}
+          onClick={() => setFilter('HIDDEN')}
         >
           <div className="info">
             <span>숨김 처리</span>
@@ -197,6 +210,8 @@ function CommunityPostManagementPage() {
         posts={posts}
         loading={loading}
         totalElements={totalElements}
+        filter={filter}
+        onFilterChange={setFilter}
       />
 
       {totalPages > 1 && (

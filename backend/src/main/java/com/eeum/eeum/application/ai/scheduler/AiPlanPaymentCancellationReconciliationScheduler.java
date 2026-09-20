@@ -22,8 +22,9 @@ import java.util.function.Consumer;
 public class AiPlanPaymentCancellationReconciliationScheduler {
 
     private static final int RECOVERY_DELAY_MINUTES = 5;
-    private static final int RECOVERY_BATCH_SIZE = 100;
-    private static final int RECOVERY_MAX_PER_RUN = 500;
+    // PortOne read/cancel timeout은 10초다. 상태별 10건으로 제한해 최악의 경우에도
+    // 20개 외부 호출(약 200초) 안에서 ShedLock 10분을 넘지 않게 한다.
+    private static final int RECOVERY_BATCH_SIZE = 10;
 
     private final AiPlanPaymentCancellationOperationRepository cancellationOperationRepository;
     private final AiPlanSubscriptionService aiPlanSubscriptionService;
@@ -39,29 +40,10 @@ public class AiPlanPaymentCancellationReconciliationScheduler {
     private void reconcile(
             AiPlanPaymentCancellationStatus status, LocalDateTime threshold, Consumer<String> action
     ) {
-        LocalDateTime cursorModifiedAt = null;
-        Long cursorId = null;
-        int remaining = RECOVERY_MAX_PER_RUN;
-        while (remaining > 0) {
-            int size = Math.min(RECOVERY_BATCH_SIZE, remaining);
-            List<AiPlanPaymentCancellationOperation> candidates = cancellationOperationRepository
-                    .findCandidatesByStatusModifiedBefore(
-                            status, threshold, cursorModifiedAt, cursorId, PageRequest.of(0, size));
-            if (candidates.isEmpty()) {
-                return;
-            }
-
-            AiPlanPaymentCancellationOperation last = candidates.get(candidates.size() - 1);
-            // 외부 호출이 상태·modifiedAt을 바꿔도 다음 페이지의 범위가 흔들리지 않게,
-            // 호출 전에 읽은 정렬 키로 커서를 전진시킨다.
-            cursorModifiedAt = last.getModifiedAt();
-            cursorId = last.getId();
-            candidates.forEach(candidate -> action.accept(candidate.getPayment().getPortonePaymentId()));
-            remaining -= candidates.size();
-            if (candidates.size() < size) {
-                return;
-            }
-        }
+        List<AiPlanPaymentCancellationOperation> candidates = cancellationOperationRepository
+                .findCandidatesByStatusModifiedBefore(
+                        status, threshold, null, null, PageRequest.of(0, RECOVERY_BATCH_SIZE));
+        candidates.forEach(candidate -> action.accept(candidate.getPayment().getPortonePaymentId()));
     }
 
     private void retryPending(String paymentId) {

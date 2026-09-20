@@ -40,9 +40,9 @@ class AiPlanExpirationSchedulerTest {
         // given
         AiPlanSubscription first = expiredSubscription();
         AiPlanSubscription second = expiredSubscription();
-        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(any()))
+        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBeforeOrderByExpiredAtAscAiPlanSubscriptionIdAsc(any(), any()))
                 .thenReturn(List.of(first, second));
-        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(), any()))
+        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfterOrderByStartedAtAscAiPlanSubscriptionIdAsc(any(), any(), any()))
                 .thenReturn(List.of());
 
         // when
@@ -51,27 +51,31 @@ class AiPlanExpirationSchedulerTest {
         // then
         assertThat(first.isActive()).isFalse();
         assertThat(second.isActive()).isFalse();
-        verify(aiPlanSubscriptionRepository).findByActiveTrueAndExpiredAtBefore(any(LocalDateTime.class));
         verify(aiPlanSubscriptionRepository)
-                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(LocalDateTime.class), any(LocalDateTime.class));
+                .findByActiveTrueAndExpiredAtBeforeOrderByExpiredAtAscAiPlanSubscriptionIdAsc(any(LocalDateTime.class), any());
+        verify(aiPlanSubscriptionRepository)
+                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfterOrderByStartedAtAscAiPlanSubscriptionIdAsc(
+                        any(LocalDateTime.class), any(LocalDateTime.class), any());
         verifyNoMoreInteractions(aiPlanSubscriptionRepository);
     }
 
     @Test
     void 만료된_구독이_없으면_아무_일도_하지_않는다() {
         // given
-        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(any()))
+        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBeforeOrderByExpiredAtAscAiPlanSubscriptionIdAsc(any(), any()))
                 .thenReturn(List.of());
-        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(), any()))
+        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfterOrderByStartedAtAscAiPlanSubscriptionIdAsc(any(), any(), any()))
                 .thenReturn(List.of());
 
         // when
         scheduler.expireSubscriptions();
 
         // then
-        verify(aiPlanSubscriptionRepository).findByActiveTrueAndExpiredAtBefore(any(LocalDateTime.class));
         verify(aiPlanSubscriptionRepository)
-                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(LocalDateTime.class), any(LocalDateTime.class));
+                .findByActiveTrueAndExpiredAtBeforeOrderByExpiredAtAscAiPlanSubscriptionIdAsc(any(LocalDateTime.class), any());
+        verify(aiPlanSubscriptionRepository)
+                .findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfterOrderByStartedAtAscAiPlanSubscriptionIdAsc(
+                        any(LocalDateTime.class), any(LocalDateTime.class), any());
         verifyNoMoreInteractions(aiPlanSubscriptionRepository);
     }
 
@@ -81,9 +85,9 @@ class AiPlanExpirationSchedulerTest {
         AiPlanSubscription reserved = AiPlanSubscription.createReserved(
                 mock(Store.class), null, AiPlanType.BASIC,
                 LocalDateTime.now().minusMinutes(1), LocalDateTime.now().plusMonths(1));
-        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBefore(any()))
+        when(aiPlanSubscriptionRepository.findByActiveTrueAndExpiredAtBeforeOrderByExpiredAtAscAiPlanSubscriptionIdAsc(any(), any()))
                 .thenReturn(List.of());
-        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfter(any(), any()))
+        when(aiPlanSubscriptionRepository.findByActiveFalseAndStartedAtLessThanEqualAndExpiredAtAfterOrderByStartedAtAscAiPlanSubscriptionIdAsc(any(), any(), any()))
                 .thenReturn(List.of(reserved));
 
         // when

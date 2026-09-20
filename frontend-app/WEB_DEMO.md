@@ -13,8 +13,13 @@
 `frontend-app/api/*.ts`(API 클라이언트 코드)를 Vercel이 서버리스 함수로 오인해
 Hobby 플랜의 함수 12개 제한에 걸린다.
 
+**세 단계를 매번 처음부터 돌린다.** 3단계만 다시 돌리는 일이 없어야 한다 — 이유는 아래에.
+
 ```bash
 cd frontend-app
+
+# 0. 배포할 코드를 받는다. 머지만 하고 여기서 pull을 빠뜨리면 옛 코드를 빌드하게 된다.
+git switch main && git pull
 
 # 1. 운영 설정으로 빌드. --clear 필수 — Metro 캐시가 남아 있으면
 #    .env를 바꿔도 이전 환경변수가 그대로 번들에 박힌다.
@@ -33,6 +38,29 @@ npx vercel deploy --yes --prod --token <VERCEL_TOKEN>
 매번 지우기 때문에 `dist-web`은 항상 링크가 없는 상태다. 이때 `vercel deploy --yes`를
 그냥 돌리면 물어보지 않고 **디렉터리 이름을 딴 `dist-web`이라는 새 프로젝트**를 만들어
 거기에 올린다. 배포는 성공했다고 나오는데 심사자에게 준 URL은 옛날 빌드 그대로다.
+
+### 빌드를 건너뛴 배포 (실제로 겪은 사고)
+
+`dist-web`은 지난번 빌드가 그대로 남아 있는 디렉터리다. **1·2단계를 건너뛰고 3단계만
+돌리면 그 옛날 산출물이 다시 올라간다.** CLI는 성공을 띄우고 URL도 프로젝트도 맞는데,
+올라간 바이트만 옛것이라 "배포했는데 아무것도 안 바뀐" 상태가 된다. 머지 직후처럼
+코드가 바뀐 걸 알고 있을 때 특히 놓치기 쉽다.
+
+배포 후에는 **번들 해시가 실제로 바뀌었는지** 확인한다. 빌드 로그에 찍힌 파일명과
+아래 결과가 같아야 한다.
+
+```bash
+curl -s https://eeum-web-demo.vercel.app/ | grep -oE "entry-[a-f0-9]+\.js"
+```
+
+새 기능이 실제로 들어갔는지까지 보려면 번들에서 그 기능이 부르는 API 경로를 찾는다.
+
+```bash
+curl -s https://eeum-web-demo.vercel.app/_expo/static/js/web/<번들명>.js | grep -c "/ai-exposures"
+```
+
+배포가 끝나면 `dist-web`을 지워 두는 편이 안전하다. 남겨두면 다음 사람이 그 안에서
+3단계만 돌릴 여지가 생긴다.
 
 ### 2단계가 필요한 이유
 
@@ -73,6 +101,9 @@ npx vercel deploy --yes --prod --token <VERCEL_TOKEN>
   등록해야 SDK가 로드된다.
 - **데모 계정**: 활동지역이 없으면 홈·중고거래가 빈 화면이 된다. 가입 후
   `/accounts/me/regions`로 지역을 추가하고 verify·primary까지 마쳐야 한다.
+- **백엔드 배포**: 이 문서의 배포는 프론트만 올린다. 응답에 필드가 새로 필요한 기능은
+  백엔드가 따로 배포돼야 동작한다. 백엔드는 `main` push에만 올라가므로(`production-cd.yml`),
+  `develop`에 머지한 것만으로는 반영되지 않는다. 화면은 멀쩡한데 그 값만 비어 보인다.
 
 ## PC에서 폰 화면처럼 보이기
 

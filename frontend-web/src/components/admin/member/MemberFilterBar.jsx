@@ -82,6 +82,8 @@ function MemberFilterBar({
   onBulkSuspend,
   onBulkActivate,
   onApplyFilter,
+  // 탭이 이미 상태를 정하는 경우(정지·탈퇴 회원) 상태 선택을 막는다
+  statusDisabled = false,
 }) {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [keyword, setKeyword] = useState('');
@@ -110,13 +112,14 @@ function MemberFilterBar({
         <input
           className="search-input"
           type="text"
-          placeholder="이름, 이메일, 전화번호로 검색"
+          placeholder="이름, 닉네임, 이메일로 검색"
           value={keyword}
           onChange={handleKeywordChange}
         />
         <select
-          value={statusFilter}
+          value={statusDisabled ? 'ALL' : statusFilter}
           onChange={handleStatusChange}
+          disabled={statusDisabled}
         >
           <option value="ALL">전체 상태</option>
           <option value="ACTIVE">활성</option>

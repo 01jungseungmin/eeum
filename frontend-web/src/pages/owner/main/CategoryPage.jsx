@@ -84,6 +84,8 @@ const TableHeader = styled.div`
 
 function CategoryPage() {
   const [categories, setCategories] = useState([]);
+  // 상단 카드로 고르는 노출 필터: ALL | VISIBLE
+  const [visibilityFilter, setVisibilityFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
 
   // 서브 UI 제어용 상태 관리
@@ -271,6 +273,11 @@ function CategoryPage() {
   const activeCount = categories.filter((c) => c.isVisible).length;
   const totalProducts = categories.reduce((sum, c) => sum + c.productCount, 0);
 
+  const isFiltered = visibilityFilter !== 'ALL';
+  const displayedCategories = isFiltered
+    ? categories.filter((c) => c.isVisible)
+    : categories;
+
   if (loading) {
     return (
       <PageContainer>
@@ -294,6 +301,8 @@ function CategoryPage() {
         totalCount={totalCount}
         activeCount={activeCount}
         totalProducts={totalProducts}
+        visibilityFilter={visibilityFilter}
+        onVisibilityChange={setVisibilityFilter}
       />
 
       <MainCard>
@@ -303,6 +312,8 @@ function CategoryPage() {
             <p>
               ↑↓ 버튼으로 카테고리 순서를 변경하세요. 앱에 이 순서대로
               표시됩니다.
+              {isFiltered &&
+                ' (노출 중인 카테고리만 보는 중이라 순서 변경은 전체 보기에서 할 수 있어요)'}
             </p>
           </div>
           <AddButton
@@ -328,7 +339,7 @@ function CategoryPage() {
             <div>관리</div>
           </TableHeader>
 
-          {categories.length === 0 ? (
+          {displayedCategories.length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
@@ -337,16 +348,19 @@ function CategoryPage() {
                 fontSize: '13px',
               }}
             >
-              등록된 카테고리가 없습니다.
+              {isFiltered
+                ? '노출 중인 카테고리가 없습니다.'
+                : '등록된 카테고리가 없습니다.'}
             </div>
           ) : (
-            categories.map((cat, index) => (
+            displayedCategories.map((cat, index) => (
               <CategoryRow
                 key={cat.id}
                 cat={cat}
                 index={index}
-                isFirst={index === 0}
-                isLast={index === categories.length - 1}
+                // 일부만 보이는 동안은 순서를 바꾸면 안 보이는 카테고리와 자리가 바뀌므로 막는다
+                isFirst={isFiltered || index === 0}
+                isLast={isFiltered || index === categories.length - 1}
                 editingId={editingId}
                 editingName={editingName}
                 setEditingName={setEditingName}

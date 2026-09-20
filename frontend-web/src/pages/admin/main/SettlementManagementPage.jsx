@@ -6,6 +6,7 @@ import PayoutProcessModal from '../../../components/admin/settlement/PayoutProce
 import LateRevenueRecoveryCard from '../../../components/admin/settlement/LateRevenueRecoveryCard';
 import { settlementApi } from '../../../api/admin/settlementApi';
 import { WEEKLY_SETTLEMENT_CLAIMABLE_STATUSES } from '../../../constants/settlementConstants';
+import { clickableCardStyle } from '../../../components/common/cardFilterStyle';
 
 const Container = styled.div`
   padding: 30px;
@@ -34,6 +35,7 @@ const SummaryCard = styled.div`
   align-items: flex-start;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 
+  ${clickableCardStyle}
   .info {
     span {
       font-size: 12px;
@@ -105,6 +107,8 @@ function SettlementManagementPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
   const [processingSettlement, setProcessingSettlement] = useState(null);
+  // 상단 카드로 고르는 보기 필터 (현재 불러온 페이지 안에서만 적용): ALL | COMPLETED | PENDING | FAILED
+  const [cardFilter, setCardFilter] = useState('ALL');
 
   const fetchSettlements = useCallback(async () => {
     setLoading(true);
@@ -146,6 +150,22 @@ function SettlementManagementPage() {
     queueMicrotask(() => fetchSettlements());
   }, [fetchSettlements]);
 
+  // 카드 숫자와 같은 기준으로 거른다
+  const displayedSettlements = useMemo(() => {
+    if (cardFilter === 'COMPLETED') {
+      return settlements.filter((s) => s.status === 'COMPLETED');
+    }
+    if (cardFilter === 'PENDING') {
+      return settlements.filter((s) =>
+        WEEKLY_SETTLEMENT_CLAIMABLE_STATUSES.includes(s.status),
+      );
+    }
+    if (cardFilter === 'FAILED') {
+      return settlements.filter((s) => s.status === 'FAILED');
+    }
+    return settlements;
+  }, [settlements, cardFilter]);
+
   const handleModalCompleted = () => {
     setProcessingSettlement(null);
     fetchSettlements();
@@ -157,6 +177,9 @@ function SettlementManagementPage() {
         <SummaryCard
           $iconBg="#f0f5ff"
           $iconColor="#2f54eb"
+          $clickable
+          $active={cardFilter === 'ALL'}
+          onClick={() => setCardFilter('ALL')}
         >
           <div className="info">
             <span>전체 정산 건수</span>
@@ -170,6 +193,9 @@ function SettlementManagementPage() {
         <SummaryCard
           $iconBg="#edf5f1"
           $iconColor="#2d5a43"
+          $clickable
+          $active={cardFilter === 'COMPLETED'}
+          onClick={() => setCardFilter('COMPLETED')}
         >
           <div className="info">
             <span>지급 완료 금액</span>
@@ -183,6 +209,9 @@ function SettlementManagementPage() {
         <SummaryCard
           $iconBg="#fffbe6"
           $iconColor="#ad6800"
+          $clickable
+          $active={cardFilter === 'PENDING'}
+          onClick={() => setCardFilter('PENDING')}
         >
           <div className="info">
             <span>지급 대기</span>
@@ -196,6 +225,9 @@ function SettlementManagementPage() {
         <SummaryCard
           $iconBg="#fff1f0"
           $iconColor="#f5222d"
+          $clickable
+          $active={cardFilter === 'FAILED'}
+          onClick={() => setCardFilter('FAILED')}
         >
           <div className="info">
             <span>지급 실패</span>
@@ -211,7 +243,7 @@ function SettlementManagementPage() {
       <LateRevenueRecoveryCard />
 
       <SettlementTable
-        settlements={settlements}
+        settlements={displayedSettlements}
         loading={loading}
         onProcessClick={setProcessingSettlement}
       />

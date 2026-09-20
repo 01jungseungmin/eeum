@@ -1,5 +1,11 @@
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { dashboardApi } from '../../../api/admin/dashboardApi';
+import { REASON_MAP } from '../../../constants/reportConstants';
+import { INQUIRY_CATEGORY_MAP } from '../../../constants/inquiryConstants';
+import { formatRelativeTime, isWaitingOver } from '../../../utils/relativeTime';
 
 const Card = styled.div`
   background: white;
@@ -18,14 +24,6 @@ const Header = styled.div`
     font-size: 16px;
     font-weight: 700;
     color: #262626;
-  }
-  .more {
-    display: flex;
-    align-items: center;
-    font-size: 12px;
-    color: #52c41a;
-    cursor: pointer;
-    font-weight: 600;
   }
 `;
 
@@ -96,58 +94,142 @@ const StatusTag = styled.span`
   color: ${(props) => (props.$type === '긴급' ? '#ff4d4f' : '#595959')};
 `;
 
-const pendingData = [
-  {
-    id: 1,
-    icon: '📋',
-    title: '사장 가입 승인 12건',
-    desc: '수용품 떡케이어뵉 외 11건 · 3시간 전',
-    status: '긴급',
-  },
-  {
-    id: 2,
-    icon: '🚨',
-    title: '신고 처리 5건',
-    desc: '사기 의심 1건 · 욕설/비방 2건 · 오늘',
-    status: '일반',
-  },
-  {
-    id: 3,
-    icon: '💬',
-    title: '고객 문의 6건',
-    desc: '결제 오류 2건 · 계정 문의 3건 · 1일 전',
-    status: '일반',
-  },
-];
+const EmptyText = styled.div`
+  padding: 30px 0;
+  text-align: center;
+  color: #bfbfbf;
+  font-size: 13px;
+`;
+
+// 분류별 건수 맵({ SPAM: 1, ABUSE: 2, ... })에서 건수가 많은 순으로 상위 N개를 "라벨 N건" 으로 요약
+const summarizeCounts = (countMap, labelMap, limit = 2) => {
+  return Object.entries(countMap || {})
+    .filter(([, count]) => count > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, limit)
+    .map(([key, count]) => `${labelMap[key] || key} ${count}건`);
+};
+
+const joinDesc = (parts) => parts.filter(Boolean).join(' · ');
+
+// API 응답 → 화면 항목. 대기 건이 없으면 안내 문구만 보여주고 태그/링크는 숨긴다.
+const buildItems = (data) => {
+  const { ownerApprovals, reports, inquiries } = data;
+
+  const approvalCount = ownerApprovals?.count ?? 0;
+  const approvalOthers = approvalCount - 1;
+
+  return [
+    {
+      id: 'approval',
+      icon: '📋',
+      title: `사장 가입 승인 ${approvalCount}건`,
+      count: approvalCount,
+      desc: joinDesc([
+        ownerApprovals?.latestStoreName
+          ? `${ownerApprovals.latestStoreName}${approvalOthers > 0 ? ` 외 ${approvalOthers}건` : ''}`
+          : '',
+        formatRelativeTime(ownerApprovals?.latestRequestedAt),
+      ]),
+      urgent: isWaitingOver(ownerApprovals?.oldestRequestedAt),
+      path: '/admin/approval',
+    },
+    {
+      id: 'report',
+      icon: '🚨',
+      title: `신고 처리 ${reports?.count ?? 0}건`,
+      count: reports?.count ?? 0,
+      desc: joinDesc([
+        ...summarizeCounts(reports?.countByReason, REASON_MAP),
+        formatRelativeTime(reports?.latestReportedAt),
+      ]),
+      urgent: isWaitingOver(reports?.oldestReportedAt),
+      path: '/admin/reports',
+    },
+    {
+      id: 'inquiry',
+      icon: '💬',
+      title: `고객 문의 ${inquiries?.count ?? 0}건`,
+      count: inquiries?.count ?? 0,
+      desc: joinDesc([
+        ...summarizeCounts(inquiries?.countByCategory, INQUIRY_CATEGORY_MAP),
+        formatRelativeTime(inquiries?.latestCreatedAt),
+      ]),
+      urgent: isWaitingOver(inquiries?.oldestCreatedAt),
+      path: '/admin/inquiry',
+    },
+  ];
+};
 
 function AdminPendingActions() {
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchPendingActions = async () => {
+      try {
+        const response = await dashboardApi.getPendingActions();
+        if (isMounted && response.data?.success) {
+          setItems(buildItems(response.data.data));
+        }
+      } catch (err) {
+        console.error('처리 대기 항목 조회 실패:', err);
+        if (isMounted) setError(true);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchPendingActions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <Card>
       <Header>
         <h3>처리 대기 항목</h3>
-        <span className="more">
-          전체 보기 <ChevronRight size={14} />
-        </span>
       </Header>
-      <ListContainer>
-        {pendingData.map((item) => (
-          <ActionItem key={item.id}>
-            <div className="left-side">
-              <div className="icon-avatar">{item.icon}</div>
-              <div className="info">
-                <div className="title">{item.title}</div>
-                <div className="desc">{item.desc}</div>
+      {loading ? (
+        <EmptyText>불러오는 중...</EmptyText>
+      ) : error ? (
+        <EmptyText>처리 대기 항목을 불러오지 못했어요.</EmptyText>
+      ) : (
+        <ListContainer>
+          {items.map((item) => (
+            <ActionItem key={item.id}>
+              <div className="left-side">
+                <div className="icon-avatar">{item.icon}</div>
+                <div className="info">
+                  <div className="title">{item.title}</div>
+                  <div className="desc">
+                    {item.count > 0 ? item.desc : '대기 중인 건이 없어요'}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="right-side">
-              <StatusTag $type={item.status}>{item.status}</StatusTag>
-              <div className="action-link">
-                처리하기 <ChevronRight size={12} />
-              </div>
-            </div>
-          </ActionItem>
-        ))}
-      </ListContainer>
+              {item.count > 0 && (
+                <div className="right-side">
+                  <StatusTag $type={item.urgent ? '긴급' : '일반'}>
+                    {item.urgent ? '긴급' : '일반'}
+                  </StatusTag>
+                  <div
+                    className="action-link"
+                    onClick={() => navigate(item.path)}
+                  >
+                    처리하기 <ChevronRight size={12} />
+                  </div>
+                </div>
+              )}
+            </ActionItem>
+          ))}
+        </ListContainer>
+      )}
     </Card>
   );
 }

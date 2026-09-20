@@ -67,7 +67,13 @@ const ListWrapper = styled.div`
   gap: 14px;
 `;
 
-function ApprovalListContainer({ listData, onApprove, onReject }) {
+function ApprovalListContainer({
+  listData,
+  loading = false,
+  emptyMessage = '가입 승인 대기 내역이 존재하지 않습니다.',
+  onApprove,
+  onReject,
+}) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [selectedId, setSelectedId] = useState(null);
@@ -83,15 +89,16 @@ function ApprovalListContainer({ listData, onApprove, onReject }) {
     const searchTarget = submittedKeyword.toLowerCase().trim();
     if (!searchTarget) return true; // 검색어가 비어 있으면 전체 출력
 
-    const name = account?.name?.toLowerCase() || '';
-    const email = account?.email?.toLowerCase() || '';
-    const nickname = account?.nickname?.toLowerCase() || '';
+    // 목록 API는 대표자명(ownerName)과 상점명(storeName)을 내려준다
+    const fields = [
+      account?.ownerName,
+      account?.storeName,
+      account?.name,
+      account?.email,
+      account?.nickname,
+    ];
 
-    return (
-      name.includes(searchTarget) ||
-      email.includes(searchTarget) ||
-      nickname.includes(searchTarget)
-    );
+    return fields.some((field) => field?.toLowerCase().includes(searchTarget));
   });
 
   return (
@@ -104,7 +111,7 @@ function ApprovalListContainer({ listData, onApprove, onReject }) {
           />
           <input
             type="text"
-            placeholder="신청자명, 닉네임, 이메일로 검색"
+            placeholder="대표자명, 상점명, 이메일로 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onKeyDown={(e) => {
@@ -121,7 +128,7 @@ function ApprovalListContainer({ listData, onApprove, onReject }) {
       </FilterBar>
 
       <ListWrapper>
-        {filteredList.length === 0 ? (
+        {loading ? (
           <div
             style={{
               textAlign: 'center',
@@ -130,7 +137,18 @@ function ApprovalListContainer({ listData, onApprove, onReject }) {
               fontSize: '14px',
             }}
           >
-            가입 승인 대기 내역이 존재하지 않습니다.
+            불러오는 중...
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '40px 0',
+              color: '#8c8c8c',
+              fontSize: '14px',
+            }}
+          >
+            {emptyMessage}
           </div>
         ) : (
           filteredList.map((account, index) => {

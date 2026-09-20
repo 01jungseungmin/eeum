@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { NotificationProvider } from '../contexts/NotificationContext';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 import { approvalApi } from '../api/owner/approvalApi';
@@ -126,16 +127,18 @@ function MainLayout() {
   }
 
   return (
-    <LayoutWrapper>
-      <Sidebar approvalStatus={approvalStatus} />
+    <NotificationProvider>
+      <LayoutWrapper>
+        <Sidebar approvalStatus={approvalStatus} />
 
-      <MainContent>
-        <TopNavbar />
-        <PageContainer>
-          <Outlet context={{ approvalStatus, dashboardData }} />
-        </PageContainer>
-      </MainContent>
-    </LayoutWrapper>
+        <MainContent>
+          <TopNavbar />
+          <PageContainer>
+            <Outlet context={{ approvalStatus, dashboardData }} />
+          </PageContainer>
+        </MainContent>
+      </LayoutWrapper>
+    </NotificationProvider>
   );
 }
 

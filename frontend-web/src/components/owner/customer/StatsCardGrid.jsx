@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 import { User, Heart, Bell, Star, TrendingUp } from 'lucide-react';
 
 const CardGrid = styled.div`
@@ -19,6 +20,7 @@ const Card = styled.div`
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  ${clickableCardStyle}
 `;
 const CardTitle = styled.p`
   font-size: 12px;
@@ -42,10 +44,21 @@ const IconWrapper = styled.div`
   justify-content: center;
 `;
 
-export default function StatsCardGrid({ stats }) {
+export default function StatsCardGrid({
+  stats,
+  activeFilter,
+  onFilterChange,
+}) {
+  // 목록 필터와 연결된 카드만 누를 수 있다 (누적 매출·즐겨찾기/알림 카드는 해당 필터가 없음)
+  const filterCardProps = (filter) => ({
+    $clickable: Boolean(onFilterChange),
+    $active: activeFilter === filter,
+    onClick: () => onFilterChange?.(filter),
+  });
+
   return (
     <CardGrid>
-      <Card>
+      <Card {...filterCardProps('ALL')}>
         <div>
           <CardTitle>전체 고객</CardTitle>
           <CardValue>{stats.totalCount}명</CardValue>
@@ -58,7 +71,7 @@ export default function StatsCardGrid({ stats }) {
           <User size={20} />
         </IconWrapper>
       </Card>
-      <Card>
+      <Card {...filterCardProps('VIP')}>
         <div>
           <CardTitle>단골 고객</CardTitle>
           <CardValue>{stats.vipCount}명</CardValue>
@@ -87,7 +100,7 @@ export default function StatsCardGrid({ stats }) {
           <Bell size={20} />
         </IconWrapper>
       </Card>
-      <Card>
+      <Card {...filterCardProps('NEW')}>
         <div>
           <CardTitle>이번 달 신규</CardTitle>
           <CardValue>{stats.newCount}명</CardValue>

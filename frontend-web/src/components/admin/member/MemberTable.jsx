@@ -144,6 +144,8 @@ function MemberTable({
   onActionWithdraw,
   onActionRestore,
   onShowSanctionHistory,
+  onShowDetail,
+  loading = false,
 }) {
   const [activeMenuId, setActiveMenuId] = useState(null);
 
@@ -192,6 +194,20 @@ function MemberTable({
           </tr>
         </thead>
         <tbody>
+          {data.length === 0 && (
+            <tr>
+              <td
+                colSpan={9}
+                style={{
+                  textAlign: 'center',
+                  padding: '40px 0',
+                  color: '#8c8c8c',
+                }}
+              >
+                {loading ? '불러오는 중...' : '조건에 맞는 회원이 없어요.'}
+              </td>
+            </tr>
+          )}
           {data.map((row) => {
             const isOwner = row.role === 'ROLE_OWNER';
             const isMenuOpen = activeMenuId === row.accountId;
@@ -210,7 +226,14 @@ function MemberTable({
                     {row.name ? row.name.charAt(0) : 'U'}
                   </AvatarCircle>
                 </td>
-                <td style={{ fontWeight: '600', color: '#262626' }}>
+                <td
+                  style={{
+                    fontWeight: '600',
+                    color: '#262626',
+                    cursor: onShowDetail ? 'pointer' : 'default',
+                  }}
+                  onClick={() => onShowDetail?.(row.accountId)}
+                >
                   {row.name}
                 </td>
                 <td style={{ color: '#595959' }}>{row.email}</td>
@@ -241,6 +264,11 @@ function MemberTable({
                   </ActionButton>
                   {isMenuOpen && (
                     <DropdownMenu>
+                      {onShowDetail && (
+                        <DropdownItem onClick={() => onShowDetail(row.accountId)}>
+                          상세 보기
+                        </DropdownItem>
+                      )}
                       <DropdownItem
                         onClick={() =>
                           onShowSanctionHistory(row.accountId, row.name)

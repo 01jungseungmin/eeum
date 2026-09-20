@@ -77,6 +77,10 @@ public class Payment extends BaseEntity {
     @Column(name = "refunded_at")
     private LocalDateTime refundedAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public static Payment create(
             Order order,
             Account account,

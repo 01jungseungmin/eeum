@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { clickableCardStyle } from '../../common/cardFilterStyle';
 
 const StatsSection = styled.div`
   display: flex;
@@ -20,6 +21,7 @@ const StatCard = styled.div`
   border: 1px solid #eef0f2;
   text-align: left;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  ${clickableCardStyle}
 
   .label {
     font-size: 12px;
@@ -70,7 +72,7 @@ const InfoBanner = styled.div`
   }
 `;
 
-function ProductStats({ products = [] }) {
+function ProductStats({ products = [], typeFilter, onTypeChange }) {
   const totalCount = products.length;
   const saleCount = products.filter((p) => p.productType === 'SALE').length;
   const menuCount = products.filter((p) => p.productType === 'MENU').length;
@@ -78,7 +80,11 @@ function ProductStats({ products = [] }) {
   return (
     <StatsSection>
       <CardGrid>
-        <StatCard>
+        <StatCard
+          $clickable={Boolean(onTypeChange)}
+          $active={typeFilter === 'ALL'}
+          onClick={() => onTypeChange?.('ALL')}
+        >
           <div className="label">전체 상품</div>
           <div
             className="count"
@@ -87,7 +93,11 @@ function ProductStats({ products = [] }) {
             {totalCount}개
           </div>
         </StatCard>
-        <StatCard>
+        <StatCard
+          $clickable={Boolean(onTypeChange)}
+          $active={typeFilter === 'SALE'}
+          onClick={() => onTypeChange?.('SALE')}
+        >
           <div className="label">판매 상품</div>
           <div
             className="count"
@@ -96,7 +106,11 @@ function ProductStats({ products = [] }) {
             {saleCount}개
           </div>
         </StatCard>
-        <StatCard>
+        <StatCard
+          $clickable={Boolean(onTypeChange)}
+          $active={typeFilter === 'MENU'}
+          onClick={() => onTypeChange?.('MENU')}
+        >
           <div className="label">메뉴 상품</div>
           <div
             className="count"

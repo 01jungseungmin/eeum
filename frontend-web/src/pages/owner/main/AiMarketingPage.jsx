@@ -7,13 +7,19 @@ import {
   Sparkles,
   RefreshCw,
   Send,
-  Clock,
   MessageSquare,
   Store,
   Share2,
   Loader2,
+  Crown,
 } from 'lucide-react';
 import { aiManagerApi } from '../../../api/owner/aiManagerApi';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  AI_PAGE_REQUIRED_PLAN,
+  hasRequiredPlan,
+} from '../../../constants/aiPlanFeatures';
+import PlanUpgradeModal from '../../../components/owner/ai/modal/PlanUpgradeModal';
 
 const PageContainer = styled.div`
   max-width: 1200px;
@@ -257,6 +263,35 @@ const CharacterCount = styled.div`
   color: #9ca3af;
 `;
 
+const NoticeBanner = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background-color: ${(props) => (props.$warning ? '#fffbeb' : '#fef2f2')};
+  border: 1px solid ${(props) => (props.$warning ? '#fde68a' : '#fecaca')};
+  color: ${(props) => (props.$warning ? '#92400e' : '#991b1b')};
+  font-size: 13px;
+  line-height: 1.5;
+
+  button {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: #f59e0b;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+`;
+
 const ChannelList = styled.div`
   display: flex;
   flex-direction: column;
@@ -384,28 +419,6 @@ const PrimaryButton = styled.button`
   }
 `;
 
-const SecondaryButton = styled.button`
-  width: 100%;
-  background-color: #ffffff;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-  padding: 14px;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: #f9fafb;
-    border-color: #d1d5db;
-  }
-`;
-
 const FooterCaption = styled.p`
   font-size: 11px;
   color: #9ca3af;
@@ -428,6 +441,7 @@ const TONE_MAP = {
 
 export default function AiMarketingPage() {
   const navigate = useNavigate();
+  const { aiPlanType } = useAuth();
 
   // 상태 관리
   const [typeTab, setTypeTab] = useState('event');
@@ -435,6 +449,10 @@ export default function AiMarketingPage() {
   const [aiText, setAiText] = useState('');
   const [loading, setLoading] = useState(false);
   const [, setOverviewData] = useState([]);
+  // 플랜 부족(403/AI_001) 여부와 업그레이드 모달, 그 외 실패 안내 문구
+  const [planLocked, setPlanLocked] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // 채널 활성화 상태
   const [channels, setChannels] = useState({
@@ -453,8 +471,9 @@ export default function AiMarketingPage() {
   });
 
   // 마케팅 문구 초안 생성 API 호출 함수
+  // auto: 페이지 진입 시 자동 생성 — 이때는 확인창(AI_015) 대신 안내 문구만 보여준다
   const fetchMarketingDraft = useCallback(
-    async (confirmDelete = false) => {
+    async ({ auto = false } = {}) => {
       const activeChannels = Object.keys(channels).filter(
         (key) => channels[key],
       );
@@ -463,6 +482,7 @@ export default function AiMarketingPage() {
         setAiText('발송할 채널을 1개 이상 선택해 주세요.');
         setDraftResult((prev) => ({
           ...prev,
+          messageId: null,
           estimatedReach: 0,
           selectedChannelCount: 0,
         }));
@@ -470,18 +490,38 @@ export default function AiMarketingPage() {
       }
 
       setLoading(true);
+      setErrorMessage('');
 
-      const requestBody = {
-        noticeType: TYPE_MAP[typeTab],
-        tone: TONE_MAP[tone],
-        channels: activeChannels,
-        confirmDelete,
-      };
+      const createDraft = (confirmDelete) =>
+        aiManagerApi.createMarketingDraft({
+          noticeType: TYPE_MAP[typeTab],
+          tone: TONE_MAP[tone],
+          channels: activeChannels,
+          confirmDelete,
+        });
 
       try {
-        const response = await aiManagerApi.createMarketingDraft(requestBody);
+        let response;
+        try {
+          response = await createDraft(false);
+        } catch (error) {
+          const body = error.response?.data;
+          // AI_015: 초안 보관 개수 초과 — 사장님 확인 후 confirmDelete=true 로 재요청
+          if (body?.error?.code === 'AI_015' && !auto) {
+            const capacity = body.data;
+            const detail = capacity
+              ? `\n(보관 중 ${capacity.currentCount}개 / 최대 ${capacity.limit}개)`
+              : '';
+            if (!window.confirm(`${body.error.message}${detail}`)) return;
+            response = await createDraft(true);
+          } else {
+            throw error;
+          }
+        }
+
         if (response.data?.success && response.data?.data) {
           const resData = response.data.data;
+          setPlanLocked(false);
           setAiText(resData.content || '');
           setDraftResult({
             messageId: resData.messageId,
@@ -495,7 +535,25 @@ export default function AiMarketingPage() {
           });
         }
       } catch (error) {
-        console.error('마케팅 문구 초안 생성 실패:', error);
+        const body = error.response?.data;
+        const code = body?.error?.code;
+
+        if (error.response?.status === 403 || code === 'AI_001') {
+          // FREE 플랜 — 조용히 실패하지 않고 업그레이드를 안내한다
+          setPlanLocked(true);
+          if (!auto) setIsUpgradeModalOpen(true);
+        } else if (code === 'AI_015') {
+          setErrorMessage(
+            '초안 보관함이 가득 찼어요. "다시 생성"을 누르면 오래된 초안을 정리하고 새로 만들 수 있어요.',
+          );
+        } else {
+          console.error('마케팅 문구 초안 생성 실패:', error);
+          setErrorMessage(
+            body?.error?.message ||
+              '문구 생성에 실패했어요. 잠시 후 다시 시도해 주세요.',
+          );
+        }
+        setDraftResult((prev) => ({ ...prev, messageId: null }));
       } finally {
         setLoading(false);
       }
@@ -514,12 +572,25 @@ export default function AiMarketingPage() {
       } catch (error) {
         console.error('마케팅 개요 조회 실패:', error);
       }
+      // 캐싱된 플랜으로 BASIC 미만이 확실하면 초안 생성 요청(사용량 차감 대상)을 생략한다
+      if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.marketingDraft)) {
+        setPlanLocked(true);
+        return;
+      }
       // 최초 초안 가져오기
-      fetchMarketingDraft();
+      fetchMarketingDraft({ auto: true });
     };
 
     fetchInitialData();
   }, []); // 의존성 배열을 비워 최초 1회만 실행
+
+  // 새로고침 직후에는 플랜 조회가 끝나기 전에 초안 요청이 먼저 나갈 수 있다 —
+  // 플랜이 뒤늦게 BASIC 미만으로 확정되면 그때 화면을 잠근다
+  useEffect(() => {
+    if (!hasRequiredPlan(aiPlanType, AI_PAGE_REQUIRED_PLAN.marketingDraft)) {
+      queueMicrotask(() => setPlanLocked(true));
+    }
+  }, [aiPlanType]);
 
   const handleToggleChannel = (key) => {
     setChannels((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -624,7 +695,11 @@ export default function AiMarketingPage() {
                 <p>자유롭게 수정한 뒤 등록할 수 있어요</p>
               </CardTitleGroup>
               <RefreshTextButton
-                onClick={() => fetchMarketingDraft(false)}
+                onClick={() =>
+                  planLocked
+                    ? setIsUpgradeModalOpen(true)
+                    : fetchMarketingDraft()
+                }
                 disabled={loading}
               >
                 {loading ? (
@@ -656,6 +731,23 @@ export default function AiMarketingPage() {
               {draftResult.characterCount || aiText.length}자 · 알림톡 1건으로
               발송 가능
             </CharacterCount>
+
+            {planLocked && (
+              <NoticeBanner $warning>
+                <span>
+                  마케팅 문구 생성은 베이직 플랜부터 이용할 수 있어요.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsUpgradeModalOpen(true)}
+                >
+                  <Crown size={12} /> 플랜 업그레이드
+                </button>
+              </NoticeBanner>
+            )}
+            {errorMessage && !planLocked && (
+              <NoticeBanner>{errorMessage}</NoticeBanner>
+            )}
           </Card>
 
           <Card>
@@ -756,16 +848,36 @@ export default function AiMarketingPage() {
           </Card>
 
           <PrimaryButton
-            onClick={() => navigate('/ai-manager/notice')}
-            disabled={!draftResult.sendable || loading}
+            onClick={() =>
+              navigate('/ai-manager/notice', {
+                state: {
+                  noticeData: {
+                    messageId: draftResult.messageId,
+                    // 사장님이 고친 문구가 그대로 넘어가야 한다
+                    content: aiText,
+                    estimatedReach: draftResult.estimatedReach,
+                    noticeType: TYPE_MAP[typeTab],
+                  },
+                },
+              })
+            }
+            disabled={
+              planLocked ||
+              !draftResult.sendable ||
+              !draftResult.messageId ||
+              loading
+            }
           >
             <Send size={16} /> 공지 등록하기
           </PrimaryButton>
-          <SecondaryButton disabled={loading}>
-            <Clock size={16} /> 예약 발송
-          </SecondaryButton>
         </RightColumn>
       </ContentGrid>
+
+      <PlanUpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        errorMessage="마케팅 문구 생성은 베이직 플랜부터 이용할 수 있어요."
+      />
     </PageContainer>
   );
 }

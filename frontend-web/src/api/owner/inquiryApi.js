@@ -15,4 +15,12 @@ export const inquiryApi = {
       content,
     });
   },
+
+  // 사장님 답변 수정
+  updateAnswer: (inquiryId, answerId, content) => {
+    return apiClient.patch(
+      `/owner/stores/me/inquiries/${inquiryId}/answers/${answerId}`,
+      { content },
+    );
+  },
 };

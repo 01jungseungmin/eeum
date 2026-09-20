@@ -1,4 +1,8 @@
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { dashboardApi } from '../../../api/admin/dashboardApi';
+import { ACTIVITY_TITLE } from '../../../constants/dashboardConstants';
+import { formatRelativeTime } from '../../../utils/relativeTime';
 
 const Card = styled.div`
   background: white;
@@ -79,38 +83,94 @@ const TimelineContent = styled.div`
   }
 `;
 
-const activities = [
-  { id: 1, title: '새 회원 가입', desc: '강남구(신규 유저)', time: '방금 전' },
-  { id: 2, title: '신규 가게 등록', desc: '수용품 떡케이어뵉', time: '5분 전' },
-  { id: 3, title: '거래 완료', desc: '₩47,500 결제 확인', time: '8분 전' },
-  {
-    id: 4,
-    title: '플랫폼 신고 접수',
-    desc: '사기 의심 게시글 필터링',
-    time: '12분 전',
-  },
-];
+const EmptyText = styled.div`
+  padding: 30px 0;
+  text-align: center;
+  color: #bfbfbf;
+  font-size: 13px;
+`;
+
+// 실시간 활동은 새로고침 없이도 갱신되도록 주기적으로 다시 조회한다
+const REFRESH_INTERVAL_MS = 30 * 1000;
+const ACTIVITY_LIMIT = 6;
+
+// 활동 종류별 부가 설명 — 결제는 금액과 상점명을 함께 보여준다
+const buildDescription = (activity) => {
+  const { type, description, amount } = activity;
+
+  if (type === 'PAYMENT_COMPLETED') {
+    const price = `₩${Number(amount || 0).toLocaleString()} 결제 확인`;
+    return description ? `${price} · ${description}` : price;
+  }
+  if (type === 'MEMBER_SIGNUP') {
+    return description ? `${description}(신규 유저)` : '동네 인증 전 신규 유저';
+  }
+  return description || '';
+};
 
 function AdminLiveActivities() {
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchActivities = async () => {
+      try {
+        const response = await dashboardApi.getActivities({
+          limit: ACTIVITY_LIMIT,
+        });
+        if (isMounted && response.data?.success) {
+          setActivities(response.data.data || []);
+          setError(false);
+        }
+      } catch (err) {
+        console.error('실시간 활동 조회 실패:', err);
+        if (isMounted) setError(true);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchActivities();
+    const timerId = setInterval(fetchActivities, REFRESH_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      clearInterval(timerId);
+    };
+  }, []);
+
   return (
     <Card>
       <Header>
         <h3>실시간 활동</h3>
       </Header>
-      <TimelineContainer>
-        {activities.map((act) => (
-          <TimelineRow key={act.id}>
-            <TimelineDot />
-            <TimelineContent>
-              <div className="text-side">
-                <h4>{act.title}</h4>
-                <p>{act.desc}</p>
-              </div>
-              <span className="time-text">{act.time}</span>
-            </TimelineContent>
-          </TimelineRow>
-        ))}
-      </TimelineContainer>
+      {loading ? (
+        <EmptyText>불러오는 중...</EmptyText>
+      ) : error && activities.length === 0 ? (
+        <EmptyText>실시간 활동을 불러오지 못했어요.</EmptyText>
+      ) : activities.length === 0 ? (
+        <EmptyText>아직 표시할 활동이 없어요.</EmptyText>
+      ) : (
+        <TimelineContainer>
+          {activities.map((act) => (
+            <TimelineRow key={`${act.type}-${act.targetId}-${act.occurredAt}`}>
+              <TimelineDot />
+              <TimelineContent>
+                <div className="text-side">
+                  <h4>{act.title || ACTIVITY_TITLE[act.type]}</h4>
+                  <p>{buildDescription(act)}</p>
+                </div>
+                <span className="time-text">
+                  {formatRelativeTime(act.occurredAt)}
+                </span>
+              </TimelineContent>
+            </TimelineRow>
+          ))}
+        </TimelineContainer>
+      )}
     </Card>
   );
 }

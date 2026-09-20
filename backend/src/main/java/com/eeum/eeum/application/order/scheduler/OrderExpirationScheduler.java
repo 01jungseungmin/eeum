@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +22,8 @@ import java.util.List;
 public class OrderExpirationScheduler {
 
     private static final int PAYMENT_PENDING_EXPIRE_MINUTES = 15;
+    // 행별 Redis·DB 상태 전이를 수행하므로 5분 ShedLock 안에서 끝나도록 제한한다.
+    private static final int EXPIRATION_BATCH_SIZE = 20;
 
     private final OrderRepository orderRepository;
     private final OrderService orderService;
@@ -33,7 +37,9 @@ public class OrderExpirationScheduler {
         List<Order> orders = orderRepository.findPaymentPendingOrdersBefore(
                 OrderStatus.PENDING,
                 PaymentStatus.PENDING,
-                threshold
+                threshold,
+                PageRequest.of(0, EXPIRATION_BATCH_SIZE,
+                        Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("orderId")))
         );
 
         if (orders.isEmpty()) {

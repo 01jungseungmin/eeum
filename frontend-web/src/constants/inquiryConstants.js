@@ -34,6 +34,8 @@ export const INQUIRY_CATEGORY_MAP = {
   PAYMENT: '결제 문의',
   ACCOUNT: '계정 문의',
   SYSTEM: '시스템 문의',
+  RESERVATION: '예약 문의',
+  REPORT: '신고 문의',
   ETC: '기타 문의',
 };
 

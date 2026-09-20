@@ -12,6 +12,20 @@ export const reservationApi = {
     );
   },
 
+  // 방문 예약 완료 처리 (승인된 예약만 가능)
+  completeReservation: (reservationId) => {
+    return apiClient.patch(
+      `/owner/reservations/visits/${reservationId}/complete`,
+    );
+  },
+
+  // 날짜별 시간대 잔여 테이블 현황 조회 (date: YYYY-MM-DD)
+  getAvailableTimeSlots: (date) => {
+    return apiClient.get('/owner/reservations/visits/available-time-slots', {
+      params: { date },
+    });
+  },
+
   // 방문 예약 승인 / 거절
   approveReservation: (reservationId) => {
     return apiClient.patch(

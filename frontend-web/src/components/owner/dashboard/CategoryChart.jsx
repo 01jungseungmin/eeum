@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { PieChart, Pie, Cell } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { storeApi } from '../../../api/owner/storeApi';
 
 const Card = styled.div`
   background: white;
@@ -53,64 +55,153 @@ const LegendItem = styled.div`
   }
 `;
 
-const data = [
-  { name: '반찬류', value: 55, color: '#2d5a43' },
-  { name: '국/찌개', value: 25, color: '#143022' },
-  { name: '나물류', value: 12, color: '#7cb342' },
-  { name: '기타', value: 8, color: '#c5e1a5' },
-];
+const EmptyText = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 0;
+  color: #bfbfbf;
+  font-size: 13px;
+`;
+
+// 상위 카테고리가 색상 4개(마지막은 "기타")에 들어가도록 나머지는 기타로 묶는다
+const CHART_COLORS = ['#2d5a43', '#7cb342', '#c5e1a5', '#bfbfbf'];
+const MAX_SLICES = CHART_COLORS.length;
+
+const pad = (n) => String(n).padStart(2, '0');
+
+const toLocalDateTime = (date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+
+// "이번 달 기준" = 이번 달 1일 00:00 ~ 지금
+const getThisMonthRange = () => {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+  return { from: toLocalDateTime(monthStart), to: toLocalDateTime(now) };
+};
+
+// API 응답(수량 내림차순) → 차트 데이터. 카테고리가 많으면 상위 N-1개 + 기타로 합친다.
+const buildChartData = (categories) => {
+  const rows = categories.map((category) => ({
+    name: category.categoryName,
+    value: Number(category.quantityRatio),
+    quantity: category.soldQuantity,
+  }));
+
+  if (rows.length > MAX_SLICES) {
+    const top = rows.slice(0, MAX_SLICES - 1);
+    const rest = rows.slice(MAX_SLICES - 1);
+    rows.length = 0;
+    rows.push(...top, {
+      name: '기타',
+      value: Math.round(rest.reduce((sum, row) => sum + row.value, 0) * 10) / 10,
+      quantity: rest.reduce((sum, row) => sum + row.quantity, 0),
+    });
+  }
+
+  return rows.map((row, index) => ({ ...row, color: CHART_COLORS[index] }));
+};
 
 function CategoryChart() {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCategorySales = async () => {
+      try {
+        const { from, to } = getThisMonthRange();
+        const response = await storeApi.getCategorySales(from, to);
+
+        if (isMounted && response?.success) {
+          setData(buildChartData(response.data || []));
+        }
+      } catch (err) {
+        console.error('카테고리별 판매 조회 실패:', err);
+        if (isMounted) setError(true);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchCategorySales();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <Card>
       <Title>카테고리별 판매</Title>
-      <SubTitle>이번 달 기준</SubTitle>
+      <SubTitle>이번 달 기준 · 판매 수량 비율</SubTitle>
 
-      <div
-        style={{
-          width: '100%',
-          height: 140,
-          display: 'flex',
-          justifyContent: 'center',
-        }}
-      >
-        <PieChart
-          width={200}
-          height={140}
-        >
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={45}
-            outerRadius={60}
-            paddingAngle={3}
-            dataKey="value"
+      {loading ? (
+        <EmptyText>불러오는 중...</EmptyText>
+      ) : error ? (
+        <EmptyText>카테고리별 판매를 불러오지 못했어요.</EmptyText>
+      ) : data.length === 0 ? (
+        <EmptyText>이번 달 판매된 상품이 없습니다.</EmptyText>
+      ) : (
+        <>
+          <div
+            style={{
+              width: '100%',
+              height: 140,
+              display: 'flex',
+              justifyContent: 'center',
+            }}
           >
-            {data.map((entry, index) => (
-              <Cell
-                key={`cell-${index}`}
-                fill={entry.color}
+            <PieChart
+              width={200}
+              height={140}
+            >
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={45}
+                outerRadius={60}
+                paddingAngle={3}
+                dataKey="value"
+              >
+                {data.map((entry) => (
+                  <Cell
+                    key={entry.name}
+                    fill={entry.color}
+                  />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value, name, item) => [
+                  `${value}% (${item.payload.quantity}개)`,
+                  name,
+                ]}
               />
-            ))}
-          </Pie>
-        </PieChart>
-      </div>
+            </PieChart>
+          </div>
 
-      <LegendContainer>
-        {data.map((item) => (
-          <LegendItem
-            key={item.name}
-            $color={item.color}
-          >
-            <div className="label-side">
-              <span className="dot" />
-              <span>{item.name}</span>
-            </div>
-            <div className="value-side">{item.value}%</div>
-          </LegendItem>
-        ))}
-      </LegendContainer>
+          <LegendContainer>
+            {data.map((item) => (
+              <LegendItem
+                key={item.name}
+                $color={item.color}
+              >
+                <div className="label-side">
+                  <span className="dot" />
+                  <span>{item.name}</span>
+                </div>
+                <div className="value-side">{item.value}%</div>
+              </LegendItem>
+            ))}
+          </LegendContainer>
+        </>
+      )}
     </Card>
   );
 }

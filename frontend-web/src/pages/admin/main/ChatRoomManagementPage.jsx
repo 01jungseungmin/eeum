@@ -4,6 +4,7 @@ import { MessageSquare, CheckCircle2, XCircle, BellRing } from 'lucide-react';
 import ChatRoomFilterBar from '../../../components/admin/chat/ChatRoomFilterBar';
 import ChatRoomTable from '../../../components/admin/chat/ChatRoomTable';
 import { chatApi } from '../../../api/admin/chatApi';
+import { clickableCardStyle } from '../../../components/common/cardFilterStyle';
 
 const Container = styled.div`
   padding: 30px;
@@ -32,6 +33,7 @@ const SummaryCard = styled.div`
   align-items: flex-start;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 
+  ${clickableCardStyle}
   .info {
     span {
       font-size: 12px;
@@ -104,6 +106,8 @@ function ChatRoomManagementPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
+  // 상단 카드로 고르는 보기 필터 (현재 불러온 페이지 안에서만 적용): ALL | ACTIVE | INACTIVE
+  const [cardFilter, setCardFilter] = useState('ALL');
 
   const fetchRooms = useCallback(async () => {
     setLoading(true);
@@ -149,12 +153,21 @@ function ChatRoomManagementPage() {
     };
   }, [rooms]);
 
+  const displayedRooms = useMemo(() => {
+    if (cardFilter === 'ACTIVE') return rooms.filter((r) => r.active);
+    if (cardFilter === 'INACTIVE') return rooms.filter((r) => !r.active);
+    return rooms;
+  }, [rooms, cardFilter]);
+
   return (
     <Container>
       <SummaryGrid>
         <SummaryCard
           $iconBg="#f0f5ff"
           $iconColor="#2f54eb"
+          $clickable
+          $active={cardFilter === 'ALL'}
+          onClick={() => setCardFilter('ALL')}
         >
           <div className="info">
             <span>전체 채팅방</span>
@@ -168,6 +181,9 @@ function ChatRoomManagementPage() {
         <SummaryCard
           $iconBg="#edf5f1"
           $iconColor="#2d5a43"
+          $clickable
+          $active={cardFilter === 'ACTIVE'}
+          onClick={() => setCardFilter('ACTIVE')}
         >
           <div className="info">
             <span>활성</span>
@@ -181,6 +197,9 @@ function ChatRoomManagementPage() {
         <SummaryCard
           $iconBg="#f5f5f5"
           $iconColor="#8c8c8c"
+          $clickable
+          $active={cardFilter === 'INACTIVE'}
+          onClick={() => setCardFilter('INACTIVE')}
         >
           <div className="info">
             <span>비활성</span>
@@ -214,7 +233,7 @@ function ChatRoomManagementPage() {
       />
 
       <ChatRoomTable
-        rooms={rooms}
+        rooms={displayedRooms}
         loading={loading}
       />
 

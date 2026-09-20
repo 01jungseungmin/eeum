@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Bell,
   ShieldCheck,
-  FileText,
   FolderTree,
   UserCheck,
   Settings,
@@ -320,12 +319,6 @@ export const ADMIN_MENU_CONFIG = [
         countKey: 'adminApproval',
       },
       {
-        id: 'admin-posts',
-        name: '게시글',
-        path: '/admin/posts',
-        icon: <FileText {...iconProps} />,
-      },
-      {
         id: 'admin-reports',
         name: '신고',
         path: '/admin/reports',
@@ -344,12 +337,6 @@ export const ADMIN_MENU_CONFIG = [
         path: '/admin/categories',
         subtitle: '가게, 게시판, 중고거래, 신고사유 카테고리를 관리합니다.',
         icon: <FolderTree {...iconProps} />,
-      },
-      {
-        id: 'admin-logs',
-        name: '관리자 로그',
-        path: '/admin/logs',
-        icon: <ClipboardList {...iconProps} />,
       },
     ],
   },
@@ -398,6 +385,14 @@ const SUB_PAGE_CONFIG = {
   },
 };
 
+// 상세 페이지(/admin/stores/3 등)처럼 메뉴에 직접 등록되지 않은 경로는
+// 가장 길게 일치하는 상위 메뉴(/admin/stores)를 찾아 헤더 제목으로 쓴다.
+const isSubPath = (path, menuPath) =>
+  Boolean(menuPath) &&
+  menuPath !== '#' &&
+  menuPath !== '/' &&
+  path.startsWith(`${menuPath}/`);
+
 // 브레드크럼이나 헤더 타이틀 매칭 함수 리팩토링
 export const findMenuByPath = (path, role) => {
   if (SUB_PAGE_CONFIG[path]) {
@@ -409,6 +404,8 @@ export const findMenuByPath = (path, role) => {
 
   if (!Array.isArray(targetConfig)) return null;
 
+  let parentMatch = null;
+
   for (const group of targetConfig) {
     const found = group.items.find((item) => item.path === path);
     if (found) return found;
@@ -419,7 +416,14 @@ export const findMenuByPath = (path, role) => {
         const subFound = item.children.find((sub) => sub.path === path);
         if (subFound) return subFound;
       }
+
+      if (
+        isSubPath(path, item.path) &&
+        (!parentMatch || item.path.length > parentMatch.path.length)
+      ) {
+        parentMatch = item;
+      }
     }
   }
-  return null;
+  return parentMatch;
 };
