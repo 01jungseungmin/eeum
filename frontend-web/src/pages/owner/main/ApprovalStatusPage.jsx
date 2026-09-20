@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useOutletContext } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import AuthStatusBanner from '../../../components/owner/approval/AuthStatusBanner';
 import BusinessInfoBox from '../../../components/owner/approval/BusinessInfoBox';
@@ -47,6 +48,8 @@ const ApplySubmitButton = styled.button`
 `;
 
 function ApprovalStatusPage() {
+  // 사이드바 승인 배지를 최신 상태로 맞추기 위해 MainLayout에 결과를 알린다
+  const { syncApproval } = useOutletContext() || {};
   const [checklist, setChecklist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('PENDING');
@@ -62,6 +65,7 @@ function ApprovalStatusPage() {
         const data = response.data.data;
         setChecklist(data);
         setStatus(data.approvalStatus);
+        syncApproval?.(data);
       }
     } catch (error) {
       console.error('입점 심사 체크리스트 조회 실패:', error);

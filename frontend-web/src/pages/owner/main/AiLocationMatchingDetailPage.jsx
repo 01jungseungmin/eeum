@@ -315,64 +315,22 @@ const SegmentList = styled.div`
 const SegmentItem = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 14px 16px;
   background-color: #f8fafc;
   border-radius: 12px;
-
-  .left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #475569;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .count {
-    font-size: 15px;
-    font-weight: 700;
-    color: #0f172a;
-  }
-`;
-
-const TagTypeBadge = styled.span`
-  font-size: 11px;
+  color: #475569;
+  font-size: 14px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background-color: ${({ type }) =>
-    type === '핵심' ? '#e0e7ff' : type === '추천' ? '#e0f2fe' : '#f1f5f9'};
-  color: ${({ type }) =>
-    type === '핵심' ? '#4338ca' : type === '추천' ? '#0369a1' : '#475569'};
 `;
 
-const TagGroup = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
-`;
-
-const KeywordTag = styled.span`
-  background-color: #e0e7ff;
-  color: #4338ca;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 8px;
-`;
-
-const ReasonList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+const EmptyNotice = styled.div`
+  padding: 20px 16px;
+  background-color: #f8fafc;
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 14px;
+  text-align: center;
 `;
 
 const ReasonItem = styled.div`
@@ -382,11 +340,6 @@ const ReasonItem = styled.div`
   font-size: 14px;
   color: #334155;
   line-height: 1.5;
-
-  strong {
-    color: #0f172a;
-    font-weight: 700;
-  }
 `;
 
 const RightChartCard = styled(Card)`
@@ -719,6 +672,14 @@ const ApplyButton = styled.button`
 `;
 
 // 날짜 문구 포맷팅 헬퍼 함수
+// 종합 점수 구간별 등급 문구 (백엔드가 순위 정보를 주지 않아 점수로만 판단)
+const getScoreGrade = (score) => {
+  if (score >= 80) return '매우 높음';
+  if (score >= 60) return '높음';
+  if (score >= 40) return '보통';
+  return '낮음';
+};
+
 const formatStartTime = (isoString) => {
   if (!isoString) return '';
   const dateObj = new Date(isoString);
@@ -921,15 +882,20 @@ export default function AiLocationMatchingDetailPage() {
     return <PageContainer>데이터를 불러오는 중입니다...</PageContainer>;
   if (!data) return <PageContainer>데이터가 없습니다.</PageContainer>;
 
+  // 백엔드가 데이터 부족 시 점수를 null로 내려주므로 임의의 기본값을 채우지 않는다
   const {
-    totalScore = 92,
-    regionMatchRate = 96,
-    interestMatchRate = 91,
-    eventFitScore = 88,
-    regularCustomerRatio = 84,
+    totalScore,
+    regionMatchRate,
+    interestMatchRate,
+    eventFitScore,
+    regularCustomerRatio,
     segments = [],
-    estimatedTargetCount = 3459,
-    interest: currentInterest = '한식',
+    matchReason,
+    estimatedTargetCount = 0,
+    hasData = true,
+    emptyMessage,
+    interest: currentInterest = interest,
+    radiusKm: currentRadiusKm = radiusKm,
   } = data;
 
   const currentInterestLabel =
@@ -982,71 +948,77 @@ export default function AiLocationMatchingDetailPage() {
               <h3>매칭 점수 구성</h3>
               <p>우리 가게가 주변 생활권과 얼마나 잘 맞는지</p>
             </CardHeader>
-            <ScoreDetailsGrid>
-              <DonutContainer>
-                <DonutGraphic $score={totalScore} />
-                <DonutScoreText>
-                  {totalScore}
-                  <span>점</span>
-                </DonutScoreText>
-              </DonutContainer>
+            {!hasData ? (
+              <EmptyNotice>{emptyMessage}</EmptyNotice>
+            ) : (
+              <ScoreDetailsGrid>
+                <DonutContainer>
+                  <DonutGraphic $score={totalScore} />
+                  <DonutScoreText>
+                    {totalScore}
+                    <span>점</span>
+                  </DonutScoreText>
+                </DonutContainer>
 
-              <ProgressBarList>
-                <ProgressItem>
-                  <div className="bar-info">
-                    <span className="label">지역 일치 (서울 마포구)</span>
-                    <span className="value">{regionMatchRate}%</span>
-                  </div>
-                  <Track>
-                    <Fill
-                      value={regionMatchRate}
-                      color="#10b981"
-                    />
-                  </Track>
-                </ProgressItem>
+                <ProgressBarList>
+                  <ProgressItem>
+                    <div className="bar-info">
+                      <span className="label">
+                        지역 일치 (반경 {currentRadiusKm}km)
+                      </span>
+                      <span className="value">{regionMatchRate}%</span>
+                    </div>
+                    <Track>
+                      <Fill
+                        value={regionMatchRate}
+                        color="#10b981"
+                      />
+                    </Track>
+                  </ProgressItem>
 
-                <ProgressItem>
-                  <div className="bar-info">
-                    <span className="label">
-                      관심사 일치 ({currentInterest})
-                    </span>
-                    <span className="value">{interestMatchRate}%</span>
-                  </div>
-                  <Track>
-                    <Fill
-                      value={interestMatchRate}
-                      color="#10b981"
-                    />
-                  </Track>
-                </ProgressItem>
+                  <ProgressItem>
+                    <div className="bar-info">
+                      <span className="label">
+                        관심사 일치 ({currentInterest})
+                      </span>
+                      <span className="value">{interestMatchRate}%</span>
+                    </div>
+                    <Track>
+                      <Fill
+                        value={interestMatchRate}
+                        color="#10b981"
+                      />
+                    </Track>
+                  </ProgressItem>
 
-                <ProgressItem>
-                  <div className="bar-info">
-                    <span className="label">이벤트 적합도</span>
-                    <span className="value">{eventFitScore}%</span>
-                  </div>
-                  <Track>
-                    <Fill
-                      value={eventFitScore}
-                      color="#6366f1"
-                    />
-                  </Track>
-                </ProgressItem>
+                  <ProgressItem>
+                    <div className="bar-info">
+                      <span className="label">이벤트 적합도</span>
+                      <span className="value">{eventFitScore}%</span>
+                    </div>
+                    <Track>
+                      <Fill
+                        value={eventFitScore}
+                        color="#6366f1"
+                      />
+                    </Track>
+                  </ProgressItem>
 
-                <ProgressItem>
-                  <div className="bar-info">
-                    <span className="label">단골 고객 비중</span>
-                    <span className="value">{regularCustomerRatio}%</span>
-                  </div>
-                  <Track>
-                    <Fill
-                      value={regularCustomerRatio}
-                      color="#6366f1"
-                    />
-                  </Track>
-                </ProgressItem>
-              </ProgressBarList>
-            </ScoreDetailsGrid>
+                  <ProgressItem>
+                    <div className="bar-info">
+                      <span className="label">단골 고객 비중</span>
+                      <span className="value">{regularCustomerRatio}%</span>
+                    </div>
+                    <Track>
+                      <Fill
+                        value={regularCustomerRatio}
+                        color="#6366f1"
+                      />
+                    </Track>
+                  </ProgressItem>
+                </ProgressBarList>
+              </ScoreDetailsGrid>
+            )}
           </Card>
 
           <Card>
@@ -1060,63 +1032,23 @@ export default function AiLocationMatchingDetailPage() {
               <p>지금 노출하면 닿을 수 있는 생활권 세그먼트</p>
             </CardHeader>
 
-            <SegmentList>
-              <SegmentItem>
-                <div className="left">
-                  <Users
-                    size={18}
-                    color="#6366f1"
-                  />
-                  <span>마포구 한식 관심 고객</span>
-                </div>
-                <div className="right">
-                  <TagTypeBadge type="핵심">핵심</TagTypeBadge>
-                  <span className="count">1,820명</span>
-                </div>
-              </SegmentItem>
-
-              <SegmentItem>
-                <div className="left">
-                  <Users
-                    size={18}
-                    color="#6366f1"
-                  />
-                  <span>점심 이벤트 반응 고객</span>
-                </div>
-                <div className="right">
-                  <TagTypeBadge type="추천">추천</TagTypeBadge>
-                  <span className="count">940명</span>
-                </div>
-              </SegmentItem>
-
-              <SegmentItem>
-                <div className="left">
-                  <Users
-                    size={18}
-                    color="#6366f1"
-                  />
-                  <span>우리 가게 단골</span>
-                </div>
-                <div className="right">
-                  <TagTypeBadge type="유지">유지</TagTypeBadge>
-                  <span className="count">89명</span>
-                </div>
-              </SegmentItem>
-
-              <SegmentItem>
-                <div className="left">
-                  <Users
-                    size={18}
-                    color="#6366f1"
-                  />
-                  <span>반경 {radiusKm}km 신규 유입</span>
-                </div>
-                <div className="right">
-                  <TagTypeBadge type="확장">확장</TagTypeBadge>
-                  <span className="count">610명</span>
-                </div>
-              </SegmentItem>
-            </SegmentList>
+            {segments.length > 0 ? (
+              <SegmentList>
+                {segments.map((segment) => (
+                  <SegmentItem key={segment}>
+                    <Users
+                      size={18}
+                      color="#6366f1"
+                    />
+                    <span>{segment}</span>
+                  </SegmentItem>
+                ))}
+              </SegmentList>
+            ) : (
+              <EmptyNotice>
+                {emptyMessage || '아직 집계된 고객 세그먼트가 없어요.'}
+              </EmptyNotice>
+            )}
           </Card>
 
           <Card>
@@ -1124,37 +1056,18 @@ export default function AiLocationMatchingDetailPage() {
               <h3>매칭 이유</h3>
             </CardHeader>
 
-            <TagGroup>
-              {segments.map((tag, idx) => (
-                <KeywordTag key={idx}>#{tag}</KeywordTag>
-              ))}
-            </TagGroup>
-
-            <ReasonList>
+            {matchReason ? (
               <ReasonItem>
                 <CheckCircle2
                   size={18}
                   color="#10b981"
                   style={{ flexShrink: 0, marginTop: 2 }}
                 />
-                <span>
-                  주변 생활권 고객의{' '}
-                  <strong>관심사 1위가 '{currentInterest}'</strong>으로 우리
-                  가게와 일치해요.
-                </span>
+                <span>{matchReason}</span>
               </ReasonItem>
-              <ReasonItem>
-                <CheckCircle2
-                  size={18}
-                  color="#10b981"
-                  style={{ flexShrink: 0, marginTop: 2 }}
-                />
-                <span>
-                  진행 중인 <strong>점심 이벤트</strong>가 점심 수요가 높은
-                  직장인 생활권과 잘 맞습니다.
-                </span>
-              </ReasonItem>
-            </ReasonList>
+            ) : (
+              <EmptyNotice>표시할 매칭 이유가 아직 없어요.</EmptyNotice>
+            )}
           </Card>
 
           <FooterText>
@@ -1165,14 +1078,22 @@ export default function AiLocationMatchingDetailPage() {
         <RightColumn>
           <RightChartCard>
             <span className="card-label">종합 매칭 점수</span>
-            <DonutContainer style={{ width: 140, height: 140 }}>
-              <DonutGraphic $score={totalScore} />
-              <DonutScoreText style={{ fontSize: 32 }}>
-                {totalScore}
-                <span>점</span>
-              </DonutScoreText>
-            </DonutContainer>
-            <span className="percentile-text">상위 8% · 매우 높음</span>
+            {hasData ? (
+              <>
+                <DonutContainer style={{ width: 140, height: 140 }}>
+                  <DonutGraphic $score={totalScore} />
+                  <DonutScoreText style={{ fontSize: 32 }}>
+                    {totalScore}
+                    <span>점</span>
+                  </DonutScoreText>
+                </DonutContainer>
+                <span className="percentile-text">
+                  {getScoreGrade(totalScore)}
+                </span>
+              </>
+            ) : (
+              <span className="percentile-text">집계할 데이터가 없어요</span>
+            )}
           </RightChartCard>
 
           {isExposing ? (

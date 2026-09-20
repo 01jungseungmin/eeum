@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Lightbulb,
   Tag,
-  Heart,
   AlertCircle,
 } from 'lucide-react';
 
@@ -289,17 +288,12 @@ export default function AiEventDetailPage() {
             <PrimaryButton onClick={handleGoToCreateEvent}>
               <Tag size={18} /> 다음 이벤트 만들기
             </PrimaryButton>
-            <SecondaryButton onClick={() => navigate('/messages/create')}>
-              <Heart size={18} /> 단골 메시지 보내기
-            </SecondaryButton>
           </ButtonGroup>
         </RightColumn>
       </ContentGrid>
     </PageWrapper>
   );
 }
-
-// --- Styled Components ---
 
 const PageWrapper = styled.div`
   max-width: 1200px;
@@ -626,26 +620,5 @@ const PrimaryButton = styled.button`
 
   &:hover {
     background-color: #369a6a;
-  }
-`;
-
-const SecondaryButton = styled.button`
-  width: 100%;
-  background-color: #ffffff;
-  color: #166534;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: #f8fafc;
   }
 `;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +7,7 @@ import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 import { approvalApi } from '../api/owner/approvalApi';
 import { storeApi } from '../api/owner/storeApi';
+import { getApprovalBadge } from '../utils/approvalBadge';
 
 const LayoutWrapper = styled.div`
   display: flex;
@@ -33,8 +34,18 @@ function MainLayout() {
   const { accessToken, isLoading: authLoading } = useAuth();
 
   const [approvalStatus, setApprovalStatus] = useState(null);
+  const [reviewRequestedAt, setReviewRequestedAt] = useState(null);
+  // 조회에 실패해 임시로 REJECTED를 넣은 경우에는 배지를 달지 않기 위한 플래그
+  const [approvalSynced, setApprovalSynced] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
+
+  // 심사 신청·사업자번호 수정 등으로 체크리스트가 바뀌면 사이드바 배지도 따라가도록 페이지가 호출한다
+  const syncApproval = useCallback((checklist) => {
+    setApprovalStatus(checklist.approvalStatus);
+    setReviewRequestedAt(checklist.reviewRequestedAt ?? null);
+    setApprovalSynced(true);
+  }, []);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -52,7 +63,7 @@ function MainLayout() {
           storeApi.getDashboard(),
         ]);
         if (approvalRes.data && approvalRes.data.success) {
-          setApprovalStatus(approvalRes.data.data.approvalStatus);
+          syncApproval(approvalRes.data.data);
         }
 
         // 대시보드 정보 처리
@@ -96,7 +107,7 @@ function MainLayout() {
     };
 
     fetchInitialData();
-  }, [accessToken]);
+  }, [accessToken, syncApproval]);
 
   // 인증 및 승인 상태 데이터 로딩 대기
   if (authLoading || (accessToken && statusLoading)) {
@@ -129,12 +140,21 @@ function MainLayout() {
   return (
     <NotificationProvider>
       <LayoutWrapper>
-        <Sidebar approvalStatus={approvalStatus} />
+        <Sidebar
+          approvalStatus={approvalStatus}
+          approvalBadge={
+            approvalSynced
+              ? getApprovalBadge(approvalStatus, reviewRequestedAt)
+              : null
+          }
+        />
 
         <MainContent>
           <TopNavbar />
           <PageContainer>
-            <Outlet context={{ approvalStatus, dashboardData }} />
+            <Outlet
+              context={{ approvalStatus, dashboardData, syncApproval }}
+            />
           </PageContainer>
         </MainContent>
       </LayoutWrapper>
