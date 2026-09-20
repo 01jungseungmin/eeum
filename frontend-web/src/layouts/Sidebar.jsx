@@ -255,9 +255,6 @@ function Sidebar({ approvalStatus }) {
 
     if (item.action === 'LOGOUT') {
       const refreshToken = localStorage.getItem('refreshToken');
-      const currentRole = sessionStorage.getItem('role');
-      const targetPath =
-        currentRole === 'ROLE_ADMIN' ? '/admin/login' : '/login';
 
       try {
         if (refreshToken) {
@@ -267,7 +264,7 @@ function Sidebar({ approvalStatus }) {
         console.error('로그아웃 API 에러:', error.response?.status);
       } finally {
         logout();
-        navigate(targetPath);
+        navigate('/login');
       }
     } else if (item.path && item.path !== '#') {
       navigate(item.path);

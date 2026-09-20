@@ -6,7 +6,6 @@ import FindPasswordPage from './pages/owner/login/FindPasswordPage';
 import MainLayout from './layouts/MainLayout';
 import ApprovalStatus from './pages/owner/main/ApprovalStatusPage';
 import OwnerDashboardPage from './pages/owner/main/DashBoardPage';
-import AdminLoginPage from './pages/admin/login/AdminLoginPage';
 import AdminDashboardPage from './pages/admin/main/DashBoardPage';
 import ApprovalPage from './pages/admin/main/ApprovalPage';
 import ApprovalDetailPage from './pages/admin/main/ApprovalDetailPage';
@@ -114,9 +113,15 @@ function App() {
         path="/find-password"
         element={<FindPasswordPage />}
       />
+      {/* 로그인 페이지를 하나로 통일 — 기존 관리자 로그인 주소로 들어와도 일반 로그인으로 보낸다 */}
       <Route
         path="/admin/login"
-        element={<AdminLoginPage />}
+        element={
+          <Navigate
+            to="/login"
+            replace
+          />
+        }
       />
 
       <Route element={<MainLayout />}>
