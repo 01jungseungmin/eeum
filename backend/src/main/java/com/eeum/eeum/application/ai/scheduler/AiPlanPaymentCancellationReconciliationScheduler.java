@@ -39,23 +39,16 @@ public class AiPlanPaymentCancellationReconciliationScheduler {
     private void reconcile(
             AiPlanPaymentCancellationStatus status, LocalDateTime threshold, Consumer<String> action
     ) {
-        LocalDateTime cursorModifiedAt = null;
-        Long cursorId = null;
         int remaining = RECOVERY_MAX_PER_RUN;
         while (remaining > 0) {
             int size = Math.min(RECOVERY_BATCH_SIZE, remaining);
             List<AiPlanPaymentCancellationOperation> candidates = cancellationOperationRepository
                     .findCandidatesByStatusModifiedBefore(
-                            status, threshold, cursorModifiedAt, cursorId, PageRequest.of(0, size));
+                            status, threshold, null, null, PageRequest.of(0, size));
             if (candidates.isEmpty()) {
                 return;
             }
 
-            AiPlanPaymentCancellationOperation last = candidates.get(candidates.size() - 1);
-            // 외부 호출이 상태·modifiedAt을 바꿔도 다음 페이지의 범위가 흔들리지 않게,
-            // 호출 전에 읽은 정렬 키로 커서를 전진시킨다.
-            cursorModifiedAt = last.getModifiedAt();
-            cursorId = last.getId();
             candidates.forEach(candidate -> action.accept(candidate.getPayment().getPortonePaymentId()));
             remaining -= candidates.size();
             if (candidates.size() < size) {

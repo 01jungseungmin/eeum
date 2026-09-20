@@ -48,6 +48,9 @@ public class AiPlanPaymentCancellationOperation extends BaseEntity {
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
 
+    @Column(name = "last_checked_at")
+    private LocalDateTime lastCheckedAt;
+
     public static AiPlanPaymentCancellationOperation request(AiPlanPayment payment, BigDecimal amount) {
         AiPlanPaymentCancellationOperation operation = new AiPlanPaymentCancellationOperation();
         operation.payment = payment;
@@ -91,5 +94,9 @@ public class AiPlanPaymentCancellationOperation extends BaseEntity {
         pgCancelledAmount = cancelledAmount;
         status = AiPlanPaymentCancellationStatus.FAILED;
         resolvedAt = LocalDateTime.now();
+    }
+
+    public void markReconciliationChecked() {
+        lastCheckedAt = LocalDateTime.now();
     }
 }

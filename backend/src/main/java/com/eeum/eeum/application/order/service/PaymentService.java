@@ -154,6 +154,16 @@ public class PaymentService {
         }
     }
 
+    /** Webhook/브라우저 verify가 유실된 PENDING 주문을 PortOne 조회 결과로 수렴시킨다. */
+    public void reconcilePendingPayment(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId).orElse(null);
+        if (payment == null || payment.getStatus() != PaymentStatus.PENDING
+                || !StringUtils.hasText(payment.getPortonePaymentId())) {
+            return;
+        }
+        handleWebhookByExternalStatus(payment.getOrder().getOrderId(), payment.getPortonePaymentId());
+    }
+
     @Transactional(readOnly = true)
     public Page<PaymentResponseDto> getMyPayments(Long accountId, Pageable pageable) {
         return paymentRepository

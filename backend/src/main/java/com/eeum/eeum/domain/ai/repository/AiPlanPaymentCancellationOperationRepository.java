@@ -25,11 +25,11 @@ public interface AiPlanPaymentCancellationOperationRepository
         from AiPlanPaymentCancellationOperation o
         join fetch o.payment
         where o.status = :status
-          and o.modifiedAt < :threshold
+          and (o.lastCheckedAt is null or o.lastCheckedAt < :threshold)
           and (:cursorModifiedAt is null
                or o.modifiedAt > :cursorModifiedAt
                or (o.modifiedAt = :cursorModifiedAt and o.id > :cursorId))
-        order by o.modifiedAt asc, o.id asc
+        order by o.lastCheckedAt asc, o.modifiedAt asc, o.id asc
     """)
     List<AiPlanPaymentCancellationOperation> findCandidatesByStatusModifiedBefore(
             @Param("status") AiPlanPaymentCancellationStatus status,
