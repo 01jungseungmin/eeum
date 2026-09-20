@@ -26,6 +26,7 @@ import com.eeum.eeum.domain.product.repository.ProductRepository;
 import com.eeum.eeum.domain.store.entity.SettlementAccount;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
+import com.eeum.eeum.domain.store.enums.Bank;
 import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.repository.SettlementAccountRepository;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
@@ -181,17 +182,20 @@ public class OwnerApprovalService {
                 settlementAccountRepository.findByStore_StoreId(store.getStoreId())
                         .orElse(null);
 
+        // 별칭으로 들어온 표기를 대표 이름으로 모아서 저장한다
+        String bankName = Bank.normalizeName(request.getBankName());
+
         if (settlementAccount == null) {
             settlementAccount = SettlementAccount.create(
                     store,
-                    request.getBankName(),
+                    bankName,
                     request.getAccountNumber(),
                     request.getAccountHolder()
             );
             settlementAccountRepository.save(settlementAccount);
         } else {
             settlementAccount.update(
-                    request.getBankName(),
+                    bankName,
                     request.getAccountNumber(),
                     request.getAccountHolder()
             );

@@ -27,6 +27,10 @@ public class Cart extends BaseEntity {
     @JoinColumn(name = "store_id")
     private Store store;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public static Cart create(Account account) {
         Cart cart = new Cart();
         cart.account = account;

@@ -59,7 +59,8 @@ public class StoreOrderCompletionProcessor {
                 throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
             }
             payment.markAsPaid("CASH_ON_SITE");
-        } else if (payment.getStatus() != PaymentStatus.PAID) {
+        } else if (payment.getStatus() != PaymentStatus.PAID
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_COMPLETED);
         }
 

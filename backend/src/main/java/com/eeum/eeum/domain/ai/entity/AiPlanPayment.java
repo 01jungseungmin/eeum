@@ -72,7 +72,24 @@ public class AiPlanPayment extends BaseEntity {
         this.status = AiPlanPaymentStatus.FAILED;
     }
 
+    public boolean isFailed() {
+        return this.status == AiPlanPaymentStatus.FAILED;
+    }
+
     public boolean isPaid() {
         return this.status == AiPlanPaymentStatus.PAID;
+    }
+
+    public void cancel() {
+        if (this.status != AiPlanPaymentStatus.CANCELLED) {
+            this.status = AiPlanPaymentStatus.CANCELLED;
+        }
+    }
+
+    /** 부분 환불은 결제 상태로만 기록한다. 구독 권한은 별도 정책이 바꾸기 전까지 유지한다. */
+    public void partiallyCancel() {
+        if (this.status == AiPlanPaymentStatus.PENDING || this.status == AiPlanPaymentStatus.PAID) {
+            this.status = AiPlanPaymentStatus.PARTIALLY_CANCELLED;
+        }
     }
 }

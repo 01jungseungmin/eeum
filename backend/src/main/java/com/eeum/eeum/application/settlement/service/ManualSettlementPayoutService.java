@@ -33,8 +33,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ManualSettlementPayoutService {
 
-    /** 지급 작업 임대 시간. 만료되면 다른 관리자가 다시 claim 할 수 있다. */
-    private static final Duration CLAIM_LEASE = Duration.ofMinutes(10);
+    /**
+     * 지급 작업 임대 시간. 은행 이체와 확인에 걸리는 시간을 감안한다.
+     * 만료돼도 자동으로 풀리지 않는다 — 송금 여부를 확인한 뒤 인계로만 정리한다.
+     */
+    private static final Duration CLAIM_LEASE = Duration.ofMinutes(30);
 
     private final WeeklySettlementRepository weeklySettlementRepository;
     private final AccountRepository accountRepository;
@@ -88,6 +91,53 @@ public class ManualSettlementPayoutService {
             revenue.markSettled();
         }
         settlement.completeManually(admin, claimToken, payoutReference, LocalDateTime.now());
+    }
+
+    /**
+     * 임대가 끝난 지급 작업을 인계받아 완료 처리한다. 이전 관리자가 실제로 송금한 것을
+     * 확인했을 때만 쓴다. 송금 증빙(payoutReference)을 남겨야 이중 송금 여부를 나중에 가릴 수 있다.
+     */
+    @Transactional
+    public void completeHandover(Long adminAccountId, Long weeklySettlementId, String payoutReference) {
+        Account admin = requireAdmin(adminAccountId);
+        WeeklySettlement settlement = weeklySettlementRepository.findByIdWithPessimisticLock(weeklySettlementId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        LocalDateTime now = LocalDateTime.now();
+        if (!settlement.isStalledClaim(now)) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS);
+        }
+        assertNoUncompletedCancellation(weeklySettlementId, false);
+
+        WeeklySettlementItemAmounts itemAmounts = weeklySettlementItemRepository
+                .sumAmountsByWeeklySettlementId(weeklySettlementId);
+        settlement.reconcileWithItemAmounts(
+                itemAmounts.paymentAmount(), itemAmounts.pgFeeAmount(),
+                itemAmounts.platformFeeAmount(), itemAmounts.payoutAmount());
+
+        List<Long> ownerRevenueIds = weeklySettlementItemRepository
+                .findOwnerRevenueIdsByWeeklySettlementId(weeklySettlementId);
+        List<OwnerRevenue> revenues = ownerRevenueRepository.findAllByIdInWithPessimisticLock(ownerRevenueIds);
+        if (revenues.size() != ownerRevenueIds.size()) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_CONCURRENT_MODIFICATION);
+        }
+        revenues.forEach(OwnerRevenue::markSettled);
+        settlement.completeHandover(admin, payoutReference, now);
+        log.warn("[SETTLEMENT] 지급 인계 완료 처리: settlementId={}, adminId={}, payoutReference={}",
+                weeklySettlementId, adminAccountId, payoutReference);
+    }
+
+    /**
+     * 임대가 끝난 지급 작업을 되돌려 다시 지급할 수 있게 한다.
+     * 이전 관리자가 송금하지 않은 것을 확인했을 때만 쓴다.
+     */
+    @Transactional
+    public void releaseStalledClaim(Long adminAccountId, Long weeklySettlementId, String reason) {
+        Account admin = requireAdmin(adminAccountId);
+        WeeklySettlement settlement = weeklySettlementRepository.findByIdWithPessimisticLock(weeklySettlementId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
+        settlement.releaseStalledClaim(admin, reason, LocalDateTime.now());
+        log.warn("[SETTLEMENT] 미송금 확인 후 지급 작업 반환: settlementId={}, adminId={}, reason={}",
+                weeklySettlementId, adminAccountId, reason);
     }
 
     /**

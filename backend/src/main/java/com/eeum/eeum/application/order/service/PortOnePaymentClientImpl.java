@@ -32,14 +32,15 @@ import java.util.Map;
 public class PortOnePaymentClientImpl implements PortOnePaymentClient {
 
     private final PortOneProperties portOneProperties;
+    private final RestClient restClient;
 
     @Override
     public PortOnePaymentInfo getPayment(String paymentId) {
         PortOnePaymentResponse response;
         try {
-            response = RestClient.create(portOneProperties.baseUrl())
+            response = restClient
                     .get()
-                    .uri("/payments/{paymentId}", paymentId)
+                    .uri(portOneProperties.baseUrl() + "/payments/{paymentId}", paymentId)
                     .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret())
                     .retrieve()
                     .body(PortOnePaymentResponse.class);
@@ -75,9 +76,9 @@ public class PortOnePaymentClientImpl implements PortOnePaymentClient {
         try {
             // 응답 본문을 버리지 않는다. 취소 상태(SUCCEEDED/REQUESTED/FAILED)와 취소 식별자가
             // 여기에만 있고, REQUESTED를 완료로 확정하면 미완료 취소가 완료로 기록된다.
-            RestClient.RequestBodySpec request = RestClient.create(portOneProperties.baseUrl())
+            RestClient.RequestBodySpec request = restClient
                     .post()
-                    .uri("/payments/{paymentId}/cancel", paymentId)
+                    .uri(portOneProperties.baseUrl() + "/payments/{paymentId}/cancel", paymentId)
                     .header(HttpHeaders.AUTHORIZATION, "PortOne " + portOneProperties.apiSecret());
             if (idempotencyKey != null) {
                 request.header("Idempotency-Key", "\"" + idempotencyKey + "\"");

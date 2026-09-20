@@ -5,14 +5,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Getter
 @Builder
 @AllArgsConstructor
-@NoArgsConstructor
 @Schema(description = "관리자 채팅방 검색 조건")
 public class ChatRoomAdminSearchDto {
 

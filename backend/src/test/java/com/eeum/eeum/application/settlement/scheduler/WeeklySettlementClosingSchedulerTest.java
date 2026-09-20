@@ -56,18 +56,15 @@ class WeeklySettlementClosingSchedulerTest {
         // given
         when(ownerRevenueRepository.findLateEligibleIds(eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class)))
                 .thenReturn(List.of(9L));
-        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class)))
+        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(true);
 
         // when
         scheduler.closeWeeklySettlements();
 
         // then
-        verify(operationFailureRecorder).record(
-                eq(OperationFailureCategory.SCHEDULER),
-                eq("WeeklySettlementClosingScheduler.closeWeeklySettlements"),
-                eq("ownerRevenue"), eq("9"),
-                eq("SETTLEMENT_OUTSIDE_PERIOD"), anyString(), anyString());
+        verify(weeklySettlementClosingService).markLateRevenueReported(
+                eq(9L), any(LocalDateTime.class), any(LocalDateTime.class));
         verify(weeklySettlementClosingService, never()).closeEligibleRevenue(eq(9L), any(), any());
     }
 
@@ -80,12 +77,13 @@ class WeeklySettlementClosingSchedulerTest {
         when(ownerRevenueRepository.findEligibleIds(
                 eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of(1L));
-        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class)))
+        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenThrow(new BusinessException(ErrorCode.SETTLEMENT_INVALID_STATUS));
 
         scheduler.closeWeeklySettlements();
 
-        verify(weeklySettlementClosingService).markLateRevenueReported(eq(10L), any(LocalDateTime.class));
+        verify(weeklySettlementClosingService).markLateRevenueReported(
+                eq(10L), any(LocalDateTime.class), any(LocalDateTime.class));
         verify(weeklySettlementClosingService).closeEligibleRevenue(eq(1L), any(), any());
         verify(operationFailureRecorder).record(
                 eq(OperationFailureCategory.SCHEDULER),
@@ -126,20 +124,19 @@ class WeeklySettlementClosingSchedulerTest {
     }
 
     @Test
-    void 이미_수습_이력으로_표시한_누락_원장은_다시_기록하지_않는다() {
+    void 이미_수습_표시된_원장은_서비스가_운영_이력_존재를_확인한다() {
         // given
         when(ownerRevenueRepository.findLateEligibleIds(eq(OwnerRevenueStatus.ACCRUED), any(LocalDateTime.class)))
                 .thenReturn(List.of(9L));
-        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class)))
+        when(weeklySettlementClosingService.markLateRevenueReported(eq(9L), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(false);
 
         // when
         scheduler.closeWeeklySettlements();
 
         // then
-        verify(operationFailureRecorder, never()).record(
-                eq(OperationFailureCategory.SCHEDULER), anyString(), anyString(), eq("9"),
-                eq("SETTLEMENT_OUTSIDE_PERIOD"), anyString(), anyString());
+        verify(weeklySettlementClosingService).markLateRevenueReported(
+                eq(9L), any(LocalDateTime.class), any(LocalDateTime.class));
     }
 
     private void givenEligible(Long... ownerRevenueIds) {

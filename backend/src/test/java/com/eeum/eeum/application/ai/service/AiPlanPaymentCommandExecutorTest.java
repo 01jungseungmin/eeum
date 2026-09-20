@@ -1,14 +1,18 @@
 package com.eeum.eeum.application.ai.service;
 
 import com.eeum.eeum.application.order.dto.response.PortOnePaymentInfo;
-import com.eeum.eeum.application.order.service.PortOnePaymentClient;
+import com.eeum.eeum.application.ai.dto.response.AiPlanPaymentCancellationPlan;
 import com.eeum.eeum.domain.ai.entity.AiPlanPayment;
+import com.eeum.eeum.domain.ai.entity.AiPlanPaymentCancellationOperation;
 import com.eeum.eeum.domain.ai.entity.AiPlanSubscription;
+import com.eeum.eeum.domain.ai.enums.AiPlanPaymentCancellationStatus;
 import com.eeum.eeum.domain.ai.enums.AiPlanPaymentStatus;
 import com.eeum.eeum.domain.ai.enums.AiPlanType;
+import com.eeum.eeum.domain.ai.repository.AiPlanPaymentCancellationOperationRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanPaymentRepository;
 import com.eeum.eeum.domain.ai.repository.AiPlanSubscriptionRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -26,7 +30,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,12 +43,20 @@ class AiPlanPaymentCommandExecutorTest {
     private AiPlanPaymentCommandExecutor executor;
 
     @Mock private AiPlanPaymentRepository aiPlanPaymentRepository;
+    @Mock private AiPlanPaymentCancellationOperationRepository cancellationOperationRepository;
     @Mock private AiPlanSubscriptionRepository aiPlanSubscriptionRepository;
-    @Mock private PortOnePaymentClient portOnePaymentClient;
-    @Mock private AiPlanPaymentFailureRecorder failureRecorder;
+    @Mock private StoreRepository storeRepository;
 
     private static final Long STORE_ID = 1L;
     private static final String PAYMENT_ID = "ai-plan-1-abcd1234";
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        lenient().when(aiPlanSubscriptionRepository.findByPayment_AiPlanPaymentId(org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(Optional.empty());
+        lenient().when(storeRepository.findByIdWithPessimisticLock(STORE_ID))
+                .thenAnswer(invocation -> Optional.of(stubStore()));
+    }
 
     private Store stubStore() {
         Store store = mock(Store.class);
@@ -73,7 +84,8 @@ class AiPlanPaymentCommandExecutorTest {
     void BASIC_플랜_구독_요청_시_PENDING_결제가_생성된다() {
         // given
         Store store = stubStore();
-        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
+        when(aiPlanPaymentRepository.findFirstByStore_StoreIdAndPlanTypeAndStatusOrderByCreatedAtDesc(
+                STORE_ID, AiPlanType.BASIC, AiPlanPaymentStatus.PENDING))
                 .thenReturn(Optional.empty());
         when(aiPlanPaymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -87,36 +99,32 @@ class AiPlanPaymentCommandExecutorTest {
     }
 
     @Test
-    void 이미_같은_플랜을_활성_구독_중이면_재결제_요청을_막는다() {
-        // given — 이미 BASIC을 활성 구독 중인데 BASIC을 또 결제하려는 상황
+    void 같은_플랜을_활성_구독_중이어도_남은_기간을_연장할_결제_요청을_허용한다() {
+        // given — BASIC이 남아 있는 상태의 BASIC 연장 결제
         Store store = stubStore();
-        AiPlanSubscription activeBasic = AiPlanSubscription.create(store, AiPlanType.BASIC, LocalDateTime.now());
-        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.of(activeBasic));
+        when(aiPlanPaymentRepository.findFirstByStore_StoreIdAndPlanTypeAndStatusOrderByCreatedAtDesc(
+                STORE_ID, AiPlanType.BASIC, AiPlanPaymentStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(aiPlanPaymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        // when & then
-        assertThatThrownBy(() -> executor.requestSubscriptionInTx(store, AiPlanType.BASIC))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.AI_PLAN_ALREADY_SUBSCRIBED);
-        verify(aiPlanPaymentRepository, never()).save(any());
+        AiPlanPayment payment = executor.requestSubscriptionInTx(store, AiPlanType.BASIC);
+
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.PENDING);
+        verify(aiPlanPaymentRepository).save(any());
     }
 
     @Test
-    void 다른_플랜으로_업그레이드_요청은_허용된다() {
-        // given — BASIC 활성 구독 중 PRO로 업그레이드 요청 (정상 플로우 — 막으면 안 됨)
+    void 아직_완료되지_않은_같은_플랜_결제는_재사용한다() {
         Store store = stubStore();
-        AiPlanSubscription activeBasic = AiPlanSubscription.create(store, AiPlanType.BASIC, LocalDateTime.now());
-        when(aiPlanSubscriptionRepository.findFirstByStore_StoreIdAndActiveTrueOrderByCreatedAtDesc(STORE_ID))
-                .thenReturn(Optional.of(activeBasic));
-        when(aiPlanPaymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        AiPlanPayment pending = pendingPayment(store, AiPlanType.PRO);
+        when(aiPlanPaymentRepository.findFirstByStore_StoreIdAndPlanTypeAndStatusOrderByCreatedAtDesc(
+                STORE_ID, AiPlanType.PRO, AiPlanPaymentStatus.PENDING))
+                .thenReturn(Optional.of(pending));
 
-        // when
         AiPlanPayment payment = executor.requestSubscriptionInTx(store, AiPlanType.PRO);
 
-        // then
-        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.PENDING);
-        assertThat(payment.getAmount()).isEqualByComparingTo(new BigDecimal("19900"));
+        assertThat(payment).isSameAs(pending);
+        verify(aiPlanPaymentRepository, never()).save(any());
     }
 
     // ──────────────────── applyPaidSubscriptionInTx ────────────────────
@@ -126,15 +134,14 @@ class AiPlanPaymentCommandExecutorTest {
         // given
         Store store = stubStore();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.PRO);
-        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID)).thenReturn(Optional.of(payment));
         PortOnePaymentInfo paidInfo = portoneInfo("PAID", new BigDecimal("19900"));
-        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(paidInfo);
         AiPlanSubscription oldSubscription = AiPlanSubscription.create(store, AiPlanType.BASIC, LocalDateTime.now());
         when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
                 .thenReturn(List.of(oldSubscription));
 
         // when
-        executor.applyPaidSubscriptionInTx(PAYMENT_ID);
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, paidInfo);
 
         // then
         assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.PAID);
@@ -147,12 +154,11 @@ class AiPlanPaymentCommandExecutorTest {
         // given
         Store store = stubStore();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
-        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID)).thenReturn(Optional.of(payment));
         PortOnePaymentInfo failedInfo = portoneInfo("FAILED", new BigDecimal("9900"));
-        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(failedInfo);
 
         // when & then
-        assertThatThrownBy(() -> executor.applyPaidSubscriptionInTx(PAYMENT_ID))
+        assertThatThrownBy(() -> executor.applyPaidSubscriptionInTx(PAYMENT_ID, failedInfo))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_NOT_COMPLETED);
@@ -160,22 +166,74 @@ class AiPlanPaymentCommandExecutorTest {
     }
 
     @Test
-    void 결제_금액이_불일치하면_PAYMENT_AMOUNT_MISMATCH_예외가_발생하고_FAILED_기록은_REQUIRES_NEW_빈에_위임된다() {
+    void 결제_금액이_불일치하면_PAYMENT_AMOUNT_MISMATCH_예외가_발생한다() {
         // given
         Store store = stubStore();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
-        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID)).thenReturn(Optional.of(payment));
         PortOnePaymentInfo tamperedInfo = portoneInfo("PAID", new BigDecimal("100")); // 위변조 금액
-        when(portOnePaymentClient.getPayment(PAYMENT_ID)).thenReturn(tamperedInfo);
 
         // when & then
-        assertThatThrownBy(() -> executor.applyPaidSubscriptionInTx(PAYMENT_ID))
+        assertThatThrownBy(() -> executor.applyPaidSubscriptionInTx(PAYMENT_ID, tamperedInfo))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-        // 이 메서드가 예외로 롤백돼도 FAILED 마킹이 남도록 REQUIRES_NEW 빈에 위임했는지 확인
-        verify(failureRecorder).markFailed(PAYMENT_ID);
         verify(aiPlanSubscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void 부분_취소된_결제는_늦은_PAID_재전송으로_구독을_복구하지_않는다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.markPaid(LocalDateTime.now());
+        payment.partiallyCancel();
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
+
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.PARTIALLY_CANCELLED);
+        verify(aiPlanSubscriptionRepository, never()).save(any(AiPlanSubscription.class));
+    }
+
+    @Test
+    void 구독을_아직_반영하지_않은_결제의_부분_취소도_종결_상태로_기록한다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+
+        executor.partiallyCancelPaidSubscriptionInTx(PAYMENT_ID);
+
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.PARTIALLY_CANCELLED);
+        verify(aiPlanSubscriptionRepository, never()).findByPayment_AiPlanPaymentId(org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void 성공한_환불_작업은_늦은_실패_응답으로_되돌아가지_않는다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        AiPlanPaymentCancellationOperation operation = AiPlanPaymentCancellationOperation.request(
+                payment, new BigDecimal("9900"));
+        operation.recordSucceeded("cancel-1", new BigDecimal("9900"));
+
+        operation.recordFailed("cancel-1", null);
+
+        assertThat(operation.getStatus()).isEqualTo(AiPlanPaymentCancellationStatus.SUCCEEDED);
+    }
+
+    @Test
+    void 부분_취소된_결제도_전액_취소_Webhook에서_CANCELLED로_수렴한다() {
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.markPaid(LocalDateTime.now());
+        payment.partiallyCancel();
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+
+        executor.cancelPaidSubscriptionInTx(PAYMENT_ID);
+
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.CANCELLED);
     }
 
     @Test
@@ -184,16 +242,15 @@ class AiPlanPaymentCommandExecutorTest {
         Store store = stubStore();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
         payment.markPaid(LocalDateTime.now());
-        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID)).thenReturn(Optional.of(payment));
         AiPlanSubscription existingSubscription = AiPlanSubscription.create(store, AiPlanType.BASIC, LocalDateTime.now());
-        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
-                .thenReturn(List.of(existingSubscription));
+        when(aiPlanSubscriptionRepository.findByPayment_AiPlanPaymentId(1L))
+                .thenReturn(Optional.of(existingSubscription));
 
         // when
-        executor.applyPaidSubscriptionInTx(PAYMENT_ID);
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
 
-        // then — PortOne 재검증도, 구독 생성도 일어나지 않는다
-        verify(portOnePaymentClient, never()).getPayment(anyString());
+        // then — 구독 생성은 일어나지 않는다
         verify(aiPlanSubscriptionRepository, never()).save(any());
     }
 
@@ -203,15 +260,178 @@ class AiPlanPaymentCommandExecutorTest {
         Store store = stubStore();
         AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
         payment.markPaid(LocalDateTime.now());
-        when(aiPlanPaymentRepository.findByPortonePaymentId(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID)).thenReturn(Optional.of(payment));
         when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
                 .thenReturn(List.of());
 
         // when
-        executor.applyPaidSubscriptionInTx(PAYMENT_ID);
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
 
-        // then — 결제 재검증(PortOne) 없이도 누락된 구독이 복구 생성된다
-        verify(portOnePaymentClient, never()).getPayment(anyString());
+        // then — 이미 검증된 결제를 기준으로 누락된 구독을 복구 생성한다
         verify(aiPlanSubscriptionRepository).save(any(AiPlanSubscription.class));
+    }
+
+    // ──────────────────── prepareMismatchedPaymentCancellation ────────────────────
+
+    @Test
+    void 금액_불일치_환불_작업은_PortOne_호출_전에_PENDING으로_저장한다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByPaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.empty());
+        when(cancellationOperationRepository.save(any(AiPlanPaymentCancellationOperation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        AiPlanPaymentCancellationPlan plan = executor.prepareMismatchedPaymentCancellation(
+                PAYMENT_ID, new BigDecimal("9900"));
+
+        // then
+        assertThat(plan.shouldCallPortOne()).isTrue();
+        org.mockito.ArgumentCaptor<AiPlanPaymentCancellationOperation> captor =
+                org.mockito.ArgumentCaptor.forClass(AiPlanPaymentCancellationOperation.class);
+        verify(cancellationOperationRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(AiPlanPaymentCancellationStatus.PENDING);
+    }
+
+    @Test
+    void PortOne_호출_전에_중단된_PENDING_환불은_같은_멱등키로_재시도한다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        AiPlanPaymentCancellationOperation operation =
+                AiPlanPaymentCancellationOperation.request(payment, new BigDecimal("9900"));
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByPaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(operation));
+
+        // when
+        AiPlanPaymentCancellationPlan plan = executor.prepareMismatchedPaymentCancellation(
+                PAYMENT_ID, new BigDecimal("9900"));
+
+        // then
+        assertThat(plan.shouldCallPortOne()).isTrue();
+        assertThat(plan.idempotencyKey()).isEqualTo(operation.getIdempotencyKey());
+        assertThat(operation.getStatus()).isEqualTo(AiPlanPaymentCancellationStatus.PENDING);
+    }
+
+    @Test
+    void PortOne이_접수한_REQUESTED_환불은_중복_호출하지_않는다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        AiPlanPaymentCancellationOperation operation =
+                AiPlanPaymentCancellationOperation.request(payment, new BigDecimal("9900"));
+        operation.recordRequested("cancel-1");
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        when(cancellationOperationRepository.findByPaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(operation));
+
+        // when
+        AiPlanPaymentCancellationPlan plan = executor.prepareMismatchedPaymentCancellation(
+                PAYMENT_ID, new BigDecimal("9900"));
+
+        // then
+        assertThat(plan.shouldCallPortOne()).isFalse();
+    }
+
+    // ──────────────────── 구독 기간 정책 ────────────────────
+
+    @Test
+    void 상위_플랜_결제는_즉시_적용되고_남은_기간만큼_종료일이_밀린다() {
+        // given — BASIC이 10일 남은 상태에서 PRO 결제
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.PRO);
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        LocalDateTime remainingUntil = LocalDateTime.now().plusDays(10);
+        AiPlanSubscription basic = AiPlanSubscription.createWithPeriod(
+                store, AiPlanType.BASIC, LocalDateTime.now().minusDays(20), remainingUntil);
+        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
+                .thenReturn(List.of(basic));
+
+        // when
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("19900")));
+
+        // then
+        AiPlanSubscription saved = savedSubscription();
+        assertThat(basic.isActive()).isFalse();
+        assertThat(saved.isActive()).isTrue();
+        assertThat(saved.getPlanType()).isEqualTo(AiPlanType.PRO);
+        assertThat(saved.getExpiredAt()).isEqualTo(remainingUntil.plusMonths(1));
+    }
+
+    @Test
+    void 하위_플랜_결제는_현재_기간이_끝난_뒤로_예약된다() {
+        // given — PRO가 10일 남은 상태에서 BASIC 결제
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        LocalDateTime remainingUntil = LocalDateTime.now().plusDays(10);
+        AiPlanSubscription pro = AiPlanSubscription.createWithPeriod(
+                store, AiPlanType.PRO, LocalDateTime.now().minusDays(20), remainingUntil);
+        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
+                .thenReturn(List.of(pro));
+
+        // when
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
+
+        // then — 남은 PRO 권한을 깎지 않는다
+        AiPlanSubscription saved = savedSubscription();
+        assertThat(pro.isActive()).isTrue();
+        assertThat(saved.isActive()).isFalse();
+        assertThat(saved.getStartedAt()).isEqualTo(remainingUntil);
+        assertThat(saved.getExpiredAt()).isEqualTo(remainingUntil.plusMonths(1));
+    }
+
+    @Test
+    void 남은_기간이_없으면_결제_시점부터_한_달을_적용한다() {
+        // given
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+        AiPlanSubscription expired = AiPlanSubscription.createWithPeriod(
+                store, AiPlanType.BASIC, LocalDateTime.now().minusMonths(2), LocalDateTime.now().minusDays(1));
+        when(aiPlanSubscriptionRepository.findByStore_StoreIdAndActiveTrue(STORE_ID))
+                .thenReturn(List.of(expired));
+
+        // when
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
+
+        // then
+        AiPlanSubscription saved = savedSubscription();
+        assertThat(saved.isActive()).isTrue();
+        assertThat(saved.getExpiredAt()).isEqualTo(saved.getStartedAt().plusMonths(1));
+    }
+
+    @Test
+    void 만료로_실패_처리된_결제는_뒤늦게_승인돼도_구독을_만들지_않는다() {
+        // given — 결제 대기 만료로 FAILED가 된 뒤 PAID Webhook이 도착
+        Store store = stubStore();
+        AiPlanPayment payment = pendingPayment(store, AiPlanType.BASIC);
+        payment.markFailed();
+        when(aiPlanPaymentRepository.findByPortonePaymentIdWithPessimisticLock(PAYMENT_ID))
+                .thenReturn(Optional.of(payment));
+
+        // when — 종결된 결제의 PAID 재전송은 무시된다. 환불은 호출부(서비스)가 맡는다
+        executor.applyPaidSubscriptionInTx(PAYMENT_ID, portoneInfo("PAID", new BigDecimal("9900")));
+
+        // then
+        assertThat(payment.getStatus()).isEqualTo(AiPlanPaymentStatus.FAILED);
+        verify(aiPlanSubscriptionRepository, never()).save(any(AiPlanSubscription.class));
+    }
+
+    private AiPlanSubscription savedSubscription() {
+        org.mockito.ArgumentCaptor<AiPlanSubscription> captor =
+                org.mockito.ArgumentCaptor.forClass(AiPlanSubscription.class);
+        verify(aiPlanSubscriptionRepository).save(captor.capture());
+        return captor.getValue();
     }
 }

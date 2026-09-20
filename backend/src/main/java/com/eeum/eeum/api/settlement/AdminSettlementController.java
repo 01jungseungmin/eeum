@@ -1,6 +1,7 @@
 package com.eeum.eeum.api.settlement;
 
 import com.eeum.eeum.application.settlement.dto.request.ManualPayoutCompleteRequestDto;
+import com.eeum.eeum.application.settlement.dto.request.PayoutHandoverRequestDto;
 import com.eeum.eeum.application.settlement.dto.request.PartialCancellationReconcileRequestDto;
 import com.eeum.eeum.application.settlement.dto.response.BlockingCancellationResponseDto;
 import com.eeum.eeum.application.settlement.dto.response.WeeklySettlementResponseDto;
@@ -63,6 +64,30 @@ public class AdminSettlementController {
     ) {
         payoutService.complete(
                 SecurityUtil.getCurrentAccountId(), id, request.claimToken(), request.payoutReference());
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "지급 작업 인계 — 이미 송금됨",
+            description = "임대가 끝난 지급 작업을 인계받아 완료 처리합니다. 이전 관리자의 실제 송금을 "
+                    + "확인한 경우에만 사용하며, note에 송금 증빙을 남깁니다. 임대 만료만으로는 재claim이 되지 않습니다.")
+    @PostMapping("/{id}/handover/complete")
+    public ResponseEntity<ApiResponse<Void>> completeHandover(
+            @PathVariable @Positive Long id,
+            @Valid @RequestBody PayoutHandoverRequestDto request
+    ) {
+        payoutService.completeHandover(SecurityUtil.getCurrentAccountId(), id, request.note());
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @Operation(summary = "지급 작업 인계 — 송금 안 됨",
+            description = "임대가 끝난 지급 작업을 되돌려 다시 지급할 수 있게 합니다. 송금이 없었음을 "
+                    + "확인한 경우에만 사용하며, note에 확인 사유를 남깁니다.")
+    @PostMapping("/{id}/handover/release")
+    public ResponseEntity<ApiResponse<Void>> releaseStalledClaim(
+            @PathVariable @Positive Long id,
+            @Valid @RequestBody PayoutHandoverRequestDto request
+    ) {
+        payoutService.releaseStalledClaim(SecurityUtil.getCurrentAccountId(), id, request.note());
         return ResponseEntity.ok(ApiResponse.success());
     }
 
