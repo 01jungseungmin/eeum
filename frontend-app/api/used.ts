@@ -52,6 +52,22 @@ export interface CreateUsedProductReq {
   tradePlaceId?: string | null;
 }
 
+/**
+ * 수정 요청. regionId가 없는 것은 실수가 아니다 — 거래 희망 지역은 서버가 변경을 막는다.
+ * 거래 희망 장소는 셋 다 보내거나 셋 다 null이어야 한다(부분 입력은 400).
+ */
+export interface UpdateUsedProductReq {
+  categoryId?: number;
+  title?: string;
+  content?: string;
+  priceType?: UsedProductPriceType;
+  price?: number | null;
+  tradeLocationName?: string | null;
+  tradeLatitude?: number | null;
+  tradeLongitude?: number | null;
+  tradePlaceId?: string | null;
+}
+
 export interface UsedProductImage {
   imageId: number;
   imageUrl: string;
@@ -72,6 +88,9 @@ export interface UsedProductDetail {
   priceType: UsedProductPriceType;
   price: number | null;
   status: UsedProductStatus;
+  /** 판매완료 시 확정된 거래 상대. 이 사람만 후기를 쓸 수 있다. */
+  buyerAccountId: number | null;
+  buyerNickname: string | null;
   hidden: boolean;
   viewCount: number;
   favoriteCount: number;
@@ -127,5 +146,58 @@ export const usedApi = {
 
   uploadImages: async (usedProductId: number, data: { images: { imageUrl: string }[] }) => {
     return await client.post(`/used/${usedProductId}/images`, data);
-  }
+  },
+
+  /** 작성자 본인만. 거래 희망 지역(regionId)은 서버가 변경을 막는다. */
+  updateUsedProduct: async (
+    usedProductId: number,
+    data: UpdateUsedProductReq
+  ): Promise<UsedProductDetail> => {
+    const res = await client.patch(`/used/${usedProductId}`, data);
+    return res.data?.data ?? res.data;
+  },
+
+  /** 작성자 본인만. 예약 중인 글은 예약을 먼저 취소해야 삭제된다. */
+  deleteUsedProduct: async (usedProductId: number): Promise<void> => {
+    await client.delete(`/used/${usedProductId}`);
+  },
+
+  // ===================== 거래 상태 =====================
+
+  /** buyerId는 선택. 지정하면 예약 취소 시 함께 해제된다. */
+  reserve: async (usedProductId: number, buyerId?: number | null): Promise<UsedProductDetail> => {
+    const res = await client.post(
+      `/used/${usedProductId}/reservation`,
+      buyerId ? { buyerId } : undefined
+    );
+    return res.data?.data ?? res.data;
+  },
+
+  cancelReservation: async (usedProductId: number): Promise<UsedProductDetail> => {
+    const res = await client.delete(`/used/${usedProductId}/reservation`);
+    return res.data?.data ?? res.data;
+  },
+
+  /**
+   * buyerId를 생략하면 예약 때 지정한 상대가 유지된다.
+   * 여기서 확정된 상대만 후기를 쓸 수 있다.
+   */
+  markSold: async (usedProductId: number, buyerId?: number | null): Promise<UsedProductDetail> => {
+    const res = await client.post(
+      `/used/${usedProductId}/sold`,
+      buyerId ? { buyerId } : undefined
+    );
+    return res.data?.data ?? res.data;
+  },
+
+  // ===================== 사진 =====================
+
+  /** 대표 사진을 지우면 남은 첫 사진이 대표가 된다. */
+  deleteImage: async (usedProductId: number, imageId: number): Promise<void> => {
+    await client.delete(`/used/${usedProductId}/images/${imageId}`);
+  },
+
+  setThumbnail: async (usedProductId: number, imageId: number): Promise<void> => {
+    await client.patch(`/used/${usedProductId}/images/${imageId}/thumbnail`);
+  },
 };

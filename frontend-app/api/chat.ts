@@ -129,5 +129,39 @@ export const chatApi = {
   sendImageMessage: async (roomId: string | number, imageUrl: string) => {
     const response = await client.post(`/chat/rooms/${roomId}/messages/image`, { imageUrl });
     return response.data;
+  },
+
+  /**
+   * 13. 중고 게시글 문의방 생성 (POST /chat/rooms/used-products/{usedProductId})
+   *
+   * 멱등이다 — 같은 게시글에 이미 활성 문의방이 있으면 그 방을 돌려준다.
+   * 본인 글에는 문의할 수 없고, GPS 인증된 활동 지역이 있어야 한다.
+   */
+  createUsedProductInquiry: async (usedProductId: number) => {
+    const response = await client.post(`/chat/rooms/used-products/${usedProductId}`);
+    return response.data?.data ?? response.data;
+  },
+
+  // 14. 채팅방 사진 모아보기 (GET /chat/rooms/{roomId}/images) - 최신순 커서 페이징
+  getRoomImages: async (
+    roomId: string | number,
+    cursorValue: string | null = null,
+    cursorId: number | null = null,
+    size: number = 50
+  ): Promise<CursorSlice<any>> => {
+    try {
+      const params: any = { size };
+      // 과거 메시지와 같은 규칙 — 커서는 두 값을 함께 보내야 한다.
+      if (cursorValue != null && cursorId != null) {
+        params.cursorValue = cursorValue;
+        params.cursorId = cursorId;
+      }
+
+      const response = await client.get(`/chat/rooms/${roomId}/images`, { params });
+      return toCursorSlice(response.data?.data);
+    } catch (error) {
+      console.error('채팅방 사진 조회 에러:', error);
+      return { content: [], hasNext: false, nextCursorValue: null, nextCursorId: null };
+    }
   }
 };
