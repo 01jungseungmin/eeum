@@ -52,13 +52,14 @@ const ButtonGroup = styled.div`
   }
 `;
 
-function MemberOverview({ total, suspended }) {
+function MemberOverview({ total, suspended, withdrawn = 0 }) {
   return (
     <OverviewContainer>
       <TitleBlock>
         <h1>회원 관리</h1>
         <p>
-          전체 {total.toLocaleString()}명 · 정지 {suspended}명
+          전체 {total.toLocaleString()}명 · 정지 {suspended}명 · 탈퇴{' '}
+          {withdrawn}명
         </p>
       </TitleBlock>
       <ButtonGroup>

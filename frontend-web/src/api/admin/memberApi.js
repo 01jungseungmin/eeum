@@ -1,9 +1,20 @@
-import { apiClient } from '../apiClient'; // 프로젝트 경로에 맞게 맞춰주세요
+import { apiClient } from '../apiClient';
 
 export const memberApi = {
-  // 전체 회원 목록 조회
-  getAllMembers: (page = 0, size = 1000) => {
-    return apiClient.get(`/admin/accounts?page=${page}&size=${size}`);
+  // 회원 목록 조회 (서버 페이징)
+  // params: { page, size, status: ACTIVE|SUSPENDED|WITHDRAWN, role: ROLE_USER|ROLE_OWNER|ROLE_ADMIN, keyword(이메일·닉네임·이름) }
+  getMembers: (params) => {
+    return apiClient.get('/admin/accounts', { params });
+  },
+
+  // 탈퇴 회원 목록 조회
+  getWithdrawnMembers: (params) => {
+    return apiClient.get('/admin/accounts/withdrawn', { params });
+  },
+
+  // 회원 상세 조회 (활동 지역·사장 정보 포함)
+  getMemberDetail: (accountId) => {
+    return apiClient.get(`/admin/accounts/${accountId}`);
   },
 
   // 단일 회원 정지 / 해제
