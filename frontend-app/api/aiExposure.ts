@@ -4,6 +4,8 @@ export interface AiExposedStore {
   storeId: number;
   storeName: string;
   address: string;
+  /** 썸네일을 등록하지 않은 상점이면 null */
+  storeThumbnailUrl: string | null;
   /** 클릭 로그를 남길 때 쓰는 노출 상태 ID */
   exposureStatusId: number;
   interest: string | null;

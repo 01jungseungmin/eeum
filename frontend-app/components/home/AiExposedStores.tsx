@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../CustomText';
 
 import { AiExposedStore, aiExposureApi } from '../../api/aiExposure';
+import { StoreThumbnail } from '../StoreThumbnail';
 
 interface Props {
   router: any;
@@ -66,17 +67,24 @@ export default function AiExposedStores({ router, regionKeyword }: Props) {
             style={styles.card}
             onPress={() => handlePress(store)}
           >
-            <View style={styles.cardTop}>
-              <Text fontWeight="bold" style={styles.storeName} numberOfLines={1}>
-                {store.storeName}
-              </Text>
-              {/* 광고성 노출이라는 점을 감추지 않는다 */}
-              <Text style={styles.badge}>AI 추천</Text>
+            <StoreThumbnail
+              uri={store.storeThumbnailUrl}
+              style={styles.thumbnail}
+              iconSize={28}
+            />
+            <View style={styles.cardBody}>
+              <View style={styles.cardTop}>
+                <Text fontWeight="bold" style={styles.storeName} numberOfLines={1}>
+                  {store.storeName}
+                </Text>
+                {/* 광고성 노출이라는 점을 감추지 않는다 */}
+                <Text style={styles.badge}>AI 추천</Text>
+              </View>
+              {!!store.interest && (
+                <Text style={styles.interest} numberOfLines={1}>{store.interest}</Text>
+              )}
+              <Text style={styles.address} numberOfLines={1}>{store.address}</Text>
             </View>
-            {!!store.interest && (
-              <Text style={styles.interest} numberOfLines={1}>{store.interest}</Text>
-            )}
-            <Text style={styles.address} numberOfLines={1}>{store.address}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -90,17 +98,21 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, color: '#1E3932' },
   list: { paddingHorizontal: 20 },
   card: {
-    width: 200,
-    padding: 14,
+    width: 240,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
     marginRight: 12,
     borderRadius: 12,
     backgroundColor: '#F4FBF7',
     borderWidth: 1,
     borderColor: '#DFF1E7',
   },
+  thumbnail: { width: 56, height: 56, borderRadius: 8, marginRight: 12 },
+  cardBody: { flex: 1 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   storeName: { flex: 1, fontSize: 15, color: '#1E3932', marginRight: 8 },
   badge: { fontSize: 11, color: '#00A859' },
-  interest: { fontSize: 13, color: '#00A859', marginTop: 8 },
+  interest: { fontSize: 13, color: '#00A859', marginTop: 6 },
   address: { fontSize: 12, color: '#888', marginTop: 4 },
 });
