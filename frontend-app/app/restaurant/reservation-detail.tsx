@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { reservationApi } from '../../api/reservation';
-import { reviewApi } from '../../api/review';
 
 export default function ReservationDetailScreen() {
   const router = useRouter();
@@ -14,8 +13,9 @@ export default function ReservationDetailScreen() {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 리뷰 작성 여부를 저장할 상태 추가
-  const [isReviewCompleted, setIsReviewCompleted] = useState(false);
+  // 리뷰 작성 여부는 상세 응답의 hasReview가 그대로 알려준다.
+  // 예전에는 리뷰 상세를 따로 불렀는데, 안 쓴 리뷰는 404라 콘솔에 에러가 남았다.
+  const isReviewCompleted = detail?.hasReview === true;
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -36,24 +36,6 @@ export default function ReservationDetailScreen() {
       setLoading(false);
     }
   }, [id]);
-
-  // 예약 상태가 'COMPLETED'일 때만 리뷰 작성 여부를 백엔드에 물어봅니다.
-  useEffect(() => {
-    const checkReviewStatus = async () => {
-      if (detail && detail.status === 'COMPLETED') {
-        try {
-          const reviewData = await reviewApi.getReservationReview(Number(id));
-          if (reviewData && reviewData.storereviewId) {
-            setIsReviewCompleted(true);
-          }
-        } catch (error) {
-          setIsReviewCompleted(false);
-        }
-      }
-    };
-
-    checkReviewStatus();
-  }, [detail, id]);
 
   const getStatusDisplay = (status: string) => {
     switch (status) {

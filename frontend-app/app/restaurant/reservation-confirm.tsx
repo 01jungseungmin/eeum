@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Text } from '../../components/CustomText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { shopApi } from '../../api/shop';
 import { userApi } from '../../api/user';
 import { reservationApi } from '@/api/reservation';
+import { StoreThumbnail } from '../../components/StoreThumbnail';
 
 export default function ReservationConfirmScreen() {
   const router = useRouter();
@@ -134,9 +135,10 @@ export default function ReservationConfirmScreen() {
           <View style={styles.card}>
             <Text fontWeight="bold" style={styles.shopName}>{shopInfo?.name || '상점 이름'}</Text>
             <View style={styles.shopInfoBox}>
-              <Image 
-                source={{ uri: shopInfo?.images?.[0]?.imageUrl || 'https://placehold.co/100.png' }} 
-                style={styles.shopImage} 
+              <StoreThumbnail
+                uri={shopInfo?.images?.[0]?.imageUrl}
+                style={styles.shopImage}
+                iconSize={26}
               />
               <View style={styles.shopDetails}>
                 <Text style={styles.shopText} numberOfLines={1}>{shopInfo?.address || '주소 정보'}</Text>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { 
-  StyleSheet, View, FlatList, Image, 
-  TouchableOpacity, ActivityIndicator 
+import {
+  StyleSheet, View, FlatList,
+  TouchableOpacity, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 import { orderApi } from '@/api/order';
 import { getReviewAvailability } from '../../utils/reviewAvailability';
+import { StoreThumbnail } from '../../components/StoreThumbnail';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -79,7 +80,7 @@ export default function HistoryScreen() {
       : '주문일시 없음';
 
 
-    const imageUrl = item.items?.[0]?.thumbnailUrl || 'https://placehold.co/150.png';
+    const imageUrl = item.items?.[0]?.thumbnailUrl;
 
     const review = getReviewAvailability(item.status, item.hasReview === true);
 
@@ -98,10 +99,7 @@ export default function HistoryScreen() {
         </View>
 
         <View style={styles.cardBody}>
-          <Image 
-            source={{ uri: imageUrl }} 
-            style={styles.cardImage} 
-          />
+          <StoreThumbnail uri={imageUrl} style={styles.cardImage} />
           <View style={styles.cardInfo}>
             <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>
               {item.storeName}
