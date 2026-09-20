@@ -300,6 +300,12 @@ export const ADMIN_MENU_CONFIG = [
         icon: <Bell {...iconProps} />,
       },
       {
+        id: 'admin-operations',
+        name: '운영 모니터링',
+        path: '/admin/operations',
+        icon: <Activity {...iconProps} />,
+      },
+      {
         id: 'admin-approval',
         name: '사장 승인',
         path: '/admin/approval',

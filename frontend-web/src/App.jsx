@@ -54,6 +54,7 @@ import AdminUsedProductDetailPage from './pages/admin/main/UsedProductDetailPage
 import AdminChatRoomManagementPage from './pages/admin/main/ChatRoomManagementPage';
 import AdminChatRoomDetailPage from './pages/admin/main/ChatRoomDetailPage';
 import AdminNotificationSendPage from './pages/admin/main/NotificationSendPage';
+import AdminOperationMonitoringPage from './pages/admin/main/OperationMonitoringPage';
 
 import ApprovalGuard from './components/owner/ApprovalGuard';
 import { approvalApi } from './api/owner/approvalApi';
@@ -182,6 +183,10 @@ function App() {
         <Route
           path="/admin/notifications/send"
           element={<AdminNotificationSendPage />}
+        />
+        <Route
+          path="/admin/operations"
+          element={<AdminOperationMonitoringPage />}
         />
         <Route
           path="/admin/reports"
