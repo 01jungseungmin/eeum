@@ -103,7 +103,8 @@ const Badge = styled.span`
 `;
 
 const StatusBadge = styled.span`
-  background-color: #ff4d4f;
+  background-color: ${({ $tone }) =>
+    $tone === 'info' ? '#1677ff' : '#ff4d4f'};
   color: white;
   font-size: 10px;
   padding: 2px 6px;
@@ -146,7 +147,7 @@ const CATEGORY_MAP = {
   system: 'SYSTEM',
 };
 
-function Sidebar({ approvalStatus }) {
+function Sidebar({ approvalStatus, approvalBadge }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
@@ -270,7 +271,11 @@ function Sidebar({ approvalStatus }) {
                           {counts[item.countKey]}
                         </Badge>
                       )}
-                      {item.status && <StatusBadge>{item.status}</StatusBadge>}
+                      {item.id === 'approval' && approvalBadge && (
+                        <StatusBadge $tone={approvalBadge.tone}>
+                          {approvalBadge.label}
+                        </StatusBadge>
+                      )}
                     </MenuItem>
 
                     {/* 하위 서브메뉴(children)가 있는 경우 렌더링 */}

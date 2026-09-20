@@ -229,7 +229,6 @@ export const OWNER_MENU_CONFIG = [
         path: '/approval-status',
         icon: <ShieldCheck {...iconProps} />,
         subtitle: '사업자 등록증 인증 상태를 확인하세요',
-        status: '확인필요',
       },
     ],
   },
