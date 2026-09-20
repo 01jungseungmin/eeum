@@ -82,54 +82,22 @@ const CloseLabel = styled.span`
 
 export default function TimeSlotStatus({
   slotsData = [],
+  availableSlots = [],
   selectedDate,
-  dayOrders = [],
-  defaultSettings,
 }) {
-  // 대기(PENDING), 거절(REJECTED)을 제외하고 '승인된 예약'만 필터링
-  const approvedOrders = dayOrders.filter(
-    (order) => order.status === 'APPROVED',
-  );
-
-  // 승인된 예약이 존재하는 시간대만 추출
-  const activeReservationTimes = approvedOrders.map((order) => {
-    if (!order.visitTime) return '';
-    return order.visitTime.substring(0, 5);
+  // 백엔드가 계산한 시간대별 잔여 테이블 현황 (HH:mm 기준으로 조회)
+  const availabilityByTime = {};
+  availableSlots.forEach((slot) => {
+    availabilityByTime[slot.time?.substring(0, 5)] = slot;
   });
 
-  // 화면에 표시할 시간대 필터링
+  // 예약된 테이블이 있거나 수동으로 차단된 시간대만 화면에 표시
   const visibleSlots = slotsData.filter((slot) => {
-    const slotTime = slot.time?.substring(0, 5);
-    const hasApprovedReservations = activeReservationTimes.includes(slotTime);
+    const availability = availabilityByTime[slot.time?.substring(0, 5)];
+    const hasReservedTables = (availability?.reservedTableCount ?? 0) > 0;
     const isManuallyModified = slot.enabled === false;
-
-    // 승인된 예약이 있거나 수동으로 차단된 시간대만 화면에 표시
-    return hasApprovedReservations || isManuallyModified;
+    return hasReservedTables || isManuallyModified;
   });
-
-  // 인원수를 파싱하는 안전한 함수
-  const getHeadCount = (order) => {
-    const count =
-      order.headCount ??
-      order.partySize ??
-      order.guestCount ??
-      order.peopleCount ??
-      order.people ??
-      1;
-
-    if (typeof count === 'string') {
-      const parsed = parseInt(count.replace(/[^0-9]/g, ''), 10);
-      return isNaN(parsed) ? 1 : parsed;
-    }
-    return Number(count);
-  };
-
-  // 인원수별 인석 매칭
-  const getCapacityByPeople = (count) => {
-    if (count <= 2) return 2; // 1~2명 -> 2인석
-    if (count <= 4) return 4; // 3~4명 -> 4인석
-    return 6; // 5명 이상 -> 6인석
-  };
 
   return (
     <Container>
@@ -158,26 +126,8 @@ export default function TimeSlotStatus({
         visibleSlots.map((slot) => {
           const slotTime = slot.time?.substring(0, 5);
           const isSlotEnabled = slot.enabled !== false;
-
-          // 해당 시간대의 '승인된' 예약만 추출
-          const slotOrders = approvedOrders.filter(
-            (o) => o.visitTime?.substring(0, 5) === slotTime,
-          );
-
-          // 승인된 예약에 대해서만 인석별 테이블 사용량 집계
-          const usedMap = { 2: 0, 4: 0, 6: 0 };
-          slotOrders.forEach((order) => {
-            const count = getHeadCount(order);
-            const cap = getCapacityByPeople(count);
-            usedMap[cap] = (usedMap[cap] || 0) + 1;
-          });
-
-          // 설정된 총 테이블 수
-          const totalMap = {
-            2: defaultSettings?.table2Seater ?? 2,
-            4: defaultSettings?.table4Seater ?? 3,
-            6: defaultSettings?.table6Seater ?? 1,
-          };
+          const tableAvailabilities =
+            availabilityByTime[slotTime]?.tableAvailabilities ?? [];
 
           return (
             <SlotRow
@@ -190,18 +140,18 @@ export default function TimeSlotStatus({
                   <CloseLabel>예약 마감(차단됨)</CloseLabel>
                 ) : (
                   <BadgeGroup>
-                    {[2, 4, 6].map((cap) => {
-                      const used = usedMap[cap] || 0;
-                      const total = totalMap[cap] || 0;
-                      const isFull = used >= total && total > 0;
+                    {tableAvailabilities.map((table) => {
+                      const isFull =
+                        table.totalCount > 0 && table.availableCount === 0;
 
                       return (
                         <CapacityBadge
-                          key={cap}
+                          key={table.capacity}
                           $isFull={isFull}
                           $disabled={!isSlotEnabled}
                         >
-                          {cap}인석 {used}/{total}
+                          {table.capacity}인석 {table.reservedCount}/
+                          {table.totalCount}
                         </CapacityBadge>
                       );
                     })}
