@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Sliders,
   CalendarRange,
+  AlertCircle,
 } from 'lucide-react';
 import SummaryCard from '../../../components/owner/reservation/SummaryCard';
 import TimeSlotStatus from '../../../components/owner/reservation/TimeSlotStatus';
@@ -18,6 +19,44 @@ const PageContainer = styled.div`
   background-color: #f8f9fa;
   min-height: 100vh;
   font-family: 'Noto Sans KR', sans-serif;
+`;
+
+// 예약 기본 설정이 아직 저장되지 않은 매장에 보여주는 안내 배너
+const SettingNoticeBanner = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #fff9db;
+  border: 1px solid #ffe066;
+  color: #856404;
+  font-size: 14px;
+  line-height: 1.5;
+
+  .message {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  button {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    background: #4ca771;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      background: #3e8f5e;
+    }
+  }
 `;
 
 // 상단 요약본 대시보드 4열 배치
@@ -195,6 +234,8 @@ export default function ReservationPage() {
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('전체');
   const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  // 예약 기본 설정이 저장된 적 없으면 예약 가능 시간대 조회가 404(RESERVATION_012)로 실패한다
+  const [isSettingMissing, setIsSettingMissing] = useState(false);
 
   // 기본 설정과 시간대 현황 조회
   const fetchSettings = async () => {
@@ -211,26 +252,43 @@ export default function ReservationPage() {
 
   // 특정 날짜의 시간대 현황 조회
   // (시간대 오픈/차단 설정 + 실제 잔여 테이블 현황을 함께 조회)
+  // 한쪽이 실패해도 다른 쪽 결과는 살리기 위해 allSettled를 쓴다 — 설정이 없는 매장은
+  // 잔여 현황만 404가 나고, 시간대 오픈/차단 목록은 기본값으로 정상 응답한다.
   const fetchTimeSlots = useCallback(async (date) => {
-    try {
-      const [slotResponse, availableResponse] = await Promise.all([
-        reservationApi.getDateTimeSlots(date),
-        reservationApi.getAvailableTimeSlots(date),
-      ]);
+    const [slotResult, availableResult] = await Promise.allSettled([
+      reservationApi.getDateTimeSlots(date),
+      reservationApi.getAvailableTimeSlots(date),
+    ]);
+
+    if (slotResult.status === 'fulfilled') {
+      const slotResponse = slotResult.value;
       if (slotResponse.data && slotResponse.data.success) {
         setTimeSlots(
           Array.isArray(slotResponse.data.data) ? slotResponse.data.data : [],
         );
       }
+    } else {
+      console.error('시간대 현황 로드 실패:', slotResult.reason);
+    }
+
+    if (availableResult.status === 'fulfilled') {
+      const availableResponse = availableResult.value;
       if (availableResponse.data && availableResponse.data.success) {
         setAvailableSlots(
           Array.isArray(availableResponse.data.data)
             ? availableResponse.data.data
             : [],
         );
+        setIsSettingMissing(false);
       }
-    } catch (error) {
-      console.error('시간대 현황 로드 실패:', error);
+    } else {
+      const error = availableResult.reason;
+      if (error.response?.data?.error?.code === 'RESERVATION_012') {
+        setAvailableSlots([]);
+        setIsSettingMissing(true);
+      } else {
+        console.error('잔여 시간대 현황 로드 실패:', error);
+      }
     }
   }, []);
 
@@ -303,6 +361,19 @@ export default function ReservationPage() {
 
   return (
     <PageContainer>
+      {isSettingMissing && (
+        <SettingNoticeBanner>
+          <span className="message">
+            <AlertCircle size={18} />
+            예약 기본 설정이 아직 없어요. 기본 설정을 먼저 등록해야 예약을 받을
+            수 있어요.
+          </span>
+          <button onClick={() => setIsCapacityModalOpen(true)}>
+            기본 설정 등록
+          </button>
+        </SettingNoticeBanner>
+      )}
+
       <SummaryGrid>
         <SummaryCard
           title="선택일 전체 예약"

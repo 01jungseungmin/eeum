@@ -7,7 +7,6 @@ import {
   Sparkles,
   RefreshCw,
   Send,
-  Clock,
   MessageSquare,
   Store,
   Share2,
@@ -417,28 +416,6 @@ const PrimaryButton = styled.button`
   &:disabled {
     background-color: #9ca3af;
     cursor: not-allowed;
-  }
-`;
-
-const SecondaryButton = styled.button`
-  width: 100%;
-  background-color: #ffffff;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-  padding: 14px;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: #f9fafb;
-    border-color: #d1d5db;
   }
 `;
 
@@ -893,9 +870,6 @@ export default function AiMarketingPage() {
           >
             <Send size={16} /> 공지 등록하기
           </PrimaryButton>
-          <SecondaryButton disabled={loading}>
-            <Clock size={16} /> 예약 발송
-          </SecondaryButton>
         </RightColumn>
       </ContentGrid>
 

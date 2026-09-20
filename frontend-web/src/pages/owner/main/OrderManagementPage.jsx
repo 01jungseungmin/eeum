@@ -52,13 +52,20 @@ function OrderManagementPage() {
   // API 데이터 패치 함수
   const fetchOrders = async () => {
     try {
+      // 서버가 정렬 없이 내려주므로(오래된 주문부터) 최신 주문 50건을 받도록 정렬을 요청한다
       const response = await orderApi.getOwnerOrders({
         page: 0,
         size: 50,
+        sort: 'createdAt,desc',
       });
 
       if (response.data?.success) {
-        const contentList = response.data.data.content || [];
+        // 같은 시각에 생성된 주문은 orderId 역순으로 맞춰 항상 최신 주문이 위에 오게 한다
+        const contentList = [...(response.data.data.content || [])].sort(
+          (a, b) =>
+            new Date(b.createdAt) - new Date(a.createdAt) ||
+            b.orderId - a.orderId,
+        );
         setOrders(contentList);
 
         setCounts({
