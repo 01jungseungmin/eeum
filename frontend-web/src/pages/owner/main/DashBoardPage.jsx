@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import DashboardCard from '../../../components/owner/dashboard/DashBoardCard';
 import SalesChart from '../../../components/owner/dashboard/SalesChart';
-// import CategoryChart from '../../../components/owner/dashboard/CategoryChart'; // 카테고리별 판매 비율 - 별도 상품/카테고리 연동 작업 필요
+import CategoryChart from '../../../components/owner/dashboard/CategoryChart';
 import TopProducts from '../../../components/owner/dashboard/TopProducts';
 import RecentOrders from '../../../components/owner/dashboard/recentOrders';
 import RecentReviews from '../../../components/owner/dashboard/RecentReviews';
@@ -83,7 +83,7 @@ const WelcomeBanner = styled.div`
 
 const BottomGridRow1 = styled.div`
   display: grid;
-  grid-template-columns: 1fr; // CategoryChart는 별도 연동 전까지 SalesChart 단독 전체폭
+  grid-template-columns: 2fr 1fr;
   gap: 20px;
 `;
 
@@ -196,6 +196,7 @@ function DashboardPage() {
 
       <BottomGridRow1>
         <SalesChart />
+        <CategoryChart />
       </BottomGridRow1>
 
       <BottomGridRow2>

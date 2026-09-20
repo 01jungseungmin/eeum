@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import {
   BarChart,
@@ -9,6 +9,11 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import { dashboardApi } from '../../../api/admin/dashboardApi';
+import {
+  SIGNUP_TYPE_TABS,
+  DAY_OF_WEEK_LABEL,
+} from '../../../constants/dashboardConstants';
 
 const ChartCard = styled.div`
   background: white;
@@ -65,18 +70,66 @@ const ChartContainer = styled.div`
   min-width: 0; /* CSS Grid 크기 계산 오류 방지 */
 `;
 
-const mockData = [
-  { name: '월', value: 220 },
-  { name: '화', value: 310 },
-  { name: '수', value: 270 },
-  { name: '목', value: 410 },
-  { name: '금', value: 460 },
-  { name: '토', value: 530 },
-  { name: '일', value: 500 },
-];
+const EmptyText = styled.div`
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bfbfbf;
+  font-size: 13px;
+`;
+
+const TREND_DAYS = 7;
+
+// "2026-09-20" → "9/20"
+const formatShortDate = (dateStr) => {
+  const [, month, day] = dateStr.split('-');
+  return `${Number(month)}/${Number(day)}`;
+};
 
 function AdminUserChart() {
-  const [activeTab, setActiveTab] = useState('일반');
+  const [activeType, setActiveType] = useState('GENERAL');
+  const [trend, setTrend] = useState({ total: 0, daily: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    // 탭을 빠르게 바꿨을 때 늦게 도착한 이전 응답이 화면을 덮어쓰지 않도록 취소 플래그를 둔다
+    let isCancelled = false;
+
+    const fetchTrend = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const response = await dashboardApi.getSignupTrend({
+          type: activeType,
+          days: TREND_DAYS,
+        });
+        if (!isCancelled && response.data?.success) {
+          const { total, daily } = response.data.data;
+          setTrend({
+            total,
+            daily: (daily || []).map((item) => ({
+              name: DAY_OF_WEEK_LABEL[item.dayOfWeek] || item.dayOfWeek,
+              dateLabel: `${formatShortDate(item.date)} (${DAY_OF_WEEK_LABEL[item.dayOfWeek] || ''})`,
+              value: item.count,
+            })),
+          });
+        }
+      } catch (err) {
+        console.error('가입자 추이 조회 실패:', err);
+        if (!isCancelled) setError(true);
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    fetchTrend();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeType]);
 
   return (
     <ChartCard>
@@ -86,70 +139,79 @@ function AdminUserChart() {
           <p>최근 7일 신규 가입 트렌드</p>
         </div>
         <TabContainer>
-          <TabButton
-            $active={activeTab === '일반'}
-            onClick={() => setActiveTab('일반')}
-          >
-            일반
-          </TabButton>
-          <TabButton
-            $active={activeTab === '사장'}
-            onClick={() => setActiveTab('사장')}
-          >
-            사장
-          </TabButton>
+          {SIGNUP_TYPE_TABS.map((tab) => (
+            <TabButton
+              key={tab.value}
+              $active={activeType === tab.value}
+              onClick={() => setActiveType(tab.value)}
+            >
+              {tab.label}
+            </TabButton>
+          ))}
         </TabContainer>
       </CardHeader>
 
-      <ChartContainer>
-        {/* 2. minWidth={0} 추가 및 height를 숫자로 직접 지정 */}
-        <ResponsiveContainer
-          width="100%"
-          height={200}
-          minWidth={0}
-        >
-          <BarChart
-            data={mockData}
-            margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
+      {loading ? (
+        <EmptyText>불러오는 중...</EmptyText>
+      ) : error ? (
+        <EmptyText>가입자 추이를 불러오지 못했어요.</EmptyText>
+      ) : (
+        <ChartContainer>
+          {/* 2. minWidth={0} 추가 및 height를 숫자로 직접 지정 */}
+          <ResponsiveContainer
+            width="100%"
+            height={200}
+            minWidth={0}
           >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#f5f5f5"
-            />
-            <XAxis
-              dataKey="name"
-              stroke="#bfbfbf"
-              fontSize={11}
-              tickLine={false}
-            />
-            <YAxis
-              stroke="#bfbfbf"
-              fontSize={11}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip />
-            <Bar
-              dataKey="value"
-              fill="#2d5a43"
-              radius={[4, 4, 0, 0]}
-              barSize={26}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartContainer>
+            <BarChart
+              data={trend.daily}
+              margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#f5f5f5"
+              />
+              <XAxis
+                dataKey="name"
+                stroke="#bfbfbf"
+                fontSize={11}
+                tickLine={false}
+              />
+              <YAxis
+                stroke="#bfbfbf"
+                fontSize={11}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                labelFormatter={(_, payload) => payload?.[0]?.payload?.dateLabel}
+                formatter={(value) => [`${value}명`, '가입자']}
+              />
+              <Bar
+                dataKey="value"
+                fill="#2d5a43"
+                radius={[4, 4, 0, 0]}
+                barSize={26}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+      )}
 
-      <div
-        style={{
-          textAlign: 'center',
-          fontSize: '12px',
-          color: '#bfbfbf',
-          marginTop: '12px',
-        }}
-      >
-        52+8
-      </div>
+      {!loading && !error && (
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: '12px',
+            color: '#bfbfbf',
+            marginTop: '12px',
+          }}
+        >
+          최근 {TREND_DAYS}일 합계 {trend.total.toLocaleString()}명
+        </div>
+      )}
     </ChartCard>
   );
 }

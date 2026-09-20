@@ -17,6 +17,14 @@ export const storeApi = {
       .get('/owner/stores/me/products/sales', { params: { from, to } })
       .then((res) => res.data),
 
+  // 카테고리별 판매 통계 (from/to: LocalDateTime 문자열, 수량 내림차순, 기본은 COMPLETED 주문만 집계)
+  getCategorySales: (from, to) =>
+    apiClient
+      .get('/owner/stores/me/products/sales/categories', {
+        params: { from, to },
+      })
+      .then((res) => res.data),
+
   // 영업시간 조회 / 수정
   getBusinessHours: () => apiClient.get('/owner/stores/me/business-hours'),
   updateBusinessHours: (data) =>
