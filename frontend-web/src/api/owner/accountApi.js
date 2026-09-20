@@ -1,6 +1,11 @@
 import { apiClient } from '../apiClient';
 
 export const accountApi = {
+  // 내 정보 조회 (닉네임·이름 등, 사장/관리자 공통)
+  getMyInfo: () => {
+    return apiClient.get('/accounts/me');
+  },
+
   // 내 사업자 정보 조회
   getOwnerAccountInfo: () => {
     return apiClient.get('/accounts/me/owner');

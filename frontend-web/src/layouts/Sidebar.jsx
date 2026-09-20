@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { EventSourcePolyfill } from 'event-source-polyfill';
 import { OWNER_MENU_CONFIG, ADMIN_MENU_CONFIG } from '../config/MenuConfig';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import { authApi } from '../api/authApi';
 import { notificationApi } from '../api/owner/notificationApi';
 
@@ -149,73 +149,17 @@ const CATEGORY_MAP = {
 function Sidebar({ approvalStatus }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, accessToken } = useAuth();
+  const { logout } = useAuth();
+  // 알림 개수는 헤더와 함께 쓰므로 NotificationProvider가 SSE로 관리한다
+  const { counts, setCounts } = useNotification();
 
   const role = sessionStorage.getItem('role');
   const isAdmin = role === 'ROLE_ADMIN';
-
-  // 알림 수량 실시간 상태
-  const [counts, setCounts] = useState({
-    orders: 0,
-    reservations: 0,
-    reviews: 0,
-    chat: 0,
-    qna: 0,
-    alerts: 0,
-    system: 0,
-  });
 
   const isOwnerRestricted = !isAdmin && approvalStatus !== 'APPROVED';
   const menuConfig = isAdmin ? ADMIN_MENU_CONFIG : OWNER_MENU_CONFIG;
 
   const [activeSection, setActiveSection] = useState('section-ai-report');
-
-  // SSE 실시간 연결 (accessToken이 재발급되어 바뀔 때마다 새 토큰으로 재연결)
-  useEffect(() => {
-    if (!accessToken) return;
-
-    const { url } = notificationApi.getSubscribeInfo();
-
-    const eventSource = new EventSourcePolyfill(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      heartbeatTimeout: 300000,
-    });
-
-    eventSource.addEventListener('unread-count', (event) => {
-      try {
-        const parsedData = JSON.parse(event.data);
-        const byCategory =
-          parsedData.data?.byCategory || parsedData.byCategory || {};
-
-        setCounts({
-          orders: byCategory.ORDER || 0,
-          reservations: byCategory.RESERVATION || 0,
-          reviews: byCategory.REVIEW || 0,
-          chat: byCategory.CHAT || 0,
-          qna: byCategory.COMMUNITY || byCategory.QNA || 0,
-          system: byCategory.SYSTEM || 0,
-          alerts: parsedData.data?.unreadCount || parsedData.unreadCount || 0,
-        });
-      } catch (error) {
-        console.error('SSE 데이터 파싱 실패:', error);
-      }
-    });
-
-    eventSource.onopen = () => {
-      console.log('SSE 연결 성공');
-    };
-
-    eventSource.onerror = (err) => {
-      console.error('SSE 연결 에러:', err);
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [accessToken]);
 
   // 메뉴 클릭 핸들러
   const handleMenuClick = async (e, item) => {
@@ -233,23 +177,21 @@ function Sidebar({ approvalStatus }) {
       }
     }
 
-    // ✨ 알림 배지가 있는 메뉴 클릭 시 해당 카테고리만 읽음 처리
-    if (item.countKey && counts[item.countKey] > 0) {
-      const category = CATEGORY_MAP[item.countKey];
-
-      // UI 즉시 반영 (해당 카테고리만 0으로 차감)
+    // 알림 배지가 있는 메뉴 클릭 시 해당 카테고리만 읽음 처리
+    // (전체 알림 / 관리자 대기 건수처럼 읽음 처리 대상 카테고리가 없는 배지는 건드리지 않는다)
+    const category = CATEGORY_MAP[item.countKey];
+    if (category && counts[item.countKey] > 0) {
+      // UI 즉시 반영 (해당 카테고리만 0으로, 전체 개수는 그만큼 차감)
       setCounts((prev) => ({
         ...prev,
         [item.countKey]: 0,
+        alerts: Math.max(0, prev.alerts - prev[item.countKey]),
       }));
 
-      // 해당 카테고리만 백엔드 읽음 처리 요청
-      if (category) {
-        try {
-          await notificationApi.readSingleNotification(category);
-        } catch (error) {
-          console.error(`${category} 카테고리 알림 읽음 처리 실패:`, error);
-        }
+      try {
+        await notificationApi.readCategoryNotification(category);
+      } catch (error) {
+        console.error(`${category} 카테고리 알림 읽음 처리 실패:`, error);
       }
     }
 
