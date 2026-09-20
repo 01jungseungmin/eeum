@@ -19,6 +19,10 @@ public class VisitReservationResponseDto {
     private String storeAddress;
     private String storePhone;
 
+    // 필드명이 thumbnailUrl로 끝나야 ImageUrlResponseAdvice가 응답 직전에
+    // S3 objectKey를 조회용 URL로 바꿔준다.
+    private String storeThumbnailUrl;
+
     private Long accountId;
     private String customerName;
     private String customerPhone;

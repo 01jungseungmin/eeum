@@ -7,6 +7,8 @@ import com.eeum.eeum.domain.ai.entity.AiExposureStatus;
 import com.eeum.eeum.domain.ai.repository.AiAdClickLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiAdExposureLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiExposureStatusRepository;
+import com.eeum.eeum.domain.store.entity.StoreImage;
+import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 생활권 광고 노출 집행 — active=true인 가게만 사용자 앱/웹에 노출한다.
@@ -29,6 +33,7 @@ public class AiAdExposureService {
     private final AiExposureStatusRepository aiExposureStatusRepository;
     private final AiAdExposureLogRepository aiAdExposureLogRepository;
     private final AiAdClickLogRepository aiAdClickLogRepository;
+    private final StoreImageRepository storeImageRepository;
 
     // 노출 중인 가게 목록 — 노출 대상 0개여도 정상(빈 리스트) 응답
     @Transactional
@@ -50,8 +55,22 @@ public class AiAdExposureService {
                     .toList());
         }
 
+        // 노출 건마다 썸네일을 조회하면 N+1이다. 등장하는 상점을 모아 IN절 한 번에 가져온다.
+        List<Long> storeIds = matched.stream()
+                .map(exposure -> exposure.getStore().getStoreId())
+                .distinct()
+                .toList();
+        Map<Long, String> thumbnailUrlByStoreId = storeIds.isEmpty()
+                ? Map.of()
+                : storeImageRepository.findByStore_StoreIdInAndIsThumbnailTrue(storeIds).stream()
+                        .collect(Collectors.toMap(
+                                image -> image.getStore().getStoreId(),
+                                StoreImage::getImageUrl,
+                                (first, second) -> first));
+
         return matched.stream()
-                .map(exposure -> AiExposedStoreDto.from(exposure, requestId))
+                .map(exposure -> AiExposedStoreDto.from(
+                        exposure, requestId, thumbnailUrlByStoreId.get(exposure.getStore().getStoreId())))
                 .toList();
     }
 

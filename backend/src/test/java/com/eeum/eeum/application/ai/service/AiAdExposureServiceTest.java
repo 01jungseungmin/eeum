@@ -6,6 +6,8 @@ import com.eeum.eeum.domain.ai.repository.AiAdClickLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiAdExposureLogRepository;
 import com.eeum.eeum.domain.ai.repository.AiExposureStatusRepository;
 import com.eeum.eeum.domain.store.entity.Store;
+import com.eeum.eeum.domain.store.entity.StoreImage;
+import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,7 @@ class AiAdExposureServiceTest {
     @Mock private AiExposureStatusRepository aiExposureStatusRepository;
     @Mock private AiAdExposureLogRepository aiAdExposureLogRepository;
     @Mock private AiAdClickLogRepository aiAdClickLogRepository;
+    @Mock private StoreImageRepository storeImageRepository;
 
     private AiExposureStatus activeExposure(Long id, String address) {
         Store store = mock(Store.class);
@@ -63,6 +66,43 @@ class AiAdExposureServiceTest {
         assertThat(stores).hasSize(1);
         assertThat(stores.get(0).getStoreId()).isEqualTo(1L);
         verify(aiAdExposureLogRepository).saveAll(anyList());
+    }
+
+    @Test
+    void 노출_목록의_상점_썸네일이_한_번의_조회로_매핑된다() {
+        // given
+        AiExposureStatus exposure = activeExposure(1L, "서울 마포구 서교동");
+        StoreImage thumbnail = mock(StoreImage.class);
+        when(thumbnail.getStore()).thenReturn(exposure.getStore());
+        when(thumbnail.getImageUrl()).thenReturn("stores/1/thumb.png");
+
+        when(aiExposureStatusRepository.findByActiveTrue()).thenReturn(List.of(exposure));
+        when(storeImageRepository.findByStore_StoreIdInAndIsThumbnailTrue(List.of(1L)))
+                .thenReturn(List.of(thumbnail));
+
+        // when
+        List<AiExposedStoreDto> stores = exposureService.getExposedStores(100L, null);
+
+        // then
+        assertThat(stores).hasSize(1);
+        assertThat(stores.get(0).getStoreThumbnailUrl()).isEqualTo("stores/1/thumb.png");
+        verify(storeImageRepository).findByStore_StoreIdInAndIsThumbnailTrue(List.of(1L));
+    }
+
+    @Test
+    void 썸네일이_없는_상점은_썸네일_없이_노출된다() {
+        // given
+        AiExposureStatus exposure = activeExposure(1L, "서울 마포구 서교동");
+        when(aiExposureStatusRepository.findByActiveTrue()).thenReturn(List.of(exposure));
+        when(storeImageRepository.findByStore_StoreIdInAndIsThumbnailTrue(List.of(1L)))
+                .thenReturn(List.of());
+
+        // when
+        List<AiExposedStoreDto> stores = exposureService.getExposedStores(100L, null);
+
+        // then
+        assertThat(stores).hasSize(1);
+        assertThat(stores.get(0).getStoreThumbnailUrl()).isNull();
     }
 
     @Test

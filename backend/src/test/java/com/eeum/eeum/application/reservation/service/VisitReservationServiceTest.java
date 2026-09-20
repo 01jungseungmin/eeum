@@ -19,9 +19,11 @@ import com.eeum.eeum.domain.reservation.repository.VisitReservationRepository;
 import com.eeum.eeum.domain.reservation.repository.VisitReservationTimeSlotRepository;
 import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.entity.StoreBusinessHour;
+import com.eeum.eeum.domain.store.entity.StoreImage;
 import com.eeum.eeum.domain.store.enums.StoreDayOfWeek;
 import com.eeum.eeum.domain.store.enums.StoreStatus;
 import com.eeum.eeum.domain.store.repository.StoreBusinessHourRepository;
+import com.eeum.eeum.domain.store.repository.StoreImageRepository;
 import com.eeum.eeum.domain.store.repository.StoreRepository;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
@@ -60,6 +62,7 @@ class VisitReservationServiceTest {
     @Mock private VisitReservationRepository visitReservationRepository;
     @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private StoreRepository storeRepository;
+    @Mock private StoreImageRepository storeImageRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private StoreBusinessHourRepository storeBusinessHourRepository;
     @Mock private StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
@@ -142,7 +145,7 @@ class VisitReservationServiceTest {
         when(visitReservationRepository.findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable))
                 .thenReturn(new PageImpl<>(List.of(reservation)));
         when(storeReviewRepository.findVisitReservationIdsWithReview(List.of(1L))).thenReturn(Set.of());
-        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false))
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false, null))
                 .thenReturn(mock(VisitReservationResponseDto.class));
 
         // when
@@ -165,7 +168,7 @@ class VisitReservationServiceTest {
         when(visitReservationRepository.findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable))
                 .thenReturn(new PageImpl<>(List.of(reservation)));
         when(storeReviewRepository.findVisitReservationIdsWithReview(List.of(1L))).thenReturn(Set.of(1L));
-        when(visitReservationMapper.toVisitReservationResponseDto(reservation, true))
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, true, null))
                 .thenReturn(mock(VisitReservationResponseDto.class));
 
         // when
@@ -173,7 +176,35 @@ class VisitReservationServiceTest {
 
         // then
         assertThat(result.getTotalElements()).isEqualTo(1);
-        verify(visitReservationMapper).toVisitReservationResponseDto(reservation, true);
+        verify(visitReservationMapper).toVisitReservationResponseDto(reservation, true, null);
+    }
+
+    @Test
+    void 내_예약_목록_조회_시_상점_썸네일이_한_번의_조회로_매핑된다() {
+        // given
+        Long accountId = 1L;
+        Account account = createAccount(accountId, "사용자", "user");
+        Store store = createStore(10L, account, StoreStatus.OPEN);
+        VisitReservation reservation = createReservation(1L, store, account,
+                VisitReservationStatus.PENDING, LocalDate.now().plusDays(3), LocalTime.of(10, 0));
+        PageRequest pageable = PageRequest.of(0, 10);
+
+        StoreImage thumbnail = StoreImage.create(store, "stores/10/thumb.png", 0, true);
+
+        when(visitReservationRepository.findByAccount_AccountIdOrderByVisitDateDescVisitTimeDesc(accountId, pageable))
+                .thenReturn(new PageImpl<>(List.of(reservation)));
+        when(storeReviewRepository.findVisitReservationIdsWithReview(List.of(1L))).thenReturn(Set.of());
+        when(storeImageRepository.findByStore_StoreIdInAndIsThumbnailTrue(List.of(10L)))
+                .thenReturn(List.of(thumbnail));
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false, "stores/10/thumb.png"))
+                .thenReturn(mock(VisitReservationResponseDto.class));
+
+        // when
+        Page<VisitReservationResponseDto> result = visitReservationService.getMyReservations(accountId, pageable);
+
+        // then
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        verify(storeImageRepository, times(1)).findByStore_StoreIdInAndIsThumbnailTrue(List.of(10L));
     }
 
     // ──────────────── getMyReservationDetail ────────────────
@@ -190,7 +221,7 @@ class VisitReservationServiceTest {
 
         when(visitReservationRepository.findByVisitReservationId(eq(10L))).thenReturn(Optional.of(reservation));
         when(storeReviewRepository.existsByVisitReservation_VisitReservationId(10L)).thenReturn(false);
-        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false)).thenReturn(dto);
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, false, null)).thenReturn(dto);
 
         // when
         VisitReservationResponseDto result = visitReservationService.getMyReservationDetail(accountId, 10L);
@@ -211,7 +242,7 @@ class VisitReservationServiceTest {
 
         when(visitReservationRepository.findByVisitReservationId(eq(10L))).thenReturn(Optional.of(reservation));
         when(storeReviewRepository.existsByVisitReservation_VisitReservationId(10L)).thenReturn(true);
-        when(visitReservationMapper.toVisitReservationResponseDto(reservation, true)).thenReturn(dto);
+        when(visitReservationMapper.toVisitReservationResponseDto(reservation, true, null)).thenReturn(dto);
 
         // when
         VisitReservationResponseDto result = visitReservationService.getMyReservationDetail(accountId, 10L);

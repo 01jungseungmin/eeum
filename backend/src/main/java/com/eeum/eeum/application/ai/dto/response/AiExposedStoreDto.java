@@ -19,6 +19,11 @@ public class AiExposedStoreDto {
     @Schema(description = "주소")
     private final String address;
 
+    // 필드명이 thumbnailUrl로 끝나야 ImageUrlResponseAdvice가 응답 직전에
+    // S3 objectKey를 조회용 URL로 바꿔준다.
+    @Schema(description = "상점 썸네일")
+    private final String storeThumbnailUrl;
+
     @Schema(description = "노출 상태 ID — 클릭 로그 기록에 사용")
     private final Long exposureStatusId;
 
@@ -28,11 +33,12 @@ public class AiExposedStoreDto {
     @Schema(description = "요청 추적 ID — 클릭 시 함께 전달")
     private final String requestId;
 
-    public static AiExposedStoreDto from(AiExposureStatus exposure, String requestId) {
+    public static AiExposedStoreDto from(AiExposureStatus exposure, String requestId, String storeThumbnailUrl) {
         return AiExposedStoreDto.builder()
                 .storeId(exposure.getStore().getStoreId())
                 .storeName(exposure.getStore().getName())
                 .address(exposure.getStore().getAddress())
+                .storeThumbnailUrl(storeThumbnailUrl)
                 .exposureStatusId(exposure.getAiExposureStatusId())
                 .interest(exposure.getInterest())
                 .requestId(requestId)
