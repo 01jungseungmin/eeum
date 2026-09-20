@@ -5,4 +5,9 @@ export const accountApi = {
   getOwnerAccountInfo: () => {
     return apiClient.get('/accounts/me/owner');
   },
+
+  // 사업자 정보(사업자번호) 수정 — 승인 완료 후에는 변경 불가
+  updateOwnerAccountInfo: (payload) => {
+    return apiClient.put('/accounts/me/owner', payload);
+  },
 };

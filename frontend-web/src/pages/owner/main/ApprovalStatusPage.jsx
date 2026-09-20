@@ -157,7 +157,7 @@ function ApprovalStatusPage() {
       <AuthStatusBanner status={status} />
 
       {/* 사장 기본 정보 */}
-      <BusinessInfoBox />
+      <BusinessInfoBox onUpdated={fetchChecklistData} />
 
       {status === 'REJECTED' && (
         <RejectReasonBox reason={currentChecklist.rejectionReason} />
