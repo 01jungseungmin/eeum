@@ -15,7 +15,7 @@ import {
   UsedProductPriceType,
   UsedProductStatus,
 } from '../../api/favorite';
-import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { useCategories } from '../../hooks/useCategories';
 
 type TabKey = 'STORE' | 'USED_PRODUCT';
 
@@ -40,6 +40,8 @@ const STATUS_LABEL: Record<UsedProductStatus, string> = {
 
 export default function FavoritesScreen() {
   const router = useRouter();
+
+  const { getCategoryName } = useCategories('STORE');
 
   const [activeTab, setActiveTab] = useState<TabKey>('STORE');
 
@@ -144,9 +146,6 @@ export default function FavoritesScreen() {
     }
   };
 
-  const getCategoryName = (id: number) => {
-    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
-  };
 
   const formatPrice = (item: FavoriteUsedProduct) => {
     if (item.priceType !== 'FIXED') return PRICE_TYPE_LABEL[item.priceType];

@@ -6,7 +6,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function ReservationSuccessScreen() {
   const router = useRouter();
-  const { reservationId, month, date, time, people } = useLocalSearchParams();
+  const { reservationId, fullDate, month, date, time, people } = useLocalSearchParams();
+
+  // 예약 번호는 예약 날짜에서 만든다. 연도를 '2026'으로 박아두면 해가 바뀐 뒤
+  // 접수한 예약도 2026으로 보인다.
+  const reservationNo = `EX-${String(fullDate || '').replace(/-/g, '') ||
+    `${String(month || '').padStart(2, '0')}${String(date || '').padStart(2, '0')}`
+    }-${String(reservationId || '').padStart(4, '0')}`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -32,7 +38,7 @@ export default function ReservationSuccessScreen() {
           <View style={styles.infoBox}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>예약 번호</Text>
-              <Text style={styles.infoValue}>EX-2026{String(month || '').padStart(2, '0')}{String(date || '').padStart(2, '0')}-{String(reservationId || '').padStart(4, '0')}</Text>
+              <Text style={styles.infoValue}>{reservationNo}</Text>
             </View>
             <View style={[styles.infoRow, { marginTop: 10 }]}>
               <Text style={styles.infoLabel}>예약 일정</Text>

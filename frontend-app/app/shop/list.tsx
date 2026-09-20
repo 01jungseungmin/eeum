@@ -6,7 +6,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
 import { regionApi } from '../../api/region';
-import { SHOP_CATEGORIES } from '../../constants/shopDummyData';
+import { useCategories } from '../../hooks/useCategories';
 import { shopApi } from '../../api/shop';
 import { favoriteApi } from '../../api/favorite';
 import { reviewApi } from '../../api/review';
@@ -15,6 +15,8 @@ export default function ShopListScreen() {
   const router = useRouter();
   
   const { regionId } = useLocalSearchParams();
+
+  const { categories, getCategoryName } = useCategories('STORE', { includeAll: true });
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
   const [shopList, setShopList] = useState<any[]>([]);
@@ -117,9 +119,6 @@ export default function ShopListScreen() {
     }, [selectedCategoryId, regionId]) // ✨ regionId 의존성 추가
   );
 
-  const getCategoryName = (id: number) => {
-    return SHOP_CATEGORIES.find(c => c.id === id)?.name || '기타';
-  };
 
   const handleListToggleFavorite = async (storeId: number, currentStatus: boolean) => {
     try {
@@ -200,7 +199,7 @@ export default function ShopListScreen() {
       <View style={styles.categoryWrapper}>
         <FlatList
           ref={categoryListRef}
-          data={SHOP_CATEGORIES || []}
+          data={categories}
           horizontal
           showsHorizontalScrollIndicator={false}
           ListHeaderComponent={<View style={{ width: 20 }} />}

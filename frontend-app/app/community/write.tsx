@@ -7,14 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Text } from '../../components/CustomText';
 import { communityApi } from '../../api/community';
 import { uploadImageAssets } from '../../utils/imageUpload';
-
-const CATEGORY_MAP = [
-  { id: 8, name: '자유게시판' },
-  { id: 9, name: '동네소식' },
-  { id: 10, name: '분실물' },
-  { id: 11, name: '도움요청' },
-  { id: 12, name: '공동배달' },
-];
+import { useCategories } from '../../hooks/useCategories';
 
 // 이미지 관리를 위한 타입 정의 (기존 이미지인지 새 이미지인지 구분)
 interface ImageItem {
@@ -26,6 +19,8 @@ export default function CommunityWriteScreen() {
   const router = useRouter();
   const { editId } = useLocalSearchParams(); 
   
+  const { categories } = useCategories('COMMUNITY');
+
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -181,7 +176,7 @@ export default function CommunityWriteScreen() {
           <View style={styles.section}>
             <Text fontWeight="bold" style={styles.sectionLabel}>카테고리</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-              {CATEGORY_MAP.map((cat) => (
+              {categories.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
                   style={[styles.categoryChip, selectedCategory === cat.id && styles.activeCategoryChip]}

@@ -1,15 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { 
-  StyleSheet, View, FlatList, Image, 
-  TouchableOpacity, ActivityIndicator, Alert 
+import {
+  StyleSheet, View, FlatList,
+  TouchableOpacity, ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '../../components/CustomText';
 
-import { reservationApi } from '@/api/reservation'; 
-import { reviewApi } from '../../api/review'; 
+import { reservationApi } from '@/api/reservation';
+import { StoreThumbnail } from '../../components/StoreThumbnail';
 
 export default function ReservationsScreen() {
   const router = useRouter();
@@ -28,29 +28,11 @@ export default function ReservationsScreen() {
       const res = await reservationApi.getMyVisitReservations();
       
       const realData = res?.content || res?.data || res || [];
-      
-      // ✨ [추가] 받아온 예약 목록 중 'COMPLETED'인 항목들만 리뷰 작성 여부를 확인합니다.
-      const updatedData = await Promise.all(
-        realData.map(async (item: any) => {
-          if (item.status === 'COMPLETED') {
-            try {
-              // 리뷰 상세 조회 API 호출
-              const reviewData = await reviewApi.getReservationReview(item.visitReservationId);
-              // 데이터가 존재하면 리뷰 작성 완료 처리
-              if (reviewData && reviewData.storereviewId) {
-                return { ...item, isReviewed: true };
-              }
-            } catch (e) {
-              // 에러(404 등)가 나면 아직 리뷰를 안 쓴 것
-              return { ...item, isReviewed: false };
-            }
-          }
-          // COMPLETED가 아니면 기존 데이터 그대로 리턴
-          return item;
-        })
-      );
 
-      setReservationList(updatedData);
+      // 리뷰 작성 여부는 목록 응답의 hasReview가 이미 알려준다.
+      // 예전에는 COMPLETED 건마다 리뷰 상세를 따로 불렀는데, 아직 안 쓴 리뷰는
+      // 404라 예약 개수만큼 콘솔에 에러가 쌓였다.
+      setReservationList(realData);
     } catch (error) {
       console.error('예약 내역 로딩 실패:', error);
     } finally {
@@ -105,7 +87,7 @@ export default function ReservationsScreen() {
       statusBg = '#FFEBEE';
     }
 
-    const isReviewCompleted = item.isReviewed === true;
+    const isReviewCompleted = item.hasReview === true;
 
     return (
       <TouchableOpacity 
@@ -126,10 +108,8 @@ export default function ReservationsScreen() {
         </View>
 
         <View style={styles.cardBody}>
-          <Image 
-            source={{ uri: 'https://placehold.co/150.png' }} 
-            style={styles.cardImage} 
-          />
+          {/* 예약 목록 응답에는 가게 이미지가 없어 항상 자리표시자다 */}
+          <StoreThumbnail style={styles.cardImage} />
           <View style={styles.cardInfo}>
             <Text fontWeight="bold" style={styles.shopName} numberOfLines={1}>{storeName}</Text>
             {item.visitorCount && (
