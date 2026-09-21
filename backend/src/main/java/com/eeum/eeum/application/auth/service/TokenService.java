@@ -60,8 +60,7 @@ public class TokenService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_TOKEN)); //Redis에 저장된 값이 없으면 예외
 
         if (!storedToken.equals(refreshToken)) { //Redis에 저장된 Refresh Token과 사용자가 보낸 Refresh Token이 같은지 비교
-            // 저장된 토큰과 불일치 → 탈취 가능성, 저장된 토큰도 삭제
-            deleteRefreshToken(accountId); //저장된 Refresh Token을 Redis에서 삭제
+            // 이전 토큰 재시도가 새 로그인 세션까지 삭제해서는 안 된다.
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN); //토큰 오류 예외
         }
 
@@ -70,6 +69,23 @@ public class TokenService {
 
     public void deleteRefreshToken(Long accountId) { //저장된 Refresh Token을 Redis에서 삭제
         redisUtil.delete(refreshTokenKey(accountId)); //예를 들어 accountId = 1 delete refresh:1
+    }
+
+    public void deleteRevokedTokens(Long accountId, long currentVersion,
+                                    boolean refresh, boolean reauth, boolean reset) {
+        if (refresh) deleteOlderGeneration(refreshTokenKey(accountId), currentVersion);
+        if (reauth) deleteOlderGeneration(reAuthTokenKey(accountId), currentVersion);
+        if (reset) deleteOlderGeneration(passwordResetTokenKey(accountId), currentVersion);
+    }
+
+    private void deleteOlderGeneration(String key, long currentVersion) {
+        redisUtil.get(key).ifPresent(token -> {
+            Long version = jwtProvider.isValid(token) ? jwtProvider.getTokenVersion(token) : null;
+            if (version == null || version < currentVersion) {
+                // 조회 이후 새 토큰으로 교체됐으면 삭제하지 않는다.
+                redisUtil.compareAndDelete(key, token);
+            }
+        });
     }
 
     // ===================== Access Token 블랙리스트 =====================

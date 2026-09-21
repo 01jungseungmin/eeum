@@ -32,6 +32,7 @@ public class RealtimeRelaySubscriber {
     private final SseEmitterManager sseEmitterManager;
     private final WebSocketSessionRegistry sessionRegistry;
     private final ObjectMapper objectMapper;
+    private final com.eeum.eeum.application.auth.service.AuthAccountReader authAccountReader;
 
     @org.springframework.context.annotation.Bean
     public RedisMessageListenerContainer realtimeRelayListenerContainer(
@@ -132,14 +133,24 @@ public class RealtimeRelaySubscriber {
         return (Message message, byte[] pattern) -> handle(message, body -> {
             SessionTerminationRelayMessage relayed =
                     objectMapper.readValue(body, SessionTerminationRelayMessage.class);
-            int closed = sessionRegistry.closeAll(
-                    relayed.accountId(), WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
-            sseEmitterManager.closeAll(relayed.accountId());
-            if (closed > 0) {
-                log.info("계정 상태 변경으로 WebSocket 연결 종료: accountId={}, 세션={}개",
-                        relayed.accountId(), closed);
+            closeRevokedConnections(relayed.accountId());
+        });
+    }
+
+    void closeRevokedConnections(Long accountId) {
+        var sockets = sessionRegistry.connectedCredentials();
+        var emitter = sseEmitterManager.connectedCredentials().get(accountId);
+        var state = authAccountReader.authState(accountId).orElse(null);
+        // 오래 대기한 중계 메시지가 새 로그인으로 맺은 연결까지 닫지 않도록 현재 세대를 대조한다.
+        sockets.forEach((sessionId, credentials) -> {
+            if (accountId.equals(credentials.accountId())
+                    && (state == null || !state.isUsable(credentials.tokenVersion()))) {
+                sessionRegistry.closeIfCurrent(sessionId, credentials, WebSocketSessionRegistry.ACCOUNT_STATE_CHANGED);
             }
         });
+        if (emitter != null && (state == null || !state.isUsable(emitter.tokenVersion()))) {
+            sseEmitterManager.closeIfCurrent(accountId, emitter);
+        }
     }
 
     private void handle(Message message, RelayHandler handler) {

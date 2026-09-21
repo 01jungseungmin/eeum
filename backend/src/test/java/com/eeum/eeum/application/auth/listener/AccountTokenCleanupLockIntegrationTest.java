@@ -32,7 +32,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 class AccountTokenCleanupLockIntegrationTest extends IntegrationTestSupport {
 
-    private static final Long ACCOUNT_ID = 987654321L;
+    private Long ACCOUNT_ID;
+    private final com.eeum.eeum.domain.account.repository.AccountRepository accountRepository;
+
+    @org.junit.jupiter.api.BeforeEach
+    void account() {
+        String unique = java.util.UUID.randomUUID().toString();
+        var account = com.eeum.eeum.domain.account.entity.Account.createUser(
+                unique + "@test.com", "pw", "name", unique, "010");
+        account.invalidateIssuedTokens();
+        ACCOUNT_ID = accountRepository.save(account).getAccountId();
+    }
 
     private final AccountTokenCleanupEventListener listener;
     private final RedisLockService redisLockService;
@@ -46,13 +56,14 @@ class AccountTokenCleanupLockIntegrationTest extends IntegrationTestSupport {
         //        지금 보장은 계정의 토큰 세대가 맡는다 — 제재와 같은 트랜잭션에서 오른다.
         tokenService.saveRefreshToken(ACCOUNT_ID, "refresh-token");
         CountDownLatch releaseLock = new CountDownLatch(1);
+        CountDownLatch acquired = new CountDownLatch(1);
         ExecutorService pool = Executors.newSingleThreadExecutor();
 
         try {
             Future<?> holder = pool.submit(() -> redisLockService.executeWithLock(
                     LockKeys.reissue(ACCOUNT_ID), Duration.ofSeconds(20),
-                    () -> awaitQuietly(releaseLock)));
-            sleepQuietly(200);
+                    () -> { acquired.countDown(); awaitQuietly(releaseLock); }));
+            assertThat(acquired.await(10, TimeUnit.SECONDS)).isTrue();
 
             // When: 재발급 락이 잡혀 있는 동안 정리가 들어온다
             listener.onAccountTokenCleanup(AccountTokenCleanupEvent.allTokens(ACCOUNT_ID));
@@ -83,6 +94,19 @@ class AccountTokenCleanupLockIntegrationTest extends IntegrationTestSupport {
 
         // Then
         assertThat(awaitTokenDeleted()).isTrue();
+    }
+
+    @Test
+    void 이전_이벤트가_늦게_도착해도_새_로그인_토큰은_유지된다() throws Exception {
+        // 앱의 서명 키와 같아야 하므로 실제 TokenService가 생성하는 일회용 토큰으로 검사한다.
+        String reauth = tokenService.generateAndSaveReAuthToken(ACCOUNT_ID, 1L);
+        String reset = tokenService.generateAndSavePasswordResetToken(ACCOUNT_ID, 1L);
+        AccountTokenCleanupEventListener synchronous = org.springframework.test.util.AopTestUtils.getTargetObject(listener);
+        synchronous.onAccountTokenCleanup(AccountTokenCleanupEvent.allTokens(ACCOUNT_ID));
+        assertThat(redisUtil.get("reauth:" + ACCOUNT_ID)).contains(reauth);
+        assertThat(redisUtil.get("password-reset:" + ACCOUNT_ID)).contains(reset);
+        redisUtil.delete("reauth:" + ACCOUNT_ID);
+        redisUtil.delete("password-reset:" + ACCOUNT_ID);
     }
 
     // 리스너는 @Async 프록시라 호출이 즉시 반환된다 — 실제 삭제까지 기다린다.
