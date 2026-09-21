@@ -92,6 +92,7 @@ class AdminAccountServiceOwnerReviewGuardTest {
     private OwnerInfo locked(Account account, Transition transition) {
         OwnerInfo ownerInfo = OwnerInfo.create(account, "123-45-67890", LocalDate.of(2020, 1, 1));
         ReflectionTestUtils.setField(ownerInfo, "ownerInfoId", OWNER_INFO_ID);
+        ownerInfo.markBusinessVerified(account.getName());
         transition.applyTo(ownerInfo);
 
         when(ownerInfoRepository.findAccountIdByOwnerInfoId(OWNER_INFO_ID))

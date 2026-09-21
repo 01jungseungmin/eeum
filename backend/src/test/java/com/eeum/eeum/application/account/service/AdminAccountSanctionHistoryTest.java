@@ -48,6 +48,7 @@ class AdminAccountSanctionHistoryTest {
     @Mock private OwnerApplicationMapper ownerApplicationMapper;
     @Mock private StoreApprovalMapper storeApprovalMapper;
     @Mock private OwnerStoreWithdrawalService ownerStoreWithdrawalService;
+    @Mock private AccountWithdrawalProcessor accountWithdrawalProcessor;
     // 제재 자격 판정은 Mock으로 두면 관리자 대상 차단·중복 정지 차단이 무력화된 채 통과한다.
     @Spy private AccountSanctionPolicy accountSanctionPolicy = new AccountSanctionPolicy();
     @Mock private SanctionHistoryService sanctionHistoryService;
@@ -148,5 +149,19 @@ class AdminAccountSanctionHistoryTest {
         verify(account, never()).suspend();
         verify(sanctionHistoryService, never())
                 .recordDirectAccountAction(10L, SanctionAction.SUSPEND, 1L);
+    }
+
+    @Test
+    void 강제_탈퇴는_복구_대상_추적을_위해_감사_이력을_남긴다() {
+        Account account = mock(Account.class);
+        when(account.isWithdrawn()).thenReturn(false);
+        when(account.isAdmin()).thenReturn(false);
+        when(accountRepository.findByIdWithLock(10L)).thenReturn(Optional.of(account));
+
+        adminAccountService.forceDeleteAccount(1L, 10L);
+
+        verify(accountWithdrawalProcessor).process(account);
+        verify(sanctionHistoryService)
+                .recordDirectAccountAction(10L, SanctionAction.FORCE_WITHDRAW, 1L);
     }
 }

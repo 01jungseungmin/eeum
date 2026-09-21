@@ -177,6 +177,7 @@ public class AdminAccountService {
         // 본인 탈퇴와 같은 뒷정리를 한다 — 상점 비활성화, 탈퇴 처리, 찜 정리.
         // 강제 탈퇴만 찜을 남겨두면 탈퇴자의 찜이 상점·게시글 favoriteCount에 계속 잡힌다.
         accountWithdrawalProcessor.process(target);
+        sanctionHistoryService.recordDirectAccountAction(targetAccountId, SanctionAction.FORCE_WITHDRAW, adminId);
 
         // DB 커밋 성공 후 남은 토큰 회수 — 정지와 같은 이유다
         eventPublisher.publishEvent(AccountTokenCleanupEvent.allTokens(targetAccountId));
@@ -241,6 +242,9 @@ public class AdminAccountService {
         // PENDING만 보면 아직 체크리스트도 안 끝낸 신규 OwnerInfo(create 직후·사업자번호
         // 변경 직후)까지 ownerInfoId만 알면 승인된다.
         assertReviewable(ownerInfo);
+        if (!ownerInfo.isBusinessVerified()) {
+            throw new BusinessException(ErrorCode.BUSINESS_VERIFY_FAILED);
+        }
 
         // 승인은 ROLE_OWNER를 부여한다 — 살아 있지 않은 계정에 권한을 주면 정지·탈퇴가 무력화된다.
         // 거절과 달리 승인만 계정 상태를 요구하는 이유다. (거절은 아무 권한도 주지 않으므로
