@@ -21,10 +21,14 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class NotificationPushEventListener {
 
     private final PushAdapter pushAdapter;
+    private final com.eeum.eeum.application.notification.service.PushEligibilityReader pushEligibilityReader;
 
     @Async("notificationPushTaskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT) // 현재 트랜잭션이 성공적으로 커밋된 뒤에만 이벤트를 처리
     public void onPushEvent(NotificationPushEvent event) {
+        if (!pushEligibilityReader.canSend(event.getAccountId(), event.getPushMessage().getFcmToken())) {
+            return;
+        }
         PushResult result = pushAdapter.send(event.getPushMessage());
 
         if (result.isSuccess()) {
