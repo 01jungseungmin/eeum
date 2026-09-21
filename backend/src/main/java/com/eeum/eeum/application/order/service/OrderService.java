@@ -93,16 +93,18 @@ public class OrderService {
         Cart cart = cartRepository.findByAccountIdWithPessimisticLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
 
+        List<CartItem> cartItems = cartItemRepository.findByCart_CartId(cart.getCartId());
+
+        // 빈 카트는 상점도 비어 있다(주문 완료 후 비워진 카트 포함).
+        // 상점을 먼저 읽으면 NPE로 500이 나가므로 빈 카트를 먼저 판정한다.
+        if (cartItems.isEmpty()) {
+            throw new BusinessException(ErrorCode.CART_EMPTY);
+        }
+
         var store = storeRepository.findByIdWithPessimisticLock(cart.getStore().getStoreId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
         if (store.getStatus() != com.eeum.eeum.domain.store.enums.StoreStatus.OPEN) {
             throw new BusinessException(ErrorCode.STORE_CLOSED);
-        }
-
-        List<CartItem> cartItems = cartItemRepository.findByCart_CartId(cart.getCartId());
-
-        if (cartItems.isEmpty()) {
-            throw new BusinessException(ErrorCode.CART_EMPTY);
         }
 
         OrderType orderType = resolveOrderType(cartItems);

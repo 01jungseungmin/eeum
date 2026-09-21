@@ -114,6 +114,31 @@ class OrderServiceTest {
         verify(accountRepository, never()).findByIdWithLock(any());
     }
 
+    // 주문 완료 후 비워진 카트로 재요청하면 cart.store가 null이라 NPE로 500이 났다
+    @Test
+    void 빈_장바구니로_주문하면_CART_EMPTY() {
+        // given
+        Long accountId = 100L;
+        Long cartId = 1L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of());
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CART_EMPTY);
+
+        // 빈 카트에는 상점이 없다 — 읽으러 가면 NPE다
+        verify(storeRepository, never()).findByIdWithPessimisticLock(any());
+    }
+
     // [시나리오 2] 이벤트 종료 후 카트에 남은 이벤트 상품으로 주문 생성 → EVENT_NOT_FOUND
     @Test
     void 종료된_이벤트_상품으로_주문_생성_시_EVENT_NOT_FOUND() {

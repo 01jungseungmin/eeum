@@ -18,12 +18,12 @@ Gradle/컴파일/외부 API 실호출/통합 테스트는 실행하지 않았다
 | M-04 | 수정됨 | 최신 DB 세대보다 오래된 Redis 토큰만 compare-and-delete. 불일치한 refresh 제시만으로 최신 refresh를 삭제하지 않음 |
 | M-05 | 재검토 통과 | 주문 생성과 활동지역 쓰기에 Account 잠금 후 assertWritable 적용. 주문은 현재 상점도 잠금 조회하여 폐점 상점의 주문 생성을 차단 |
 | M-06 | 수정됨 | 비동기 FCM 발송 직전 계정 ACTIVE 및 현재 토큰 일치 확인. 외부 전송 시작 후의 회수까지 보장하는 것은 아님 |
-| M-07 | 재검토 통과 | 30일 익명화는 유지한다. 미지급·실패·수동검토 정산, 최종 상태가 아닌 온라인 결제, 또는 미완료 취소가 있으면 지급계좌만 보존하고, 지급 완료 뒤 일일 후속 파기에서 삭제 |
+| M-07 | 지적됨 | 보존 경로는 구현됐으나 지급 완료 뒤에도 PAID 결제가 남아 계좌 파기가 차단됨. 아래 최종 재검토 R3-01 참조 |
 | M-08 | 수정됨 | Kakao access_token_info의 앱 ID·사용자 ID·잔여 유효기간 검사 후 user/me 사용자 ID 대조. 로그인과 재인증 모두 적용 |
 | m-01 | 수정됨 | Kakao 이메일 유효·인증 플래그를 확인하고 미확인 이메일은 저장 입력에서 제외. OAuth Account의 이메일 인증 상태도 실제 결과 반영 |
 | m-02 | 수정됨 / 일부 지적 정정 | SMTP·재인증 OAuth 경로의 전체 트랜잭션 제거, 필요한 계정 조회만 AuthAccountReader의 read-only 트랜잭션 사용. 기존 관리자 위치 조회는 외부 API가 아니라 Region/Location DB 조회였으므로 이 부분 지적은 철회 |
 | P-01 | 재검토 통과 | 본인 탈퇴는 미완료 주문·방문예약·중고 예약·정산·취소 작업이 있으면 409으로 차단. 관리자 강제 탈퇴는 해당 이력을 보존하고 `FORCE_WITHDRAW` 감사 이력을 남김 |
-| P-02 | 재검토 통과 | 기존 30일 익명화 후 미지급 정산계좌만 제한 보존하고 지급 완료 뒤 파기. 전체 법적 보존기간·백업 정책은 이번 수정으로 확정하지 않음 |
+| P-02 | 지적됨 | 정책은 사용자 확정 완료. 지급 완료 후 파기 구현은 R3-01로 재개방. 전체 법적 보존기간·백업 정책은 이번 수정으로 확정하지 않음 |
 
 ### 배포·호환성
 
@@ -47,7 +47,14 @@ Gradle/컴파일/외부 API 실호출/통합 테스트는 실행하지 않았다
 - `RealtimeSessionRevocationTest`: 지연된 종료 중계가 새 세대의 WebSocket/SSE 연결을 유지.
 - 기존 사장 승인/사업자번호/토큰 정리/주문 테스트의 fixture와 기대 동작을 수정 계약에 맞춤.
 
-정적 재검토에서 Critical/Major와 정책 보류는 남지 않았다. Gradle·MySQL/Redis 통합·동시성·외부 API 계약 테스트는 사용자 실행 대기이므로, 실행 검증까지 포함한 **3단계 최종 완료 판정은 보류**한다.
+최종 정적 재검토에서 아래 결함을 확인했으므로 **3단계 미완료**다. 앞선 Critical/Major 없음 및 Gradle만 남았다는 판정은 철회한다. Gradle·MySQL/Redis 통합·동시성 테스트는 사용자 실행 대기이며 이번 검토에서도 실행하지 않았다.
+
+### 최종 재검토 — 미해결 결함
+
+1. **R3-01 / Major / 지적됨 — 지급 완료된 계좌가 계속 보존됨.** `WithdrawalObligationRepository.requiresSettlementAccount()`는 원장·주간 정산이 모두 완료돼도 온라인 Payment가 PAID 또는 PARTIALLY_REFUNDED이면 true다. `ManualSettlementPayoutService.complete()`와 `completeHandover()`는 OwnerRevenue를 SETTLED, WeeklySettlement를 COMPLETED로 전이시키지만 결제 상태는 변경하지 않는다. 정상 지급 완료 이력이 한 건만 있어도 익명화 및 후속 스케줄러 모두 계좌 삭제를 건너뛴다. 보존 조건에서 결제 대기·원장 누락·실제 미지급 채무를 완료된 지급과 구분해야 한다. 실제 저장된 PAID + SETTLED + COMPLETED 조합의 계좌 파기 회귀 테스트가 필요하다.
+2. **R3-02 / Major / 지적됨 — 빈 장바구니 주문이 500으로 실패함.** `OrderService.createOrder()`는 CART_EMPTY 검사 전에 `cart.getStore().getStoreId()`를 호출한다. `Cart.create()`와 `Cart.clear()`는 store를 null로 두므로 정상적인 빈 장바구니 또는 주문 성공 뒤 재요청에서 NullPointerException이 발생한다. 상점 참조 전에 빈 장바구니를 거절하고, 신규 빈 장바구니 및 주문 완료 후 재요청에 대한 회귀 검증이 필요하다.
+
+이번 요청은 최종 검토이므로 애플리케이션 코드는 변경하지 않고 원장만 갱신했다. 위 항목은 실행 재현이 아닌 코드 경로로 확인했다.
 
 ## 상태와 범위
 
