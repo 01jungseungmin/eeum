@@ -19,12 +19,19 @@ public class OAuthService {
 
     private final RestClientConfig restClientConfig;
 
+    @org.springframework.beans.factory.annotation.Value("${kakao.app-id:0}")
+    private long kakaoAppId;
+
     public OAuthUserInfo getUserInfo(OAuthProvider provider, String accessToken) {
-        return switch (provider) {
+        try {
+            return switch (provider) {
             case KAKAO -> fetchKakaoProfile(accessToken);
             case NAVER -> fetchNaverProfile(accessToken);
             default -> throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
-        };
+            };
+        } catch (RestClientException | ClassCastException | NullPointerException e) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
     }
 
     public void validateToken(OAuthProvider provider, String accessToken, String expectedProviderId) {
@@ -44,22 +51,42 @@ public class OAuthService {
     // ======================== 카카오 ========================
 
     private OAuthUserInfo fetchKakaoProfile(String accessToken) {
+        if (kakaoAppId <= 0) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        Map info = restClientConfig.restClient().get()
+                .uri("https://kapi.kakao.com/v1/user/access_token_info")
+                .header("Authorization", "Bearer " + accessToken)
+                .retrieve().body(Map.class);
+        if (info == null || !(info.get("app_id") instanceof Number appId)
+                || appId.longValue() != kakaoAppId
+                || !(info.get("expires_in") instanceof Number expires) || expires.longValue() <= 0
+                || !(info.get("id") instanceof Number id) || id.longValue() <= 0) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
         Map response = restClientConfig.restClient().get()
                 .uri("https://kapi.kakao.com/v2/user/me")
                 .header("Authorization", "Bearer " + accessToken)
                 .retrieve() //요청 실행 후 응답 받기
                 .body(Map.class); //응답 JSON을 Map으로 파싱
 
-        String providerId = String.valueOf(response.get("id"));
+        if (response == null || !(response.get("id") instanceof Number profileId)
+                || profileId.longValue() != id.longValue()) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        String providerId = String.valueOf(profileId.longValue());
 
         Map<String, Object> kakaoAccount = (Map<String, Object>) response.getOrDefault("kakao_account",Map.of());
         Map<String, Object> profile = (Map<String, Object>) kakaoAccount.getOrDefault("profile",Map.of());
 
-        String email = (String) kakaoAccount.getOrDefault("email", null);
+        boolean emailVerified = Boolean.TRUE.equals(kakaoAccount.get("is_email_valid"))
+                && Boolean.TRUE.equals(kakaoAccount.get("is_email_verified"));
+        String email = emailVerified ? (String) kakaoAccount.get("email") : null;
         String nickname = (String) profile.getOrDefault("nickname", null);
         String profileImage = (String) profile.getOrDefault("profile_image_url", null)  ;
 
         return OAuthUserInfo.builder()
+                .emailVerified(emailVerified && email != null)
                 .provider(OAuthProvider.KAKAO)
                 .providerId(providerId)
                 .email(email)
@@ -87,6 +114,7 @@ public class OAuthService {
         String profileImage = (String) naverResponse.getOrDefault("profile_image", null);
 
         return OAuthUserInfo.builder()
+                .emailVerified(email != null)
                 .provider(OAuthProvider.NAVER)
                 .providerId(providerId)
                 .email(email)

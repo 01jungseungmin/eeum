@@ -84,6 +84,7 @@ business:
     service-key: ${NTS_BUSINESS_SERVICE_KEY}
 
 kakao:
+  app-id: ${KAKAO_APP_ID:0}
   rest-api-key: ${KAKAO_REST_API_KEY}
 
 # 정산 수수료율 — 0 이상 1 이하의 소수(0.033 = 3.3%). 현재는 수수료 없음.

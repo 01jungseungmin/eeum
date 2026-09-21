@@ -148,8 +148,12 @@ public class Account extends BaseEntity {
         account.profileImageUrl = profileImageUrl != null ? profileImageUrl : DEFAULT_PROFILE_IMAGE_URL;
         account.role = AccountRole.ROLE_USER;
         account.status = AccountStatus.PENDING;
-        account.emailVerified = true;
+        account.emailVerified = false;
         return account;
+    }
+
+    public void applyOAuthEmailVerification(boolean verified) {
+        this.emailVerified = verified && this.email != null;
     }
 
     // 추가 정보 입력 완료 후 업데이트

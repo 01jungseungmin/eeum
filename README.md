@@ -218,6 +218,7 @@ cp .env.example .env
 | `AWS_ACCESS_KEY` / `AWS_SECRET_KEY` / `AWS_S3_BUCKET` | AWS S3                 |
 | `PORTONE_API_SECRET` / `PORTONE_WEBHOOK_SECRET`       | PortOne 결제           |
 | `KAKAO_REST_API_KEY`                                  | 카카오 OAuth           |
+| `KAKAO_APP_ID` | Kakao 숫자 앱 ID. 토큰 발급 앱 검증용이며 미설정 시 Kakao 로그인 거절 |
 | `FCM_PROJECT_ID` / `FCM_SERVICE_ACCOUNT_KEY_PATH`     | Firebase FCM           |
 | `NTS_BUSINESS_SERVICE_KEY`                            | 국세청 사업자 조회 API |
 
