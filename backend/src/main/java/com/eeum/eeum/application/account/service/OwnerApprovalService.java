@@ -51,6 +51,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OwnerApprovalService {
 
+    private final AccountWriteTransactions accountWriteTransactions;
+    private final OwnerBusinessSnapshotReader ownerBusinessSnapshotReader;
+    private final com.eeum.eeum.application.auth.service.BusinessVerificationService businessVerificationService;
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final StoreRepository storeRepository;
@@ -208,8 +211,16 @@ public class OwnerApprovalService {
 
     // ===================== 심사 요청 =====================
 
-    @Transactional
     public void requestReview(Long accountId) {
+        var snapshot = ownerBusinessSnapshotReader.read(accountId);
+        if (!businessVerificationService.verifyBusiness(snapshot.businessNumber(), snapshot.ownerName(),
+                snapshot.openingDate().toString())) {
+            throw new BusinessException(ErrorCode.BUSINESS_VERIFY_FAILED);
+        }
+        accountWriteTransactions.run(() -> requestVerifiedReview(accountId, snapshot));
+    }
+
+    private void requestVerifiedReview(Long accountId, OwnerBusinessSnapshotReader.Snapshot snapshot) {
         // 잠금 순서 account → owner_info. 관리자 승인/거절(AdminAccountService)과 같은 순서다.
         // 잠그지 않고 읽으면 PENDING을 본 뒤 관리자 승인이 ROLE_OWNER + APPROVED를 커밋하고,
         // 이 트랜잭션이 나중에 flush하며 상태를 PENDING으로 되돌린다. OwnerInfo에는 @Version이
@@ -237,6 +248,8 @@ public class OwnerApprovalService {
             throw new BusinessException(ErrorCode.OWNER_REVIEW_ALREADY_REQUESTED);
         }
 
+        snapshot.assertMatches(ownerInfo);
+        ownerInfo.markBusinessVerified(snapshot.ownerName());
         Store store = getStore(accountId);
 
         validateChecklistCompleted(ownerInfo, store);
