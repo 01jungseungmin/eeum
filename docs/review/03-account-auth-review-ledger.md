@@ -1,13 +1,57 @@
 # 3단계 계정·인증·권한 검토 원장
 
 검토일: 2026-09-20. 기준 커밋: `3aa680693824c63a719453d7387f57f852232493`.
-애플리케이션 코드 수정 없이 읽기 전용으로 검토했다. 이 문서만 추가했다.
+2026-09-20에는 읽기 전용 검토를 수행했다. 아래 원본 지적은 당시 기준이며, 2026-09-22 수정 상태는 다음 표를 우선한다.
 사용자 요청에 따라 Gradle, MySQL/Redis 통합 테스트, 외부 서비스 실호출은 실행하지 않았다.
-결론: **3단계 통과 전. Major 8건, Minor 2건, 정책 보류 2건.** 이는 정적 코드 경로로 확인한 지적이며 실행 재현 결과가 아니다.
+초기 검토 결론(수정 전): **3단계 통과 전. Major 8건, Minor 2건, 정책 보류 2건.** 이는 정적 코드 경로로 확인한 지적이며 실행 재현 결과가 아니다.
+
+## 2026-09-22 수정 상태
+
+수정 기준 HEAD: `f3f92da2`. 사용자가 수정 요청을 승인한 범위에서 작업했다.
+Gradle/컴파일/외부 API 실호출/통합 테스트는 실행하지 않았다. 아래 `수정됨`은 실행 검증 통과를 의미하지 않는다.
+
+| ID | 현재 상태 | 반영 사항 |
+| --- | --- | --- |
+| M-01 | 수정됨 | 가입·번호 변경·심사 요청에 서버 사업자 검증. 외부 검증 후 별도 DB 트랜잭션에서 정보 일치 재검사. 검증 시각/대표자명을 저장하고 번호 변경 시 무효화. 관리자 승인도 증빙 확인 |
+| M-02 | 수정됨 | 로그아웃은 재발급 락 안에서 계정 DB 잠금·현재 토큰 세대·refresh 일치 확인 후 BEFORE_COMMIT 세대 회수. 해당 계정의 기존 모든 토큰을 회수하는 동작으로 명시 |
+| M-03 | 수정됨 | 모든 JWT 발급마다 UUID jti 추가 |
+| M-04 | 수정됨 | 최신 DB 세대보다 오래된 Redis 토큰만 compare-and-delete. 불일치한 refresh 제시만으로 최신 refresh를 삭제하지 않음 |
+| M-05 | 재검토 통과 | 주문 생성과 활동지역 쓰기에 Account 잠금 후 assertWritable 적용. 주문은 현재 상점도 잠금 조회하여 폐점 상점의 주문 생성을 차단 |
+| M-06 | 수정됨 | 비동기 FCM 발송 직전 계정 ACTIVE 및 현재 토큰 일치 확인. 외부 전송 시작 후의 회수까지 보장하는 것은 아님 |
+| M-07 | 재검토 통과 | 30일 익명화는 유지한다. 미지급·실패·수동검토 정산, 최종 상태가 아닌 온라인 결제, 또는 미완료 취소가 있으면 지급계좌만 보존하고, 지급 완료 뒤 일일 후속 파기에서 삭제 |
+| M-08 | 수정됨 | Kakao access_token_info의 앱 ID·사용자 ID·잔여 유효기간 검사 후 user/me 사용자 ID 대조. 로그인과 재인증 모두 적용 |
+| m-01 | 수정됨 | Kakao 이메일 유효·인증 플래그를 확인하고 미확인 이메일은 저장 입력에서 제외. OAuth Account의 이메일 인증 상태도 실제 결과 반영 |
+| m-02 | 수정됨 / 일부 지적 정정 | SMTP·재인증 OAuth 경로의 전체 트랜잭션 제거, 필요한 계정 조회만 AuthAccountReader의 read-only 트랜잭션 사용. 기존 관리자 위치 조회는 외부 API가 아니라 Region/Location DB 조회였으므로 이 부분 지적은 철회 |
+| P-01 | 재검토 통과 | 본인 탈퇴는 미완료 주문·방문예약·중고 예약·정산·취소 작업이 있으면 409으로 차단. 관리자 강제 탈퇴는 해당 이력을 보존하고 `FORCE_WITHDRAW` 감사 이력을 남김 |
+| P-02 | 재검토 통과 | 기존 30일 익명화 후 미지급 정산계좌만 제한 보존하고 지급 완료 뒤 파기. 전체 법적 보존기간·백업 정책은 이번 수정으로 확정하지 않음 |
+
+### 배포·호환성
+
+- `V28__add_owner_business_verification.sql`, `V29__add_force_withdrawal_audit_action.sql` 적용이 필요하다. 기존 입력만 있는 사장 정보를 임의로 검증 완료로 backfill하지 않는다. 기존 미승인 신청은 사업자 정보 재저장 또는 심사 재요청으로 서버 검증을 받아야 하며, 증빙 없는 기존 심사 대기 건은 바로 승인할 수 없다.
+- `KAKAO_APP_ID`에 서비스의 Kakao 앱 숫자 ID를 설정해야 한다. REST API 키와 다른 값이다. 미설정/0이면 Kakao 로그인을 거절한다. 요청/응답 필드나 엔드포인트는 변경하지 않았다.
+- 로그아웃은 DB tokenVersion을 올리므로 해당 계정의 이전 기기 토큰도 회수된다. 현재 refresh 저장 구조가 계정당 하나라는 기존 계약에 맞춘다.
+- 지연된 실시간 세션 종료 중계도 현재 DB 상태·세대와 대조하고 연결 식별자로 조건부 종료한다. 새 로그인으로 연결된 현재 세대는 유지한다.
+- 본인 탈퇴는 진행 중 주문·예약·정산을 먼저 완료해야 한다. 관리자 강제 탈퇴는 거래·정산 행과 지급계좌를 미지급 상태가 끝날 때까지 보존하며, 관리자 이력에서 복구 대상을 추적한다.
+
+### 추가·보강 테스트 (미실행)
+
+- `TokenGenerationRegressionTest`: JWT 고유성, 지연 정리에서 현재 세대 보존, 원자적 조건부 삭제.
+- `AccountLogoutServiceTest`: 현재 세대 회수 이벤트, 이전 세대 로그아웃 거절.
+- `AccountStageThreeRegressionIntegrationTest`: MySQL/Redis에서 로그아웃 후 Redis 회수정보 유실 시 JWT 거절, 실제 Account 행 잠금 대기를 관찰하는 탈퇴/주문 경합.
+- `AccountTokenCleanupLockIntegrationTest`: 실제 계정 fixture, 락 획득 latch, 늦은 이벤트 이후 새 일회용 토큰 보존.
+- `OAuthServiceContractTest`: 로컬 HTTP Stub으로 앱 불일치·재인증·미인증/정상 이메일 계약.
+- `OwnerBusinessVerificationTest`, `AuthServiceOwnerSignupTest`: 입력만으로 검증 완료 금지, 번호 변경/오래된 증빙 거절, 사업자 검증 실패 시 가입 미시작.
+- `PushEligibilityReaderTest`: 탈퇴 및 토큰 교체 뒤 대기 FCM 미발송.
+- `AccountWithdrawalGuardTest`, `AccountWithdrawalProcessorTest`: 본인 탈퇴의 미완료 거래 409 차단과 관리자 강제 탈퇴 경로의 분리.
+- `SettlementAccountDeleteServiceTest`, `AccountCleanupServiceTest`, `AccountCleanupSchedulerTest`: 미지급 계좌 보존과 지급 완료 후 일일 재검사 파기.
+- `RealtimeSessionRevocationTest`: 지연된 종료 중계가 새 세대의 WebSocket/SSE 연결을 유지.
+- 기존 사장 승인/사업자번호/토큰 정리/주문 테스트의 fixture와 기대 동작을 수정 계약에 맞춤.
+
+정적 재검토에서 Critical/Major와 정책 보류는 남지 않았다. Gradle·MySQL/Redis 통합·동시성·외부 API 계약 테스트는 사용자 실행 대기이므로, 실행 검증까지 포함한 **3단계 최종 완료 판정은 보류**한다.
 
 ## 상태와 범위
 
-상태는 `미점검 / 지적됨 / 수정됨 / 재검토 통과 / 정책 보류`를 사용한다. 이번에 수정하거나 수정 후 재검토한 항목은 없다.
+상태는 `미점검 / 지적됨 / 수정됨 / 재검토 통과 / 정책 보류`를 사용한다. 아래 표는 초기 검토 기록이며 최신 수정 상태는 위 표를 따른다.
 파일 경로는 별도 표기가 없으면 `backend/src/main/java/com/eeum/eeum/` 기준이다.
 
 | 검토 단위 | 상태 | 확인한 경로와 남은 사항 |
@@ -17,10 +61,10 @@
 | 재발급·로그아웃 | 지적됨 | JwtProvider, TokenService, AuthService, RedisLockService, JWT 필터. M-02~04 |
 | 비밀번호 변경·재설정 | 지적됨 | 일회용 토큰 compare-and-delete, 토큰 세대 검사와 BEFORE_COMMIT 회수 확인. 지연 정리 경쟁 M-04 |
 | 사장 가입·정보 변경·심사·승인 | 지적됨 | OwnerInfo, OwnerApprovalService, AccountService, AdminAccountService. 관리자 권한·대상 계정 잠금 존재. 사업자 검증 M-01 |
-| 제재·탈퇴·익명화 | 지적됨 | AccountWithdrawalProcessor, OwnerStoreWithdrawalService, AccountCleanupService, SettlementAccountDeleteService. M-05~07 및 P-01~02 |
-| 계정 상태와 채팅·실시간 인증 | 정책 보류 | ChatAccessHelper, ChatMessageService, STOMP 인증, 세션 회수·대조 경로 확인. DB 상태/세대 재검사와 송신자 잠금 존재. 보존 범위 P-02 |
+| 제재·탈퇴·익명화 | 재검토 통과 | 본인 탈퇴의 미완료 거래 409 차단, 관리자 강제 탈퇴 감사 이력, 미지급 정산계좌 제한 보존·완료 후 파기를 재검토 |
+| 계정 상태와 채팅·실시간 인증 | 재검토 통과 | ChatAccessHelper, ChatMessageService, STOMP 인증, 세션 회수·대조 경로 확인. DB 상태/세대 재검사와 송신자 잠금 존재 |
 | 계정 상태와 알림 | 지적됨 | NotificationService → NotificationPushEventListener → FcmPushAdapter. 대기 푸시 M-06 |
-| 계정 상태와 주문·정산 | 지적됨 | 주문 생성·환불 경로, 탈퇴 처리, 주간 정산 엔티티/응답, 정산계좌 삭제. M-05/M-07/P-01 |
+| 계정 상태와 주문·정산 | 재검토 통과 | 주문 생성·환불 경로, 탈퇴 처리, 주간 정산, 미지급 정산계좌 보존과 완료 후 파기 재검토 |
 | 실제 장애·경합·외부 계약 실행 검증 | 미점검 | Redis 데이터 유실, 동시 로그아웃/재발급, 지연 이벤트, 외부 OAuth/사업자 응답, MySQL 경합은 미실행 |
 | 운영 데이터 전체 개인정보 보존 조사 | 미점검 | 모든 스냅샷·첨부파일·로그·백업의 실데이터 조사와 법적 보존기간 확정은 이번 코드 검토로 완료하지 않음 |
 
