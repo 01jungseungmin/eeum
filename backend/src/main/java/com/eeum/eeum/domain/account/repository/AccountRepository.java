@@ -56,6 +56,20 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
             Pageable pageable
     );
 
+    // 본문 개인정보는 이미 파기됐지만 미지급 정산 때문에 계좌만 남은 계정의 후속 파기 대상.
+    @Query("""
+        SELECT sa.store.account.accountId FROM SettlementAccount sa
+        WHERE sa.store.account.status = :status
+          AND sa.store.account.anonymizedAt IS NOT NULL
+          AND sa.store.account.accountId > :lastAccountId
+        ORDER BY sa.store.account.accountId ASC
+        """)
+    List<Long> findSettlementAccountCleanupIdsAfter(
+            @Param("status") AccountStatus status,
+            @Param("lastAccountId") Long lastAccountId,
+            Pageable pageable
+    );
+
     // 무효/만료 FCM 토큰 감지 시 해당 토큰을 null로 초기화
     // Bulk update도 version을 올려 이전에 Account를 읽은 stale 트랜잭션의 덮어쓰기를 차단한다.
     @Transactional

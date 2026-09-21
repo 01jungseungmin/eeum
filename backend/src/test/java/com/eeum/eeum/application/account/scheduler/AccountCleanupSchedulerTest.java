@@ -3,6 +3,7 @@ package com.eeum.eeum.application.account.scheduler;
 import com.eeum.eeum.application.account.service.AccountCleanupService;
 import com.eeum.eeum.application.operation.service.OperationFailureRecorder;
 import com.eeum.eeum.domain.operation.enums.OperationFailureCategory;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +35,12 @@ class AccountCleanupSchedulerTest {
 
     @InjectMocks
     private AccountCleanupScheduler accountCleanupScheduler;
+
+    @BeforeEach
+    void defaultRetainedSettlementAccounts() {
+        when(accountCleanupService.findSettlementAccountCleanupIds(eq(0L), anyInt()))
+                .thenReturn(List.of());
+    }
 
     @Test
     void 한_계정이_실패해도_나머지는_파기한다() {
@@ -116,6 +123,17 @@ class AccountCleanupSchedulerTest {
 
         // then
         verify(accountCleanupService, times(1)).anonymizeAccount(7L);
+    }
+
+    @Test
+    void 미지급으로_보존했던_계좌는_매일_재검사한다() {
+        // 배치 크기보다 적게 돌아오면 다음 커서를 읽지 않고 끝난다 — 후속 조회 스터빙은 두지 않는다
+        when(accountCleanupService.findSettlementAccountCleanupIds(eq(0L), anyInt()))
+                .thenReturn(List.of(11L));
+
+        accountCleanupScheduler.cleanupWithdrawnAccounts();
+
+        verify(accountCleanupService).cleanupRetainedSettlementAccount(11L);
     }
 
     private void givenTargets(List<Long> ids) {

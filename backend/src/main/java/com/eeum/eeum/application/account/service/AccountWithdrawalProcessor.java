@@ -39,8 +39,17 @@ public class AccountWithdrawalProcessor {
     private final FavoriteService favoriteService;
     private final UsedProductWithdrawalService usedProductWithdrawalService;
     private final UsedProductRepository usedProductRepository;
+    private final AccountWithdrawalGuard accountWithdrawalGuard;
 
     public void process(Account account) {
+        process(account, false);
+    }
+
+    public void processSelfWithdrawal(Account account) {
+        process(account, true);
+    }
+
+    private void process(Account account, boolean selfWithdrawal) {
         Long accountId = account.getAccountId();
 
         // 1. 이 트랜잭션이 잠글 상점 행을 ID 오름차순으로 미리 확보한다.
@@ -52,6 +61,10 @@ public class AccountWithdrawalProcessor {
         // 찜한 남의 글을 잠근다 — 두 단계로 나눠 잡으면 서로의 글을 찜한 두 판매자가
         // 동시에 탈퇴할 때 각자 자기 글을 잡고 상대 글을 기다리는 순환 대기가 난다.
         lockUsedProductsInIdOrder(accountId);
+
+        if (selfWithdrawal) {
+            accountWithdrawalGuard.assertSelfWithdrawalAllowed(accountId);
+        }
 
         // 2. 사장 계정이면 상점/상품/이벤트 상품 비활성화 — 탈퇴한 사장의 상점이
         // 사용자 화면에 계속 노출되고 주문·예약이 들어오는 것을 막는다.

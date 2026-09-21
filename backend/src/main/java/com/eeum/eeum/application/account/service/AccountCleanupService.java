@@ -86,11 +86,11 @@ public class AccountCleanupService {
         // 남은 찜이 없으면 추가 쿼리 없이 끝나므로 무조건 호출해도 안전하다.
         favoriteService.deleteAllByAccountId(accountId);
 
-        // 계정에 딸린 개인정보 행 삭제 — GPS 활동지역, 사업자 정보(사업자번호),
-        // 정산 계좌(계좌번호·예금주). 활동 이력이 아니라 식별 정보다.
+        // 계정에 딸린 개인정보 행 삭제 — GPS 활동지역과 사업자 정보(사업자번호).
+        // 정산 계좌(계좌번호·예금주)는 미지급 정산이 없을 때만 파기한다.
         accountRegionRepository.deleteByAccount_AccountId(accountId);
         ownerInfoRepository.deleteByAccount_AccountId(accountId);
-        settlementAccountDeleteService.deleteByAccountId(accountId);
+        settlementAccountDeleteService.deleteWhenNoPayoutObligation(accountId);
 
         log.info("탈퇴 후 30일 경과 계정 개인정보 파기 완료: accountId={}", accountId);
     }
@@ -104,5 +104,20 @@ public class AccountCleanupService {
                 && !account.isAnonymized()
                 && account.getDeletedAt() != null
                 && !account.getDeletedAt().isAfter(anonymizeThreshold());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findSettlementAccountCleanupIds(Long lastAccountId, int batchSize) {
+        return accountRepository.findSettlementAccountCleanupIdsAfter(
+                AccountStatus.WITHDRAWN, lastAccountId, PageRequest.of(0, batchSize));
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void cleanupRetainedSettlementAccount(Long accountId) {
+        Account account = accountRepository.findByIdWithLock(accountId).orElse(null);
+        if (account == null || !account.isWithdrawn() || !account.isAnonymized()) {
+            return;
+        }
+        settlementAccountDeleteService.deleteWhenNoPayoutObligation(accountId);
     }
 }

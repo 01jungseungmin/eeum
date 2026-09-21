@@ -44,6 +44,7 @@ class AccountWithdrawalProcessorTest {
     @Mock private FavoriteService favoriteService;
     @Mock UsedProductWithdrawalService usedProductWithdrawalService;
     @Mock private UsedProductRepository usedProductRepository;
+    @Mock private AccountWithdrawalGuard accountWithdrawalGuard;
 
     @InjectMocks
     private AccountWithdrawalProcessor accountWithdrawalProcessor;
@@ -104,6 +105,17 @@ class AccountWithdrawalProcessorTest {
         accountWithdrawalProcessor.process(givenUser());
 
         verify(ownerStoreWithdrawalService, never()).deactivateForWithdrawal(any());
+    }
+
+    @Test
+    void 본인_탈퇴는_정리_전에_미완료_거래를_검사한다() {
+        Account account = givenUser();
+
+        accountWithdrawalProcessor.processSelfWithdrawal(account);
+
+        InOrder inOrder = inOrder(accountWithdrawalGuard, account);
+        inOrder.verify(accountWithdrawalGuard).assertSelfWithdrawalAllowed(ACCOUNT_ID);
+        inOrder.verify(account).withdraw();
     }
 
     @Test
