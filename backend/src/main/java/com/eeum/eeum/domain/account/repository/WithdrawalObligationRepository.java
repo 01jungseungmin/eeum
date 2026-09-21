@@ -82,12 +82,15 @@ public class WithdrawalObligationRepository {
 
     public boolean requiresSettlementAccount(Long accountId) {
         return hasPendingSettlements(accountId)
+                // 지급이 끝나도 결제는 PAID로 남는다. PAID를 보존 조건에 두면 계좌가 영영 파기되지
+                // 않는다 — 원장이 없거나 미지급인 PAID는 hasPendingSettlements가 이미 본다.
+                // 여기서는 아직 원장이 생기지 않은 진행 중(PENDING) 결제만 붙잡는다.
                 || query.selectOne().from(payment)
                 .join(payment.order, order)
                 .join(order.store, store)
                 .where(store.account.accountId.eq(accountId),
                         payment.paymentMethod.ne(PaymentMethod.CASH_ON_SITE),
-                        payment.status.in(PaymentStatus.PENDING, PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED))
+                        payment.status.eq(PaymentStatus.PENDING))
                 .fetchFirst() != null
                 || query.selectOne().from(paymentCancellationOperation)
                 .join(paymentCancellationOperation.order, order)
