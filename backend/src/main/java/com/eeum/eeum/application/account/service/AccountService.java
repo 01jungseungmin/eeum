@@ -178,8 +178,14 @@ public class AccountService {
 
     @Transactional
     public void updateFcmToken(Long accountId, String fcmToken) {
-        Account account = getActiveAccount(accountId);
-        account.updateFcmToken(fcmToken);
+        accountRepository.findStatusByAccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND))
+                .assertWritable();
+
+        // 이전 계정에 같은 토큰이 남으면 계정을 바꾼 기기로 이전 계정의 알림이 간다.
+        // 계정 행을 따로 잠그지 않는다 — 두 계정이 서로의 행을 기다리는 교착이 생긴다.
+        accountRepository.transferFcmToken(
+                accountId, fcmToken == null || fcmToken.isBlank() ? null : fcmToken);
     }
 
     // ===================== 사장 정보 조회 =====================

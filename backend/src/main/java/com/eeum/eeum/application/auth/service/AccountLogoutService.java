@@ -29,6 +29,10 @@ public class AccountLogoutService {
                 || !accountId.equals(tokenService.validateRefreshToken(refreshToken))) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
+        // 이 기기로 가던 알림도 함께 끊는다. 남겨 두면 다른 계정으로 전환한 기기에
+        // 이 계정의 알림이 계속 도착한다.
+        account.updateFcmToken(null);
+
         // BEFORE_COMMIT 회수로 Redis 데이터가 사라져도 이 계정의 기존 세션은 되살아나지 않는다.
         eventPublisher.publishEvent(AccountTokenCleanupEvent.allTokens(accountId));
     }

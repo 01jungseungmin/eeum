@@ -596,6 +596,14 @@ public class VisitReservationService {
         if (store.getStatus() != StoreStatus.OPEN) {
             throw new BusinessException(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE);
         }
+
+        // 사장 정지는 Account만 바꾸고 상점은 OPEN으로 남는다. 판매자 계정을 상점 다음에 잠가
+        // 정지 커밋과 순서를 정한다 — 주문 생성과 같은 순서(account → store → 판매자 account)다.
+        Account seller = accountRepository.findByIdWithLock(store.getAccount().getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE));
+        if (!seller.isActive()) {
+            throw new BusinessException(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE);
+        }
     }
 
     private void validateVisitDateTime(LocalDate visitDate, LocalTime visitTime) {

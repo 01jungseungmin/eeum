@@ -34,6 +34,21 @@ class AccountLogoutServiceTest {
         verify(publisher).publishEvent(AccountTokenCleanupEvent.allTokens(1L));
     }
 
+    // 토큰을 남기면 다른 계정으로 전환한 기기에 이 계정의 알림이 계속 간다
+    @Test
+    void 로그아웃하면_기기_푸시_토큰_연결도_끊는다() {
+        Account account = Account.createUser("a@test.com", "pw", "name", "nick", "010");
+        account.updateFcmToken("device-token");
+        when(accounts.findByIdWithLock(1L)).thenReturn(Optional.of(account));
+        when(jwt.getTokenVersion("access")).thenReturn(0L);
+        when(jwt.getTokenVersion("refresh")).thenReturn(0L);
+        when(tokens.validateRefreshToken("refresh")).thenReturn(1L);
+
+        service.logout(1L, "access", "refresh");
+
+        assertThat(account.getFcmToken()).isNull();
+    }
+
     @Test
     void 이전_세대의_로그아웃으로_새_세션을_회수할_수_없다() {
         Account account = Account.createUser("a@test.com", "pw", "name", "nick", "010");

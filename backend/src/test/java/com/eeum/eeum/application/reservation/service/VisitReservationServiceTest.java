@@ -85,6 +85,10 @@ class VisitReservationServiceTest {
         Store store = Store.createForOwnerSignup(owner, "테스트상점", "서울시", "02-0000-0000");
         ReflectionTestUtils.setField(store, "storeId", id);
         ReflectionTestUtils.setField(store, "status", status);
+        // 예약 생성은 판매자 계정도 잠가 정지 여부를 본다 — 상점 상태만으로는 정지된 사장을 거르지 못한다
+        org.mockito.Mockito.lenient()
+                .when(accountRepository.findByIdWithLock(owner.getAccountId()))
+                .thenReturn(Optional.of(owner));
         return store;
     }
 
@@ -407,6 +411,25 @@ class VisitReservationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.STORE_NOT_FOUND);
+    }
+
+    // 계정 정지는 Account만 SUSPENDED로 바꾸고 상점은 OPEN으로 남는다 — 상점 상태만 보면 통과한다
+    @Test
+    void 예약_생성_내부_사장이_정지되면_RESERVATION_STORE_NOT_RESERVABLE() {
+        setupPassthroughLockAndTransaction();
+        Account account = createAccount(1L, "사용자", "user");
+        Account owner = createAccount(2L, "사장", "owner");
+        ReflectionTestUtils.setField(owner, "status",
+                com.eeum.eeum.domain.account.enums.AccountStatus.SUSPENDED);
+        Store store = createStore(10L, owner, StoreStatus.OPEN);
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
+
+        assertThatThrownBy(() -> visitReservationService.createReservation(
+                1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE);
     }
 
     @Test
