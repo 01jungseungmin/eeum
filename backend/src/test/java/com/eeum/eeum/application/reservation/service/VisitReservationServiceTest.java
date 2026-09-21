@@ -386,7 +386,7 @@ class VisitReservationServiceTest {
     @Test
     void 예약_생성_내부_계정이_없으면_ACCOUNT_NOT_FOUND() {
         setupPassthroughLockAndTransaction();
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.empty());
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
                 1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
@@ -399,8 +399,8 @@ class VisitReservationServiceTest {
     void 예약_생성_내부_상점이_없으면_STORE_NOT_FOUND() {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.empty());
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
                 1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
@@ -414,8 +414,8 @@ class VisitReservationServiceTest {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.TEMP_CLOSED);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
                 1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
@@ -429,8 +429,8 @@ class VisitReservationServiceTest {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
@@ -447,8 +447,8 @@ class VisitReservationServiceTest {
         Store store = createStore(10L, account, StoreStatus.OPEN);
         // createDefault → enabled=false
         StoreVisitReservationSetting disabledSetting = StoreVisitReservationSetting.createDefault(store);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(disabledSetting));
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
@@ -465,8 +465,8 @@ class VisitReservationServiceTest {
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
@@ -491,8 +491,8 @@ class VisitReservationServiceTest {
         StoreBusinessHour businessHour = StoreBusinessHour.create(store, dayOfWeek, false,
                 LocalTime.of(9, 0), LocalTime.of(18, 0));
 
-        when(accountRepository.findById(eq(accountId))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(storeId))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(accountId))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(storeId))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(storeId))).thenReturn(Optional.of(setting));
         when(storeBusinessHourRepository.findByStore_StoreIdAndDayOfWeek(eq(storeId), eq(dayOfWeek)))
                 .thenReturn(Optional.of(businessHour));
@@ -524,8 +524,8 @@ class VisitReservationServiceTest {
         StoreBusinessHour businessHour = StoreBusinessHour.create(store, dayOfWeek, false,
                 LocalTime.of(9, 0), LocalTime.of(18, 0));
 
-        when(accountRepository.findById(eq(accountId))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(storeId))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(accountId))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(storeId))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(storeId))).thenReturn(Optional.of(setting));
         when(storeBusinessHourRepository.findByStore_StoreIdAndDayOfWeek(eq(storeId), eq(dayOfWeek)))
                 .thenReturn(Optional.of(businessHour));

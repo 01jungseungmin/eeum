@@ -458,9 +458,10 @@ public class VisitReservationService {
     private VisitReservationResponseDto createReservationInternal(
             Long accountId, Long storeId, VisitReservationCreateRequestDto request
     ) {
-        Account account = accountRepository.findById(accountId)
+        Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-        Store store = storeRepository.findById(storeId)
+        account.assertWritable();
+        Store store = storeRepository.findByIdWithPessimisticLock(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
         validateReservableStore(store);

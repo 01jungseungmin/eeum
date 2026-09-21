@@ -59,6 +59,7 @@ public class OrderService {
     private final FileStorageService fileStorageService;
     private final AccountRepository accountRepository;
     private final CartRepository cartRepository;
+    private final com.eeum.eeum.domain.store.repository.StoreRepository storeRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -84,11 +85,19 @@ public class OrderService {
     ) {
         validateSupportedPaymentMethod(request.getPaymentMethod());
 
-        Account account = accountRepository.findById(accountId)
+        Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        account.assertWritable();
 
         Cart cart = cartRepository.findByAccountIdWithPessimisticLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
+
+        var store = storeRepository.findByIdWithPessimisticLock(cart.getStore().getStoreId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        if (store.getStatus() != com.eeum.eeum.domain.store.enums.StoreStatus.OPEN) {
+            throw new BusinessException(ErrorCode.STORE_CLOSED);
+        }
 
         List<CartItem> cartItems = cartItemRepository.findByCart_CartId(cart.getCartId());
 

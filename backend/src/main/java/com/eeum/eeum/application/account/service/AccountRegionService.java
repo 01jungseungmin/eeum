@@ -51,7 +51,7 @@ public class AccountRegionService {
 
     @Transactional
     public AccountRegionResponseDto addRegion(Long accountId, RegionRequestDto request) {
-        Account account = getAccount(accountId);
+        Account account = getWritableAccountWithLock(accountId);
 
         // 1. 최대 2개 제한
         if (accountRegionRepository.countByAccount_AccountId(accountId) >= MAX_REGION_COUNT) {
@@ -89,7 +89,7 @@ public class AccountRegionService {
      */
     @Transactional
     public AccountRegionResponseDto completeVerification(Long accountId, Long accountRegionId) {
-        Account account = getAccount(accountId);
+        Account account = getWritableAccountWithLock(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
 
         accountRegion.verify();
@@ -117,7 +117,7 @@ public class AccountRegionService {
 
     @Transactional
     public void setPrimaryRegion(Long accountId, Long accountRegionId) {
-        Account account = getAccount(accountId);
+        Account account = getWritableAccountWithLock(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
 
         // 인증된 지역만 대표 지역으로 설정 가능
@@ -133,7 +133,7 @@ public class AccountRegionService {
 
     @Transactional
     public void deleteRegion(Long accountId, Long accountRegionId) {
-        Account account = getAccount(accountId);
+        Account account = getWritableAccountWithLock(accountId);
         AccountRegion accountRegion = getOwnedAccountRegion(accountRegionId, accountId);
 
         boolean isPrimaryRegion = accountRegion.getAccountRegionId().equals(account.getPrimaryRegionId());
@@ -159,6 +159,13 @@ public class AccountRegionService {
     }
 
     // ===================== 내부 유틸 =====================
+
+    private Account getWritableAccountWithLock(Long accountId) {
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        account.assertWritable();
+        return account;
+    }
 
     private Account getAccount(Long accountId) {
         return accountRepository.findById(accountId)
