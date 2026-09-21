@@ -51,6 +51,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OwnerApprovalService {
 
+    private final AccountWriteGuard accountWriteGuard;
     private final AccountWriteTransactions accountWriteTransactions;
     private final OwnerBusinessSnapshotReader ownerBusinessSnapshotReader;
     private final com.eeum.eeum.application.auth.service.BusinessVerificationService businessVerificationService;
@@ -107,9 +108,7 @@ public class OwnerApprovalService {
 
     @Transactional
     public void updateBusinessHours(Long accountId,StoreBusinessHourUpdateRequestDto request) {
-        OwnerInfo ownerInfo = getOwnerInfo(accountId);
-
-        validateReviewEditable(ownerInfo);
+        lockEditableReview(accountId);
 
         Store store = getStore(accountId);
 
@@ -151,10 +150,7 @@ public class OwnerApprovalService {
 
     @Transactional
     public void updateStoreBusinessInfo(Long accountId, StoreBusinessInfoRequestDto request) {
-        OwnerInfo ownerInfo = ownerInfoRepository.findByAccount_AccountId(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
-
-        validateReviewEditable(ownerInfo);
+        lockEditableReview(accountId);
 
         Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
@@ -175,9 +171,7 @@ public class OwnerApprovalService {
             Long accountId,
             SettlementAccountRequestDto request
     ) {
-        OwnerInfo ownerInfo = getOwnerInfo(accountId);
-
-        validateReviewEditable(ownerInfo);
+        lockEditableReview(accountId);
 
         Store store = getStore(accountId);
 
@@ -268,9 +262,7 @@ public class OwnerApprovalService {
 
     @Transactional
     public void saveRepresentativeMenu(Long accountId, RepresentativeMenuCreateRequestDto request) {
-        OwnerInfo ownerInfo = getOwnerInfo(accountId);
-
-        validateReviewEditable(ownerInfo);
+        lockEditableReview(accountId);
 
         Store store = storeRepository.findByAccount_AccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
@@ -353,6 +345,21 @@ public class OwnerApprovalService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    /**
+     * 심사 정보 쓰기의 공통 진입 — account → owner_info 순으로 잠그고 상태를 다시 본다.
+     *
+     * 잠그지 않으면 승인(AdminAccountService.approveOwner)이 먼저 커밋돼도 그 전에 시작한
+     * 저장이 APPROVED 뒤에 반영된다. 필터를 통과한 뒤의 정지·탈퇴도 여기서 걸린다.
+     */
+    private void lockEditableReview(Long accountId) {
+        accountWriteGuard.lockActive(accountId);
+
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
+
+        validateReviewEditable(ownerInfo);
     }
 
     private void validateReviewEditable(OwnerInfo ownerInfo) {
