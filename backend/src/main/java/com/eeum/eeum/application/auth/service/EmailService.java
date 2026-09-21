@@ -75,13 +75,12 @@ public class EmailService {
         String stored = redisUtil.get(EMAIL_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));
 
-        if (!stored.equals(code)) {
+        // 비교와 삭제를 한 연산으로 묶는다. 나눠 하면 같은 코드로 동시에 들어온 두 요청이
+        // 모두 통과하고, 그 사이 재발송된 새 코드를 옛 요청이 지운다.
+        if (!stored.equals(code) || !redisUtil.compareAndDelete(EMAIL_CODE_PREFIX + email, code)) {
             rateLimitService.recordFailure(failKey, Duration.ofSeconds(codeExpiration));
             throw new BusinessException(ErrorCode.AUTH_INVALID_VERIFICATION_CODE);
         }
-
-        // 코드 사용 후 삭제
-        redisUtil.delete(EMAIL_CODE_PREFIX + email);
         rateLimitService.resetFailure(failKey);
 
         // 인증 토큰 발급 (회원가입 요청 시 같이 보내는 값)
@@ -135,13 +134,12 @@ public class EmailService {
         String stored = redisUtil.get(PASSWORD_RESET_CODE_PREFIX + email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXPIRED_VERIFICATION_CODE));
 
-        if (!stored.equals(code)) {
+        // 비교와 삭제를 한 연산으로 묶는다. 나눠 하면 같은 코드로 동시에 들어온 두 요청이
+        // 모두 통과하고, 그 사이 재발송된 새 코드를 옛 요청이 지운다.
+        if (!stored.equals(code) || !redisUtil.compareAndDelete(PASSWORD_RESET_CODE_PREFIX + email, code)) {
             rateLimitService.recordFailure(failKey, Duration.ofSeconds(codeExpiration));
             throw new BusinessException(ErrorCode.AUTH_INVALID_VERIFICATION_CODE);
         }
-
-        // 코드 사용 후 삭제
-        redisUtil.delete(PASSWORD_RESET_CODE_PREFIX + email);
         rateLimitService.resetFailure(failKey);
     }
 
