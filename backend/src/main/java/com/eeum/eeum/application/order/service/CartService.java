@@ -403,13 +403,14 @@ public class CartService {
     }
 
     private Cart getOrCreateCartForWrite(Long accountId) {
-        Optional<Cart> locked = cartRepository.findByAccountIdWithPessimisticLock(accountId);
-        if (locked.isPresent()) {
-            return locked.get();
-        }
-        Cart cart = getOrCreateCart(accountId);
-        // 다른 요청이 먼저 만든 카트를 받았을 수 있다 — 쓰기 전에 그 행을 잠근다.
-        return cartRepository.findByAccountIdWithPessimisticLock(accountId).orElse(cart);
+        // 잠금 순서는 account → cart로 통일한다. 카트가 있을 때만 cart를 먼저 잠그면
+        // 첫 생성 요청(account → cart)과 순서가 엇갈려 동시 담기에서 교착이 난다.
+        Account account = accountRepository.findByIdWithLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        // 계정 행을 잡은 뒤 조회하므로, 앞선 요청이 만든 카트는 여기서 보인다(READ_COMMITTED).
+        return cartRepository.findByAccountIdWithPessimisticLock(accountId)
+                .orElseGet(() -> cartRepository.save(Cart.create(account)));
     }
 
     private CartItemResponseDto toCartItemDto(CartItem item) {
