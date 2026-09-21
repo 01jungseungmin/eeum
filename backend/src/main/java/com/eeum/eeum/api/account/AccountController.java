@@ -60,7 +60,7 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.success());
     }
 
-    @Operation(summary = "회원 탈퇴", description = "재인증 토큰 검증 후 회원을 탈퇴 처리합니다. (30일 후 물리 삭제)")
+    @Operation(summary = "회원 탈퇴", description = "재인증 토큰 검증 후 회원을 탈퇴 처리합니다. 진행 중인 주문·예약·정산이 있으면 거절됩니다. 탈퇴 30일 후 개인정보를 파기(익명화)하며, 계정 행과 주문·결제 이력은 보존됩니다.")
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> withdraw(
             @Valid @RequestBody WithdrawRequestDto request
