@@ -107,6 +107,14 @@ public class OrderService {
             throw new BusinessException(ErrorCode.STORE_CLOSED);
         }
 
+        // 사장 정지는 Account만 바꾸고 상점은 OPEN으로 남는다. 판매자 계정을 상점 행 다음에
+        // 잠가 정지 커밋과 순서를 정한다 — 잠금 순서는 구매자 account → cart → store → 판매자 account다.
+        Account seller = accountRepository.findByIdWithLock(store.getAccount().getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        if (!seller.isActive()) {
+            throw new BusinessException(ErrorCode.STORE_SUSPENDED);
+        }
+
         OrderType orderType = resolveOrderType(cartItems);
 
         validatePickupPolicy(orderType, request.getPickupScheduledAt());

@@ -88,11 +88,22 @@ class OrderServiceTest {
     }
 
     private void stubOpenStore(Cart cart) {
+        stubStore(cart, true);
+    }
+
+    // 상점이 OPEN이어도 사장이 정지면 새 주문을 받지 않는다 — 판매자 계정까지 확인한다
+    private void stubStore(Cart cart, boolean sellerActive) {
         Store store = mock(Store.class);
         when(store.getStoreId()).thenReturn(1L);
         when(store.getStatus()).thenReturn(com.eeum.eeum.domain.store.enums.StoreStatus.OPEN);
         when(cart.getStore()).thenReturn(store);
         when(storeRepository.findByIdWithPessimisticLock(1L)).thenReturn(Optional.of(store));
+
+        Account seller = mock(Account.class);
+        when(seller.getAccountId()).thenReturn(200L);
+        when(seller.isActive()).thenReturn(sellerActive);
+        when(store.getAccount()).thenReturn(seller);
+        when(accountRepository.findByIdWithLock(200L)).thenReturn(Optional.of(seller));
     }
 
     // ──────────────────── createOrder ────────────────────
@@ -137,6 +148,34 @@ class OrderServiceTest {
 
         // 빈 카트에는 상점이 없다 — 읽으러 가면 NPE다
         verify(storeRepository, never()).findByIdWithPessimisticLock(any());
+    }
+
+    // 사장 정지는 Account만 바꾸고 상점은 OPEN으로 남는다 — 기존 장바구니로 새 주문이 들어갔다
+    @Test
+    void 사장이_정지되면_기존_장바구니로도_주문할_수_없다() {
+        // given
+        Long accountId = 100L;
+        Long cartId = 1L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+        stubStore(cart, false);
+
+        CartItem cartItem = mock(CartItem.class);
+
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_SUSPENDED);
+
+        // 재고를 건드리기 전에 막아야 한다
+        verify(orderRepository, never()).save(any());
     }
 
     // [시나리오 2] 이벤트 종료 후 카트에 남은 이벤트 상품으로 주문 생성 → EVENT_NOT_FOUND
