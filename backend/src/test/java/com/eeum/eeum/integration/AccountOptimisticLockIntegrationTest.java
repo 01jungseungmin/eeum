@@ -5,6 +5,7 @@ import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.application.account.service.AccountService;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,7 @@ class AccountOptimisticLockIntegrationTest extends IntegrationTestSupport {
 
 
     private final AccountRepository accountRepository;
+    private final AccountService accountService;
     private final PlatformTransactionManager transactionManager;
 
     private Long accountId;
@@ -103,8 +105,7 @@ class AccountOptimisticLockIntegrationTest extends IntegrationTestSupport {
             Account stale = accountRepository.findById(accountId).orElseThrow();
 
             requiresNew().executeWithoutResult(inner -> {
-                int updated = accountRepository.transferFcmToken(accountId, "replacement-fcm-token");
-                assertThat(updated).isEqualTo(1);
+                accountService.updateFcmToken(accountId, "replacement-fcm-token");
             });
 
             stale.updateInfo("stale_nickname", null);

@@ -1,6 +1,7 @@
 package com.eeum.eeum.domain.account.repository;
 
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.application.account.service.AccountService;
 import com.eeum.eeum.support.IntegrationTestSupport;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FcmTokenTransferIntegrationTest extends IntegrationTestSupport {
 
     private final AccountRepository accountRepository;
+    private final AccountService accountService;
 
     @Test
     void 같은_토큰을_새_계정이_등록하면_이전_계정에서는_사라진다() {
@@ -35,7 +37,7 @@ class FcmTokenTransferIntegrationTest extends IntegrationTestSupport {
         accountRepository.saveAndFlush(previous);
 
         // when
-        accountRepository.transferFcmToken(next.getAccountId(), deviceToken);
+        accountService.updateFcmToken(next.getAccountId(), deviceToken);
 
         // then
         assertThat(accountRepository.findById(previous.getAccountId()).orElseThrow().getFcmToken())
@@ -56,7 +58,7 @@ class FcmTokenTransferIntegrationTest extends IntegrationTestSupport {
         accountRepository.saveAndFlush(other);
         accountRepository.saveAndFlush(mine);
 
-        accountRepository.transferFcmToken(mine.getAccountId(), null);
+        accountService.updateFcmToken(mine.getAccountId(), null);
 
         assertThat(accountRepository.findById(mine.getAccountId()).orElseThrow().getFcmToken()).isNull();
         assertThat(accountRepository.findById(other.getAccountId()).orElseThrow().getFcmToken())

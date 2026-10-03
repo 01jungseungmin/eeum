@@ -103,18 +103,17 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
     @Query("SELECT a.status FROM Account a WHERE a.accountId = :accountId")
     Optional<AccountStatus> findStatusByAccountId(@Param("accountId") Long accountId);
 
-    // 기기 토큰의 소유를 한 문장으로 옮긴다. 두 계정이 같은 토큰을 동시에 등록해도
-    // 한 문장이라 잠금 순서가 엇갈리지 않고, 이전 계정에는 토큰이 남지 않는다.
-    // clearFcmTokenByFcmToken과 같은 이유로 version도 올린다.
-    @Transactional
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    // 대상과 현재 소유자를 ID 순으로 잠근다. 같은 기기를 계정 간에 옮길 때
+    // 이전 소유자를 먼저 비워 UNIQUE 제약을 만족시킨 뒤 새 소유자를 기록한다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-        UPDATE Account a
-        SET a.fcmToken = CASE WHEN a.accountId = :accountId THEN :fcmToken ELSE NULL END,
-            a.version = a.version + 1
-        WHERE a.accountId = :accountId OR a.fcmToken = :fcmToken
+        SELECT a FROM Account a
+        WHERE a.accountId = :accountId
+           OR (:fcmToken IS NOT NULL AND a.fcmToken = :fcmToken)
+        ORDER BY a.accountId ASC
         """)
-    int transferFcmToken(@Param("accountId") Long accountId, @Param("fcmToken") String fcmToken);
+    List<Account> findFcmTokenTransferAccountsWithLock(
+            @Param("accountId") Long accountId, @Param("fcmToken") String fcmToken);
 
     // 관리자 상태 변경용 비관적 쓰기 잠금 (동시 suspend/forceDelete 경쟁 방지)
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -145,6 +145,14 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail(ErrorCode.INQUIRY_ALREADY_ANSWERED));
         }
+        if (rootMsg.contains("uk_owner_info_business_number")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER));
+        }
+        if (rootMsg.contains("uk_account_provider")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(ErrorCode.ACCOUNT_ALREADY_EXISTS));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ErrorCode.COMMON_CONFLICT));
     }

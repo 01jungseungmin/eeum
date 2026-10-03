@@ -27,11 +27,9 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.exception.BusinessException;
-import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -178,14 +176,23 @@ public class AccountService {
 
     @Transactional
     public void updateFcmToken(Long accountId, String fcmToken) {
-        accountRepository.findStatusByAccountId(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND))
-                .assertWritable();
+        String normalizedFcmToken = fcmToken == null || fcmToken.isBlank() ? null : fcmToken;
+        List<Account> accounts = accountRepository
+                .findFcmTokenTransferAccountsWithLock(accountId, normalizedFcmToken);
+        Account target = accounts.stream()
+                .filter(account -> account.getAccountId().equals(accountId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        target.assertWritable();
 
-        // 이전 계정에 같은 토큰이 남으면 계정을 바꾼 기기로 이전 계정의 알림이 간다.
-        // 계정 행을 따로 잠그지 않는다 — 두 계정이 서로의 행을 기다리는 교착이 생긴다.
-        accountRepository.transferFcmToken(
-                accountId, fcmToken == null || fcmToken.isBlank() ? null : fcmToken);
+        for (Account account : accounts) {
+            if (!account.getAccountId().equals(accountId)) {
+                account.updateFcmToken(null);
+            }
+        }
+        accountRepository.flush();
+        target.updateFcmToken(normalizedFcmToken);
+        accountRepository.flush();
     }
 
     // ===================== 사장 정보 조회 =====================
@@ -244,15 +251,6 @@ public class AccountService {
 
         ownerInfo.updateInfo(normalizedBusinessNumber);
         ownerInfo.markBusinessVerified(snapshot.ownerName());
-
-        // existsByBusinessNumber를 둘 다 통과한 동시 요청은 UNIQUE 제약에서 갈린다.
-        // flush하지 않으면 커밋 시점에 터져 GlobalExceptionHandler의 generic 409로 끝나므로,
-        // 여기서 앞당겨 정확한 ACCOUNT_DUPLICATE_BUSINESS_NUMBER로 변환한다.
-        try {
-            ownerInfoRepository.flush();
-        } catch (DataIntegrityViolationException e) {
-            throw new ConflictException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
-        }
 
         log.info("사장 정보 수정 완료: accountId={}", accountId);
     }
