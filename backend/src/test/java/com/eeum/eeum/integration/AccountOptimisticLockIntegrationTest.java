@@ -95,6 +95,27 @@ class AccountOptimisticLockIntegrationTest extends IntegrationTestSupport {
         assertThat(persisted.getVersion()).isEqualTo(1L);
     }
 
+    @Test
+    void FCM_토큰_소유_이전도_version을_증가시켜_stale_write를_거부한다() {
+        TransactionTemplate outer = new TransactionTemplate(transactionManager);
+
+        assertThatThrownBy(() -> outer.executeWithoutResult(status -> {
+            Account stale = accountRepository.findById(accountId).orElseThrow();
+
+            requiresNew().executeWithoutResult(inner -> {
+                int updated = accountRepository.transferFcmToken(accountId, "replacement-fcm-token");
+                assertThat(updated).isEqualTo(1);
+            });
+
+            stale.updateInfo("stale_nickname", null);
+        })).isInstanceOf(OptimisticLockingFailureException.class);
+
+        Account persisted = accountRepository.findById(accountId).orElseThrow();
+        assertThat(persisted.getFcmToken()).isEqualTo("replacement-fcm-token");
+        assertThat(persisted.getNickname()).isEqualTo("account_lock_user");
+        assertThat(persisted.getVersion()).isEqualTo(1L);
+    }
+
     private TransactionTemplate requiresNew() {
         TransactionTemplate template = new TransactionTemplate(transactionManager);
         template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);

@@ -105,11 +105,14 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
 
     // 기기 토큰의 소유를 한 문장으로 옮긴다. 두 계정이 같은 토큰을 동시에 등록해도
     // 한 문장이라 잠금 순서가 엇갈리지 않고, 이전 계정에는 토큰이 남지 않는다.
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    // clearFcmTokenByFcmToken과 같은 이유로 version도 올린다.
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
         UPDATE Account a
-           SET a.fcmToken = CASE WHEN a.accountId = :accountId THEN :fcmToken ELSE NULL END
-         WHERE a.accountId = :accountId OR a.fcmToken = :fcmToken
+        SET a.fcmToken = CASE WHEN a.accountId = :accountId THEN :fcmToken ELSE NULL END,
+            a.version = a.version + 1
+        WHERE a.accountId = :accountId OR a.fcmToken = :fcmToken
         """)
     int transferFcmToken(@Param("accountId") Long accountId, @Param("fcmToken") String fcmToken);
 
