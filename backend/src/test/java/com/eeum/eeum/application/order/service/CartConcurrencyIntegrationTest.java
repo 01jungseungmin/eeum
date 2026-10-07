@@ -99,8 +99,9 @@ class CartConcurrencyIntegrationTest extends IntegrationTestSupport {
         // given
         AtomicReference<Throwable> secondFailure = new AtomicReference<>();
 
-        // when — 첫 요청이 카트를 만들고 커밋하기 전에 두 번째 요청이 들어온다
-        raceOnLock(transactionManager, "cart",
+        // when — 첫 요청이 카트를 만들고 커밋하기 전에 두 번째 요청이 들어온다.
+        // 카트 쓰기는 account 행을 먼저 잠그므로 대기는 cart가 아니라 account에서 잡힌다.
+        raceOnLock(transactionManager, "account",
                 () -> cartService.addItem(buyer.getAccountId(), addRequest(bread)),
                 () -> cartService.addItem(buyer.getAccountId(), addRequest(milk)),
                 secondFailure);
@@ -115,13 +116,13 @@ class CartConcurrencyIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void 카트가_있으면_동시_담기가_카트_행_잠금으로_직렬화되어_모두_반영된다() throws Exception {
+    void 카트가_있으면_동시_담기가_계정_행_잠금으로_직렬화되어_모두_반영된다() throws Exception {
         // given
         cartService.addItem(buyer.getAccountId(), addRequest(bread));
         AtomicReference<Throwable> secondFailure = new AtomicReference<>();
 
-        // when
-        raceOnLock(transactionManager, "cart",
+        // when — 카트가 있어도 account를 먼저 잠근다. 카트 유무로 순서가 갈리면 교착이 난다.
+        raceOnLock(transactionManager, "account",
                 () -> cartService.addItem(buyer.getAccountId(), addRequest(milk)),
                 () -> cartService.addItem(buyer.getAccountId(), addRequest(jam)),
                 secondFailure);

@@ -5,6 +5,7 @@ import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.enums.AccountStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.application.account.service.AccountService;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,7 @@ class AccountOptimisticLockIntegrationTest extends IntegrationTestSupport {
 
 
     private final AccountRepository accountRepository;
+    private final AccountService accountService;
     private final PlatformTransactionManager transactionManager;
 
     private Long accountId;
@@ -91,6 +93,26 @@ class AccountOptimisticLockIntegrationTest extends IntegrationTestSupport {
         // then: bulk update 결과와 version이 보존된다.
         Account persisted = accountRepository.findById(accountId).orElseThrow();
         assertThat(persisted.getFcmToken()).isNull();
+        assertThat(persisted.getNickname()).isEqualTo("account_lock_user");
+        assertThat(persisted.getVersion()).isEqualTo(1L);
+    }
+
+    @Test
+    void FCM_토큰_소유_이전도_version을_증가시켜_stale_write를_거부한다() {
+        TransactionTemplate outer = new TransactionTemplate(transactionManager);
+
+        assertThatThrownBy(() -> outer.executeWithoutResult(status -> {
+            Account stale = accountRepository.findById(accountId).orElseThrow();
+
+            requiresNew().executeWithoutResult(inner -> {
+                accountService.updateFcmToken(accountId, "replacement-fcm-token");
+            });
+
+            stale.updateInfo("stale_nickname", null);
+        })).isInstanceOf(OptimisticLockingFailureException.class);
+
+        Account persisted = accountRepository.findById(accountId).orElseThrow();
+        assertThat(persisted.getFcmToken()).isEqualTo("replacement-fcm-token");
         assertThat(persisted.getNickname()).isEqualTo("account_lock_user");
         assertThat(persisted.getVersion()).isEqualTo(1L);
     }

@@ -59,6 +59,7 @@ public class OrderService {
     private final FileStorageService fileStorageService;
     private final AccountRepository accountRepository;
     private final CartRepository cartRepository;
+    private final com.eeum.eeum.domain.store.repository.StoreRepository storeRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -84,16 +85,34 @@ public class OrderService {
     ) {
         validateSupportedPaymentMethod(request.getPaymentMethod());
 
-        Account account = accountRepository.findById(accountId)
+        Account account = accountRepository.findByIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        account.assertWritable();
 
         Cart cart = cartRepository.findByAccountIdWithPessimisticLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
 
         List<CartItem> cartItems = cartItemRepository.findByCart_CartId(cart.getCartId());
 
+        // 빈 카트는 상점도 비어 있다(주문 완료 후 비워진 카트 포함).
+        // 상점을 먼저 읽으면 NPE로 500이 나가므로 빈 카트를 먼저 판정한다.
         if (cartItems.isEmpty()) {
             throw new BusinessException(ErrorCode.CART_EMPTY);
+        }
+
+        var store = storeRepository.findByIdWithPessimisticLock(cart.getStore().getStoreId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        if (store.getStatus() != com.eeum.eeum.domain.store.enums.StoreStatus.OPEN) {
+            throw new BusinessException(ErrorCode.STORE_CLOSED);
+        }
+
+        // 사장 정지는 Account만 바꾸고 상점은 OPEN으로 남는다. 판매자 계정을 상점 행 다음에
+        // 잠가 정지 커밋과 순서를 정한다 — 잠금 순서는 구매자 account → cart → store → 판매자 account다.
+        Account seller = accountRepository.findByIdWithLock(store.getAccount().getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        if (!seller.isActive()) {
+            throw new BusinessException(ErrorCode.STORE_SUSPENDED);
         }
 
         OrderType orderType = resolveOrderType(cartItems);

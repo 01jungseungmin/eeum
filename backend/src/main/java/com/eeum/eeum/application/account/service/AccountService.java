@@ -12,6 +12,8 @@ import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.security.jwt.JwtProvider;
 import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
@@ -27,11 +29,9 @@ import com.eeum.eeum.domain.account.repository.AccountRegionRepository;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.exception.BusinessException;
-import com.eeum.eeum.exception.ConflictException;
 import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -39,12 +39,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Duration;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AccountService {
 
+    private final AccountWriteTransactions accountWriteTransactions;
+    private final RedisLockService redisLockService;
+    private final OwnerBusinessSnapshotReader ownerBusinessSnapshotReader;
+    private final com.eeum.eeum.application.auth.service.BusinessVerificationService businessVerificationService;
     private final AccountRepository accountRepository;
     private final OwnerInfoRepository ownerInfoRepository;
     private final AccountRegionRepository accountRegionRepository;
@@ -149,7 +154,7 @@ public class AccountService {
 
     // ===================== 회원 탈퇴 =====================
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void withdraw(Long accountId, WithdrawRequestDto request) {
         // 1. ReAuth 토큰 검증
         tokenService.consumeReAuthToken(accountId, request.getReAuthToken());
@@ -162,7 +167,7 @@ public class AccountService {
 
         // 3. 상점 잠금 선점 → 사장 상점 비활성화 → 탈퇴 → 찜 정리.
         // 관리자 강제 탈퇴와 같은 절차를 써야 한쪽만 고쳐져 어긋나지 않는다.
-        accountWithdrawalProcessor.process(account);
+        accountWithdrawalProcessor.processSelfWithdrawal(account);
 
         // 4. DB 커밋 성공 후 ReAuth Token + Refresh Token 삭제
         // DB 롤백 시 계정은 ACTIVE 상태이고 토큰도 유지
@@ -173,10 +178,31 @@ public class AccountService {
 
     // ===================== FCM 토큰 =====================
 
-    @Transactional
     public void updateFcmToken(Long accountId, String fcmToken) {
-        Account account = getActiveAccount(accountId);
-        account.updateFcmToken(fcmToken);
+        String normalizedFcmToken = fcmToken == null || fcmToken.isBlank() ? null : fcmToken;
+        redisLockService.executeWithLock(
+                LockKeys.fcmTokenRegistration(),
+                Duration.ofSeconds(10),
+                () -> accountWriteTransactions.run(() -> transferFcmToken(accountId, normalizedFcmToken)));
+    }
+
+    private void transferFcmToken(Long accountId, String normalizedFcmToken) {
+        List<Account> accounts = accountRepository
+                .findFcmTokenTransferAccountsWithLock(accountId, normalizedFcmToken);
+        Account target = accounts.stream()
+                .filter(account -> account.getAccountId().equals(accountId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        target.assertWritable();
+
+        for (Account account : accounts) {
+            if (!account.getAccountId().equals(accountId)) {
+                account.updateFcmToken(null);
+            }
+        }
+        accountRepository.flush();
+        target.updateFcmToken(normalizedFcmToken);
+        accountRepository.flush();
     }
 
     // ===================== 사장 정보 조회 =====================
@@ -196,8 +222,18 @@ public class AccountService {
 
     // ===================== 사장 정보 수정 =====================
 
-    @Transactional
     public void updateOwnerInfo(Long accountId, OwnerInfoRequestDto request) {
+        var snapshot = ownerBusinessSnapshotReader.read(accountId);
+        String number = normalizeBusinessNumber(request.getBusinessNumber());
+        if (number == null) return;
+        if (!businessVerificationService.verifyBusiness(number, snapshot.ownerName(), snapshot.openingDate().toString())) {
+            throw new BusinessException(ErrorCode.BUSINESS_VERIFY_FAILED);
+        }
+        accountWriteTransactions.run(() -> updateVerifiedOwnerInfo(accountId, request, snapshot));
+    }
+
+    private void updateVerifiedOwnerInfo(Long accountId, OwnerInfoRequestDto request,
+                                         OwnerBusinessSnapshotReader.Snapshot snapshot) {
         // 잠금 순서 account → owner_info. 사장 승인(AdminAccountService.approveOwner)과 같은 순서다.
         // 잠그지 않으면 승인 트랜잭션과 겹쳐 승인 결과(APPROVED)를 이 트랜잭션의 옛 스냅샷이 덮어
         // ROLE_OWNER인데 심사는 PENDING이고 사업자번호는 미검증인 상태가 남는다.
@@ -206,6 +242,7 @@ public class AccountService {
         OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_OWNER_NOT_FOUND));
 
+        snapshot.assertMatches(ownerInfo);
         String normalizedBusinessNumber = normalizeBusinessNumber(request.getBusinessNumber());
 
         boolean businessNumberChanged = normalizedBusinessNumber != null
@@ -223,15 +260,7 @@ public class AccountService {
         }
 
         ownerInfo.updateInfo(normalizedBusinessNumber);
-
-        // existsByBusinessNumber를 둘 다 통과한 동시 요청은 UNIQUE 제약에서 갈린다.
-        // flush하지 않으면 커밋 시점에 터져 GlobalExceptionHandler의 generic 409로 끝나므로,
-        // 여기서 앞당겨 정확한 ACCOUNT_DUPLICATE_BUSINESS_NUMBER로 변환한다.
-        try {
-            ownerInfoRepository.flush();
-        } catch (DataIntegrityViolationException e) {
-            throw new ConflictException(ErrorCode.ACCOUNT_DUPLICATE_BUSINESS_NUMBER);
-        }
+        ownerInfo.markBusinessVerified(snapshot.ownerName());
 
         log.info("사장 정보 수정 완료: accountId={}", accountId);
     }

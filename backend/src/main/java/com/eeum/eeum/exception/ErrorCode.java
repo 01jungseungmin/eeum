@@ -59,6 +59,7 @@ public enum ErrorCode { // API에서 발생 가능한 에러 코드 정의
     ACCOUNT_DUPLICATE_NICKNAME("ACCOUNT_003", "이미 사용 중인 닉네임입니다", HttpStatus.CONFLICT),
     ACCOUNT_SUSPENDED("ACCOUNT_004", "정지된 계정입니다", HttpStatus.FORBIDDEN),
     ACCOUNT_WITHDRAWN("ACCOUNT_005", "탈퇴한 계정입니다", HttpStatus.FORBIDDEN),
+    ACCOUNT_WITHDRAWAL_PENDING_TRANSACTION("ACCOUNT_WITHDRAWAL_PENDING_TRANSACTION", "진행 중인 주문·예약·정산을 완료한 후 탈퇴할 수 있습니다", HttpStatus.CONFLICT),
     ACCOUNT_INVALID_PASSWORD_FORMAT("ACCOUNT_006", "비밀번호는 영문, 숫자, 특수문자를 포함하여 8자 이상이어야 합니다", HttpStatus.BAD_REQUEST),
     ACCOUNT_OWNER_ALREADY_EXISTS("ACCOUNT_007", "이미 사업자 정보가 등록되어 있습니다", HttpStatus.CONFLICT),
     ACCOUNT_OWNER_NOT_FOUND("ACCOUNT_008", "사업자 정보를 찾을 수 없습니다", HttpStatus.NOT_FOUND),

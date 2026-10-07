@@ -83,7 +83,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(token));
     }
 
-    @Operation(summary = "OAuth 로그인", description = "카카오 인가 코드로 소셜 로그인합니다.")
+    @Operation(summary = "OAuth 로그인", description = "클라이언트가 카카오에서 발급받은 Access Token으로 소셜 로그인합니다. 토큰이 이 앱에서 발급된 것인지 검증합니다.")
     @PostMapping("/login/oauth")
     public ResponseEntity<ApiResponse<OAuthLoginResponseDto>> oauthLogin(
             @Valid @RequestBody OAuthLoginRequestDto request
@@ -111,7 +111,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(token));
     }
 
-    @Operation(summary = "로그아웃", description = "Refresh Token을 삭제하고 Access Token을 블랙리스트에 등록합니다.")
+    @Operation(summary = "로그아웃", description = "계정의 토큰 세대를 올려 기존 세션 전체를 무효화합니다. 발급된 Access/Refresh Token은 모두 거절되고, 이 기기의 푸시 토큰 연결도 해제됩니다.")
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
             @RequestHeader("Authorization") String authorizationHeader,

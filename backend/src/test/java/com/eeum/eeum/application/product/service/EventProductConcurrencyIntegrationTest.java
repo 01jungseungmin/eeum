@@ -83,6 +83,9 @@ class EventProductConcurrencyIntegrationTest extends IntegrationTestSupport {
         ownerAccountId = owner.getAccountId();
 
         Store store = Store.createForOwnerSignup(owner, "테스트 상점", "서울시", "02-0000-0000");
+        // 주문 생성은 상점이 OPEN일 때만 통과한다 — 가입 직후 상태(TEMP_CLOSED)로 두면
+        // 이 테스트가 보려는 이벤트 종료 경쟁 대신 STORE_CLOSED로 끝난다
+        store.open();
         store = storeRepository.save(store);
 
         ProductCategory category = ProductCategory.create(store, "이벤트 카테고리", 0);

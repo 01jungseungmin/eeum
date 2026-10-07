@@ -67,10 +67,32 @@ public class AccountCleanupScheduler {
 
         if (anonymized == 0 && failed == 0) {
             log.info("개인정보 파기 대상 탈퇴 계정 없음");
-            return;
+        } else {
+            log.info("탈퇴 계정 개인정보 파기 스케줄러 종료: 성공={}건, 실패={}건, 마지막 accountId={}",
+                    anonymized, failed, lastAccountId);
         }
+        cleanupRetainedSettlementAccounts();
+    }
 
-        log.info("탈퇴 계정 개인정보 파기 스케줄러 종료: 성공={}건, 실패={}건, 마지막 accountId={}",
-                anonymized, failed, lastAccountId);
+    private void cleanupRetainedSettlementAccounts() {
+        long lastAccountId = 0L;
+        int processed = 0;
+        while (processed < MAX_PER_RUN) {
+            List<Long> ids = accountCleanupService.findSettlementAccountCleanupIds(lastAccountId, BATCH_SIZE);
+            if (ids.isEmpty()) return;
+            for (Long accountId : ids) {
+                if (processed++ >= MAX_PER_RUN) return;
+                lastAccountId = accountId;
+                try {
+                    accountCleanupService.cleanupRetainedSettlementAccount(accountId);
+                } catch (Exception e) {
+                    log.warn("보존 정산 계좌 파기 실패: accountId={}", accountId, e);
+                    operationFailureRecorder.record(
+                            OperationFailureCategory.SCHEDULER,
+                            "SETTLEMENT_ACCOUNT_CLEANUP", "ACCOUNT", String.valueOf(accountId), e, null);
+                }
+            }
+            if (ids.size() < BATCH_SIZE) return;
+        }
     }
 }

@@ -55,6 +55,7 @@ class OrderServiceTest {
     @Mock private FileStorageService fileStorageService;
     @Mock private AccountRepository accountRepository;
     @Mock private CartRepository cartRepository;
+    @Mock private com.eeum.eeum.domain.store.repository.StoreRepository storeRepository;
     @Mock private CartItemRepository cartItemRepository;
     @Mock private OrderRepository orderRepository;
     @Mock private OrderItemRepository orderItemRepository;
@@ -86,6 +87,25 @@ class OrderServiceTest {
         return ep;
     }
 
+    private void stubOpenStore(Cart cart) {
+        stubStore(cart, true);
+    }
+
+    // 상점이 OPEN이어도 사장이 정지면 새 주문을 받지 않는다 — 판매자 계정까지 확인한다
+    private void stubStore(Cart cart, boolean sellerActive) {
+        Store store = mock(Store.class);
+        when(store.getStoreId()).thenReturn(1L);
+        when(store.getStatus()).thenReturn(com.eeum.eeum.domain.store.enums.StoreStatus.OPEN);
+        when(cart.getStore()).thenReturn(store);
+        when(storeRepository.findByIdWithPessimisticLock(1L)).thenReturn(Optional.of(store));
+
+        Account seller = mock(Account.class);
+        when(seller.getAccountId()).thenReturn(200L);
+        when(seller.isActive()).thenReturn(sellerActive);
+        when(store.getAccount()).thenReturn(seller);
+        when(accountRepository.findByIdWithLock(200L)).thenReturn(Optional.of(seller));
+    }
+
     // ──────────────────── createOrder ────────────────────
 
     @Test
@@ -102,7 +122,60 @@ class OrderServiceTest {
                 .isEqualTo(ErrorCode.ORDER_PAYMENT_METHOD_NOT_SUPPORTED);
 
         // 재고 차감까지 가기 전에 막아야 한다
-        verify(accountRepository, never()).findById(any());
+        verify(accountRepository, never()).findByIdWithLock(any());
+    }
+
+    // 주문 완료 후 비워진 카트로 재요청하면 cart.store가 null이라 NPE로 500이 났다
+    @Test
+    void 빈_장바구니로_주문하면_CART_EMPTY() {
+        // given
+        Long accountId = 100L;
+        Long cartId = 1L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of());
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CART_EMPTY);
+
+        // 빈 카트에는 상점이 없다 — 읽으러 가면 NPE다
+        verify(storeRepository, never()).findByIdWithPessimisticLock(any());
+    }
+
+    // 사장 정지는 Account만 바꾸고 상점은 OPEN으로 남는다 — 기존 장바구니로 새 주문이 들어갔다
+    @Test
+    void 사장이_정지되면_기존_장바구니로도_주문할_수_없다() {
+        // given
+        Long accountId = 100L;
+        Long cartId = 1L;
+
+        Account account = mock(Account.class);
+        Cart cart = mock(Cart.class);
+        when(cart.getCartId()).thenReturn(cartId);
+        stubStore(cart, false);
+
+        CartItem cartItem = mock(CartItem.class);
+
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
+        when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
+
+        // when & then
+        assertThatThrownBy(() -> orderService.createOrder(accountId, mock(OrderCreateRequestDto.class)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_SUSPENDED);
+
+        // 재고를 건드리기 전에 막아야 한다
+        verify(orderRepository, never()).save(any());
     }
 
     // [시나리오 2] 이벤트 종료 후 카트에 남은 이벤트 상품으로 주문 생성 → EVENT_NOT_FOUND
@@ -116,6 +189,7 @@ class OrderServiceTest {
         Account account = mock(Account.class);
         Cart cart = mock(Cart.class);
         when(cart.getCartId()).thenReturn(cartId);
+        stubOpenStore(cart);
 
         // 이미 endAt이 지난 이벤트 상품 (isOngoing() = false)
         EventProduct expiredEvent = createExpiredEventProduct(eventProductId);
@@ -126,7 +200,7 @@ class OrderServiceTest {
 
         OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         // 락 획득 후 조회한 이벤트 상품도 이미 진행 종료 상태
@@ -151,6 +225,7 @@ class OrderServiceTest {
         Account account = mock(Account.class);
         Cart cart = mock(Cart.class);
         when(cart.getCartId()).thenReturn(cartId);
+        stubOpenStore(cart);
 
         // DB에는 없는 이벤트 상품을 가리키는 CartItem
         EventProduct ghostEvent = EventProduct.create(
@@ -167,7 +242,7 @@ class OrderServiceTest {
 
         OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         // 락 기반 조회에서 empty → orElseThrow fires
@@ -192,6 +267,7 @@ class OrderServiceTest {
         Account account = mock(Account.class);
         Cart cart = mock(Cart.class);
         when(cart.getCartId()).thenReturn(cartId);
+        stubOpenStore(cart);
 
         // 진행 중인 이벤트 상품 (endAt 미래) but soldCount = eventStock → remainingStock = 0
         Store store = Store.createForOwnerSignup(null, "상점", "주소", "010-0000-0000");
@@ -210,7 +286,7 @@ class OrderServiceTest {
 
         OrderCreateRequestDto request = mock(OrderCreateRequestDto.class);
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
@@ -337,6 +413,7 @@ class OrderServiceTest {
         Account account = mock(Account.class);
         Cart cart = mock(Cart.class);
         when(cart.getCartId()).thenReturn(cartId);
+        stubOpenStore(cart);
 
         Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
         Product product = Product.create(store, null, "김치찌개", null,
@@ -348,7 +425,7 @@ class OrderServiceTest {
         when(cartItem.getQuantity()).thenReturn(1);
         when(cartItem.getUnitPrice()).thenReturn(BigDecimal.valueOf(9000));
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
@@ -371,6 +448,7 @@ class OrderServiceTest {
         Account account = mock(Account.class);
         Cart cart = mock(Cart.class);
         when(cart.getCartId()).thenReturn(cartId);
+        stubOpenStore(cart);
 
         Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
         Product product = Product.create(store, null, "김치찌개", null,
@@ -382,7 +460,7 @@ class OrderServiceTest {
         when(cartItem.getQuantity()).thenReturn(1);
         when(cartItem.getSelectedOptionItemIds()).thenReturn("11,12");
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
@@ -406,6 +484,7 @@ class OrderServiceTest {
         Account account = mock(Account.class);
         Cart cart = mock(Cart.class);
         when(cart.getCartId()).thenReturn(cartId);
+        stubOpenStore(cart);
 
         Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
         Product product = Product.create(store, null, "김치찌개", null,
@@ -418,7 +497,7 @@ class OrderServiceTest {
         // 필수 옵션 누락이 가격 비교보다 먼저 걸리므로 단가·옵션 ID 스텁은 두지 않는다
         ProductOption newlyRequired = mock(ProductOption.class);
         when(newlyRequired.isRequired()).thenReturn(true);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));

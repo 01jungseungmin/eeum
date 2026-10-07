@@ -84,6 +84,7 @@ public class JwtProvider {
         Date expiry = new Date(now.getTime() + expirationSeconds * 1000L);
 
         JwtBuilder builder = Jwts.builder()
+                .id(java.util.UUID.randomUUID().toString())
                 .subject(subject)
                 .claim(TOKEN_TYPE_CLAIM, tokenType)
                 .issuedAt(now)

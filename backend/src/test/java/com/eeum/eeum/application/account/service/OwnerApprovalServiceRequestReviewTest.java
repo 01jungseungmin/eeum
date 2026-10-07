@@ -61,6 +61,16 @@ import static org.mockito.Mockito.when;
 class OwnerApprovalServiceRequestReviewTest {
 
     @InjectMocks OwnerApprovalService ownerApprovalService;
+    @org.mockito.Spy AccountWriteTransactions accountWriteTransactions = new AccountWriteTransactions();
+    @Mock OwnerBusinessSnapshotReader ownerBusinessSnapshotReader;
+    @Mock com.eeum.eeum.application.auth.service.BusinessVerificationService businessVerificationService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void verification() {
+        org.mockito.Mockito.lenient().when(ownerBusinessSnapshotReader.read(ACCOUNT_ID)).thenReturn(
+                new OwnerBusinessSnapshotReader.Snapshot("123-45-67890", "김사장", LocalDate.of(2020, 1, 1)));
+        org.mockito.Mockito.lenient().when(businessVerificationService.verifyBusiness(any(), any(), any())).thenReturn(true);
+    }
 
     @Mock AccountRepository accountRepository;
     @Mock OwnerInfoRepository ownerInfoRepository;

@@ -19,7 +19,6 @@ import com.eeum.eeum.domain.account.enums.AccountRole;
 import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.enums.OAuthProvider;
 import com.eeum.eeum.domain.account.event.AccountTokenCleanupEvent;
-import com.eeum.eeum.infrastructure.realtime.RealtimeRelayPublisher;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.store.entity.Store;
@@ -31,7 +30,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -73,14 +71,15 @@ public class AuthService {
     private final RateLimitService rateLimitService;
     private final RedisLockService redisLockService;
     private final ApplicationEventPublisher eventPublisher;
-    private final RealtimeRelayPublisher realtimeRelayPublisher;
+    private final AccountLogoutService accountLogoutService;
+    private final AuthAccountReader authAccountReader;
+    private final com.eeum.eeum.application.account.service.AccountWriteTransactions accountWriteTransactions;
 
     // ===================== 이메일 인증 =====================
 
-    @Transactional
     //회원가입 전 이메일 인증 코드를 발송하는 메서드
     public void sendEmailVerificationCode(EmailSendRequestDto request) {
-        if (accountRepository.existsByEmail(request.getEmail())) { //이메일이 이미 회원 DB에 존재하는지 확인
+        if (authAccountReader.emailExists(request.getEmail())) { //이메일이 이미 회원 DB에 존재하는지 확인
             throw new BusinessException(ErrorCode.ACCOUNT_DUPLICATE_EMAIL);
         }
 
@@ -123,8 +122,16 @@ public class AuthService {
         log.info("일반 회원가입 완료: accountId={}", account.getAccountId());
     }
 
-    @Transactional
     public void ownerSignup(OwnerSignupRequestDto request) {
+        String number = normalizeBusinessNumber(request.getBusinessNumber());
+        LocalDate openingDate = parseOpeningDate(request.getOpeningDate());
+        if (!businessVerificationService.verifyBusiness(number, request.getName(), openingDate.toString())) {
+            throw new BusinessException(ErrorCode.BUSINESS_VERIFY_FAILED);
+        }
+        accountWriteTransactions.run(() -> registerVerifiedOwner(request));
+    }
+
+    private void registerVerifiedOwner(OwnerSignupRequestDto request) {
         validateSignupEmail(request.getEmail(), request.getEmailVerificationToken());
 
         // 3. 사업자번호 정규화
@@ -138,17 +145,6 @@ public class AuthService {
 
         // 5. 개업일자 변환
         LocalDate openingDate = parseOpeningDate(request.getOpeningDate());
-
-        // 6. 국세청 사업자등록정보 진위확인
-/*        boolean verified = businessVerificationService.verifyBusiness(
-                businessNumber,
-                request.getName(),          // 대표자명
-                request.getOpeningDate()    // yyyyMMdd 또는 yyyy-MM-dd
-        );
-
-        if (!verified) {
-            throw new BusinessException(ErrorCode.BUSINESS_VERIFY_FAILED);
-        } */
 
         // 7. 계정 생성
         // 사장 회원가입 신청 시점에는 ROLE_USER로 생성하고, 관리자 승인 후 ROLE_OWNER로 변경
@@ -168,6 +164,7 @@ public class AuthService {
                 openingDate
         );
 
+        ownerInfo.markBusinessVerified(request.getName());
         ownerInfoRepository.save(ownerInfo);
 
         // 9. 상점 기본 정보 등록
@@ -225,7 +222,6 @@ public class AuthService {
 
     // ===================== OAuth로그인 =====================
 
-    @Transactional
     public OAuthLoginResponseDto oauthLogin(OAuthLoginRequestDto request) {
         OAuthUserInfo userInfo = oAuthService.getUserInfo(request.getProvider(), request.getAccessToken());
 
@@ -304,19 +300,14 @@ public class AuthService {
                 userInfo.getProviderId()
         );
 
+        account.applyOAuthEmailVerification(userInfo.isEmailVerified());
         account.completeOAuthProfile(
                 name,
                 phone,
                 nickname
         );
 
-        try {
-            accountRepository.saveAndFlush(account);
-        } catch (DataIntegrityViolationException e) {
-            // 동시 요청으로 같은 tempToken이 두 번 처리되는 경우 uk_account_provider 제약이 두 번째 저장을 막는다
-            // (check-then-act 경합 방지). 이미 가입된 것으로 간주한다.
-            throw new BusinessException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
-        }
+        accountRepository.save(account);
 
         eventPublisher.publishEvent(AccountTokenCleanupEvent.oauthTemp(request.getTempToken()));
 
@@ -372,44 +363,26 @@ public class AuthService {
 
     // ===================== 로그아웃 =====================
 
-    // DB 변경 없음 — Redis 전용 처리이므로 @Transactional 불필요
     public void logout(ReissueRequestDto request, String authorizationHeader) {
-        // 1. Authorization Header에서 Access Token 추출 및 검증
         String accessToken = jwtProvider.resolveAccessToken(authorizationHeader);
-
-        // 2. Refresh Token 검증 후 accountId 추출
-        Long refreshAccountId = tokenService.validateRefreshToken(request.getRefreshToken());
-
-        // 3. Access Token의 accountId 추출
-        Long accessAccountId = jwtProvider.getAccountId(accessToken);
-
-        // 4. Access Token과 Refresh Token의 사용자 일치 확인
-        if (!refreshAccountId.equals(accessAccountId)) {
+        String refreshToken = request.getRefreshToken();
+        if (!jwtProvider.isValid(refreshToken) || !jwtProvider.isRefreshToken(refreshToken)) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
-
-        // 5. reissue와 동일 lock 키로 직렬화 — logout 이후 reissue가 새 토큰을 덮어쓰는 경쟁 방지
-        final Long accountId = refreshAccountId;
-        redisLockService.executeWithLock(
-                LockKeys.reissue(accountId),
-                Duration.ofSeconds(5),
-                () -> {
-                    tokenService.logout(accountId, accessToken);
-                    return null;
-                }
-        );
-
-        realtimeRelayPublisher.publishSessionTermination(refreshAccountId);
-
-        log.info("로그아웃 완료: accountId={}", refreshAccountId);
+        Long accountId = jwtProvider.getAccountId(accessToken);
+        if (!accountId.equals(jwtProvider.getAccountId(refreshToken))) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+        }
+        redisLockService.executeWithLock(LockKeys.reissue(accountId), Duration.ofSeconds(5), () -> {
+            accountLogoutService.logout(accountId, accessToken, refreshToken);
+            return null;
+        });
     }
 
     // ===================== 비밀번호 재설정 =====================
 
-    @Transactional
     public void sendPasswordResetEmail(PasswordResetRequestDto request) {
-        Account account = accountRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        Account account = authAccountReader.byEmail(request.getEmail());
 
         // 정지·탈퇴 계정은 재설정해도 로그인할 수 없다. 탈퇴 취소는 관리자만 할 수 있어
         // 비밀번호를 되찾아야 할 이유도 없다. 익명화 전(30일)이면 메일이 실제 수신함에 도착하므로
@@ -499,10 +472,8 @@ public class AuthService {
 
     // ===================== 재인증 =====================
 
-    @Transactional
     public ReAuthResponseDto reAuth(Long accountId, ReAuthRequestDto request) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        Account account = authAccountReader.byId(accountId);
 
         validateAccountStatus(account);
 

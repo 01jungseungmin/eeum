@@ -85,6 +85,10 @@ class VisitReservationServiceTest {
         Store store = Store.createForOwnerSignup(owner, "테스트상점", "서울시", "02-0000-0000");
         ReflectionTestUtils.setField(store, "storeId", id);
         ReflectionTestUtils.setField(store, "status", status);
+        // 예약 생성은 판매자 계정도 잠가 정지 여부를 본다 — 상점 상태만으로는 정지된 사장을 거르지 못한다
+        org.mockito.Mockito.lenient()
+                .when(accountRepository.findByIdWithLock(owner.getAccountId()))
+                .thenReturn(Optional.of(owner));
         return store;
     }
 
@@ -386,7 +390,7 @@ class VisitReservationServiceTest {
     @Test
     void 예약_생성_내부_계정이_없으면_ACCOUNT_NOT_FOUND() {
         setupPassthroughLockAndTransaction();
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.empty());
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
                 1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
@@ -399,8 +403,8 @@ class VisitReservationServiceTest {
     void 예약_생성_내부_상점이_없으면_STORE_NOT_FOUND() {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.empty());
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
                 1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
@@ -409,13 +413,32 @@ class VisitReservationServiceTest {
                 .isEqualTo(ErrorCode.STORE_NOT_FOUND);
     }
 
+    // 계정 정지는 Account만 SUSPENDED로 바꾸고 상점은 OPEN으로 남는다 — 상점 상태만 보면 통과한다
+    @Test
+    void 예약_생성_내부_사장이_정지되면_RESERVATION_STORE_NOT_RESERVABLE() {
+        setupPassthroughLockAndTransaction();
+        Account account = createAccount(1L, "사용자", "user");
+        Account owner = createAccount(2L, "사장", "owner");
+        ReflectionTestUtils.setField(owner, "status",
+                com.eeum.eeum.domain.account.enums.AccountStatus.SUSPENDED);
+        Store store = createStore(10L, owner, StoreStatus.OPEN);
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
+
+        assertThatThrownBy(() -> visitReservationService.createReservation(
+                1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE);
+    }
+
     @Test
     void 예약_생성_내부_상점이_OPEN이_아니면_RESERVATION_STORE_NOT_RESERVABLE() {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.TEMP_CLOSED);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
                 1L, 10L, createRequest(LocalDate.now().plusDays(7), LocalTime.of(10, 0), 2)))
@@ -429,8 +452,8 @@ class VisitReservationServiceTest {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
@@ -447,8 +470,8 @@ class VisitReservationServiceTest {
         Store store = createStore(10L, account, StoreStatus.OPEN);
         // createDefault → enabled=false
         StoreVisitReservationSetting disabledSetting = StoreVisitReservationSetting.createDefault(store);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(disabledSetting));
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
@@ -465,8 +488,8 @@ class VisitReservationServiceTest {
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
-        when(accountRepository.findById(eq(1L))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
 
         assertThatThrownBy(() -> visitReservationService.createReservation(
@@ -491,8 +514,8 @@ class VisitReservationServiceTest {
         StoreBusinessHour businessHour = StoreBusinessHour.create(store, dayOfWeek, false,
                 LocalTime.of(9, 0), LocalTime.of(18, 0));
 
-        when(accountRepository.findById(eq(accountId))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(storeId))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(accountId))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(storeId))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(storeId))).thenReturn(Optional.of(setting));
         when(storeBusinessHourRepository.findByStore_StoreIdAndDayOfWeek(eq(storeId), eq(dayOfWeek)))
                 .thenReturn(Optional.of(businessHour));
@@ -524,8 +547,8 @@ class VisitReservationServiceTest {
         StoreBusinessHour businessHour = StoreBusinessHour.create(store, dayOfWeek, false,
                 LocalTime.of(9, 0), LocalTime.of(18, 0));
 
-        when(accountRepository.findById(eq(accountId))).thenReturn(Optional.of(account));
-        when(storeRepository.findById(eq(storeId))).thenReturn(Optional.of(store));
+        when(accountRepository.findByIdWithLock(eq(accountId))).thenReturn(Optional.of(account));
+        when(storeRepository.findByIdWithPessimisticLock(eq(storeId))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(storeId))).thenReturn(Optional.of(setting));
         when(storeBusinessHourRepository.findByStore_StoreIdAndDayOfWeek(eq(storeId), eq(dayOfWeek)))
                 .thenReturn(Optional.of(businessHour));

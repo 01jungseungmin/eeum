@@ -166,7 +166,7 @@ class AccountServiceTokenCleanupTest {
 
         // then — 토큰 정리 이벤트는 뒷정리가 끝난 뒤에 발행돼야 롤백 시 토큰이 살아남는다
         InOrder inOrder = inOrder(accountWithdrawalProcessor, eventPublisher);
-        inOrder.verify(accountWithdrawalProcessor).process(account);
+        inOrder.verify(accountWithdrawalProcessor).processSelfWithdrawal(account);
         inOrder.verify(eventPublisher).publishEvent(AccountTokenCleanupEvent.refreshOnly(accountId));
     }
 
@@ -187,7 +187,7 @@ class AccountServiceTokenCleanupTest {
 
         // DB 롤백 시나리오: 계정은 ACTIVE, 토큰은 유지되어야 함
         verify(eventPublisher, never()).publishEvent(any());
-        verify(accountWithdrawalProcessor, never()).process(any());
+        verify(accountWithdrawalProcessor, never()).processSelfWithdrawal(any());
     }
 
     @Test
@@ -196,7 +196,7 @@ class AccountServiceTokenCleanupTest {
         Long accountId = 5L;
         Account account = givenActiveAccount(accountId);
         doThrow(new RuntimeException("상점 비활성화 실패"))
-                .when(accountWithdrawalProcessor).process(account);
+                .when(accountWithdrawalProcessor).processSelfWithdrawal(account);
 
         // when & then
         assertThatThrownBy(() -> accountService.withdraw(accountId, withdrawRequest()))

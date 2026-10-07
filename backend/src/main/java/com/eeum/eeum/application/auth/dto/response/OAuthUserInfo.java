@@ -23,6 +23,8 @@ public class OAuthUserInfo {
     @Schema(description = "이메일", example = "user@example.com")
     private String email;
 
+    private boolean emailVerified;
+
     private String name;
 
     @Schema(description = "닉네임", example = "동네주민")

@@ -47,6 +47,20 @@ public class OwnerInfo extends BaseEntity {
     @Column(name = "review_requested_at")
     private LocalDateTime reviewRequestedAt;
 
+    @Column(name = "business_verified_at")
+    private LocalDateTime businessVerifiedAt;
+
+    @Column(name = "verified_owner_name", length = 100)
+    private String verifiedOwnerName;
+
+    public void markBusinessVerified(String ownerName) {
+        if (!java.util.Objects.equals(ownerName, account.getName())) {
+            throw new IllegalArgumentException("검증 대표자명이 현재 계정과 다릅니다.");
+        }
+        this.businessVerifiedAt = LocalDateTime.now();
+        this.verifiedOwnerName = ownerName;
+    }
+
     public static OwnerInfo create(
             Account account,
             String businessNumber,
@@ -91,6 +105,8 @@ public class OwnerInfo extends BaseEntity {
     public void updateInfo(String businessNumber) {
         if (businessNumber != null && !businessNumber.equals(this.businessNumber)) {
             this.businessNumber = businessNumber;
+            this.businessVerifiedAt = null;
+            this.verifiedOwnerName = null;
             this.approvalStatus = ApprovalStatus.PENDING;
             this.rejectionReason = null;
             this.reviewRequestedAt = null;
@@ -98,7 +114,7 @@ public class OwnerInfo extends BaseEntity {
     }
 
     public boolean isBusinessVerified() {
-        return this.businessNumber != null && !this.businessNumber.isBlank()
-                && this.openingDate != null;
+        return businessVerifiedAt != null && verifiedOwnerName != null
+                && verifiedOwnerName.equals(account.getName());
     }
 }

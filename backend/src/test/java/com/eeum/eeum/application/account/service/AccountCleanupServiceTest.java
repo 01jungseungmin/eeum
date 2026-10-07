@@ -95,7 +95,7 @@ class AccountCleanupServiceTest {
         verify(favoriteService).deleteAllByAccountId(ACCOUNT_ID);
         verify(accountRegionRepository).deleteByAccount_AccountId(ACCOUNT_ID);
         verify(ownerInfoRepository).deleteByAccount_AccountId(ACCOUNT_ID);
-        verify(settlementAccountDeleteService).deleteByAccountId(ACCOUNT_ID);
+        verify(settlementAccountDeleteService).deleteWhenNoPayoutObligation(ACCOUNT_ID);
     }
 
     @Test
@@ -167,6 +167,17 @@ class AccountCleanupServiceTest {
         verify(accountRepository).findAnonymizeTargetIdsAfter(
                 eq(AccountStatus.WITHDRAWN), any(), eq(10L), pageable.capture());
         assertThat(pageable.getValue().getPageSize()).isEqualTo(100);
+    }
+
+    @Test
+    void 익명화_뒤에도_미지급으로_남은_계좌는_지급완료_후_재검사한다() {
+        Account account = account();
+        account.anonymize();
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        accountCleanupService.cleanupRetainedSettlementAccount(ACCOUNT_ID);
+
+        verify(settlementAccountDeleteService).deleteWhenNoPayoutObligation(ACCOUNT_ID);
     }
 
     private Account account() {

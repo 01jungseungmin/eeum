@@ -46,6 +46,8 @@ class AuthServiceTokenCleanupTest {
     @InjectMocks AuthService authService;
 
     @Mock AccountRepository accountRepository;
+    @Mock AccountLogoutService accountLogoutService;
+    @Mock AuthAccountReader authAccountReader;
     @Mock TokenService tokenService;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtProvider jwtProvider;
@@ -205,7 +207,7 @@ class AuthServiceTokenCleanupTest {
         account.suspend();
         PasswordResetRequestDto request = mock(PasswordResetRequestDto.class);
         when(request.getEmail()).thenReturn("user@test.com");
-        when(accountRepository.findByEmail("user@test.com")).thenReturn(Optional.of(account));
+        when(authAccountReader.byEmail("user@test.com")).thenReturn(account);
 
         // when & then
         assertThatThrownBy(() -> authService.sendPasswordResetEmail(request))
@@ -223,7 +225,7 @@ class AuthServiceTokenCleanupTest {
         account.withdraw();
         PasswordResetRequestDto request = mock(PasswordResetRequestDto.class);
         when(request.getEmail()).thenReturn("user@test.com");
-        when(accountRepository.findByEmail("user@test.com")).thenReturn(Optional.of(account));
+        when(authAccountReader.byEmail("user@test.com")).thenReturn(account);
 
         // when & then
         assertThatThrownBy(() -> authService.sendPasswordResetEmail(request))
@@ -373,7 +375,9 @@ class AuthServiceTokenCleanupTest {
         when(request.getRefreshToken()).thenReturn(refreshToken);
 
         when(jwtProvider.resolveAccessToken(authHeader)).thenReturn(accessToken);
-        when(tokenService.validateRefreshToken(refreshToken)).thenReturn(accountId);
+        when(jwtProvider.isValid(refreshToken)).thenReturn(true);
+        when(jwtProvider.isRefreshToken(refreshToken)).thenReturn(true);
+        when(jwtProvider.getAccountId(refreshToken)).thenReturn(accountId);
         when(jwtProvider.getAccountId(accessToken)).thenReturn(accountId);
 
         // logout은 내부적으로 `() -> { ...; return null; }` Supplier를 사용
@@ -391,7 +395,7 @@ class AuthServiceTokenCleanupTest {
         // then: reissue와 동일한 lock key 사용 확인
         verify(redisLockService).executeWithLock(
                 eq(LockKeys.reissue(accountId)), any(Duration.class), any(Supplier.class));
-        verify(tokenService).logout(accountId, accessToken);
+        verify(accountLogoutService).logout(accountId, accessToken, refreshToken);
     }
 
     @Test
@@ -405,8 +409,7 @@ class AuthServiceTokenCleanupTest {
         when(request.getRefreshToken()).thenReturn(refreshToken);
 
         when(jwtProvider.resolveAccessToken(authHeader)).thenReturn(accessToken);
-        when(tokenService.validateRefreshToken(refreshToken))
-                .thenThrow(new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
+        when(jwtProvider.isValid(refreshToken)).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> authService.logout(request, authHeader))
@@ -429,7 +432,9 @@ class AuthServiceTokenCleanupTest {
         when(request.getRefreshToken()).thenReturn(refreshToken);
 
         when(jwtProvider.resolveAccessToken(authHeader)).thenReturn(accessToken);
-        when(tokenService.validateRefreshToken(refreshToken)).thenReturn(1L);
+        when(jwtProvider.isValid(refreshToken)).thenReturn(true);
+        when(jwtProvider.isRefreshToken(refreshToken)).thenReturn(true);
+        when(jwtProvider.getAccountId(refreshToken)).thenReturn(1L);
         when(jwtProvider.getAccountId(accessToken)).thenReturn(2L); // 불일치
 
         // when & then
@@ -478,9 +483,6 @@ class AuthServiceTokenCleanupTest {
                 .thenReturn(Optional.empty());
 
         when(accountRepository.existsByNickname(any())).thenReturn(false);
-
-        // saveAndFlush()의 반환값은 oauthComplete에서 사용하지 않음 (로컬 account 변수를 그대로 사용)
-        when(accountRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         when(jwtProvider.generateAccessToken(any(), any(), any())).thenReturn("access");
         when(jwtProvider.generateRefreshToken(any(), any())).thenReturn("refresh");

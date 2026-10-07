@@ -36,6 +36,21 @@ import static org.mockito.Mockito.when;
 class AccountServiceBusinessNumberTest {
 
     @InjectMocks AccountService accountService;
+    @org.mockito.Spy AccountWriteTransactions accountWriteTransactions = new AccountWriteTransactions();
+    @Mock OwnerBusinessSnapshotReader ownerBusinessSnapshotReader;
+    @Mock com.eeum.eeum.application.auth.service.BusinessVerificationService businessVerificationService;
+
+    private void verifiedSnapshot(OwnerInfo info, Account account) {
+        java.time.LocalDate date = java.time.LocalDate.of(2020, 1, 1);
+        // 스터빙 도중 목을 호출하면 UnfinishedStubbingException이 난다 — 먼저 읽어 둔다
+        String businessNumber = info.getBusinessNumber();
+        when(info.getAccount()).thenReturn(account);
+        when(account.getName()).thenReturn("대표자");
+        when(info.getOpeningDate()).thenReturn(date);
+        when(ownerBusinessSnapshotReader.read(1L)).thenReturn(
+                new OwnerBusinessSnapshotReader.Snapshot(businessNumber, "대표자", date));
+        when(businessVerificationService.verifyBusiness(any(), any(), any())).thenReturn(true);
+    }
 
     @Mock private FileStorageService fileStorageService;
     @Mock AccountRepository accountRepository;
@@ -67,6 +82,7 @@ class AccountServiceBusinessNumberTest {
         when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(ownerInfoRepository.existsByBusinessNumber("1234567890")).thenReturn(false);
 
+        verifiedSnapshot(ownerInfo, account);
         // when
         accountService.updateOwnerInfo(accountId, request);
 
@@ -90,6 +106,7 @@ class AccountServiceBusinessNumberTest {
         when(ownerInfo.getBusinessNumber()).thenReturn("1234567890"); // 기존값과 동일
         when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
 
+        verifiedSnapshot(ownerInfo, account);
         // when
         accountService.updateOwnerInfo(accountId, request);
 
@@ -115,6 +132,7 @@ class AccountServiceBusinessNumberTest {
         when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
         when(ownerInfoRepository.existsByBusinessNumber("1234567890")).thenReturn(true); // 이미 존재
 
+        verifiedSnapshot(ownerInfo, account);
         // when & then
         assertThatThrownBy(() -> accountService.updateOwnerInfo(accountId, request))
                 .isInstanceOf(BusinessException.class)
@@ -125,25 +143,11 @@ class AccountServiceBusinessNumberTest {
     }
 
     @Test
-    void updateOwnerInfo_사업자번호_null이면_정규화_결과도_null_중복검사_미호출() {
-        // given
-        Long accountId = 1L;
-
-        OwnerInfoRequestDto request = mock(OwnerInfoRequestDto.class);
-        when(request.getBusinessNumber()).thenReturn(null); // null 입력
-
-        Account account = mock(Account.class);
-        // 잠금 순서 account → owner_info — 사장 승인(approveOwner)과 같은 순서여야 한다.
-        when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
-
-        OwnerInfo ownerInfo = mock(OwnerInfo.class);
-        when(ownerInfoRepository.findByAccountIdWithLock(accountId)).thenReturn(Optional.of(ownerInfo));
-
-        // when
-        accountService.updateOwnerInfo(accountId, request);
-
-        // then: null이면 중복검사 미호출, updateInfo(null) 호출
-        verify(ownerInfoRepository, never()).existsByBusinessNumber(anyString());
-        verify(ownerInfo).updateInfo(null);
+    void updateOwnerInfo_사업자번호_null이면_검증과_쓰기를_생략한다() {
+        OwnerInfoRequestDto request = new OwnerInfoRequestDto();
+        when(ownerBusinessSnapshotReader.read(1L)).thenReturn(
+                new OwnerBusinessSnapshotReader.Snapshot("1234567890", "대표자", java.time.LocalDate.of(2020, 1, 1)));
+        accountService.updateOwnerInfo(1L, request);
+        org.mockito.Mockito.verifyNoInteractions(businessVerificationService, accountRepository, ownerInfoRepository);
     }
 }
