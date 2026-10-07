@@ -1,5 +1,160 @@
 # 3단계 계정·인증·권한 검토 원장
 
+## 2026-10-07 최종 재검토·실행 검증 — 최신 판정
+
+**판정: 3단계 재검토 통과. 이번 단계 범위에서 Critical/Major는 남지 않았다.**
+FCM 토큰 단일 소유권·계정 상태 경합·UNIQUE 예외 응답의 수정 범위를 다시 검토했고, 계정·인증 단위 회귀와 Docker 기반 MySQL/Redis 통합·동시성 테스트 결과를 확인했다.
+
+| 검토 단위 | 상태 | 검증 근거 |
+| --- | --- | --- |
+| F3-01 심사 부속정보와 승인·탈퇴 직렬화 | 재검토 통과 | account → owner_info 잠금과 최신 상태 재검사, 관련 단위·통합 회귀 통과. |
+| F3-02 정지 판매자의 신규 주문·예약 | 재검토 통과 | 구매자 → Store → 판매자 Account 잠금 및 ACTIVE 검사, 계정 상태 잠금 통합 회귀 통과. |
+| F3-03 FCM 토큰 단일 소유권·상태 전이 | 재검토 통과 | V30의 중복 정리·UNIQUE 제약, 등록 공용 Redis 락, 잠금 후 ACTIVE 재검사 및 실제 토큰 교환 경쟁 통합 테스트 통과. |
+| F3-04 이메일·재설정 코드 원자 소비 | 재검토 통과 | Lua compare-and-delete와 일회용 토큰 MySQL/Redis 통합 회귀 통과. |
+| F3-05 공개 API 설명 | 재검토 통과 | 익명화·전체 세션 로그아웃·OAuth access token 계약과 Swagger 설명 일치. |
+| 사업자번호·OAuth UNIQUE 경합 응답 | 재검토 통과 | 서비스 내부의 rollback-only 예외 변환을 제거하고 제약명 기반 전역 409 매핑 회귀 테스트 통과. |
+
+### 실행 결과
+
+- 컴파일: 2026-10-07 사용자 실행 `gradlew compileJava compileTestJava` 성공.
+- 계정·인증 단위 회귀: 사용자 실행 대상 범위 성공. 최초 Mockito `saveAndFlush()` stale stubbing 1건은 현재 `save()` 구현에 맞춰 제거했고, `AuthServiceTokenCleanupTest`와 `GlobalExceptionHandlerTest`를 재실행해 성공.
+- MySQL/Redis 통합·동시성: `AccountOptimisticLockIntegrationTest`, `AccountStageThreeRegressionIntegrationTest`, `AdminAccountStatusLockIntegrationTest`, 탈퇴·토큰 정리·일회용 토큰·Redis lock·FCM 이전 테스트가 Docker 환경에서 성공.
+- FCM 토큰 교환 경쟁: `FcmTokenTransferIntegrationTest`가 2026-10-07 Docker 환경에서 성공. 두 계정의 동시 토큰 교환은 15초 안에 끝나며, 실패 시 재시도 가능한 락 획득 실패만 허용하고 토큰별 소유 계정 수가 최대 1명임을 검증한다.
+
+### 다음 단계로 이관할 관찰 항목
+
+- 테스트 종료 시 `taskScheduler` 종료 대기와 Hibernate create-drop의 테이블 삭제 경고가 있었으나 Gradle은 성공했고 테스트 실패는 없었다. 이는 3단계 결함으로 분류하지 않으며, 5단계 실시간·알림/자원 검증 및 9단계 운영 준비도에서 스케줄러 종료·테스트 데이터 정리 관점으로 확인한다.
+
+## 2026-10-03 수정 범위 재검토·실행 검증 — 최신 판정
+
+**판정: 3단계 미완료. Critical은 확인하지 못했으나 Major 3건이 남아 다음 단계로 진행할 수 없다.**
+이번 수정 재검토 범위는 F3-01~F3-05, M-01~M-08, P-01~P-02를 고친 커밋과 현재 미커밋 `AccountRepository`·낙관적 락 통합 테스트 변경이다. 범위 밖 기존 문제는 차단 항목으로 확대하지 않았다.
+
+| 검토 단위 | 상태 | 최신 결과 |
+| --- | --- | --- |
+| F3-01 심사 부속정보와 승인·탈퇴 직렬화 | 재검토 통과 | 모든 심사 입력 쓰기가 account → owner_info 비관적 잠금과 ACTIVE/PENDING 최신 상태 재검사를 공유한다. |
+| F3-02 정지 판매자의 신규 주문·예약 | 재검토 통과 | 주문·예약이 구매자 → Store → 판매자 Account 순으로 잠근 뒤 판매자 ACTIVE를 확인한다. |
+| F3-03 FCM 토큰 단일 소유권·상태 전이 | 지적됨 | 아래 R3-03A/R3-03B가 남아 있다. |
+| F3-04 이메일·재설정 코드 원자 소비 | 재검토 통과 | Redis Lua compare-and-delete가 값 비교와 삭제를 한 연산으로 수행한다. 실제 Redis 경쟁 실행은 미점검이다. |
+| F3-05 공개 API 설명 | 재검토 통과 | 탈퇴 익명화·전체 세션 로그아웃·OAuth access token 계약과 Swagger 설명이 일치한다. |
+| 사업자번호·OAuth UNIQUE 경합의 예외 응답 | 지적됨 | 아래 R3-04가 이전 범위에서 새로 확인됐다. |
+| 계정·인증 단위 회귀 | 재검토 통과 | 관련 단위 테스트 25개 클래스를 실행해 `BUILD SUCCESSFUL`을 확인했다(1분 22초). |
+| MySQL/Redis 동시성 실행 검증 | 미점검 | Docker를 사용할 수 없어 Testcontainers 기반 9개 클래스, 37개 테스트가 전부 skip됐다. 통과로 집계하지 않는다. |
+
+### R3-03A · Major · 지적됨 · 잔존 — FCM 토큰의 DB 단일 소유권이 보장되지 않음
+
+- 위치: `domain/account/repository/AccountRepository.java:106-117`, 운영 DDL의 `account.fcm_token`.
+- `transferFcmToken()`은 대상 계정 또는 기존 소유자를 한 UPDATE로 변경하지만 `fcm_token` UNIQUE 제약과 Flyway 백업이 없다. 같은 토큰을 두 계정이 동시에 등록하는 경우, 행 잠금 대기 순서에 따라 두 계정에 토큰이 남을 수 있다.
+- 영향: 하나의 기기로 서로 다른 계정의 알림 본문이 전송될 수 있다.
+- 종료 조건: 기존 중복 토큰 정리 절차를 포함한 UNIQUE DDL, 충돌/재시도 규약, 실제 MySQL barrier·lock-wait 경쟁에서 토큰 보유 행 수가 항상 1 이하임을 검증하는 통합 테스트.
+
+### R3-03B · Major · 지적됨 · 잔존 — 정지·탈퇴 직후 FCM 토큰이 다시 저장될 수 있음
+
+- 위치: `application/account/service/AccountService.java:180-188`, `domain/account/repository/AccountRepository.java:111-116`.
+- FCM 등록 요청이 비잠금 상태 조회에서 ACTIVE를 확인한 뒤, 관리자 정지 또는 탈퇴가 토큰을 지우고 커밋하면 늦게 실행된 bulk UPDATE가 SUSPENDED/WITHDRAWN 계정에 토큰을 다시 쓸 수 있다. UPDATE에 상태 조건과 영향 행수 처리도 없다.
+- 영향: 탈퇴 취소 뒤 ACTIVE로 복귀하면 보관돼서는 안 되는 기기 토큰이 다시 유효해질 수 있다.
+- 종료 조건: 동일 Account의 잠금 뒤 ACTIVE 재검사 또는 상태 조건의 원자 UPDATE와 0행 처리 규약, 정지/탈퇴와 토큰 등록의 실제 MySQL 경쟁 테스트.
+
+### R3-04 · Major · 지적됨 · 이전 누락 — UNIQUE 경합이 의도한 409가 아닌 500으로 끝날 수 있음
+
+- 위치: `application/account/service/AccountService.java:251-255`, `application/auth/service/AuthService.java:311-316`.
+- 트랜잭션 안에서 `flush()`/`saveAndFlush()`의 `DataIntegrityViolationException`을 비즈니스 예외로 바꾸면 JPA 트랜잭션은 이미 rollback-only일 수 있다. 프록시 종료 시 `UnexpectedRollbackException`이 되어 사업자번호 동시 변경 또는 OAuth 가입 완료 경쟁이 의도한 409 대신 500으로 관찰될 수 있다.
+- 종료 조건: 제약 위반 변환을 안전한 별도 경계 또는 제약명 기반 전역 예외 매핑으로 옮기고, 실제 MySQL 두 경쟁 요청에서 패배 요청이 500이 아니라 각 `ACCOUNT_*` 409으로 응답함을 검증.
+
+### 실행 기록
+
+- 단위: `./gradlew --no-daemon --console=plain test`로 계정 상태·탈퇴·심사·사업자 검증·토큰 정리·로그아웃·OAuth·이메일 코드·JWT/WebSocket 관련 25개 테스트 클래스를 실행했고 성공했다. 단위 테스트는 Redis·Repository를 mock하므로 동시성 안전성을 증명하지 않는다.
+- 통합/동시성: `AccountOptimisticLockIntegrationTest`, `AccountStageThreeRegressionIntegrationTest`, `AdminAccountStatusLockIntegrationTest`, 계정 탈퇴·토큰 정리·일회용 토큰·FCM 이전·Redis lock 통합 테스트 9개 클래스를 요청했으나 Docker unavailable로 37개 전부 skip됐다.
+- 형식: 현재 변경 범위의 `git diff --check`를 통과했다.
+
+## 2026-09-30 수정 반영 상태 — 최신 판정
+
+사용자가 승인한 F3-01~F3-05 수정이 반영됐다. 애플리케이션 코드 기준으로는 모두 `수정됨`이며, 아래의 이전 정적 검토 기록은 발견 당시의 근거를 보존한다.
+
+| ID | 상태 | 반영 내용 |
+| --- | --- | --- |
+| F3-01 | 수정됨 | 심사 부속정보의 모든 쓰기가 account → owner_info 잠금과 활성 상태 재검사를 거친다. 승인 뒤 계좌·영업시간·상점 정보·대표 메뉴 변경을 막는다. |
+| F3-02 | 수정됨 | 주문과 방문 예약 생성에서 OPEN 상점뿐 아니라 판매자 Account도 잠가 ACTIVE를 확인한다. 정지 판매자의 기존 장바구니·알려진 상점 ID 거래를 거절한다. |
+| F3-03 | 수정됨 | FCM 토큰 등록은 이전 소유 계정의 토큰을 같은 DB UPDATE로 해제하고, 로그아웃은 해당 계정의 기기 토큰도 해제한다. 일괄 이전도 version을 올려 stale Account 덮어쓰기를 차단한다. |
+| F3-04 | 수정됨 | 이메일 인증·비밀번호 재설정 코드를 compare-and-delete로 소비한다. |
+| F3-05 | 수정됨 | 탈퇴 익명화, 전체 세션 로그아웃, OAuth access token 입력에 맞게 Swagger 설명을 정정했다. |
+
+회귀 범위는 심사 입력 가드, 정지 판매자의 주문·예약 거절, FCM 소유 이전·로그아웃·stale write, 이메일 코드 재소비를 포함한다. 사용자가 실행하는 Gradle 및 MySQL/Redis 동시성 검증 결과는 아직 이 원장에 반영하지 않았다.
+
+---
+
+## 전체 최종 정적 재검토 — 이전 발견 기록
+
+사용자의 명시적 전체 검토 요청에 따라 기존 두 지적의 수정 범위를 넘어 3단계 진입점과 직접 연계를 다시 검토했다. 아래 판정이 이전 부분 재검토의 통과 문구보다 우선한다.
+
+**판정: 3단계 미완료. 새로 확인한 Major 3건, Minor 2건. Critical은 확인하지 못했다.** 모두 코드 경로에 근거한 정적 지적이며 실행 재현 결과가 아니다. Gradle·DB/Redis 테스트·외부 API 실호출·배포는 수행하지 않았다. 애플리케이션 코드는 수정하지 않았다.
+
+| 전체 검토 단위 | 확인한 진입점·직접 의존 | 판정 및 근거 |
+| --- | --- | --- |
+| 일반 가입·로그인 | AuthController, AuthService.signup/login, EmailService, 요청 DTO, Account UNIQUE, RateLimitKeys | 이메일-가입토큰 결합·비밀번호 해시·역할 서버 지정 확인. 인증코드 소비 F3-04 |
+| Kakao OAuth·가입 완료 | OAuthService, oauthLogin/oauthComplete/reAuth, OAuth DTO, provider UNIQUE | 앱 ID·회원번호·만료·이메일 신뢰 플래그 검증과 임시 토큰의 서버 저장·provider 중복 제약 확인 |
+| JWT·재발급·로그아웃·Redis 유실 | JwtProvider, JwtAuthenticationFilter, SecurityConfig, TokenService, AccountLogoutService, token invalidation/cleanup listeners | 토큰 용도·세대·DB 권한 대조, 재발급 락, BEFORE_COMMIT 세대 회수, 지연 compare-and-delete 확인. 기기 푸시 연결 회수 F3-03 |
+| 비밀번호 변경·재설정·재인증 | AccountService.changePassword, AuthService reset/reAuth 경로, TokenService, EmailService | 토큰 소유자·용도·세대와 원자 소비, 상태 검사 및 Account @Version 확인. JWT 이전 단계인 이메일 코드의 원자성 F3-04 |
+| 본인 탈퇴·관리자 강제 탈퇴·익명화 | AccountService.withdraw, AdminAccountService.forceDeleteAccount, AccountWithdrawalProcessor/Guard, WithdrawalObligationRepository, AccountCleanupService/Scheduler | 본인 탈퇴 READ_COMMITTED 및 거래 가드, 관리자 감사 이력, 30일 익명화와 지급계좌 후속 파기 확인. 주문·정산 행 보존. API 설명 F3-05 |
+| 사장 정보·심사·권한 승격 | AccountService.updateOwnerInfo, OwnerApprovalService 전체 공개 메서드, AdminAccountService approve/reject, OwnerInfo, OwnerApprovalAccessChecker | 외부 사업자 검증과 증빙 결합, 승인/거절/사업자번호 변경 잠금 확인. 심사 부속정보 쓰기 F3-01 |
+| 관리자 접근·상태 전이 | AdminAccountController, SecurityConfig, AccountSanctionPolicy, AdminAccountService | 관리자 라우트·메서드 권한, 관리자 대상 제재 금지, 정지/해제/탈퇴/익명화 후 복원 가드 확인. 정지된 판매자의 신규 거래 F3-02 |
+| 활동지역·자기 정보·소유권 | AccountController, AccountRegionController/Service/VerificationService, DTO·mapper | 요청자 ID를 인증정보에서 취득, 지역 소유권 쿼리, 쓰기 Account 잠금, GPS 외부 I/O 분리, 자기/관리자 응답 범위 확인 |
+| 주문·예약·정산 연계 | OrderService.createOrder, VisitReservationService 생성·상점 검사, PaymentService 소유권 조회, SettlementQueryService, ManualSettlementPayoutService, AdminStoreService | 구매자 상태/잠금·조회 소유권과 관리자 지급 복구 접근 확인. 판매자 상태 누락 F3-02. R3-01/R3-02 수정 유지 |
+| 채팅·SSE·WebSocket 연계 | ChatAccessHelper, ChatMessageService, 채팅 응답 DTO, StompAuthChannelInterceptor, AccountWriteGuard, SessionTerminationListener, RealtimeRelaySubscriber, WebSocketSessionReconciliationScheduler, NotificationSseController | 채팅 참여자·메시지 소유권, 송신자 잠금, 연결 세대 대조, 인스턴스별 회수 보정과 새 세대 보존 확인. 비동기 회수 지연과 실행 검증은 별도 |
+| 알림·개인정보 연계 | Account.updateFcmToken/withdraw/anonymize, NotificationService/PushEventListener, PushEligibilityReader, AccountRepository | 탈퇴·토큰 교체 뒤 큐 발송 재검사 확인. 계정 간 동일 FCM 토큰 연결 F3-03 |
+| DDL·회귀 테스트 | Account/OwnerInfo/SettlementAccount, AccountRepository/OwnerInfoRepository, V28/V29, account/auth 테스트와 WithdrawalObligationIntegrationTest, AccountStageThreeRegressionIntegrationTest | 스키마와 증빙/감사 enum 연결, 기존 테스트 범위 확인. 신규 지적에 대한 필요한 회귀는 아래 명시. 실제 마이그레이션·테스트 성공은 미확인 |
+
+### F3-01 · Major · 지적됨 · 이전 누락 — 심사 부속정보 저장이 승인·탈퇴와 직렬화되지 않음
+
+- 위치: `OwnerApprovalService.saveSettlementAccount`(174행), `updateBusinessHours`, `updateStoreBusinessInfo`, `saveRepresentativeMenu`, `validateReviewEditable`.
+- 진입점: `/owner/stores/me/settlement-account` 등 승인 전 입력 API. OwnerApprovalAccessChecker는 OwnerInfo 존재만 확인한다.
+- 선행 상태/순서: ACTIVE/PENDING 신청자가 계좌 저장 요청을 시작하여 PENDING 검사를 통과 → 관리자가 account/owner_info 잠금으로 승인 커밋 → 먼저 시작한 저장 요청이 기존 SettlementAccount를 UPDATE하여 커밋. 이미 APPROVED여서 거절해야 할 계좌 변경이 승인 뒤 반영된다. 필터 통과 후 계정이 정지/탈퇴한 경우도 같은 쓰기 경로에서 현재 계정 상태를 다시 확인하지 않는다.
+- 기존 방어 실패: 부속정보 저장은 Account/OwnerInfo를 잠그지 않고 Account도 갱신하지 않는다. 따라서 Account의 @Version 및 관리자 쪽 잠금만으로 해당 UPDATE가 실패하지 않는다. SettlementAccount에도 @Version은 없다.
+- 수정 방향: 모든 심사 관련 쓰기의 시작에서 같은 account → owner_info 잠금과 상태 재검사를 적용하고 필요한 자식 행까지 일관된 순서로 보호한다.
+- 필요한 회귀: 계좌 변경과 승인/정지/강제 탈퇴의 양방향 실행 순서. 승인이 먼저 완료되면 저장을 거절하고, 저장이 먼저면 승인이 최신 값을 관찰해야 한다.
+
+### F3-02 · Major · 지적됨 · 이전 누락 — 정지된 사장에게 신규 주문·예약 생성 가능
+
+- 위치: `AdminAccountService.suspendAccount`(102행), `OrderService.createOrder`, `VisitReservationService.validateReservableStore`(595행).
+- 선행 상태/순서: 승인된 사장의 OPEN 상점에 고객 장바구니가 존재 → 사장 계정 정지 커밋 → 고객이 POST /orders 또는 POST /reservations/visits/stores/{storeId} 요청.
+- 기존 방어 실패: 계정 정지는 Account만 SUSPENDED로 바꾸며 상점은 OPEN이다. 주문·예약 생성은 고객 Account와 Store 상태만 검사하고 판매자 Account 상태를 확인하지 않는다. Store 목록의 ACTIVE 필터는 이미 알려진 상점 ID나 기존 장바구니를 사용하는 쓰기 요청에 적용되지 않는다.
+- 영향: 사장은 로그인·처리를 못 하는 상태인데 고객의 새 거래·재고 차감·결제 대기가 생성된다.
+- 수정 방향: 판매자 상태 전이와 신규 거래 허용 조건을 같은 동시성 규약으로 연결한다. 단순 목록 숨김만으로 해결하지 않는다.
+- 필요한 회귀: 정지 후 기존 장바구니 주문/알려진 상점 ID 예약 거절, 정지와 생성 경합, 제재 해제 후 정상 경로.
+
+### F3-03 · Major · 지적됨 · 이전 누락 — 동일 FCM 토큰의 계정 간 연결이 남음
+
+- 위치: `AccountService.updateFcmToken`(180행), `AccountLogoutService.logout`, `PushEligibilityReader.canSend`, Account의 fcm_token 컬럼.
+- 선행 상태/순서: 활성 계정 A가 FCM 토큰 T 등록 → A 로그아웃 → 계정 B가 같은 토큰 T 등록 → A에게 채팅/주문 알림 발생.
+- 기존 방어 실패: 로그아웃은 JWT 세대만 회수하고 A의 FCM 토큰은 남긴다. B의 등록은 A의 연결을 해제하지 않으며 fcm_token 유일성 제약도 없다. A는 ACTIVE이고 저장값도 T이므로 PushEligibilityReader가 A의 알림 발송을 허용한다.
+- 영향: B가 사용하는 기기로 A의 알림 본문이 전달될 수 있다. 임의의 제3자 기기 토큰을 추측할 수 있다는 가정은 필요하지 않으며, 같은 토큰을 등록하는 계정 전환만으로 성립한다.
+- 수정 방향: 기기 토큰의 현재 계정 연결을 원자적으로 이전하고 로그아웃의 연결 해제 및 대기 이벤트 검사를 일치시킨다.
+- 필요한 회귀: A→B 동일 토큰 이동 후 A 알림 미발송, 등록 경쟁에서 단일 소유, 지연 로그아웃/푸시가 B의 새 연결을 손상시키지 않음.
+
+### F3-04 · Minor · 지적됨 · 이전 누락 — 이메일 인증코드 소비가 원자적이지 않음
+
+- 위치: `EmailService.verifyCodeAndIssueToken`(67행), `verifyPasswordResetCode`(127행).
+- 같은 코드를 동시에 GET한 요청 둘이 모두 일치 검사를 통과하고 DELETE 결과와 무관하게 성공한다. 재발송이 GET과 DELETE 사이에 새 코드를 저장하면 옛 검증 요청이 새 코드도 삭제할 수 있다.
+- JWT 재인증/재설정 토큰의 compare-and-delete는 그 이전 단계인 이메일 코드에 적용되지 않는다. 이를 곧바로 비밀번호 탈취로 확대하지 않는다.
+- 수정 방향/회귀: 이메일 코드도 값 일치와 소비를 한 연산으로 묶는다. 동일 코드 동시 검증은 한 번 성공, 재발송된 다른 코드는 이전 검증이 삭제하지 않아야 한다.
+
+### F3-05 · Minor · 지적됨 · 이전 누락 — 공개 API 설명과 실제 동작 불일치
+
+- `AccountController` 63행은 탈퇴 후 30일에 물리 삭제한다고 설명하지만 실제로는 익명화하고 계정 행·거래 이력을 보존한다.
+- `AuthController` 114행은 로그아웃을 access 블랙리스트 등록으로 설명하지만 현재는 계정 tokenVersion 회수로 기존 세션 전체를 무효화한다. OAuth 로그인 설명도 인가 코드라고 적혀 있으나 요청 DTO는 accessToken이다.
+- 수정 방향: Swagger 계약을 실제 익명화·계정 전체 로그아웃·OAuth access token 입력으로 정정한다.
+
+### 확인 한계와 다음 판정 조건
+
+- 기존 R3-01/R3-02는 해결 상태를 유지한다. 이번 5건은 사용자 지정 전체 범위에서 확인한 이전 누락이며 이전 두 수정의 회귀로 단정하지 않는다.
+- Kakao 앱 식별·토큰 만료·이메일 신뢰 플래그는 [공식 REST 문서](https://developers.kakao.com/docs/ko/kakaologin/rest-api#access-token-info)와 대조했다. 외부 실호출은 하지 않았다.
+- 런타임 경합, Redis 장애, 테스트 성공, 운영 DDL 적용 여부, 전체 로그·백업·첨부파일의 실제 개인정보 보존 상태는 정적 검사로 확인하지 않았다. 9단계 운영 준비도 전체 완료를 뜻하지 않는다.
+- F3-01~03 수정 및 범위 재검토가 끝나야 코드 기준 완료 판정이 가능하다. 사용자 실행 테스트는 그 후에도 별도 확인한다.
+
+---
+
+아래는 이전 검토 이력이다. 최신 전체 판정은 위 내용을 따른다.
+
 검토일: 2026-09-20. 기준 커밋: `3aa680693824c63a719453d7387f57f852232493`.
 2026-09-20에는 읽기 전용 검토를 수행했다. 아래 원본 지적은 당시 기준이며, 2026-09-22 수정 상태는 다음 표를 우선한다.
 사용자 요청에 따라 Gradle, MySQL/Redis 통합 테스트, 외부 서비스 실호출은 실행하지 않았다.

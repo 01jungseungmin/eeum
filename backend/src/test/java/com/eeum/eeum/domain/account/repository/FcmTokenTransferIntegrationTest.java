@@ -3,11 +3,16 @@ package com.eeum.eeum.domain.account.repository;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.application.account.service.AccountService;
 import com.eeum.eeum.support.IntegrationTestSupport;
+import com.eeum.eeum.exception.BusinessException;
+import com.eeum.eeum.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.EnabledIfDockerAvailable;
 
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,5 +68,74 @@ class FcmTokenTransferIntegrationTest extends IntegrationTestSupport {
         assertThat(accountRepository.findById(mine.getAccountId()).orElseThrow().getFcmToken()).isNull();
         assertThat(accountRepository.findById(other.getAccountId()).orElseThrow().getFcmToken())
                 .isEqualTo("device-other-" + key);
+    }
+
+    @Test
+    void 두_계정이_서로의_토큰을_동시에_등록해도_데드락없이_단일_소유권을_유지한다() throws Exception {
+        String key = UUID.randomUUID().toString();
+        String firstToken = "device-first-" + key;
+        String secondToken = "device-second-" + key;
+        Account first = accountRepository.save(
+                Account.createUser(key + "-e@test.com", "pw", "첫째", key + "e", "010-5555-1111"));
+        Account second = accountRepository.save(
+                Account.createUser(key + "-f@test.com", "pw", "둘째", key + "f", "010-5555-2222"));
+        first.updateFcmToken(firstToken);
+        second.updateFcmToken(secondToken);
+        accountRepository.saveAndFlush(first);
+        accountRepository.saveAndFlush(second);
+
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+        AtomicReference<Throwable> firstFailure = new AtomicReference<>();
+        AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+
+        Thread firstRequest = new Thread(() -> registerAfterStart(
+                start, done, firstFailure, first.getAccountId(), secondToken));
+        Thread secondRequest = new Thread(() -> registerAfterStart(
+                start, done, secondFailure, second.getAccountId(), firstToken));
+        firstRequest.start();
+        secondRequest.start();
+        start.countDown();
+
+        assertThat(done.await(15, TimeUnit.SECONDS)).isTrue();
+        assertOnlyRetryableLockFailure(firstFailure.get());
+        assertOnlyRetryableLockFailure(secondFailure.get());
+        assertThat(firstFailure.get() == null || secondFailure.get() == null)
+                .as("동시 요청 중 하나는 토큰 이전을 완료해야 한다")
+                .isTrue();
+
+        long firstTokenOwners = accountRepository.findAll().stream()
+                .filter(account -> firstToken.equals(account.getFcmToken()))
+                .count();
+        long secondTokenOwners = accountRepository.findAll().stream()
+                .filter(account -> secondToken.equals(account.getFcmToken()))
+                .count();
+        assertThat(firstTokenOwners).isLessThanOrEqualTo(1);
+        assertThat(secondTokenOwners).isLessThanOrEqualTo(1);
+    }
+
+    private void registerAfterStart(
+            CountDownLatch start,
+            CountDownLatch done,
+            AtomicReference<Throwable> failure,
+            Long accountId,
+            String token
+    ) {
+        try {
+            start.await();
+            accountService.updateFcmToken(accountId, token);
+        } catch (Throwable throwable) {
+            failure.set(throwable);
+        } finally {
+            done.countDown();
+        }
+    }
+
+    private void assertOnlyRetryableLockFailure(Throwable failure) {
+        if (failure == null) {
+            return;
+        }
+        assertThat(failure).isInstanceOf(BusinessException.class);
+        assertThat(((BusinessException) failure).getErrorCode()).isEqualTo(ErrorCode.LOCK_ACQUIRE_FAILED);
     }
 }
