@@ -12,6 +12,8 @@ import com.eeum.eeum.application.file.FileUploadPurpose;
 import com.eeum.eeum.application.account.mapper.AccountMapper;
 import com.eeum.eeum.application.account.mapper.OwnerApplicationMapper;
 import com.eeum.eeum.application.auth.service.TokenService;
+import com.eeum.eeum.common.lock.LockKeys;
+import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.security.jwt.JwtProvider;
 import com.eeum.eeum.application.favorite.service.FavoriteService;
 import com.eeum.eeum.domain.favorite.enums.FavoriteRefType;
@@ -37,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Duration;
 
 @Slf4j
 @Service
@@ -44,6 +47,7 @@ import java.util.List;
 public class AccountService {
 
     private final AccountWriteTransactions accountWriteTransactions;
+    private final RedisLockService redisLockService;
     private final OwnerBusinessSnapshotReader ownerBusinessSnapshotReader;
     private final com.eeum.eeum.application.auth.service.BusinessVerificationService businessVerificationService;
     private final AccountRepository accountRepository;
@@ -174,9 +178,15 @@ public class AccountService {
 
     // ===================== FCM 토큰 =====================
 
-    @Transactional
     public void updateFcmToken(Long accountId, String fcmToken) {
         String normalizedFcmToken = fcmToken == null || fcmToken.isBlank() ? null : fcmToken;
+        redisLockService.executeWithLock(
+                LockKeys.fcmTokenRegistration(),
+                Duration.ofSeconds(10),
+                () -> accountWriteTransactions.run(() -> transferFcmToken(accountId, normalizedFcmToken)));
+    }
+
+    private void transferFcmToken(Long accountId, String normalizedFcmToken) {
         List<Account> accounts = accountRepository
                 .findFcmTokenTransferAccountsWithLock(accountId, normalizedFcmToken);
         Account target = accounts.stream()

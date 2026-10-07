@@ -66,6 +66,12 @@ public final class LockKeys {
         return "lock:account-status:" + accountId;
     }
 
+    // 한 요청이 이전 소유자와 새 소유자를 함께 갱신하므로, 토큰 교환(A→B, B→A)이
+    // DB 행 잠금 순서에 따라 교착되지 않도록 등록 작업 전체를 직렬화한다.
+    public static String fcmTokenRegistration() {
+        return "lock:account:fcm-token-registration";
+    }
+
     // 예약 생성 / 테이블 구성 변경 / 슬롯 비활성화가 공유하는 매장 단위 락
     public static String storeReservation(Long storeId) {
         return "lock:store:" + storeId + ":reservation";
