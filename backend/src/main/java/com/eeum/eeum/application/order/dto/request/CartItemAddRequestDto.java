@@ -18,7 +18,7 @@ public class CartItemAddRequestDto {
     private Long eventProductId;
 
     @Schema(description = "선택한 옵션 항목 ID 목록", example = "[1, 3]")
-    private List<Long> selectedOptionItemIds;
+    private List<@NotNull Long> selectedOptionItemIds;
 
     @NotNull(message = "수량은 필수입니다.")
     @Positive(message = "수량은 1개 이상이어야 합니다.")

@@ -9,7 +9,10 @@ import com.eeum.eeum.application.order.dto.response.OrderResponseDto;
 import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.order.entity.*;
 import com.eeum.eeum.domain.order.enums.OrderStatus;
 import com.eeum.eeum.domain.order.enums.OrderType;
@@ -19,6 +22,7 @@ import com.eeum.eeum.domain.order.event.OrderPlacedEvent;
 import com.eeum.eeum.domain.order.repository.*;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
+import com.eeum.eeum.domain.product.entity.ProductCategory;
 import com.eeum.eeum.domain.product.entity.ProductOption;
 import com.eeum.eeum.domain.product.entity.ProductOptionItem;
 import com.eeum.eeum.domain.product.enums.OptionSelectionType;
@@ -34,9 +38,13 @@ import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
 import com.eeum.eeum.exception.NotFoundException;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -47,7 +55,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -58,6 +69,7 @@ public class OrderService {
 
     private final FileStorageService fileStorageService;
     private final AccountRepository accountRepository;
+    private final OwnerInfoRepository ownerInfoRepository;
     private final CartRepository cartRepository;
     private final com.eeum.eeum.domain.store.repository.StoreRepository storeRepository;
     private final CartItemRepository cartItemRepository;
@@ -68,6 +80,7 @@ public class OrderService {
     private final ProductOptionRepository productOptionRepository;
     private final ProductOptionItemRepository productOptionItemRepository;
     private final EventProductRepository eventProductRepository;
+    private final EntityManager entityManager;
     private final ProductImageRepository productImageRepository;
     private final StoreReviewRepository storeReviewRepository;
     private final RedisLockService redisLockService;
@@ -114,12 +127,18 @@ public class OrderService {
         if (!seller.isActive()) {
             throw new BusinessException(ErrorCode.STORE_SUSPENDED);
         }
-
-        OrderType orderType = resolveOrderType(cartItems);
-
-        validatePickupPolicy(orderType, request.getPickupScheduledAt());
+        // 공개 목록에서 숨긴 미승인 상점은 기존 장바구니를 통한 주문도 받지 않는다.
+        OwnerInfo ownerInfo = ownerInfoRepository.findByAccountIdWithLock(seller.getAccountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+        entityManager.refresh(ownerInfo, LockModeType.PESSIMISTIC_WRITE);
+        if (ownerInfo.getApprovalStatus() != ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.STORE_NOT_FOUND);
+        }
 
         validateAndDecreaseStock(cartItems);
+
+        OrderType orderType = resolveOrderType(cartItems);
+        validatePickupPolicy(orderType, request.getPickupScheduledAt());
 
         BigDecimal totalPrice = cartItems.stream()
                 .map(CartItem::getTotalPrice)
@@ -399,14 +418,22 @@ public class OrderService {
     }
 
     private void validateAndDecreaseStock(List<CartItem> cartItems) {
-        for (CartItem item : cartItems) {
+        Map<Long, Product> lockedProducts = new HashMap<>();
+        Map<Long, EventProduct> lockedEvents = new HashMap<>();
+        // 일반/이벤트가 같은 Product.stock을 사용한다. 모든 주문이 Product ID 순으로
+        // 잠가야 서로 다른 장바구니의 상품 순서가 달라도 교착하지 않는다.
+        for (CartStockLine line : cartItems.stream()
+                .map(item -> new CartStockLine(item, stockProductId(item)))
+                .sorted(Comparator.comparing(CartStockLine::productId))
+                .toList()) {
+            CartItem item = line.item();
             if (item.getProduct() != null) {
-                Product product = productRepository.findByIdWithPessimisticLock(
-                        item.getProduct().getProductId()
-                ).orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+                Product product = lockedProducts.computeIfAbsent(line.productId(),
+                        this::lockAndRefreshProduct);
 
                 if (product.getStatus() == ProductStatus.SOLD_OUT
-                        || product.getStatus() == ProductStatus.INACTIVE) {
+                        || product.getStatus() == ProductStatus.INACTIVE
+                        || !isActiveProductCategory(product)) {
                     throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                 }
 
@@ -416,34 +443,29 @@ public class OrderService {
 
                 validateUnitPriceUnchanged(item, product);
 
-                if (product.getStock() != null) {
-                    int stockBefore = product.getStock();
-                    product.decreaseStock(item.getQuantity());
-                    int stockAfter = product.getStock();
-
-                    // 임계값을 막 넘어선 순간에만 1회 발행 (주문마다 반복 알림 방지)
-                    if (stockBefore > LOW_STOCK_THRESHOLD && stockAfter <= LOW_STOCK_THRESHOLD) {
-                        eventPublisher.publishEvent(new ProductStockWarningEvent(
-                                product.getStore().getAccount().getAccountId(),
-                                product.getStore().getName(),
-                                product.getName(),
-                                stockAfter,
-                                product.getProductId()
-                        ));
-                    }
-                }
+                decreasePhysicalStock(product, item.getQuantity());
+                flushStockChange(ErrorCode.PRODUCT_OUT_OF_STOCK);
             }
 
             if (item.getEventProduct() != null) {
-                EventProduct eventProduct = eventProductRepository.findByIdWithPessimisticLock(
-                        item.getEventProduct().getEventProductId()
-                ).orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+                // EventProduct보다 Product를 먼저 잠근다. 일반 주문도 이 행을 잠그므로
+                // 두 판매 경로의 실재고 검증/차감이 같은 직렬화 지점을 공유한다.
+                Product product = lockedProducts.computeIfAbsent(line.productId(),
+                        this::lockAndRefreshProduct);
+                EventProduct eventProduct = lockedEvents.computeIfAbsent(
+                        item.getEventProduct().getEventProductId(), this::lockAndRefreshEvent);
 
                 if (!eventProduct.isOngoing()) {
                     throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
                 }
+                if (!eventProduct.getProduct().getProductId().equals(product.getProductId())
+                        || product.getStatus() != ProductStatus.ACTIVE
+                        || !isActiveProductCategory(product)) {
+                    throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
+                }
 
-                if (eventProduct.getRemainingStock() < item.getQuantity()) {
+                if (eventProduct.getRemainingStock() < item.getQuantity()
+                        || (product.getStock() != null && product.getStock() < item.getQuantity())) {
                     throw new BusinessException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                 }
 
@@ -451,38 +473,141 @@ public class OrderService {
                     throw new BusinessException(ErrorCode.ORDER_PRICE_CHANGED);
                 }
 
+                decreasePhysicalStock(product, item.getQuantity());
+                flushStockChange(ErrorCode.PRODUCT_OUT_OF_STOCK);
                 eventProduct.decreaseStock(item.getQuantity());
+                // 충돌을 트랜잭션 종료 시점까지 미루면 API가 낙관적 잠금 예외(500)를
+                // 그대로 반환한다. 지금 확정해 롤백 가능한 도메인 오류로 변환한다.
+                flushStockChange(ErrorCode.EVENT_NOT_FOUND);
             }
         }
     }
 
+    private void flushStockChange(ErrorCode conflictCode) {
+        try {
+            entityManager.flush();
+        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException conflict) {
+            throw new BusinessException(conflictCode);
+        }
+    }
+
+    private Long stockProductId(CartItem item) {
+        return item.getProduct() != null
+                ? item.getProduct().getProductId()
+                : eventProductRepository.findProductIdByEventProductId(
+                        item.getEventProduct().getEventProductId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+    }
+
+    private record CartStockLine(CartItem item, Long productId) {}
+
+    private boolean isActiveProductCategory(Product product) {
+        // 운영 DB의 product_category_id는 NOT NULL이다. null은 DB를 쓰지 않는 단위
+        // 테스트 fixture에서만 나타나므로 기존 상품 검증과 호환한다.
+        ProductCategory category = product.getProductCategory();
+        if (category == null) {
+            return true;
+        }
+        // 앞선 장바구니 조회가 만든 RR 스냅샷/영속성 캐시 대신 현재 상태를 읽는다.
+        entityManager.refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        return category.isActive();
+    }
+
+    private Product lockAndRefreshProduct(Long productId) {
+        Product product = productRepository.findByIdWithPessimisticLock(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE);
+        return product;
+    }
+
+    private EventProduct lockAndRefreshEvent(Long eventProductId) {
+        EventProduct event = eventProductRepository.findByIdWithPessimisticLock(eventProductId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+        entityManager.refresh(event, LockModeType.PESSIMISTIC_WRITE);
+        return event;
+    }
+
+    private void decreasePhysicalStock(Product product, int quantity) {
+        if (product.getStock() == null) {
+            return;
+        }
+        int before = product.getStock();
+        product.decreaseStock(quantity);
+        int after = product.getStock();
+        if (before > LOW_STOCK_THRESHOLD && after <= LOW_STOCK_THRESHOLD) {
+            eventPublisher.publishEvent(new ProductStockWarningEvent(
+                    product.getStore().getAccount().getAccountId(),
+                    product.getStore().getName(), product.getName(), after, product.getProductId()));
+        }
+    }
+
     private void restoreStock(List<OrderItem> orderItems) {
-        for (OrderItem item : orderItems) {
+        Map<Long, Product> lockedProducts = new HashMap<>();
+        Map<Long, EventProduct> lockedEvents = new HashMap<>();
+        // 주문 항목의 eventProductId는 스냅샷 scalar라 상품 ID를 먼저 읽는다.
+        // 읽기는 잠금이 아니며, 실제 변경은 아래 Product → EventProduct 순서로 잠근다.
+        List<StockRestoreLine> lines = orderItems.stream()
+                .map(item -> new StockRestoreLine(item, item.getProductId() != null
+                        ? item.getProductId()
+                        : eventProductRepository.findProductIdByEventProductId(item.getEventProductId())
+                                .orElse(null)))
+                .filter(line -> line.productId() != null)
+                .sorted(Comparator.comparing(StockRestoreLine::productId))
+                .toList();
+        for (StockRestoreLine line : lines) {
+            OrderItem item = line.item();
+            Product product = lockedProducts.get(line.productId());
+            if (product == null) {
+                product = productRepository.findByIdWithPessimisticLock(line.productId()).orElse(null);
+                if (product != null) {
+                    entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE);
+                    lockedProducts.put(line.productId(), product);
+                }
+            }
+            if (product == null) {
+                continue;
+            }
             if (item.getEventProductId() != null) {
-                EventProduct eventProduct = eventProductRepository
-                        .findByIdWithPessimisticLock(item.getEventProductId())
-                        .orElse(null);
+                EventProduct eventProduct = lockedEvents.get(item.getEventProductId());
+                if (eventProduct == null) {
+                    eventProduct = eventProductRepository
+                            .findByIdWithPessimisticLock(item.getEventProductId()).orElse(null);
+                    if (eventProduct != null) {
+                        entityManager.refresh(eventProduct, LockModeType.PESSIMISTIC_WRITE);
+                        lockedEvents.put(item.getEventProductId(), eventProduct);
+                    }
+                }
 
                 if (eventProduct != null) {
-                    eventProduct.restoreStock(item.getQuantity());
+                    if (eventProductRepository.restoreSoldCountAtomically(
+                            item.getEventProductId(), item.getQuantity()) != 1) {
+                        throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
+                    }
+                    entityManager.refresh(eventProduct, LockModeType.PESSIMISTIC_WRITE);
+                    restorePhysicalStock(product, item.getQuantity());
                 }
 
                 continue;
             }
 
-            if (item.getProductId() != null) {
-                // 차감 경로(주문 생성)가 비관적 락으로 재고를 수정하므로 복원도 같은 락으로 읽어야
-                // lost update(스테일 값 기준 복원으로 재고 부풀림 → oversell)를 막을 수 있다.
-                Product product = productRepository
-                        .findByIdWithPessimisticLock(item.getProductId())
-                        .orElse(null);
-
-                if (product != null && product.getStock() != null) {
-                    product.restoreStock(item.getQuantity());
-                }
+            if (product.getStock() != null) {
+                restorePhysicalStock(product, item.getQuantity());
             }
         }
     }
+
+    private void restorePhysicalStock(Product product, int quantity) {
+        if (product.getStock() == null) {
+            return;
+        }
+        if (productRepository.restoreStockAtomically(product.getProductId(), quantity,
+                ProductStatus.SOLD_OUT, ProductStatus.ACTIVE) != 1) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    private record StockRestoreLine(OrderItem item, Long productId) {}
 
     private String resolveThumbnailUrl(CartItem item) {
         Long productId = item.getProduct() != null

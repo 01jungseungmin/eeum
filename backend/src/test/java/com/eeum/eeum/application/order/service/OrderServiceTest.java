@@ -4,7 +4,10 @@ import com.eeum.eeum.application.order.dto.request.OrderCreateRequestDto;
 import com.eeum.eeum.application.file.FileStorageService;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
+import com.eeum.eeum.domain.account.entity.OwnerInfo;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
 import com.eeum.eeum.domain.order.enums.PaymentMethod;
 import com.eeum.eeum.domain.order.entity.Cart;
 import com.eeum.eeum.domain.order.entity.CartItem;
@@ -17,6 +20,7 @@ import com.eeum.eeum.domain.order.repository.PaymentRepository;
 import com.eeum.eeum.domain.product.entity.EventProduct;
 import com.eeum.eeum.domain.product.entity.Product;
 import com.eeum.eeum.domain.product.entity.ProductOption;
+import com.eeum.eeum.domain.product.enums.ProductStatus;
 import com.eeum.eeum.domain.product.enums.ProductType;
 import com.eeum.eeum.domain.product.repository.EventProductRepository;
 import com.eeum.eeum.domain.product.repository.ProductImageRepository;
@@ -25,6 +29,7 @@ import com.eeum.eeum.domain.store.entity.Store;
 import com.eeum.eeum.domain.store.repository.StoreReviewRepository;
 import com.eeum.eeum.exception.BusinessException;
 import com.eeum.eeum.exception.ErrorCode;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -42,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,6 +60,7 @@ class OrderServiceTest {
 
     @Mock private FileStorageService fileStorageService;
     @Mock private AccountRepository accountRepository;
+    @Mock private OwnerInfoRepository ownerInfoRepository;
     @Mock private CartRepository cartRepository;
     @Mock private com.eeum.eeum.domain.store.repository.StoreRepository storeRepository;
     @Mock private CartItemRepository cartItemRepository;
@@ -64,6 +71,7 @@ class OrderServiceTest {
     @Mock private com.eeum.eeum.domain.product.repository.ProductOptionRepository productOptionRepository;
     @Mock private com.eeum.eeum.domain.product.repository.ProductOptionItemRepository productOptionItemRepository;
     @Mock private EventProductRepository eventProductRepository;
+    @Mock private EntityManager entityManager;
     @Mock private ProductImageRepository productImageRepository;
     @Mock private StoreReviewRepository storeReviewRepository;
     @Mock private RedisLockService redisLockService;
@@ -104,6 +112,12 @@ class OrderServiceTest {
         when(seller.isActive()).thenReturn(sellerActive);
         when(store.getAccount()).thenReturn(seller);
         when(accountRepository.findByIdWithLock(200L)).thenReturn(Optional.of(seller));
+        if (sellerActive) {
+            OwnerInfo ownerInfo = mock(OwnerInfo.class);
+            lenient().when(ownerInfo.getApprovalStatus()).thenReturn(ApprovalStatus.APPROVED);
+            lenient().when(ownerInfoRepository.findByAccountIdWithLock(200L))
+                    .thenReturn(Optional.of(ownerInfo));
+        }
     }
 
     // ──────────────────── createOrder ────────────────────
@@ -204,6 +218,10 @@ class OrderServiceTest {
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
         // 락 획득 후 조회한 이벤트 상품도 이미 진행 종료 상태
+        when(eventProductRepository.findProductIdByEventProductId(eventProductId))
+                .thenReturn(Optional.of(1L));
+        when(productRepository.findByIdWithPessimisticLock(1L))
+                .thenReturn(Optional.of(expiredEvent.getProduct()));
         when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
                 .thenReturn(Optional.of(expiredEvent));
 
@@ -236,6 +254,7 @@ class OrderServiceTest {
                 LocalDateTime.now().minusHours(1),
                 LocalDateTime.now().plusHours(1));
         ReflectionTestUtils.setField(ghostEvent, "eventProductId", missingEventProductId);
+        ReflectionTestUtils.setField(ghostEvent.getProduct(), "productId", 1L);
 
         CartItem cartItem = mock(CartItem.class);
         when(cartItem.getEventProduct()).thenReturn(ghostEvent);
@@ -245,8 +264,8 @@ class OrderServiceTest {
         when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
-        // 락 기반 조회에서 empty → orElseThrow fires
-        when(eventProductRepository.findByIdWithPessimisticLock(missingEventProductId))
+        // ID projection이 비어 있으면 엔티티 잠금을 시도하지 않고 EVENT_NOT_FOUND
+        when(eventProductRepository.findProductIdByEventProductId(missingEventProductId))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -276,6 +295,7 @@ class OrderServiceTest {
         EventProduct soldOutEvent = EventProduct.create(product, BigDecimal.valueOf(7000), 5,
                 LocalDateTime.now().minusHours(1),
                 LocalDateTime.now().plusHours(1)); // isOngoing() = true
+        ReflectionTestUtils.setField(product, "productId", 1L);
         // soldCount를 eventStock과 동일하게 설정 → getRemainingStock() = 0
         ReflectionTestUtils.setField(soldOutEvent, "soldCount", 5);
         ReflectionTestUtils.setField(soldOutEvent, "eventProductId", eventProductId);
@@ -289,6 +309,9 @@ class OrderServiceTest {
         when(accountRepository.findByIdWithLock(accountId)).thenReturn(Optional.of(account));
         when(cartRepository.findByAccountIdWithPessimisticLock(accountId)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByCart_CartId(cartId)).thenReturn(List.of(cartItem));
+        when(eventProductRepository.findProductIdByEventProductId(eventProductId))
+                .thenReturn(Optional.of(1L));
+        when(productRepository.findByIdWithPessimisticLock(1L)).thenReturn(Optional.of(product));
         when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
                 .thenReturn(Optional.of(soldOutEvent));
 
@@ -309,25 +332,35 @@ class OrderServiceTest {
 
         Store store = Store.createForOwnerSignup(null, "테스트 상점", "서울시", "010-0000-0000");
         Product product = Product.create(store, null, "이벤트 상품", null,
-                BigDecimal.valueOf(10000), 100, ProductType.SALE);
+                BigDecimal.valueOf(10000), 97, ProductType.SALE);
+        ReflectionTestUtils.setField(product, "productId", 7L);
         EventProduct eventProduct = EventProduct.create(product, BigDecimal.valueOf(8000), 10,
                 LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
         ReflectionTestUtils.setField(eventProduct, "eventProductId", eventProductId);
         ReflectionTestUtils.setField(eventProduct, "soldCount", 3);
 
         OrderItem orderItem = mock(OrderItem.class);
+        when(orderItem.getProductId()).thenReturn(null);
         when(orderItem.getEventProductId()).thenReturn(eventProductId);
         when(orderItem.getQuantity()).thenReturn(2);
 
         when(orderItemRepository.findByOrder_OrderId(orderId)).thenReturn(List.of(orderItem));
+        when(eventProductRepository.findProductIdByEventProductId(eventProductId))
+                .thenReturn(Optional.of(7L));
+        when(productRepository.findByIdWithPessimisticLock(7L)).thenReturn(Optional.of(product));
         when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
                 .thenReturn(Optional.of(eventProduct));
+        when(eventProductRepository.restoreSoldCountAtomically(eventProductId, 2)).thenReturn(1);
+        when(productRepository.restoreStockAtomically(7L, 2,
+                ProductStatus.SOLD_OUT, ProductStatus.ACTIVE)).thenReturn(1);
 
         // when
         orderService.restoreStockForOrder(orderId);
 
-        // then — eventStock(10) - (soldCount 3 - quantity 2 = 1) = 9
-        assertThat(eventProduct.getRemainingStock()).isEqualTo(9);
+        // 실제 값 변경은 DB 원자 UPDATE가 수행한다. JPA 재조회 결과는 통합 테스트에서 검증한다.
+        verify(eventProductRepository).restoreSoldCountAtomically(eventProductId, 2);
+        verify(productRepository).restoreStockAtomically(7L, 2,
+                ProductStatus.SOLD_OUT, ProductStatus.ACTIVE);
         verify(productRepository, never()).findById(any());
     }
 
@@ -338,11 +371,10 @@ class OrderServiceTest {
         Long eventProductId = 99L;
 
         OrderItem orderItem = mock(OrderItem.class);
+        when(orderItem.getProductId()).thenReturn(null);
         when(orderItem.getEventProductId()).thenReturn(eventProductId);
 
         when(orderItemRepository.findByOrder_OrderId(orderId)).thenReturn(List.of(orderItem));
-        when(eventProductRepository.findByIdWithPessimisticLock(eventProductId))
-                .thenReturn(Optional.empty());
 
         // when & then — 예외 없이 스킵
         orderService.restoreStockForOrder(orderId);
@@ -368,12 +400,15 @@ class OrderServiceTest {
 
         when(orderItemRepository.findByOrder_OrderId(orderId)).thenReturn(List.of(orderItem));
         when(productRepository.findByIdWithPessimisticLock(productId)).thenReturn(Optional.of(product));
+        when(productRepository.restoreStockAtomically(productId, 3,
+                ProductStatus.SOLD_OUT, ProductStatus.ACTIVE)).thenReturn(1);
 
         // when
         orderService.restoreStockForOrder(orderId);
 
         // then
-        assertThat(product.getStock()).isEqualTo(13);
+        verify(productRepository).restoreStockAtomically(productId, 3,
+                ProductStatus.SOLD_OUT, ProductStatus.ACTIVE);
     }
 
     @Test
