@@ -17,7 +17,9 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,7 +45,7 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                         regionEq(condition.getRegionId()),
                         keywordContains(condition.getKeyword())
                 )
-                .orderBy(storeStatusPriority(), store.createdAt.desc())
+                .orderBy(storeStatusPriority(), store.createdAt.desc(), store.storeId.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
@@ -61,7 +63,12 @@ public class StoreRepositoryImpl implements StoreRepositoryCustom {
                 )
                 .fetchOne();
 
-        return new PageImpl<>(content, pageable, total == null ? 0 : total);
+        // 공개 목록의 정렬은 상태 우선순위 → 생성일 → ID로 고정된다.
+        // 클라이언트가 보낸 sort를 그대로 Page에 담으면 응답 메타데이터가 실제 순서와 달라진다.
+        Pageable actualPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Order.asc("statusPriority"), Sort.Order.desc("createdAt"),
+                        Sort.Order.desc("storeId")));
+        return new PageImpl<>(content, actualPageable, total == null ? 0 : total);
     }
 
     @Override

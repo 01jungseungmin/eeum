@@ -194,7 +194,9 @@ public class StoreService {
 
     @Transactional
     public void updateBusinessHours(Long accountId, StoreBusinessHourUpdateRequestDto request) {
-        Store store = getStore(accountId);
+        // 신규 예약과 같은 Store 행을 잠근다. 이미 확정된 예약의 시각/테이블은 변경하지 않는다.
+        Store store = storeRepository.findByAccountIdWithPessimisticLock(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
 
         validateBusinessHoursRequest(request);
 
@@ -280,6 +282,7 @@ public class StoreService {
     // ===================== 유틸 =====================
 
     // 사장 accountId로 내 상점 ID를 조회
+    @Transactional(readOnly = true)
     public Long getOwnerStoreId(Long accountId) {
         return getStore(accountId).getStoreId();
     }

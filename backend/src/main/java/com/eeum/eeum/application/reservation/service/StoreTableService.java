@@ -77,7 +77,11 @@ public class StoreTableService {
                 LockKeys.storeReservation(storeId),
                 Duration.ofSeconds(30),
                 ErrorCode.LOCK_RESERVATION_FAILED,
-                () -> transactionTemplate.execute(status -> configureTablesInternal(store, storeId, request))
+                () -> transactionTemplate.execute(status -> {
+                    Store lockedStore = storeRepository.findByIdWithPessimisticLock(storeId)
+                            .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+                    return configureTablesInternal(lockedStore, storeId, request);
+                })
         );
     }
 

@@ -24,10 +24,6 @@ public class StoreUpdateRequestDto {
     @Schema(description = "상점 설명", example = "신선한 재료로 매일 직접 만드는 반찬가게입니다.")
     private String description;
 
-    @Schema(description = "영업시간", example = "월~토 09:00~19:00")
-    @NotBlank(message = "영업시간은 필수입니다.")
-    private String businessHours;
-
     @Schema(description = "상점 업종 카테고리 ID", example = "1")
     @NotNull(message = "상점 업종은 필수입니다.")
     private Long categoryId;
