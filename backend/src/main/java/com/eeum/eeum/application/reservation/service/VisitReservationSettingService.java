@@ -63,9 +63,11 @@ public class VisitReservationSettingService {
                 Duration.ofSeconds(30),
                 ErrorCode.LOCK_RESERVATION_FAILED,
                 () -> transactionTemplate.execute(status -> {
+                    Store lockedStore = storeRepository.findByIdWithPessimisticLock(store.getStoreId())
+                            .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
                     validateSettingRequest(request);
 
-                    StoreVisitReservationSetting setting = getOrCreateSetting(store);
+                    StoreVisitReservationSetting setting = getOrCreateSetting(lockedStore);
                     setting.update(
                             request.getEnabled(),
                             request.getSlotIntervalMinutes(),
@@ -115,7 +117,11 @@ public class VisitReservationSettingService {
                 LockKeys.storeReservation(store.getStoreId()),
                 Duration.ofSeconds(30),
                 ErrorCode.LOCK_RESERVATION_FAILED,
-                () -> transactionTemplate.execute(status -> updateTimeSlotsInternal(store, request))
+                () -> transactionTemplate.execute(status -> {
+                    Store lockedStore = storeRepository.findByIdWithPessimisticLock(store.getStoreId())
+                            .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+                    return updateTimeSlotsInternal(lockedStore, request);
+                })
         );
     }
 

@@ -138,6 +138,7 @@ public class AdminStoreService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
     }
 
+    @Transactional(readOnly = true)
     public List<StoreBusinessHourResponseDto> getBusinessHours(Long storeId) {
         return storeBusinessHourRepository.findByStore_StoreId(storeId)
                 .stream()

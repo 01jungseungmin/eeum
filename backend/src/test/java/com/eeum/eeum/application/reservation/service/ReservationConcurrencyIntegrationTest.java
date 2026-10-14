@@ -5,6 +5,8 @@ import com.eeum.eeum.support.IntegrationTestSupport;
 import com.eeum.eeum.application.reservation.dto.request.StoreTableConfigRequestDto;
 import com.eeum.eeum.application.reservation.dto.request.VisitReservationCreateRequestDto;
 import com.eeum.eeum.application.reservation.dto.response.StoreTableResponseDto;
+import com.eeum.eeum.application.store.dto.request.StoreBusinessHourUpdateRequestDto;
+import com.eeum.eeum.application.store.service.StoreService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
 import com.eeum.eeum.domain.reservation.entity.StoreTable;
@@ -30,12 +32,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 예약 도메인 통합 테스트.
@@ -55,8 +59,10 @@ class ReservationConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 
     private final VisitReservationService visitReservationService;
+    private final StoreService storeService;
     private final StoreTableService storeTableService;
     private final AccountRepository accountRepository;
+    private final com.eeum.eeum.domain.account.repository.OwnerInfoRepository ownerInfoRepository;
     private final StoreRepository storeRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
     private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
@@ -79,6 +85,11 @@ class ReservationConcurrencyIntegrationTest extends IntegrationTestSupport {
         Account owner = accountRepository.save(
                 Account.createOwner("owner@test.com", "encoded_pw", "점주", "010-1111-1111"));
         ownerAccountId = owner.getAccountId();
+        com.eeum.eeum.domain.account.entity.OwnerInfo ownerInfo =
+                com.eeum.eeum.domain.account.entity.OwnerInfo.create(
+                        owner, "123-45-67890", LocalDate.of(2020, 1, 1));
+        ownerInfo.approve();
+        ownerInfoRepository.save(ownerInfo);
 
         Account customerA = accountRepository.save(
                 Account.createUser("cust-a@test.com", "encoded_pw", "고객A", "custA", "010-2222-2222"));
@@ -116,10 +127,40 @@ class ReservationConcurrencyIntegrationTest extends IntegrationTestSupport {
         storeVisitReservationSettingRepository.deleteAll();
         storeBusinessHourRepository.deleteAll();
         storeRepository.deleteAll();
+        ownerInfoRepository.deleteAll();
         notificationRepository.deleteAll(); // account FK 참조 → account 삭제 전 먼저 정리
     }
 
     // ──────────────── 시나리오 1: configureTablesInternal dirty-marking ────────────────
+
+    @Test
+    void 영업시간을_휴무로_바꾸어도_기존_예약은_유지하고_새_예약만_차단한다() {
+        // StoreService.updateBusinessHours: 영업시간 변경은 미래 신규 예약에만 적용한다.
+        Long reservationId = visitReservationService.createReservation(
+                customerAId, storeId, buildReservationRequest(VISIT_DATE, VISIT_TIME, 2)).getVisitReservationId();
+
+        StoreBusinessHourUpdateRequestDto hours = new StoreBusinessHourUpdateRequestDto();
+        List<StoreBusinessHourUpdateRequestDto.BusinessHourItem> items = Arrays.stream(StoreDayOfWeek.values())
+                .map(day -> {
+                    StoreBusinessHourUpdateRequestDto.BusinessHourItem item =
+                            new StoreBusinessHourUpdateRequestDto.BusinessHourItem();
+                    ReflectionTestUtils.setField(item, "dayOfWeek", day);
+                    ReflectionTestUtils.setField(item, "closed", day == StoreDayOfWeek.from(VISIT_DATE.getDayOfWeek()));
+                    ReflectionTestUtils.setField(item, "openTime", LocalTime.of(9, 0));
+                    ReflectionTestUtils.setField(item, "closeTime", LocalTime.of(18, 0));
+                    return item;
+                }).toList();
+        ReflectionTestUtils.setField(hours, "businessHours", items);
+        storeService.updateBusinessHours(ownerAccountId, hours);
+
+        assertThat(visitReservationRepository.findById(reservationId).orElseThrow().getStatus())
+                .isEqualTo(com.eeum.eeum.domain.reservation.enums.VisitReservationStatus.PENDING);
+        assertThatThrownBy(() -> visitReservationService.createReservation(
+                customerBId, storeId, buildReservationRequest(VISIT_DATE, VISIT_TIME, 2)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.RESERVATION_STORE_CLOSED_DAY);
+    }
 
     @Test
     void 테이블_구성변경_기존테이블_비활성화되고_신규테이블이_DB에_반영된다() {

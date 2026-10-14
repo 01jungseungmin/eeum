@@ -11,6 +11,8 @@ import com.eeum.eeum.common.lock.LockKeys;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.reservation.entity.StoreTable;
 import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.entity.VisitReservation;
@@ -62,6 +64,7 @@ public class VisitReservationService {
     private final StoreRepository storeRepository;
     private final StoreImageRepository storeImageRepository;
     private final AccountRepository accountRepository;
+    private final OwnerInfoRepository ownerInfoRepository;
     private final StoreBusinessHourRepository storeBusinessHourRepository;
     private final StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
     private final VisitReservationTimeSlotRepository visitReservationTimeSlotRepository;
@@ -179,7 +182,10 @@ public class VisitReservationService {
     ) {
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
-        if (store.getStatus() != StoreStatus.OPEN) {
+        if (store.getStatus() != StoreStatus.OPEN
+                || !store.getAccount().isActive()
+                || !ownerInfoRepository.existsByAccount_AccountIdAndApprovalStatus(
+                        store.getAccount().getAccountId(), ApprovalStatus.APPROVED)) {
             throw new BusinessException(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE);
         }
 
@@ -601,7 +607,9 @@ public class VisitReservationService {
         // 정지 커밋과 순서를 정한다 — 주문 생성과 같은 순서(account → store → 판매자 account)다.
         Account seller = accountRepository.findByIdWithLock(store.getAccount().getAccountId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE));
-        if (!seller.isActive()) {
+        if (!seller.isActive()
+                || !ownerInfoRepository.existsByAccount_AccountIdAndApprovalStatus(
+                        seller.getAccountId(), ApprovalStatus.APPROVED)) {
             throw new BusinessException(ErrorCode.RESERVATION_STORE_NOT_RESERVABLE);
         }
     }

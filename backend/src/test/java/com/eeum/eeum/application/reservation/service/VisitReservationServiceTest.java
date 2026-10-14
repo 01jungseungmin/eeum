@@ -7,6 +7,8 @@ import com.eeum.eeum.application.reservation.mapper.VisitReservationMapper;
 import com.eeum.eeum.common.service.RedisLockService;
 import com.eeum.eeum.domain.account.entity.Account;
 import com.eeum.eeum.domain.account.repository.AccountRepository;
+import com.eeum.eeum.domain.account.repository.OwnerInfoRepository;
+import com.eeum.eeum.domain.account.enums.ApprovalStatus;
 import com.eeum.eeum.domain.reservation.entity.StoreTable;
 import com.eeum.eeum.domain.reservation.entity.StoreVisitReservationSetting;
 import com.eeum.eeum.domain.reservation.entity.VisitReservation;
@@ -64,6 +66,7 @@ class VisitReservationServiceTest {
     @Mock private StoreRepository storeRepository;
     @Mock private StoreImageRepository storeImageRepository;
     @Mock private AccountRepository accountRepository;
+    @Mock private OwnerInfoRepository ownerInfoRepository;
     @Mock private StoreBusinessHourRepository storeBusinessHourRepository;
     @Mock private StoreVisitReservationSettingRepository storeVisitReservationSettingRepository;
     @Mock private VisitReservationTimeSlotRepository visitReservationTimeSlotRepository;
@@ -90,6 +93,11 @@ class VisitReservationServiceTest {
                 .when(accountRepository.findByIdWithLock(owner.getAccountId()))
                 .thenReturn(Optional.of(owner));
         return store;
+    }
+
+    private void approveStoreOwner(Store store) {
+        when(ownerInfoRepository.existsByAccount_AccountIdAndApprovalStatus(
+                store.getAccount().getAccountId(), ApprovalStatus.APPROVED)).thenReturn(true);
     }
 
     private StoreVisitReservationSetting createEnabledSetting(Store store) {
@@ -452,6 +460,7 @@ class VisitReservationServiceTest {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
+        approveStoreOwner(store);
         when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
         when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
@@ -468,6 +477,7 @@ class VisitReservationServiceTest {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
+        approveStoreOwner(store);
         // createDefault → enabled=false
         StoreVisitReservationSetting disabledSetting = StoreVisitReservationSetting.createDefault(store);
         when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
@@ -487,6 +497,7 @@ class VisitReservationServiceTest {
         setupPassthroughLockAndTransaction();
         Account account = createAccount(1L, "사용자", "user");
         Store store = createStore(10L, account, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
         when(accountRepository.findByIdWithLock(eq(1L))).thenReturn(Optional.of(account));
         when(storeRepository.findByIdWithPessimisticLock(eq(10L))).thenReturn(Optional.of(store));
@@ -510,6 +521,7 @@ class VisitReservationServiceTest {
 
         Account account = createAccount(accountId, "사용자", "user");
         Store store = createStore(storeId, account, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
         StoreBusinessHour businessHour = StoreBusinessHour.create(store, dayOfWeek, false,
                 LocalTime.of(9, 0), LocalTime.of(18, 0));
@@ -543,6 +555,7 @@ class VisitReservationServiceTest {
 
         Account account = createAccount(accountId, "사용자", "user");
         Store store = createStore(storeId, account, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
         StoreBusinessHour businessHour = StoreBusinessHour.create(store, dayOfWeek, false,
                 LocalTime.of(9, 0), LocalTime.of(18, 0));
@@ -803,6 +816,7 @@ class VisitReservationServiceTest {
     void 가용_슬롯_조회_시_예약설정_없으면_RESERVATION_SETTING_NOT_FOUND() {
         Account owner = createAccount(1L, "사장", "owner");
         Store store = createStore(10L, owner, StoreStatus.OPEN);
+        approveStoreOwner(store);
         when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
 
@@ -816,6 +830,7 @@ class VisitReservationServiceTest {
     void 가용_슬롯_조회_시_예약기능_비활성화면_RESERVATION_DISABLED() {
         Account owner = createAccount(1L, "사장", "owner");
         Store store = createStore(10L, owner, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting disabledSetting = StoreVisitReservationSetting.createDefault(store);
         when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(disabledSetting));
@@ -830,6 +845,7 @@ class VisitReservationServiceTest {
     void 가용_슬롯_조회_시_과거_날짜면_RESERVATION_TIME_UNAVAILABLE() {
         Account owner = createAccount(1L, "사장", "owner");
         Store store = createStore(10L, owner, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
         when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
@@ -844,6 +860,7 @@ class VisitReservationServiceTest {
     void 가용_슬롯_조회_시_당일예약_불허인데_오늘이면_RESERVATION_TIME_UNAVAILABLE() {
         Account owner = createAccount(1L, "사장", "owner");
         Store store = createStore(10L, owner, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = StoreVisitReservationSetting.createDefault(store);
         setting.update(true, 30, false, 30, LocalTime.of(9, 0), LocalTime.of(18, 0));
         when(storeRepository.findById(eq(10L))).thenReturn(Optional.of(store));
@@ -861,6 +878,7 @@ class VisitReservationServiceTest {
         LocalDate visitDate = LocalDate.now().plusDays(7);
         Account owner = createAccount(1L, "사장", "owner");
         Store store = createStore(storeId, owner, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
         StoreDayOfWeek dayOfWeek = StoreDayOfWeek.from(visitDate.getDayOfWeek());
 
@@ -881,6 +899,7 @@ class VisitReservationServiceTest {
         LocalDate visitDate = LocalDate.now().plusDays(7);
         Account owner = createAccount(1L, "사장", "owner");
         Store store = createStore(storeId, owner, StoreStatus.OPEN);
+        approveStoreOwner(store);
         StoreVisitReservationSetting setting = createEnabledSetting(store);
         StoreDayOfWeek dayOfWeek = StoreDayOfWeek.from(visitDate.getDayOfWeek());
         StoreBusinessHour closedHour = StoreBusinessHour.create(store, dayOfWeek, true, null, null);
