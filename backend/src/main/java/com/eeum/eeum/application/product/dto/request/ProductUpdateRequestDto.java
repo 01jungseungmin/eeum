@@ -12,7 +12,7 @@ import lombok.Getter;
 @Schema(description = "상품 수정 요청")
 public class ProductUpdateRequestDto {
 
-    @Schema(description = "상품 유형", example = "SALE", allowableValues = {"SALE", "RESERVATION", "MENU"})
+    @Schema(description = "상품 유형", example = "SALE", allowableValues = {"SALE", "PREORDER", "MENU"})
     @NotNull(message = "상품 유형은 필수입니다.")
     private ProductType productType;
 

@@ -37,7 +37,7 @@ public class ProductOptionCreateRequestDto {
     @Valid
     @NotEmpty(message = "옵션 항목은 1개 이상 필요합니다.")
     @Schema(description = "옵션 항목 목록")
-    private List<ProductOptionItemCreateDto> items;
+    private List<@NotNull ProductOptionItemCreateDto> items;
 
     @Getter
     @Schema(description = "옵션 항목 생성 요청")
