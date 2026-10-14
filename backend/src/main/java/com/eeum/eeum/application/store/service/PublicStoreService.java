@@ -40,6 +40,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.Comparator;
@@ -146,8 +148,9 @@ public class PublicStoreService {
          * - INACTIVE 상품
          */
         return (productCategoryId == null
-                ? productRepository.findByStore_StoreIdAndStatusNot(storeId, ProductStatus.INACTIVE)
-                : productRepository.findByStore_StoreIdAndProductCategory_ProductCategoryIdAndStatusNot(
+                ? productRepository.findByStore_StoreIdAndProductCategory_IsActiveTrueAndStatusNot(
+                        storeId, ProductStatus.INACTIVE)
+                : productRepository.findByStore_StoreIdAndProductCategory_ProductCategoryIdAndProductCategory_IsActiveTrueAndStatusNot(
                         storeId, productCategoryId, ProductStatus.INACTIVE))
                 .stream()
                 .map(this::toProductListDto)
@@ -165,12 +168,9 @@ public class PublicStoreService {
          * 사용자 앱에서는 INACTIVE 상품 상세 조회를 막는다.
          * SOLD_OUT 상품은 조회 가능하다.
          */
-        if (product.getStatus() == ProductStatus.INACTIVE
-                || product.getStore().getAccount().getStatus() != AccountStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
-        }
+        validatePublicVisibleProduct(product);
 
-        increaseViewCountIfFirstView(product, viewerKey);
+        int viewCount = increaseViewCountIfFirstView(product, viewerKey);
 
         List<ImageResponseDto> images = productImageRepository
                 .findByProduct_ProductIdOrderByDisplayOrderAsc(productId)
@@ -191,13 +191,13 @@ public class PublicStoreService {
                 .stock(product.getStock())
                 .productType(product.getProductType().name())
                 .status(product.getStatus().name())
-                .viewCount(product.getViewCount())
+                .viewCount(viewCount)
                 .images(images)
                 .eventPrice(activeEvent.map(EventProduct::getEventPrice).orElse(null))
                 .hasEvent(activeEvent.isPresent())
                 .eventProductId(activeEvent.map(EventProduct::getEventProductId).orElse(null))
                 .remainingStock(activeEvent
-                        .map(EventProduct::getRemainingStock)
+                        .map(this::effectiveEventStock)
                         .orElse(null))  // 추가 필요
                 .build();
     }
@@ -276,10 +276,7 @@ public class PublicStoreService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
-        if (product.getStatus() == ProductStatus.INACTIVE
-                || product.getStore().getAccount().getStatus() != AccountStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
-        }
+        validatePublicVisibleProduct(product);
 
         return productOptionRepository
                 .findByProduct_ProductIdOrderByDisplayOrderAsc(productId)
@@ -371,7 +368,7 @@ public class PublicStoreService {
                 .eventPrice(eventProduct.getEventPrice())
                 .eventStock(eventProduct.getEventStock())
                 .soldCount(eventProduct.getSoldCount())
-                .remainingStock(eventProduct.getRemainingStock())
+                .remainingStock(effectiveEventStock(eventProduct))
                 .startAt(eventProduct.getStartAt())
                 .endAt(eventProduct.getEndAt())
                 .ongoing(eventProduct.isOngoing())
@@ -433,7 +430,7 @@ public class PublicStoreService {
                 .orElse(null);
     }
 
-    private void increaseViewCountIfFirstView(Product product, String viewerKey) {
+    private int increaseViewCountIfFirstView(Product product, String viewerKey) {
         /*
          * Redis 중복 조회 방지 정책
          *
@@ -449,7 +446,39 @@ public class PublicStoreService {
                 .setIfAbsent(redisKey, "1", PRODUCT_VIEW_TTL);
 
         if (Boolean.TRUE.equals(firstView)) {
-            product.increaseViewCount();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        stringRedisTemplate.delete(redisKey);
+                    }
+                }
+            });
+            if (productRepository.incrementViewCount(product.getProductId()) != 1) {
+                throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+            }
+        }
+        return productRepository.findViewCount(product.getProductId());
+    }
+
+    private int effectiveEventStock(EventProduct event) {
+        Integer stock = event.getProduct().getStock();
+        return stock == null ? event.getRemainingStock() : Math.min(stock, event.getRemainingStock());
+    }
+
+    private boolean isPublicVisibleProduct(Product product) {
+        return product.getStatus() != ProductStatus.INACTIVE
+                && product.getProductCategory().isActive();
+    }
+
+    private void validatePublicVisibleProduct(Product product) {
+        Store store = product.getStore();
+        if (!isPublicVisibleProduct(product)
+                || store.getAccount().getStatus() != AccountStatus.ACTIVE
+                || store.getStatus() == StoreStatus.SUSPENDED
+                || !ownerInfoRepository.existsByAccount_AccountIdAndApprovalStatus(
+                        store.getAccount().getAccountId(), ApprovalStatus.APPROVED)) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
     }
 
