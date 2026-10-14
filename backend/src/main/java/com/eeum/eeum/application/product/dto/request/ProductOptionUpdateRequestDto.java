@@ -1,6 +1,7 @@
 package com.eeum.eeum.application.product.dto.request;
 
 import com.eeum.eeum.domain.product.enums.OptionSelectionType;
+import com.eeum.eeum.application.product.dto.request.ProductOptionCreateRequestDto.ProductOptionItemCreateDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -35,5 +36,5 @@ public class ProductOptionUpdateRequestDto {
     @Valid
     @NotEmpty(message = "옵션 항목은 1개 이상 필요합니다.")
     @Schema(description = "옵션 항목 목록")
-    private List<ProductOptionCreateRequestDto.ProductOptionItemCreateDto> items;
+    private List<@NotNull ProductOptionItemCreateDto> items;
 }

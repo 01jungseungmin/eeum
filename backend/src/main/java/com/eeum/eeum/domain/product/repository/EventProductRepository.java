@@ -15,6 +15,9 @@ import java.util.Optional;
 
 public interface EventProductRepository extends JpaRepository<EventProduct, Long> {
 
+    @Query("select ep.product.productId from EventProduct ep where ep.eventProductId = :eventProductId")
+    Optional<Long> findProductIdByEventProductId(@Param("eventProductId") Long eventProductId);
+
     List<EventProduct> findByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
 
     Optional<EventProduct> findFirstByProduct_Store_StoreIdOrderByCreatedAtDesc(Long storeId);
@@ -45,6 +48,8 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
             FROM EventProduct ep
             JOIN FETCH ep.product p
             WHERE p.productId = :productId
+              AND p.status <> com.eeum.eeum.domain.product.enums.ProductStatus.INACTIVE
+              AND p.productCategory.isActive = true
               AND ep.status = :status
               AND ep.startAt <= :now
               AND ep.endAt > :now
@@ -71,6 +76,8 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
             JOIN FETCH ep.product p
             JOIN FETCH p.store s
             WHERE s.storeId = :storeId
+              AND p.status <> com.eeum.eeum.domain.product.enums.ProductStatus.INACTIVE
+              AND p.productCategory.isActive = true
               AND ep.status = :status
               AND ep.startAt <= :now
               AND ep.endAt > :now
@@ -93,6 +100,17 @@ public interface EventProductRepository extends JpaRepository<EventProduct, Long
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ep from EventProduct ep where ep.eventProductId = :eventProductId")
     Optional<EventProduct> findByIdWithPessimisticLock(@Param("eventProductId") Long eventProductId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update EventProduct ep
+               set ep.soldCount = case when ep.soldCount >= :quantity
+                                       then ep.soldCount - :quantity else 0 end,
+                   ep.version = ep.version + 1
+             where ep.eventProductId = :eventProductId
+            """)
+    int restoreSoldCountAtomically(@Param("eventProductId") Long eventProductId,
+                                   @Param("quantity") int quantity);
 
     // 만료 시각이 지난 ACTIVE 이벤트 상품을 일괄 ENDED 처리 (스케줄러 전용).
     // version도 함께 올린다 — 올리지 않으면 만료 전에 EventProduct를 읽어둔 요청이

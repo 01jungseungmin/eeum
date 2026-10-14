@@ -17,7 +17,7 @@ public class StoreBusinessHourUpdateRequestDto {
     @Valid
     @NotEmpty(message = "영업시간은 최소 1개 이상 필요합니다.")
     @Schema(description = "요일별 영업시간 목록")
-    private List<BusinessHourItem> businessHours;
+    private List<@NotNull BusinessHourItem> businessHours;
 
     @Getter
     public static class BusinessHourItem {

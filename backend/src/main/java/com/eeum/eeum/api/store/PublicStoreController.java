@@ -19,7 +19,6 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -40,15 +39,15 @@ public class PublicStoreController {
     private final ViewerKeyResolver viewerKeyResolver;
 
     @Operation(summary = "상점 목록 조회",
-            description = "카테고리, 지역, 키워드로 상점 목록을 조회합니다. 비회원 접근 가능.")
+            description = "카테고리, 지역, 키워드로 상점 목록을 조회합니다. 비회원 접근 가능. "
+                    + "정렬은 상점 상태 우선순위, 생성일 내림차순, ID 내림차순으로 고정됩니다.")
     @GetMapping("/stores")
     public ResponseEntity<ApiResponse<Page<StoreListResponseDto>>> getStores(
             @RequestParam(required = false) @Positive Long categoryId,
             @RequestParam(required = false) @Positive Long regionId,
             @RequestParam(required = false) String keyword,
             HttpServletRequest request,
-            @PageableDefault(size = 20, sort = "createdAt",
-                    direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 20) Pageable pageable
     ) {
         Page<StoreListResponseDto> stores = publicStoreService.getStores(categoryId, regionId, keyword, pageable);
         popularSearchService.record(PopularSearchScope.STORE, keyword, popularSearchViewerKeyResolver.resolve(request));

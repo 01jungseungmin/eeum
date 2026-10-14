@@ -70,7 +70,8 @@ public class ProductCategoryService {
     // 카테고리 생성
     @Transactional
     public ProductCategoryResponseDto createCategory(Long accountId, ProductCategoryRequestDto request) {
-        Store store = getStore(accountId);
+        // 이름 중복 검사와 INSERT를 같은 Store 행 잠금 아래 직렬화한다.
+        Store store = getStoreForCategoryWrite(accountId);
 
         validateDuplicateCategoryName(store.getStoreId(), request.getName());
 
@@ -87,6 +88,7 @@ public class ProductCategoryService {
     @Transactional
     public ProductCategoryResponseDto updateCategory(Long accountId, Long categoryId,
             ProductCategoryRequestDto request) {
+        getStoreForCategoryWrite(accountId);
         ProductCategory category = getCategoryWithOwnerCheck(accountId, categoryId);
 
         validateDuplicateCategoryNameForUpdate(category.getStore().getStoreId(), request.getName(), categoryId);
@@ -101,6 +103,7 @@ public class ProductCategoryService {
     // 카테고리 삭제 (소속 상품 있으면 비활성화)
     @Transactional
     public void deleteCategory(Long accountId, Long categoryId) {
+        getStoreForCategoryWrite(accountId);
         ProductCategory category = getCategoryWithOwnerCheck(accountId, categoryId);
         int productCount = productCategoryRepository.countProductsByCategoryId(categoryId);
 
@@ -117,6 +120,7 @@ public class ProductCategoryService {
     // 카테고리 활성화
     @Transactional
     public void activateCategory(Long accountId, Long categoryId) {
+        getStoreForCategoryWrite(accountId);
         ProductCategory category = getCategoryWithOwnerCheck(accountId, categoryId);
         category.activate();
         log.info("상품 카테고리 활성화: accountId={}, categoryId={}", accountId, categoryId);
@@ -125,6 +129,7 @@ public class ProductCategoryService {
     // 카테고리 비활성화
     @Transactional
     public void deactivateCategory(Long accountId, Long categoryId) {
+        getStoreForCategoryWrite(accountId);
         ProductCategory category = getCategoryWithOwnerCheck(accountId, categoryId);
         category.deactivate();
         log.info("상품 카테고리 비활성화: accountId={}, categoryId={}", accountId, categoryId);
@@ -135,6 +140,11 @@ public class ProductCategoryService {
 
     private Store getStore(Long accountId) {
         return storeRepository.findByAccount_AccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
+    }
+
+    private Store getStoreForCategoryWrite(Long accountId) {
+        return storeRepository.findByAccountIdWithPessimisticLock(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STORE_NOT_FOUND));
     }
 

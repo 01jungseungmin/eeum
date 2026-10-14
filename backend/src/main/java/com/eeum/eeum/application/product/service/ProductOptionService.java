@@ -97,7 +97,7 @@ public class ProductOptionService {
         productOptionItemRepository.saveAll(items);
 
         log.info("옵션 그룹 생성: productId={}, optionId={}", productId, option.getProductOptionId());
-        return productMapper.toProductOptionDto(option,List.of());
+        return productMapper.toProductOptionDto(option, items);
     }
 
     // 옵션 그룹 전체 교체 (PUT)

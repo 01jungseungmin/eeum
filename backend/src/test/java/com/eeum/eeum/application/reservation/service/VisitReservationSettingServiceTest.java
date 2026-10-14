@@ -174,6 +174,7 @@ class VisitReservationSettingServiceTest {
         ReflectionTestUtils.setField(request, "endTime", LocalTime.of(20, 0));
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
 
         // when
@@ -205,6 +206,7 @@ class VisitReservationSettingServiceTest {
         ReflectionTestUtils.setField(request, "endTime", LocalTime.of(20, 0));
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.empty());
         when(storeVisitReservationSettingRepository.save(any(StoreVisitReservationSetting.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
@@ -328,6 +330,7 @@ class VisitReservationSettingServiceTest {
         ReflectionTestUtils.setField(request, "slots", List.of(slotItem));
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
         when(visitReservationTimeSlotRepository.findByStore_StoreIdAndSlotDateAndSlotTime(eq(10L), eq(date), eq(LocalTime.of(9, 0))))
                 .thenReturn(Optional.of(existingOverride));
@@ -362,6 +365,7 @@ class VisitReservationSettingServiceTest {
         ReflectionTestUtils.setField(request, "slots", List.of(slotItem));
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
         when(visitReservationTimeSlotRepository.findByStore_StoreIdAndSlotDateAndSlotTime(eq(10L), eq(date), eq(LocalTime.of(9, 0))))
                 .thenReturn(Optional.empty());
@@ -397,6 +401,7 @@ class VisitReservationSettingServiceTest {
         ReflectionTestUtils.setField(request, "slots", List.of(slotItem));
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(storeVisitReservationSettingRepository.findByStore_StoreId(eq(10L))).thenReturn(Optional.of(setting));
         when(visitReservationTimeSlotRepository.findByStore_StoreIdAndSlotDateAndSlotTime(eq(10L), eq(date), eq(LocalTime.of(9, 0))))
                 .thenReturn(Optional.empty());

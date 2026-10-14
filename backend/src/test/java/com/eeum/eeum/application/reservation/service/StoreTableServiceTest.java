@@ -214,6 +214,7 @@ class StoreTableServiceTest {
         Store store = createStore(10L, owner);
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(visitReservationRepository.existsActiveFutureReservations(eq(10L), any(), any(), any()))
                 .thenReturn(true);
 
@@ -232,6 +233,7 @@ class StoreTableServiceTest {
         StoreTable existingTable = createStoreTable(99L, store, 2);
 
         when(storeRepository.findByAccount_AccountId(eq(ownerAccountId))).thenReturn(Optional.of(store));
+        when(storeRepository.findByIdWithPessimisticLock(10L)).thenReturn(Optional.of(store));
         when(visitReservationRepository.existsActiveFutureReservations(eq(10L), any(), any(), any()))
                 .thenReturn(false);
         when(storeTableRepository.findByStore_StoreIdAndActiveTrueOrderByCapacityAscStoreTableIdAsc(eq(10L)))

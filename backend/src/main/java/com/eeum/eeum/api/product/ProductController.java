@@ -46,7 +46,7 @@ public class ProductController {
 
     @Operation(
             summary = "상품 등록",
-            description = "현재 로그인한 사장의 상점에 상품을 등록합니다. 상품 유형은 SALE(판매 상품), RESERVATION(예약 상품), MENU(메뉴 상품) 중 하나를 선택합니다. 사장 입점 심사 단계에서는 MENU 상품 1개 이상 등록 여부가 대표 메뉴 등록 완료 기준으로 사용됩니다."
+            description = "현재 로그인한 사장의 상점에 상품을 등록합니다. 상품 유형은 SALE(판매 상품), PREORDER(예약 상품), MENU(메뉴 상품) 중 하나를 선택합니다. 사장 입점 심사 단계에서는 MENU 상품 1개 이상 등록 여부가 대표 메뉴 등록 완료 기준으로 사용됩니다."
     )
     @PostMapping
     public ResponseEntity<ApiResponse<ProductCreateResponseDto>> createProduct(

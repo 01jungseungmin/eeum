@@ -16,7 +16,7 @@ public class StoreTableConfigRequestDto {
     @NotEmpty(message = "테이블 목록은 비어있을 수 없습니다.")
     @Valid
     @Schema(description = "테이블 항목 목록")
-    private List<TableItem> tables;
+    private List<@NotNull TableItem> tables;
 
     @Getter
     @Schema(description = "테이블 항목")

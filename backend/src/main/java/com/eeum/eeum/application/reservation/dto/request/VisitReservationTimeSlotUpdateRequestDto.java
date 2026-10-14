@@ -20,5 +20,5 @@ public class VisitReservationTimeSlotUpdateRequestDto {
     @Valid
     @NotEmpty(message = "시간대 설정 목록은 비어 있을 수 없습니다.")
     @Schema(description = "시간대별 설정 목록")
-    private List<VisitReservationTimeSlotItemRequestDto> slots;
+    private List<@NotNull VisitReservationTimeSlotItemRequestDto> slots;
 }
